@@ -7,8 +7,7 @@ import (
 )
 
 func TestToString(t *testing.T) {
-	var cfg Config
-	err := Load("", "../../config", "", &cfg)
+	cfg, err := Load(WithConfigDir("../../config"))
 	require.NoError(t, err)
 	require.NotEmpty(t, cfg.String())
 }

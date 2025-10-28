@@ -91,12 +91,15 @@ func (so *serverOptions) loadAndValidate() error {
 }
 
 func (so *serverOptions) loadConfig() error {
-	so.config = &config.Config{}
-	err := config.Load(so.env, so.configDir, so.zone, so.config)
+	cfg, err := config.Load(
+		config.WithEnv(so.env),
+		config.WithConfigDir(so.configDir),
+		config.WithZone(so.zone),
+	)
 	if err != nil {
 		return fmt.Errorf("config file corrupted: %w", err)
 	}
-
+	so.config = cfg
 	return nil
 }
 

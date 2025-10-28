@@ -58,72 +58,120 @@ const (
 // The loader first fetches the set of files matching
 // a pre-determined naming convention, then sorts
 // them by hierarchy order and after that, simply
-// loads the files one after another with the
-// key/values in the later files overriding the key/values
-// in the earlier files
-//
-// The hierarchy is as follows from lowest to highest
-//
-//	base.yaml
-//	    env.yaml   -- environment is one of the input params ex-development
-//	      env_az.yaml -- zone is another input param
-func Load(env string, configDir string, zone string, config any) error {
-	return LoadWithEnvMap(env, configDir, zone, config, getEnvMap(), false)
+type loadOptions struct {
+	env             string
+	configDir       string
+	zone            string
+	configFilePath  string
+	useEmbeddedOnly bool
+	envMap          map[string]string
 }
 
-// LoadFromEnv loads the configuration using only the embedded template and environment variables.
-func LoadFromEnv(config any) error {
-	return LoadWithEnvMap("", "", "", config, getEnvMap(), true)
+type loadOption func(*loadOptions)
+
+func WithEnv(env string) loadOption {
+	return func(o *loadOptions) {
+		if env != "" {
+			o.env = env
+		}
+	}
 }
 
-// LoadWithEnvMap loads configuration with a specific environment variable map.
-// If useEmbeddedOnly is true, it will skip config file loading and use only the embedded template.
-func LoadWithEnvMap(env string, configDir string, zone string, config any, envMap map[string]string, useEmbeddedOnly bool) error {
-	// If using embedded template only, skip file loading
-	if useEmbeddedOnly {
+func WithConfigDir(configDir string) loadOption {
+	return func(o *loadOptions) {
+		if configDir != "" {
+			o.configDir = configDir
+		}
+	}
+}
+
+func WithZone(zone string) loadOption {
+	return func(o *loadOptions) {
+		if zone != "" {
+			o.zone = zone
+		}
+	}
+}
+
+func WithConfigFile(configFilePath string) loadOption {
+	return func(o *loadOptions) {
+		if configFilePath != "" {
+			o.configFilePath = configFilePath
+		}
+	}
+}
+
+func WithEmbedded() loadOption {
+	return func(o *loadOptions) {
+		o.useEmbeddedOnly = true
+	}
+}
+
+func WithEnvMap(envMap map[string]string) loadOption {
+	return func(o *loadOptions) {
+		if envMap != nil {
+			o.envMap = envMap
+		}
+	}
+}
+
+func Load(opts ...loadOption) (*Config, error) {
+	cfg := &Config{}
+	options := &loadOptions{
+		envMap: getEnvMap(),
+	}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if err := load(options, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func load(opts *loadOptions, config any) error {
+	if opts.envMap == nil {
+		opts.envMap = getEnvMap()
+	}
+
+	if opts.useEmbeddedOnly {
 		stdlog.Println("Loading configuration from environment variables only")
+		return loadAndUnmarshalContent(embeddedConfigTemplate, "config_template_embedded.yaml", opts.envMap, config)
+	}
 
-		// Process the embedded template
-		processedData, procErr := processConfigFile(embeddedConfigTemplate, "config_template_embedded.yaml", envMap)
-		if procErr != nil {
-			return fmt.Errorf("failed to process embedded config template: %w", procErr)
-		}
-
-		err := yaml.Unmarshal(processedData, config)
+	if opts.configFilePath != "" {
+		content, err := os.ReadFile(opts.configFilePath)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal embedded config template: %w", err)
+			return fmt.Errorf("failed to read config file %s: %w", opts.configFilePath, err)
 		}
-
-		validate := newValidator()
-		return validate.Validate(config)
+		return loadAndUnmarshalContent(content, filepath.Base(opts.configFilePath), opts.envMap, config)
 	}
 
-	if env == "" {
-		env = envDevelopment
+	if opts.env == "" {
+		opts.env = envDevelopment
 	}
-	if configDir == "" {
-		configDir = defaultConfigDir
+	if opts.configDir == "" {
+		opts.configDir = defaultConfigDir
 	}
 
-	stdlog.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
+	stdlog.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", opts.env, opts.zone, opts.configDir)
 
-	files, err := getConfigFiles(env, configDir, zone)
+	files, err := getConfigFiles(opts.env, opts.configDir, opts.zone)
 	if err != nil {
-		// Return error immediately - no fallback to embedded template
 		return fmt.Errorf("failed to get config files: %w", err)
 	}
 
 	stdlog.Printf("Loading config files=%v\n", files)
 
 	for _, f := range files {
-		// This is tagged nosec because the file names being read are for config files that are not user supplied
-		// #nosec
-		data, err := os.ReadFile(f)
+		data, err := readConfigFile(f)
 		if err != nil {
 			return err
 		}
 
-		processedData, err := processConfigFile(data, filepath.Base(f), envMap)
+		processedData, err := processConfigFile(data, filepath.Base(f), opts.envMap)
 		if err != nil {
 			return err
 		}
@@ -136,6 +184,31 @@ func LoadWithEnvMap(env string, configDir string, zone string, config any, envMa
 
 	validate := newValidator()
 	return validate.Validate(config)
+}
+
+const maxConfigFileSize = 2 << 20 // 1 MB
+
+func readConfigFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("could not read config file: %s. error: %w", path, err)
+
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(io.LimitReader(f, maxConfigFileSize+1))
+	if err != nil {
+		return nil, err
+	}
+
+	if int64(len(data)) > maxConfigFileSize {
+		return nil, errors.New("file too large (max 2 MB)")
+	}
+
+	return data, nil
 }
 
 // processConfigFile processes a config file, rendering it as a template if enabled
@@ -170,7 +243,7 @@ func (c *templateContext) Env() map[string]string {
 // defaultValue implements dockerize-compatible default handling.
 // This properly handles nil values from missing map keys when using .Env.VAR syntax.
 // Args order: value first, default second (e.g., {{ default .Env.VAR "fallback" }})
-func defaultValue(args ...interface{}) (string, error) {
+func defaultValue(args ...any) (string, error) {
 	if len(args) == 0 {
 		return "", fmt.Errorf("default called with no values!")
 	}
@@ -222,43 +295,30 @@ func renderTemplate(data []byte, filename string, envMap map[string]string) ([]b
 	return rendered.Bytes(), nil
 }
 
-// Helper function for loading configuration
 func LoadConfig(env string, configDir string, zone string) (*Config, error) {
-	config := Config{}
-	err := Load(env, configDir, zone, &config)
+	cfg, err := Load(WithEnv(env), WithConfigDir(configDir), WithZone(zone))
 	if err != nil {
 		return nil, fmt.Errorf("config file corrupted: %w", err)
 	}
-	return &config, nil
+	return cfg, nil
 }
 
-// LoadConfigFile loads configuration from a single specified file path.
-// Template rendering is enabled if the file contains "# enable-template" comment.
-func LoadConfigFile(filePath string) (*Config, error) {
-	stdlog.Printf("Loading configuration from file; filePath=%v\n", filePath)
+func LoadConfigFile(configFilePath string) (*Config, error) {
+	return Load(WithConfigFile(configFilePath))
+}
 
-	data, err := os.ReadFile(filePath)
+func loadAndUnmarshalContent(content []byte, filename string, envMap map[string]string, config any) error {
+	processed, err := processConfigFile(content, filename, envMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file %s: %w", filePath, err)
+		return fmt.Errorf("failed to process config file %s: %w", filename, err)
 	}
 
-	processedData, err := processConfigFile(data, filepath.Base(filePath), getEnvMap())
-	if err != nil {
-		return nil, fmt.Errorf("failed to process config file %s: %w", filePath, err)
-	}
-
-	config := &Config{}
-	err = yaml.Unmarshal(processedData, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config file %s: %w", filePath, err)
+	if err := yaml.Unmarshal(processed, config); err != nil {
+		return fmt.Errorf("failed to unmarshal config file %s: %w", filename, err)
 	}
 
 	validate := newValidator()
-	if err := validate.Validate(config); err != nil {
-		return nil, fmt.Errorf("config file validation failed for %s: %w", filePath, err)
-	}
-
-	return config, nil
+	return validate.Validate(config)
 }
 
 func checkTemplatingEnabled(content []byte) (bool, error) {
@@ -274,13 +334,7 @@ func checkTemplatingEnabled(content []byte) (bool, error) {
 	return false, scanner.Err()
 }
 
-// getConfigFiles returns the list of config files to
-// process in the hierarchy order.
-// Returns ErrConfigFilesNotFound if no config files are found.
-// Returns other errors if there are permission or I/O issues accessing the files.
 func getConfigFiles(env string, configDir string, zone string) ([]string, error) {
-
-	// Pre-allocate candidates slice with maximum possible size (3)
 	candidates := make([]string, 2, 3)
 	candidates[0] = filepath.Join(configDir, baseFile)
 	candidates[1] = filepath.Join(configDir, file(env, "yaml"))
@@ -290,27 +344,18 @@ func getConfigFiles(env string, configDir string, zone string) ([]string, error)
 		candidates = append(candidates, filepath.Join(configDir, f))
 	}
 
-	// Pre-allocate result with capacity matching candidates
 	result := make([]string, 0, len(candidates))
-	var firstNonNotExistError error
 
 	for _, c := range candidates {
 		_, err := os.Stat(c)
-		if err == nil {
-			// File exists, add it to results
-			result = append(result, c)
+		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-
-		if !os.IsNotExist(err) && firstNonNotExistError == nil {
-			firstNonNotExistError = fmt.Errorf("error accessing config file %s: %w", c, err)
+		if err != nil {
+			return nil, fmt.Errorf("error accessing config file %s: %w", c, err)
 		}
+		result = append(result, c)
 	}
-
-	if firstNonNotExistError != nil {
-		return nil, firstNonNotExistError
-	}
-
 	if len(result) == 0 {
 		return nil, fmt.Errorf("%w in directory: %s", ErrConfigFilesNotFound, configDir)
 	}

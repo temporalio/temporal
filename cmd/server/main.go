@@ -145,19 +145,6 @@ func buildCLI() *cli.App {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
-				if c.IsSet("config-file") && os.Getenv(config.EnvKeyConfigFile) != "" {
-					return cli.Exit("ERROR: TEMPORAL_SERVER_CONFIG_FILE_PATH env var and --config-file flag cannot both be set", 1)
-				}
-
-				if c.IsSet("config-file") {
-					conflictingFlags := []string{"config", "env", "zone"}
-					for _, flag := range conflictingFlags {
-						if c.IsSet(flag) {
-							return cli.Exit(fmt.Sprintf("ERROR: --config-file cannot be used with --%s flag", flag), 1)
-						}
-					}
-				}
-
 				return nil
 			},
 			Action: func(c *cli.Context) error {
@@ -179,16 +166,15 @@ func buildCLI() *cli.App {
 					if !filepath.IsAbs(configFilePath) {
 						configFilePath = filepath.Join(c.String("root"), configFilePath)
 					}
-					cfg, err = config.LoadConfigFile(configFilePath)
+					cfg, err = config.Load(config.WithConfigFile(configFilePath))
 				case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
-					cfg, err = config.LoadConfig(
-						c.String("env"),
-						path.Join(c.String("root"), c.String("config")),
-						c.String("zone"),
+					cfg, err = config.Load(
+						config.WithEnv(c.String("env")),
+						config.WithConfigDir(path.Join(c.String("root"), c.String("config"))),
+						config.WithZone(c.String("zone")),
 					)
 				default:
-					cfg = &config.Config{}
-					err = config.LoadFromEnv(cfg)
+					cfg, err = config.Load(config.WithEmbedded())
 				}
 
 				if err != nil {
