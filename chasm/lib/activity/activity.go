@@ -1,9 +1,8 @@
 package activity
 
 import (
-	"context"
+	"errors"
 
-	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -11,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -42,8 +42,16 @@ type Activity struct {
 	Store chasm.Field[ActivityStore]
 }
 
+// RecordActivityTaskStartedParams holds parameters for HandleRecordActivityTaskStarted method when recording activity
+// task started.
+type RecordActivityTaskStartedParams struct {
+	EntityKey        chasm.EntityKey
+	VersionDirective *taskqueuespb.TaskVersionDirective
+	WorkerIdentity   string
+}
+
 // LifecycleState TODO: we need to add more lifecycle states to better categorize some activity states, particulary for terminated/canceled.
-func (a Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
 		return chasm.LifecycleStateCompleted
@@ -97,56 +105,54 @@ func NewEmbeddedActivity(
 ) {
 }
 
-// HandleRecordActivityTaskStarted processes the start of an activity task execution. It transitions the activity to
-// started state, updates the component fields, and returns the updated activity component.
-func HandleRecordActivityTaskStarted(
-	ctx context.Context,
-	activityRef chasm.ComponentRef,
-	versionDirective *taskqueuespb.TaskVersionDirective,
-	workerIdentity string,
-) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	response, _, err := chasm.UpdateComponent(
-		ctx,
-		activityRef,
-		func(a *Activity, ctx chasm.MutableContext, _ any) (*historyservice.RecordActivityTaskStartedResponse, error) {
-			if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
-				return nil, err
-			}
-
-			attempt, err := a.Attempt.Get(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			attempt.LastStartedTime = timestamppb.New(ctx.Now(a))
-			attempt.LastWorkerIdentity = workerIdentity
-
-			if versionDirective := versionDirective.GetDeploymentVersion(); versionDirective != nil {
-				attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
-					BuildId:        versionDirective.GetBuildId(),
-					DeploymentName: versionDirective.GetDeploymentName(),
-				}
-			}
-
-			store, err := a.Store.Get(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			if store == nil {
-				return nil, errors.New("activity store is nil")
-			}
-
-			response := &historyservice.RecordActivityTaskStartedResponse{}
-			if err := store.PopulateRecordActivityTaskStartedResponse(ctx, activityRef.EntityKey, response); err != nil {
-				return nil, err
-			}
-
-			return response, nil
-		},
-		nil,
-	)
+func (a *Activity) createAddActivityTaskRequest(_ chasm.Context, activityRef chasm.ComponentRef) (*matchingservice.AddActivityTaskRequest, error) {
+	protoRef, err := chasm.ComponentRefToProtoRef(activityRef, nil)
 	if err != nil {
+		return nil, err
+	}
+
+	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
+	return &matchingservice.AddActivityTaskRequest{
+		NamespaceId:            activityRef.NamespaceID,
+		TaskQueue:              a.ActivityOptions.TaskQueue,
+		ScheduleToStartTimeout: a.ActivityOptions.ScheduleToStartTimeout,
+		Priority:               a.Priority,
+		ComponentRef:           protoRef,
+	}, nil
+}
+
+// HandleRecordActivityTaskStarted updates the activity on recording activity task started and populates the response.
+func (a *Activity) HandleRecordActivityTaskStarted(ctx chasm.MutableContext, params RecordActivityTaskStartedParams) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
+		return nil, err
+	}
+
+	attempt, err := a.Attempt.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	attempt.LastStartedTime = timestamppb.New(ctx.Now(a))
+	attempt.LastWorkerIdentity = params.WorkerIdentity
+
+	if versionDirective := params.VersionDirective.GetDeploymentVersion(); versionDirective != nil {
+		attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+			BuildId:        versionDirective.GetBuildId(),
+			DeploymentName: versionDirective.GetDeploymentName(),
+		}
+	}
+
+	store, err := a.Store.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if store == nil {
+		return nil, errors.New("activity store is nil")
+	}
+
+	response := &historyservice.RecordActivityTaskStartedResponse{}
+	if err := store.PopulateRecordActivityTaskStartedResponse(ctx, params.EntityKey, response); err != nil {
 		return nil, err
 	}
 
@@ -198,7 +204,7 @@ func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, 
 	return nil
 }
 
-func (a Activity) RecordCompletion(ctx chasm.MutableContext) error {
+func (a *Activity) RecordCompletion(_ chasm.MutableContext) error {
 	return serviceerror.NewUnimplemented("RecordCompletion is not implemented")
 }
 

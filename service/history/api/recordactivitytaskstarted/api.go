@@ -47,8 +47,22 @@ func Invoke(
 	if activityRefProto := request.GetComponentRef(); activityRefProto != nil {
 		activityRef := chasm.ProtoRefToComponentRef(activityRefProto)
 
-		return activity.HandleRecordActivityTaskStarted(
-			ctx, activityRef, request.GetVersionDirective(), request.GetPollRequest().GetIdentity())
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			activityRef,
+			(*activity.Activity).HandleRecordActivityTaskStarted,
+			activity.RecordActivityTaskStartedParams{
+				EntityKey:        activityRef.EntityKey,
+				VersionDirective: request.GetVersionDirective(),
+				WorkerIdentity:   request.GetPollRequest().GetIdentity(),
+			},
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return response, nil
 	}
 
 	var err error
