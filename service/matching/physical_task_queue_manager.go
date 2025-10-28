@@ -351,26 +351,29 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 	}
 
 	var drainBacklogMgr backlogManager
+	var logger log.Logger
 	switch c.backlogMgr.(type) {
 	case *fairBacklogManagerImpl:
+		logger = log.With(c.logger, backlogTagPriorityDrain)
 		drainBacklogMgr = newPriBacklogManager(
 			c.tqCtx,
 			c,
 			c.config,
 			c.partitionMgr.engine.taskManager,
-			log.With(c.logger, backlogTagPriorityDrain),
+			logger,
 			log.With(c.throttledLogger, backlogTagPriorityDrain),
 			c.partitionMgr.engine.matchingRawClient,
 			newPriMetricsHandler(c.metricsHandler),
 			true,
 		)
 	case *priBacklogManagerImpl:
+		logger = log.With(c.logger, backlogTagFairnessDrain)
 		drainBacklogMgr = newFairBacklogManager(
 			c.tqCtx,
 			c,
 			c.config,
 			c.partitionMgr.engine.fairTaskManager,
-			log.With(c.logger, backlogTagFairnessDrain),
+			logger,
 			log.With(c.throttledLogger, backlogTagFairnessDrain),
 			c.partitionMgr.engine.matchingRawClient,
 			newFairMetricsHandler(c.metricsHandler),
@@ -386,6 +389,7 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 	if !softassert.That(c.logger, prev == nil, "SetupDraining called twice") {
 		return
 	}
+	logger.Info("Starting draining")
 	drainBacklogMgr.Start()
 }
 
