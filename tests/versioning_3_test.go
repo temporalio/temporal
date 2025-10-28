@@ -77,7 +77,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &Versioning3Suite{useV32: true})
 	// suite.Run(t, &Versioning3Suite{useV32: false}) // May not need this since these tests are for pre-release users.
-	// suite.Run(t, &Versioning3Suite{useV32: true, useNewDeploymentData: true})
+	suite.Run(t, &Versioning3Suite{useV32: true, useNewDeploymentData: true})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -294,12 +294,11 @@ func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersPresent() {
 }
 
 func (s *Versioning3Suite) TestPinnedQuery_RollbackDrainedVersion() {
-	// s.RunTestWithMatchingBehavior(
-	// func() {
-	// 	s.testPinnedQuery_DrainedVersion(true, true)
-	// },
-	// )
-	s.testPinnedQuery_DrainedVersion(true, true)
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedQuery_DrainedVersion(true, true)
+		},
+	)
 }
 
 func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, rollback bool) {
@@ -1250,7 +1249,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool
 	}
 }
 
-func (s *Versioning3Suite) c() {
+func (s *Versioning3Suite) TestDoubleTransition() {
 	s.testDoubleTransition(false, false)
 }
 
@@ -3555,121 +3554,196 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
-// Ensures that AutoUpgrade workflow tasks never dispatch to an older version even if
-// we don't wait for read-partition propagation after flipping the current version.
 func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Use many partitions to simulate skew; we intentionally do NOT wait for propagation after flip.
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 100)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 100)
-
-	tv0 := testvars.New(s).WithBuildIDNumber(1)
-	tv1 := tv0.WithBuildIDNumber(2)
-
-	fmt.Println("workflowID for tv0: ", tv0.WorkflowID())
-	fmt.Println("workflowID for tv1: ", tv1.WorkflowID())
-
-	// Make v0 current and wait for propagation for the first WFT
-	if s.useNewDeploymentData {
-		s.updateTaskQueueDeploymentDataWithRoutingConfig(tv0, &deploymentpb.RoutingConfig{
-			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
-			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-			RevisionNumber:            1,
-		}, map[string]*deploymentspb.WorkerDeploymentVersionData{
-			tv0.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
-		}, []string{}, tqTypeWf)
-	} else {
-		s.updateTaskQueueDeploymentData(tv0, true, 0, false, 0, tqTypeWf)
+	if !s.useNewDeploymentData {
+		s.T().Skip("This test is only supported on new deployment data")
 	}
-	s.waitForDeploymentDataPropagation(tv0, versionStatusCurrent, false, tqTypeWf)
+	/*
 
-	// Define workflow implementations that gate progress on a signal "flip".
-	// WFT1 runs on current (v0). After we flip to v1, a series of WFTs should not bounce back to v0.
-	const numWFTsAfterFlip = 5
-	wfStarted := make(chan struct{}, 1)
-	wfImpl := func(versionOut string) func(ctx workflow.Context) (string, error) {
-		return func(ctx workflow.Context) (string, error) {
-			// WFT1 on current version (v0) reaches here
-			wfStarted <- struct{}{}
-			// Wait until test flips current to v1 via a Temporal signal
-			flip := workflow.GetSignalChannel(ctx, "flip")
-			var dummy any
-			flip.Receive(ctx, &dummy)
-			// Generate a series of WFTs using timers; each firing produces next WFT
-			for i := 0; i < numWFTsAfterFlip; i++ {
-				_ = workflow.NewTimer(ctx, 200*time.Millisecond).Get(ctx, nil)
-			}
-			return versionOut, nil
-		}
+		Test plan:
+		- Use only one read and write partition.
+		- Update the userData by setting current version to v0.
+		- Start 1000 workflows on v0. MS reads v0 for these workflows.
+		- Update the userData by setting the current version to v1.
+		- Complete workflow task on v1. MS reads v1 for these workflows now.
+		- *Rollback* userData to v0 on that single partition (call lower level API)
+		- See if any workflow task goes back to original v0 poller (should not)
+
+	*/
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	tv0 := testvars.New(s).WithBuildIDNumber(0)
+	tv1 := tv0.WithBuildIDNumber(1)
+
+	// Update the userData by setting the current version to v0
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv0, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            1,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv0.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
+		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+	}}, []string{}, tqTypeWf, tqTypeAct)
+
+	// Wait until all task queue partitions know that v0 is current.
+	s.waitForDeploymentDataPropagation(tv0, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// Make numWorkflows different workflow ID's so that we can verify that all workflows are running on v0.
+	numWorkflows := 10
+	wfVars_v0 := make([]*testvars.TestVars, numWorkflows)
+	wfVars_v1 := make([]*testvars.TestVars, numWorkflows)
+
+	for i := 0; i < numWorkflows; i++ {
+		wfVars_v0[i] = tv0.WithWorkflowIDNumber(i)
+		wfVars_v1[i] = tv1.WithWorkflowIDNumber(i)
 	}
 
-	// Start workers with gated workflow
-	w0 := worker.New(s.SdkClient(), tv0.TaskQueue().GetName(), worker.Options{
-		DeploymentOptions: worker.DeploymentOptions{
-			Version:                   tv0.SDKDeploymentVersion(),
-			UseVersioning:             true,
-			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+	// Start all different workflows on version v0.
+	for i := 0; i < numWorkflows; i++ {
+		s.startWorkflow(wfVars_v0[i], nil)
+	}
+
+	// Poll for workflows on v0.
+	channels := make([]chan struct{}, numWorkflows)
+	for i := 0; i < numWorkflows; i++ {
+		channels[i] = make(chan struct{})
+		s.pollWftAndHandle(wfVars_v0[i], false, channels[i],
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				resp := respondEmptyWft(wfVars_v0[i], false, vbUnpinned)
+				resp.ForceCreateNewWorkflowTask = true
+				return resp, nil
+			})
+	}
+	// Wait for channels to be closed
+	for i := 0; i < numWorkflows; i++ {
+		<-channels[i]
+	}
+
+	// Verify that all workflows are running on v0.
+	for i := 0; i < numWorkflows; i++ {
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			s.verifyWorkflowVersioning(wfVars_v0[i], vbUnpinned, tv0.Deployment(), nil, nil)
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+
+	// Verify that all workflows are running on v0 by using v1 vars
+	for i := 0; i < numWorkflows; i++ {
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			s.verifyWorkflowVersioning(wfVars_v1[i], vbUnpinned, tv0.Deployment(), nil, nil)
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+
+	// Update the userData by setting the current version to v1.
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            2,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
+		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+	}}, []string{}, tqTypeWf, tqTypeAct)
+
+	// Wait until all task queue partitions know that v1 is current.
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// Poll for workflows but this time the workflow task should be acted upon by a v1 worker.
+	channels = make([]chan struct{}, numWorkflows)
+	for i := 0; i < numWorkflows; i++ {
+		channels[i] = make(chan struct{})
+		s.pollWftAndHandle(wfVars_v1[i], false, channels[i],
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				resp := respondEmptyWft(wfVars_v1[i], false, vbUnpinned)
+				resp.ForceCreateNewWorkflowTask = true
+				return resp, nil
+			})
+	}
+	// Wait for channels to be closed
+	for i := 0; i < numWorkflows; i++ {
+		<-channels[i]
+	}
+	// Verify that all workflows are running on v1.
+	for i := 0; i < numWorkflows; i++ {
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			s.verifyWorkflowVersioning(wfVars_v1[i], vbUnpinned, tv1.Deployment(), nil, nil)
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+
+	// Rollback the userData to v0. Using the lower API here.
+	s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
+		NamespaceId: s.NamespaceID().String(),
+		TaskQueue:   tv0.TaskQueue().GetName(),
+		UserData: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(tqTypeWf): {
+						DeploymentData: &persistencespb.DeploymentData{
+							DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+								tv0.DeploymentVersion().GetDeploymentName(): {
+									RoutingConfig: &deploymentpb.RoutingConfig{
+										CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
+										CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(-time.Second)),
+										RevisionNumber:            0,
+									},
+									Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+										tv0.DeploymentVersion().GetBuildId(): {
+											Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+										},
+									},
+								},
+							},
+						},
+					},
+					int32(tqTypeAct): {
+						DeploymentData: &persistencespb.DeploymentData{
+							DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+								tv0.DeploymentVersion().GetDeploymentName(): {
+									RoutingConfig: &deploymentpb.RoutingConfig{
+										CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
+										CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(-time.Second)),
+										RevisionNumber:            0,
+									},
+									Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+										tv0.DeploymentVersion().GetBuildId(): {
+											Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Version: 0,
 		},
-		MaxConcurrentWorkflowTaskPollers: numPollers,
-		DeadlockDetectionTimeout:         30 * time.Second,
 	})
-	w0.RegisterWorkflowWithOptions(wfImpl("v0"), workflow.RegisterOptions{Name: "wf", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
-	s.NoError(w0.Start())
-	defer w0.Stop()
 
-	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
-		DeploymentOptions: worker.DeploymentOptions{
-			Version:                   tv1.SDKDeploymentVersion(),
-			UseVersioning:             true,
-			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
-		},
-		MaxConcurrentWorkflowTaskPollers: numPollers,
-		DeadlockDetectionTimeout:         30 * time.Second,
-	})
-	w1.RegisterWorkflowWithOptions(wfImpl("v1"), workflow.RegisterOptions{Name: "wf", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
-	s.NoError(w1.Start())
-	defer w1.Stop()
-
-	// Start a workflow; it will block waiting for signals after WFT1 on v0
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        tv0.WorkflowID(),
-		TaskQueue: tv0.TaskQueue().GetName(),
-	}, "wf")
-	s.NoError(err)
-	// Ensure WFT1 started on v0 and is now waiting for flip
-	s.WaitForChannel(ctx, wfStarted)
-
-	// Flip current to v1 but do not wait for read partition propagation
-	if s.useNewDeploymentData {
-		s.syncTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
-			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
-			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-			RevisionNumber:            2,
-		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
-			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}, tv0.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
-			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
-		}}, []string{}, tqTypeWf)
-	} else {
-		// Waiting for the update to propagate in the public-preview version of worker-versioning.
-		s.syncTaskQueueDeploymentData(tv1, true, 0, false, time.Now(), tqTypeWf)
-		s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf)
+	// Even though the userData is rolled back to v0, the workflows should only continue to run on v1.
+	// Start idle pollers on v0 and ensure they never receive a task.
+	for i := 0; i < numWorkflows; i++ {
+		go s.idlePollWorkflow(wfVars_v0[i], true, ver3MinPollTime, "workflows should not go to the old deployment")
 	}
 
-	// Unblock workflow to start timer-driven WFTs on v1 (signal latest run)
-	s.NoError(s.SdkClient().SignalWorkflow(ctx, tv0.WorkflowID(), "", "flip", nil))
+	// Complete all workflows on v1.
+	channels = make([]chan struct{}, numWorkflows)
+	for i := 0; i < numWorkflows; i++ {
+		channels[i] = make(chan struct{})
+		s.pollWftAndHandle(wfVars_v1[i], false, channels[i],
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				return respondCompleteWorkflow(wfVars_v1[i], vbUnpinned), nil
+			})
+	}
+	// Wait for channels to be closed
+	for i := 0; i < numWorkflows; i++ {
+		<-channels[i]
+	}
 
-	// Workflow has transitioned to v1
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		s.verifyWorkflowVersioning(tv0, vbUnpinned, tv1.Deployment(), nil, nil)
-	}, 10*time.Second, 200*time.Millisecond)
-
-	// Idle v0 poller to assert no WFT goes back to v0 after upgrade
-	go s.idlePollWorkflow(tv0, true, ver3MinPollTime, "v0 should not receive WFT after upgrade to v1")
-
-	var out string
-	s.NoError(run.Get(ctx, &out))
-	s.Equal("v1", out)
+	// Verify that all workflows are completed on v1.
+	for i := 0; i < numWorkflows; i++ {
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			s.verifyWorkflowVersioning(wfVars_v1[i], vbUnpinned, tv1.Deployment(), nil, nil)
+		}, 60*time.Second, 100*time.Millisecond)
+	}
 }

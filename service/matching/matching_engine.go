@@ -1925,12 +1925,6 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 			// set/append the new data
 			deploymentData := data.PerType[int32(t)].DeploymentData
-			if deploymentData.GetDeploymentsData() == nil {
-				deploymentData.DeploymentsData = make(map[string]*persistencespb.WorkerDeploymentData)
-			}
-			if deploymentData.GetDeploymentsData()[req.GetDeploymentName()] == nil {
-				deploymentData.GetDeploymentsData()[req.GetDeploymentName()] = &persistencespb.WorkerDeploymentData{}
-			}
 
 			if d := req.Deployment; d != nil {
 				// [cleanup-old-wv]
@@ -1976,6 +1970,15 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
 				}
 			} else {
+
+				// Only initialize DeploymentsData if we're using the new format
+				if deploymentData.GetDeploymentsData() == nil {
+					deploymentData.DeploymentsData = make(map[string]*persistencespb.WorkerDeploymentData)
+				}
+				if deploymentData.GetDeploymentsData()[req.GetDeploymentName()] == nil {
+					deploymentData.GetDeploymentsData()[req.GetDeploymentName()] = &persistencespb.WorkerDeploymentData{}
+				}
+
 				rc := req.GetUpdateRoutingConfig()
 				tqWorkerDeploymentData := deploymentData.GetDeploymentsData()[req.GetDeploymentName()]
 
