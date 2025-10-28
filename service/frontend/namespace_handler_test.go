@@ -383,14 +383,14 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 	s.False(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
-	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
+	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 
 	// Second call: Override the default value of dynamic configs.
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableUpdateWorkflowExecutionAsyncAccepted = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = dc.GetIntPropertyFnFilteredByNamespace(5)
-	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -400,7 +400,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.False(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
-	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
+	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
@@ -679,7 +679,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveClusterWit
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
-				State:             enumspb.REPLICATION_STATE_HANDOVER,
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
 						FailoverTime:    timestamppb.New(update1Time),
@@ -754,6 +754,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ChangeActiveClusterWit
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
 						FailoverTime:    timestamppb.New(update1Time),
@@ -865,6 +866,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory:   sizeLimitedFailoverHistory,
 			},
 			ConfigVersion:               0,
@@ -1147,6 +1149,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: activeClusterName,
 				Clusters:          []string{activeClusterName},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 			},
 			ConfigVersion:               1,
 			FailoverNotificationVersion: 0,
@@ -1666,6 +1669,7 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
 				FailoverHistory: []*persistencespb.FailoverStatus{
 					{
 						FailoverTime:    timestamppb.New(update1Time),
@@ -1771,7 +1775,7 @@ func (s *namespaceHandlerCommonSuite) TestDeleteWorkflowRule() {
 	ruleId := "test-id"
 	nsConfig := &persistencespb.NamespaceConfig{
 		WorkflowRules: map[string]*rulespb.WorkflowRule{
-			ruleId: &rulespb.WorkflowRule{
+			ruleId: {
 				Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
 			},
 		},
@@ -1816,7 +1820,7 @@ func (s *namespaceHandlerCommonSuite) TestDescribeWorkflowRule() {
 	ruleId := "test-id"
 	nsConfig := &persistencespb.NamespaceConfig{
 		WorkflowRules: map[string]*rulespb.WorkflowRule{
-			ruleId: &rulespb.WorkflowRule{
+			ruleId: {
 				Spec: &rulespb.WorkflowRuleSpec{Id: ruleId},
 			},
 		},

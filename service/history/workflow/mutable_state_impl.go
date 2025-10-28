@@ -678,6 +678,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		completion, err := nexusrpc.NewOperationCompletionSuccessful(p, nexusrpc.OperationCompletionSuccessfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
 			StartTime:  ms.executionState.GetStartTime().AsTime(),
+			CloseTime:  ce.GetEventTime().AsTime(),
 			Links:      []nexus.Link{startLink},
 		})
 		if err != nil {
@@ -693,6 +694,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
+				CloseTime: ce.GetEventTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
@@ -714,6 +716,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
+				CloseTime: ce.GetEventTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
@@ -730,6 +733,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
+				CloseTime: ce.GetEventTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
@@ -752,6 +756,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 			nexusrpc.OperationCompletionUnsuccessfulOptions{
 				StartTime: ms.executionState.GetStartTime().AsTime(),
+				CloseTime: ce.GetEventTime().AsTime(),
 				Links:     []nexus.Link{startLink},
 			})
 	}
@@ -4004,6 +4009,7 @@ func (ms *MutableStateImpl) AddCompletedWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -4047,6 +4053,7 @@ func (ms *MutableStateImpl) AddFailWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -4094,6 +4101,7 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -4176,6 +4184,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -4708,6 +4717,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		deleteAfterTerminate,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, err
 	}
@@ -5254,6 +5264,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		continueAsNewEvent.GetEventTime().AsTime(),
 		false,
+		false, // skipCloseTransferTask
 	); err != nil {
 		return nil, nil, err
 	}

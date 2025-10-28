@@ -14,6 +14,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -775,4 +776,198 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	},
 		time.Second*10,
 		time.Second)
+}
+
+func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication() {
+	if !s.enableTransitionHistory {
+		s.T().Skip("Skip when transition history is disabled")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	ns := s.createNamespaceInCluster0(false)
+	s.T().Logf("Created local namespace '%s' on cluster 0 (active)", ns)
+
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		recorder.Clear()
+	}
+	s.T().Log("Cleared replication stream recorders on all clusters")
+
+	workflowID := "test-replication-" + uuid.New()
+	sourceClient := s.clusters[0].FrontendClient()
+	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           ns,
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout:  durationpb.New(time.Minute),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	s.Require().NoError(err, "Failed to start workflow execution")
+	s.T().Logf("Started workflow '%s' (RunID: %s) on cluster 0", workflowID, startResp.GetRunId())
+
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
+		}}, nil
+	}
+
+	//nolint:staticcheck // TODO: replace with taskpoller.TaskPoller
+	poller := &testcore.TaskPoller{
+		Client:              sourceClient,
+		Namespace:           ns,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		Identity:            "worker-identity",
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.Require().NoError(err, "Failed to poll and process workflow task")
+	s.T().Log("Completed workflow execution via worker poll")
+
+	s.Eventually(func() bool {
+		resp, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      startResp.GetRunId(),
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
+	s.T().Log("Verified workflow reached COMPLETED status")
+
+	namespaceResp, err := sourceClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	})
+	s.Require().NoError(err, "Failed to describe namespace")
+	namespaceID := namespaceResp.NamespaceInfo.GetId()
+
+	historyClient := s.clusters[0].HistoryClient()
+	mutableStateResp, err := historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().NoError(err, "Failed to describe mutable state")
+	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")
+	s.T().Logf("Retrieved mutable state for workflow (NamespaceID: %s)", namespaceID)
+
+	//nolint:forbidigo // waiting for close transfer task to be acked - no alternative available
+	time.Sleep(5 * time.Second)
+	s.T().Log("Waited 5 seconds for close transfer task to be acknowledged internally")
+
+	targetClient := s.clusters[1].FrontendClient()
+	_, err = targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	})
+	s.Require().Error(err, "Namespace should not exist on target cluster before promotion")
+
+	_, err = targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().Error(err, "Workflow should not exist on target cluster before promotion")
+	s.T().Log("Verified namespace and workflow do NOT exist on cluster 1 (standby) before promotion")
+
+	_, err = sourceClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace:        ns,
+		PromoteNamespace: true,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: s.clusters[0].ClusterName()},
+				{ClusterName: s.clusters[1].ClusterName()},
+			},
+		},
+	})
+	s.Require().NoError(err, "Failed to promote namespace to global")
+	s.T().Logf("Promoted namespace '%s' from local to global (added cluster 1)", ns)
+
+	s.Eventually(func() bool {
+		_, err := targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: ns,
+		})
+		return err == nil
+	}, 60*time.Second, time.Second)
+	s.T().Log("Verified namespace replicated to cluster 1")
+
+	sourceAdminClient := s.clusters[0].AdminClient()
+	_, err = sourceAdminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().NoError(err, "Failed to generate last history replication tasks")
+	s.T().Log("Generated last history replication tasks to force replication of completed workflow")
+
+	recorder := s.clusters[0].GetReplicationStreamRecorder()
+	s.T().Log("Checking replication stream for close transfer task acknowledgment in versioned transition artifact...")
+	s.Eventually(func() bool {
+		for _, msg := range recorder.GetMessages() {
+			if msg.Direction != testcore.DirectionServerSend {
+				continue
+			}
+
+			resp := testcore.ExtractReplicationMessages(msg.Request)
+			if resp == nil {
+				continue
+			}
+
+			for _, task := range resp.GetReplicationTasks() {
+				if syncAttrs := task.GetSyncVersionedTransitionTaskAttributes(); syncAttrs != nil {
+					if artifact := syncAttrs.GetVersionedTransitionArtifact(); artifact != nil {
+						if artifact.GetIsCloseTransferTaskAcked() && artifact.GetIsForceReplication() {
+							return true
+						}
+					}
+				}
+			}
+		}
+		return false
+	}, 10*time.Second, 100*time.Millisecond)
+	s.T().Log("Verified IsCloseTransferTaskAcked flag is set in replication artifact")
+
+	// Wait for replication to complete to the passive cluster
+	s.T().Log("Waiting for workflow to replicate to cluster 1 (passive)...")
+	s.Eventually(func() bool {
+		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      startResp.GetRunId(),
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 30*time.Second, time.Second)
+	s.T().Log("Verified workflow replicated to cluster 1 (passive) with COMPLETED status")
+
+	// Write captured replication messages to log files for both clusters
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		if err := recorder.WriteToLog(); err != nil {
+			s.T().Logf("Failed to write replication stream log for cluster %s: %v", cluster.ClusterName(), err)
+		}
+	}
 }

@@ -52,7 +52,6 @@ enum CallbackStatus {
     CALLBACK_STATUS_SUCCEEDED = 5;
 }
 
-
 message Callback {
     message Nexus {
         // Callback URL.

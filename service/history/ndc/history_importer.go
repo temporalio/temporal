@@ -328,6 +328,7 @@ func (r *HistoryImporterImpl) commit(
 		if err := r.taskRefresher.Refresh(
 			ctx,
 			memNDCWorkflow.GetMutableState(),
+			false,
 		); err != nil {
 			return err
 		}
@@ -420,6 +421,7 @@ func (r *HistoryImporterImpl) commit(
 	if err := r.taskRefresher.Refresh(
 		ctx,
 		memNDCWorkflow.GetMutableState(),
+		false,
 	); err != nil {
 		return err
 	}

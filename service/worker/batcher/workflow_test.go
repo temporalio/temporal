@@ -29,7 +29,7 @@ func TestBatcherSuite(t *testing.T) {
 func (s *batcherSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-	s.env.RegisterWorkflow(BatchWorkflow)
+	s.env.RegisterWorkflow(BatchWorkflowProtobuf)
 }
 
 func (s *batcherSuite) TearDownTest() {
@@ -37,16 +37,16 @@ func (s *batcherSuite) TearDownTest() {
 	s.env.AssertExpectations(s.T())
 }
 
-func (s *batcherSuite) TestBatchWorkflow_MissingParams() {
-	s.env.ExecuteWorkflow(BatchWorkflow, &batchspb.BatchOperationInput{})
+func (s *batcherSuite) TestBatchWorkflow_MissingParams_Protobuf() {
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{})
 	err := s.env.GetWorkflowError()
 	s.Require().Error(err)
 	s.Contains(err.Error(), "must provide required parameters")
 }
 
-func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query() {
+func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 	var ac *activities
-	s.env.OnActivity(ac.BatchActivity, mock.Anything, mock.Anything).Return(HeartBeatDetails{
+	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
 		SuccessCount: 42,
 		ErrorCount:   27,
 	}, nil)
@@ -60,7 +60,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflow, &batchspb.BatchOperationInput{
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
 			JobId: uuid.New(),
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
@@ -76,9 +76,9 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query() {
 	s.Require().NoError(err)
 }
 
-func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions() {
+func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 	var ac *activities
-	s.env.OnActivity(ac.BatchActivity, mock.Anything, mock.Anything).Return(HeartBeatDetails{
+	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
 		SuccessCount: 42,
 		ErrorCount:   27,
 	}, nil)
@@ -92,7 +92,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions() {
 			},
 		}, memo)
 	}).Once()
-	s.env.ExecuteWorkflow(BatchWorkflow, &batchspb.BatchOperationInput{
+	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
 			JobId: uuid.New(),
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{

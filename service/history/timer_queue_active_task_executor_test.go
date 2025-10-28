@@ -1990,8 +1990,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	}
 
 	// Mock the CHASM tree and execute interface.
-	mockEach := chasm.NewMockNodePureTask(s.controller)
-	mockEach.EXPECT().ExecutePureTask(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+	mockEach := &chasm.MockNodePureTask{}
 	chasmTree := historyi.NewMockChasmTree(s.controller)
 	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
 		Times(1).Do(

@@ -135,7 +135,7 @@ func (s *RetrySuite) TestRetryContextTimeout() {
 	err := ThrottleRetryContext(ctx, func(ctx context.Context) error { return &someError{} },
 		NewExponentialRetryPolicy(1*time.Second), retryEverything)
 	elapsed := time.Since(start)
-	s.ErrorIs(err, &someError{})
+	s.ErrorAs(err, new(*someError))
 	s.Less(elapsed, timeout,
 		"Call to retry should return early if backoff exceeds context timeout")
 }

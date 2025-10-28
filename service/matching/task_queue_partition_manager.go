@@ -576,6 +576,10 @@ func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
 	return pm.userDataManager
 }
 
+func (pm *taskQueuePartitionManagerImpl) GetConfig() *taskQueueConfig {
+	return pm.config
+}
+
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
 	ret := pm.defaultQueue.GetAllPollerInfo()

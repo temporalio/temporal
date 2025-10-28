@@ -439,6 +439,7 @@ func (h *nexusHandler) StartOperation(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -603,6 +604,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.logger.Error("received error from matching service for Nexus CancelOperation request", tag.Error(err))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
