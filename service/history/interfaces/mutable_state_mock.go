@@ -651,6 +651,21 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links)
 }
 
+// AddWorkflowExecutionPausedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionPausedEvent(identity, reason, requestId string) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionPausedEvent", identity, reason, requestId)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionPausedEvent indicates an expected call of AddWorkflowExecutionPausedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionPausedEvent(identity, reason, requestId any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionPausedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionPausedEvent), identity, reason, requestId)
+}
+
 // AddWorkflowExecutionSignaled mocks base method.
 func (m *MockMutableState) AddWorkflowExecutionSignaled(signalName string, input *common.Payloads, identity string, header *common.Header, links []*common.Link) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
