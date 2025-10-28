@@ -535,14 +535,10 @@ func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *test
 		}
 		for _, versionInfoInternal := range res.VersionsInfoInternal {
 			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
-				// ApproximateBacklogCount is sometimes wrong for draining because it fails to sync on unload, but
-				// LoadedTasks for fairness may not include the whole backlog because of matching.getTasksReloadAt.
-				// The max is a good count of tasks on the queue. This check is only for extra confidence anyway,
-				// the test is useful without it.
 				if st.Draining {
-					tasksOnDraining += max(st.ApproximateBacklogCount, st.LoadedTasks)
+					tasksOnDraining += st.ApproximateBacklogCount
 				} else {
-					tasksOnActive += max(st.ApproximateBacklogCount, st.LoadedTasks)
+					tasksOnActive += st.ApproximateBacklogCount
 				}
 			}
 		}
