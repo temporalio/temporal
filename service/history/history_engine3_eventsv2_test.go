@@ -372,7 +372,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken, _ = ms.GetCurrentBranchToken()
-	expectedResponse.RawHistory = [][]byte{historyBlob}
+	expectedResponse.RawHistoryBytes = [][]byte{historyBlob}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)

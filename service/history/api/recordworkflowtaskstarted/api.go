@@ -347,7 +347,11 @@ func setHistoryForRecordWfTaskStartedResp(
 		for i, blob := range rawHistory {
 			historyBlobs[i] = blob.Data
 		}
+		// Populate both RawHistory (field 20) and RawHistoryBytes (field 21) as per proto contract.
+		// Field 20 will be auto-deserialized by matching's GRPC client to History type.
+		// Field 21 will remain as raw bytes for the optimized path.
 		response.RawHistory = historyBlobs
+		response.RawHistoryBytes = historyBlobs
 	} else {
 		response.History = history
 	}
