@@ -2424,18 +2424,18 @@ func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(arg0 any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), arg0)
 }
 
-// GetScheduledRoutingConfigCounter mocks base method.
-func (m *MockMutableState) GetScheduledRoutingConfigCounter() int32 {
+// GetRevisionNumber mocks base method.
+func (m *MockMutableState) GetRevisionNumber() int64 {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetScheduledRoutingConfigCounter")
-	ret0, _ := ret[0].(int32)
+	ret := m.ctrl.Call(m, "GetRevisionNumber")
+	ret0, _ := ret[0].(int64)
 	return ret0
 }
 
-// GetScheduledRoutingConfigCounter indicates an expected call of GetScheduledRoutingConfigCounter.
-func (mr *MockMutableStateMockRecorder) GetScheduledRoutingConfigCounter() *gomock.Call {
+// GetRevisionNumber indicates an expected call of GetRevisionNumber.
+func (mr *MockMutableStateMockRecorder) GetRevisionNumber() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScheduledRoutingConfigCounter", reflect.TypeOf((*MockMutableState)(nil).GetScheduledRoutingConfigCounter))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).GetRevisionNumber))
 }
 
 // GetSignalExternalInitiatedEvent mocks base method.
@@ -2827,16 +2827,16 @@ func (mr *MockMutableStateMockRecorder) HasStartedWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStartedWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasStartedWorkflowTask))
 }
 
-// IncrementScheduledRoutingConfigCounter mocks base method.
-func (m *MockMutableState) IncrementScheduledRoutingConfigCounter() {
+// IncrementRevisionNumber mocks base method.
+func (m *MockMutableState) IncrementRevisionNumber() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "IncrementScheduledRoutingConfigCounter")
+	m.ctrl.Call(m, "IncrementRevisionNumber")
 }
 
-// IncrementScheduledRoutingConfigCounter indicates an expected call of IncrementScheduledRoutingConfigCounter.
-func (mr *MockMutableStateMockRecorder) IncrementScheduledRoutingConfigCounter() *gomock.Call {
+// IncrementRevisionNumber indicates an expected call of IncrementRevisionNumber.
+func (mr *MockMutableStateMockRecorder) IncrementRevisionNumber() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementScheduledRoutingConfigCounter", reflect.TypeOf((*MockMutableState)(nil).IncrementScheduledRoutingConfigCounter))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).IncrementRevisionNumber))
 }
 
 // InitTransitionHistory mocks base method.
