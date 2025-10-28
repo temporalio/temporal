@@ -3034,6 +3034,20 @@ func (mr *MockMutableStateMockRecorder) IsWorkflowCloseAttempted() *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowCloseAttempted", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowCloseAttempted))
 }
 
+// IsWorkflowExecutionPaused mocks base method.
+func (m *MockMutableState) IsWorkflowExecutionPaused() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWorkflowExecutionPaused")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsWorkflowExecutionPaused indicates an expected call of IsWorkflowExecutionPaused.
+func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionPaused() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionPaused", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowExecutionPaused))
+}
+
 // IsWorkflowExecutionRunning mocks base method.
 func (m *MockMutableState) IsWorkflowExecutionRunning() bool {
 	m.ctrl.T.Helper()
