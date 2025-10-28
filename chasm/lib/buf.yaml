@@ -7,6 +7,7 @@ breaking:
     - WIRE
   ignore:
     - chasm/lib/scheduler/proto/v1/message.proto
+    - chasm/lib/callback/proto/v1/tasks.proto
 lint:
   use:
     - DEFAULT

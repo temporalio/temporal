@@ -31,7 +31,7 @@ var TransitionRescheduled = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(ctx chasm.MutableContext, cb *Callback, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{Attempt: cb.Attempt})
 		return nil
 	},
 )

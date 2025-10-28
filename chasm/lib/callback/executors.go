@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -14,7 +15,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
@@ -82,7 +82,8 @@ func (r invocationResultFail) error() error {
 
 // invocationResultRetry marks an invocation as failed with the intent to retry.
 type invocationResultRetry struct {
-	err error
+	err         error
+	retryPolicy backoff.RetryPolicy
 }
 
 func (invocationResultRetry) mustImplementInvocationResult() {}
@@ -113,7 +114,7 @@ func (e InvocationTaskExecutor) Invoke(
 	invokable, err := chasm.ReadComponent(
 		ctx,
 		ref,
-		e.loadInvocationArgs,
+		(*Callback).loadInvocationArgs,
 		ctx,
 	)
 	if err != nil {
@@ -130,77 +131,10 @@ func (e InvocationTaskExecutor) Invoke(
 	_, _, saveErr := chasm.UpdateComponent(
 		ctx,
 		ref,
-		e.saveResult,
+		(*Callback).saveResult,
 		result,
 	)
 	return invokable.WrapError(result, saveErr)
-}
-
-//nolint:revive // context.Context is an input parameter for chasm.ReadComponent, not a function parameter
-func (e InvocationTaskExecutor) loadInvocationArgs(
-	component *Callback,
-	chasmCtx chasm.Context,
-	ctx context.Context,
-) (callbackInvokable, error) {
-	target, err := component.CompletionSource.Get(chasmCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	completion, err := target.GetNexusCompletion(ctx, component.RequestId)
-	if err != nil {
-		return nil, err
-	}
-
-	switch variant := component.GetCallback().GetVariant().(type) {
-	case *callbackspb.Callback_Nexus_:
-		if variant.Nexus.Url == chasm.NexusCompletionHandlerURL {
-			return chasmInvocation{
-				nexus:      variant.Nexus,
-				attempt:    component.Attempt,
-				completion: completion,
-				requestID:  component.RequestId,
-			}, nil
-		}
-		return nexusInvocation{
-			nexus:      variant.Nexus,
-			completion: completion,
-			// workflowID: component.WorkflowId,
-			workflowID: chasmCtx.ExecutionKey().BusinessID,
-			runID:      chasmCtx.ExecutionKey().EntityID,
-			attempt:    component.Attempt,
-		}, nil
-	default:
-		return nil, queues.NewUnprocessableTaskError(
-			fmt.Sprintf("unprocessable callback variant: %v", variant),
-		)
-	}
-}
-
-func (e InvocationTaskExecutor) saveResult(
-	component *Callback,
-	ctx chasm.MutableContext,
-	result invocationResult,
-) (struct{}, error) {
-	switch result.(type) {
-	case invocationResultOK:
-		component.Status = callbackspb.CALLBACK_STATUS_SUCCEEDED
-		component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
-	case invocationResultRetry:
-		component.Status = callbackspb.CALLBACK_STATUS_BACKING_OFF
-		component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
-		// TODO (seankane): Calculate backoff and set NextAttemptScheduleTime
-		// TODO (seankane): Add backoff task
-	case invocationResultFail:
-		component.Status = callbackspb.CALLBACK_STATUS_FAILED
-		component.LastAttemptCompleteTime = timestamppb.New(ctx.Now(component))
-	default:
-		return struct{}{}, queues.NewUnprocessableTaskError(
-			fmt.Sprintf("unrecognized callback result %v", result),
-		)
-	}
-
-	return struct{}{}, nil
 }
 
 type BackoffTaskExecutor struct {
@@ -229,23 +163,7 @@ func (e *BackoffTaskExecutor) Execute(
 	taskAttrs chasm.TaskAttributes,
 	task *callbackspb.BackoffTask,
 ) error {
-	// Create a taskExecutor wrapper with the same options
-	executor := InvocationTaskExecutor{
-		InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
-			Config:         e.Config,
-			MetricsHandler: e.MetricsHandler,
-			Logger:         e.Logger,
-		},
-	}
-
-	// Convert the CHASM task to the internal BackoffTask type
-	// Note: BackoffTask proto is empty, deadline comes from NextAttemptScheduleTime in callback
-	backoffTask := &callbackspb.BackoffTask{
-		Attempt: callback.Attempt,
-	}
-
-	// Delegate to the taskExecutor implementation
-	return executor.executeBackoffTask(ctx, callback, taskAttrs, backoffTask)
+	return TransitionRescheduled.Apply(ctx, callback, EventRescheduled{})
 }
 
 func (e *BackoffTaskExecutor) Validate(
@@ -256,22 +174,4 @@ func (e *BackoffTaskExecutor) Validate(
 ) (bool, error) {
 	// Validate that the callback is in BACKING_OFF state
 	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF && callback.Attempt == task.Attempt, nil
-}
-
-func (e InvocationTaskExecutor) executeBackoffTask(
-	ctx chasm.MutableContext,
-	callback *Callback,
-	attrs chasm.TaskAttributes,
-	_ *callbackspb.BackoffTask,
-) error {
-	callback.Status = callbackspb.CALLBACK_STATUS_SCHEDULED
-	callback.NextAttemptScheduleTime = nil
-
-	invocationTask := &callbackspb.InvocationTask{Attempt: callback.Attempt}
-	chasmAttrs := chasm.TaskAttributes{
-		ScheduledTime: chasm.TaskScheduledTimeImmediate,
-		Destination:   attrs.Destination,
-	}
-	ctx.AddTask(callback, chasmAttrs, invocationTask)
-	return nil
 }

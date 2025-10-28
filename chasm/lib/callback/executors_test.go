@@ -307,8 +307,7 @@ func TestLoadInvocationArgs(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			// Setup logger and time source
-			logger := log.NewNoopLogger()
+			// Setup time source
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
@@ -358,13 +357,6 @@ func TestLoadInvocationArgs(t *testing.T) {
 				return readFn(mockCtx, callback)
 			})
 
-			// Create executor
-			executor := InvocationTaskExecutor{
-				InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
-					Logger: logger,
-				},
-			}
-
 			// Create ComponentRef
 			ref := chasm.NewComponentRef[*Callback](chasm.EntityKey{
 				NamespaceID: "namespace-id",
@@ -379,7 +371,7 @@ func TestLoadInvocationArgs(t *testing.T) {
 			invokable, err := chasm.ReadComponent(
 				ctx,
 				ref,
-				executor.loadInvocationArgs,
+				(*Callback).loadInvocationArgs,
 				ctx,
 			)
 
@@ -404,7 +396,7 @@ func TestSaveResult(t *testing.T) {
 		},
 		{
 			name:           "retry",
-			result:         invocationResultRetry{err: errors.New("retry me")},
+			result:         invocationResultRetry{err: errors.New("retry me"), retryPolicy: backoff.NewExponentialRetryPolicy(time.Second)},
 			expectedStatus: callbackspb.CALLBACK_STATUS_BACKING_OFF,
 		},
 		{
@@ -419,7 +411,6 @@ func TestSaveResult(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			logger := log.NewNoopLogger()
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
@@ -456,18 +447,6 @@ func TestSaveResult(t *testing.T) {
 				return nil, err
 			})
 
-			executor := InvocationTaskExecutor{
-				InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
-					Config: &Config{
-						RetryPolicy: func() backoff.RetryPolicy {
-							return backoff.NewExponentialRetryPolicy(time.Second)
-						},
-					},
-					Logger:      logger,
-					ChasmEngine: mockEngine,
-				},
-			}
-
 			ref := chasm.NewComponentRef[*Callback](chasm.EntityKey{
 				NamespaceID: "namespace-id",
 				BusinessID:  "workflow-id",
@@ -481,7 +460,7 @@ func TestSaveResult(t *testing.T) {
 			_, _, err := chasm.UpdateComponent(
 				ctx,
 				ref,
-				executor.saveResult,
+				(*Callback).saveResult,
 				tc.result,
 			)
 

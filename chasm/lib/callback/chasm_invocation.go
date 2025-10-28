@@ -83,7 +83,7 @@ func (c chasmInvocation) Invoke(
 	if err != nil {
 		msg := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
 		if isRetryableRPCResponse(err) {
-			return invocationResultRetry{msg}
+			return invocationResultRetry{err: msg, retryPolicy: e.Config.RetryPolicy()}
 		}
 		return invocationResultFail{msg}
 	}
