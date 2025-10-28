@@ -1,5 +1,3 @@
-//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination tree_mock.go
-
 package chasm
 
 import (

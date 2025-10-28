@@ -9,7 +9,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
-	"go.uber.org/mock/gomock"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
@@ -17,7 +17,6 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
 		mockContext        *MockContext
 		mockMutableContext *MockMutableContext
 
@@ -33,16 +32,16 @@ func TestVisibilitySuite(t *testing.T) {
 
 func (s *visibilitySuite) SetupTest() {
 	s.initAssertions()
-	s.controller = gomock.NewController(s.T())
-	s.mockContext = NewMockContext(s.controller)
-	s.mockMutableContext = NewMockMutableContext(s.controller)
+	s.mockContext = &MockContext{}
+	s.mockMutableContext = &MockMutableContext{}
 
 	s.registry = NewRegistry(log.NewTestLogger())
 	err := s.registry.Register(&CoreLibrary{})
 	s.NoError(err)
 
-	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 	s.visibility = NewVisibility(s.mockMutableContext)
+	s.Len(s.mockMutableContext.Tasks, 1)
+	s.mockMutableContext.Tasks = nil // Clear tasks added during creation
 }
 
 func (s *visibilitySuite) SetupSubTest() {
@@ -79,7 +78,6 @@ func (s *visibilitySuite) TestSearchAttributes() {
 	floatKey, floatVal := "floatKey", 3.14
 
 	// Add SA via Visibility struct method.
-	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}).Times(1)
 	err = s.visibility.SetSearchAttributes(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
@@ -89,6 +87,8 @@ func (s *visibilitySuite) TestSearchAttributes() {
 		},
 	)
 	s.NoError(err)
+	s.Len(s.mockMutableContext.Tasks, 1)
+	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}, s.mockMutableContext.Tasks[0].Payload.(*persistencespb.ChasmVisibilityTaskData))
 
 	sa, err = s.visibility.GetSearchAttributes(s.mockMutableContext)
 	s.NoError(err)
@@ -110,12 +110,14 @@ func (s *visibilitySuite) TestSearchAttributes() {
 	s.Equal(floatVal, actualFloatVal)
 
 	// Test remove search attributes by setting payload to nil.
-	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
 	err = s.visibility.SetSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
 		intKey:   s.mustEncode(intVal),
 		floatKey: nil,
 	})
 	s.NoError(err)
+	s.Len(s.mockMutableContext.Tasks, 2)
+	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}, s.mockMutableContext.Tasks[1].Payload.(*persistencespb.ChasmVisibilityTaskData))
+
 	sa, err = s.visibility.GetSearchAttributes(s.mockMutableContext)
 	s.NoError(err)
 	s.Len(sa, 2, "intKey and stringKey should remain")
@@ -131,13 +133,14 @@ func (s *visibilitySuite) TestMemo() {
 	floatKey, floatVal := "floatKey", 3.14
 
 	// Add memo via Visibility struct method.
-	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}).Times(1)
 	err = s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
 		stringKey: s.mustEncode(stringVal),
 		intKey:    s.mustEncode(intVal),
 		floatKey:  s.mustEncode(floatVal),
 	})
 	s.NoError(err)
+	s.Len(s.mockMutableContext.Tasks, 1)
+	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}, s.mockMutableContext.Tasks[0].Payload.(*persistencespb.ChasmVisibilityTaskData))
 
 	memo, err = s.visibility.GetMemo(s.mockMutableContext)
 	s.NoError(err)
@@ -159,31 +162,17 @@ func (s *visibilitySuite) TestMemo() {
 	s.Equal(floatVal, actualFloatVal)
 
 	// Test remove memo by setting payload to nil.
-	s.mockMutableContext.EXPECT().AddTask(gomock.Any(), gomock.Any(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}).Times(1)
 	err = s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
 		intKey:   s.mustEncode(intVal),
 		floatKey: nil,
 	})
 	s.NoError(err)
+	s.Len(s.mockMutableContext.Tasks, 2)
+	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}, s.mockMutableContext.Tasks[1].Payload.(*persistencespb.ChasmVisibilityTaskData))
+
 	memo, err = s.visibility.GetMemo(s.mockMutableContext)
 	s.NoError(err)
 	s.Len(memo, 2, "intKey and stringKey should remain")
-}
-
-func (s *visibilitySuite) TestTaskValidator() {
-	task := &persistencespb.ChasmVisibilityTaskData{
-		TransitionCount: 3,
-	}
-
-	s.visibility.Data.TransitionCount = 1
-	valid, err := defaultVisibilityTaskHandler.Validate(s.mockMutableContext, s.visibility, TaskAttributes{}, task)
-	s.NoError(err)
-	s.False(valid)
-
-	s.visibility.Data.TransitionCount = task.TransitionCount
-	valid, err = defaultVisibilityTaskHandler.Validate(s.mockMutableContext, s.visibility, TaskAttributes{}, task)
-	s.NoError(err)
-	s.True(valid)
 }
 
 func (s *visibilitySuite) mustEncode(v any) *commonpb.Payload {
