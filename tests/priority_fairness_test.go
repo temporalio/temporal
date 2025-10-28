@@ -246,6 +246,7 @@ func TestFairnessSuite(t *testing.T) {
 func (s *FairnessSuite) SetupSuite() {
 	s.partitions = 1
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.MatchingUseNewMatcher.Key():          true,
 		dynamicconfig.MatchingEnableFairness.Key():         true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key():      20,
 		dynamicconfig.MatchingGetTasksReloadAt.Key():       5,
@@ -366,11 +367,25 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingEnableMigration, true)
 
+	forTest := func(v any) any {
+		return []dynamicconfig.ConstrainedValue{
+			// test tqs (both wf and activity)
+			dynamicconfig.ConstrainedValue{
+				Constraints: dynamicconfig.Constraints{
+					Namespace:     s.Namespace().String(),
+					TaskQueueName: tv.TaskQueue().Name,
+				},
+				Value: v,
+			},
+			// default (match values in SetupSuite to avoid flapping)
+			dynamicconfig.ConstrainedValue{Value: true},
+		}
+	}
 	setConfig := func(stage string, newNewMatcher, newFairness bool) {
 		newMatcher, fairness = newNewMatcher, newFairness
 		s.T().Log("setting config: "+stage, "newMatcher", newMatcher, "fairness", fairness)
-		s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, newMatcher)
-		s.OverrideDynamicConfig(dynamicconfig.MatchingEnableFairness, fairness)
+		s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, forTest(newMatcher))
+		s.OverrideDynamicConfig(dynamicconfig.MatchingEnableFairness, forTest(fairness))
 	}
 	waitForTasks := func(tp enumspb.TaskQueueType, onDraining, onActive int64) {
 		s.T().Helper()
