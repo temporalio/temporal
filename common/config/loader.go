@@ -197,7 +197,7 @@ func readConfigFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(f, maxConfigFileSize+1))
 	if err != nil {
@@ -245,28 +245,33 @@ func (c *templateContext) Env() map[string]string {
 // Args order: value first, default second (e.g., {{ default .Env.VAR "fallback" }})
 func defaultValue(args ...any) (string, error) {
 	if len(args) == 0 {
-		return "", fmt.Errorf("default called with no values!")
+		return "", errors.New("default called with no values")
 	}
 
 	if len(args) > 0 {
 		if args[0] != nil {
-			return args[0].(string), nil
+			val, ok := args[0].(string)
+			if !ok {
+				return "", errors.New("first argument is not a string")
+			}
+			return val, nil
 		}
 	}
 
 	if len(args) > 1 {
 		if args[1] == nil {
-			return "", fmt.Errorf("default called with nil default value!")
+			return "", errors.New("default called with nil default value")
 		}
 
-		if _, ok := args[1].(string); !ok {
-			return "", fmt.Errorf("default is not a string value. hint: surround it w/ double quotes.")
+		val, ok := args[1].(string)
+		if !ok {
+			return "", errors.New("default is not a string value, hint: surround it w/ double quotes")
 		}
 
-		return args[1].(string), nil
+		return val, nil
 	}
 
-	return "", fmt.Errorf("default called with no default value")
+	return "", errors.New("default called with no default value")
 }
 
 // renderTemplate renders a config file as a Go template with environment variables.
