@@ -205,9 +205,11 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		db.rangeID = initialRangeID
 		db.subqueues = db.ensureDefaultSubqueuesLocked(nil, 0, 0)
 
-		// Assume otherHasTasks for safe migration, both when we're active and draining.
-		// We can skip this if useNewMatcher+enableFairness are false and we are the active one.
-		db.otherHasTasks = db.config.NewMatcher || db.config.EnableFairness || db.isDraining
+		// If we are the draining one, then assume the other has tasks, so we can migrate
+		// backwards safely. Also assume other has tasks if the config allows for migration
+		// (and we're not sticky) since we may have just turned on fairness and need to migrate.
+		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
 			RangeID:       db.rangeID,
