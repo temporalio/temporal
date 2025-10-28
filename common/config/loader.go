@@ -308,10 +308,6 @@ func LoadConfig(env string, configDir string, zone string) (*Config, error) {
 	return cfg, nil
 }
 
-func LoadConfigFile(configFilePath string) (*Config, error) {
-	return Load(WithConfigFile(configFilePath))
-}
-
 func loadAndUnmarshalContent(content []byte, filename string, envMap map[string]string, config any) error {
 	processed, err := processConfigFile(content, filename, envMap)
 	if err != nil {
