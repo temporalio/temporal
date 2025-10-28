@@ -105,6 +105,9 @@
       "TemporalWorkerDeployment": {
         "type": "keyword"
       },
+			"TemporalReportedProblems": {
+					"type": "keyword"
+			},
       "TemporalBool01": {
         "type": "boolean"
       },
