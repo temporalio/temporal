@@ -23,6 +23,7 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:       {},
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW: {},
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:        {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED:           {},
 	}
 )
 
@@ -62,7 +63,7 @@ func ValidateUpdateWorkflowStateStatus(
 
 	// validate workflow state & status
 	if (state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) ||
-		(state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
+		(state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && (status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED)) {
 		return serviceerror.NewInternalf("Update workflow with invalid state: %v or status: %v", state, status)
 	}
 	return nil

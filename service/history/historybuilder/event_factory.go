@@ -1006,6 +1006,22 @@ func (b *EventFactory) CreateChildWorkflowExecutionTimedOutEvent(
 	return event
 }
 
+func (b *EventFactory) CreateWorkflowExecutionPausedEvent(
+	identity string,
+	reason string,
+	requestId string,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionPausedEventAttributes{
+		WorkflowExecutionPausedEventAttributes: &historypb.WorkflowExecutionPausedEventAttributes{
+			Identity:  identity,
+			Reason:    reason,
+			RequestId: requestId,
+		},
+	}
+	return event
+}
+
 func (b *EventFactory) createHistoryEvent(
 	eventType enumspb.EventType,
 	time time.Time,

@@ -2818,6 +2818,40 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
+func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
+	identity string,
+	reason string,
+	requestId string,
+) (*historypb.HistoryEvent, error) {
+	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED, func(event *historypb.HistoryEvent) {
+		event.Attributes = &historypb.HistoryEvent_WorkflowExecutionPausedEventAttributes{
+			WorkflowExecutionPausedEventAttributes: &historypb.WorkflowExecutionPausedEventAttributes{
+				Identity:  identity,
+				Reason:    reason,
+				RequestId: requestId,
+			},
+		}
+	})
+	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
+	event.WorkerMayIgnore = true
+	if err := ms.ApplyWorkflowExecutionPausedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+// ApplyWorkflowExecutionPausedEvent applies the paused event to the mutable state. It updates the workflow execution status to paused and sets the pause info.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error {
+	ms.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+	ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
+		PauseTime: timestamppb.New(event.GetEventTime().AsTime()),
+		Identity:  event.GetWorkflowExecutionPausedEventAttributes().GetIdentity(),
+		Reason:    event.GetWorkflowExecutionPausedEventAttributes().GetReason(),
+		RequestId: event.GetWorkflowExecutionPausedEventAttributes().GetRequestId(),
+	}
+	return nil
+}
+
 func (ms *MutableStateImpl) addCompletionCallbacks(
 	event *historypb.HistoryEvent,
 	requestID string,
