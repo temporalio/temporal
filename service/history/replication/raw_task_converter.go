@@ -223,13 +223,21 @@ func convertWorkflowStateReplicationTask(
 			if err := common.DiscardUnknownProto(workflowMutableState); err != nil {
 				return nil, err
 			}
+
+			isCloseTransferTaskAcked := isCloseTransferTaskAckedForWorkflow(shardContext, &tasks.CloseExecutionTask{
+				WorkflowKey: mutableState.GetWorkflowKey(),
+				TaskID:      mutableState.GetExecutionInfo().GetCloseTransferTaskId(),
+			})
+
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 				SourceTaskId: taskInfo.TaskID,
 				Priority:     taskInfo.Priority,
 				Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
 					SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-						WorkflowState: workflowMutableState,
+						WorkflowState:            workflowMutableState,
+						IsForceReplication:       taskInfo.IsForceReplication,
+						IsCloseTransferTaskAcked: isCloseTransferTaskAcked,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -865,11 +873,18 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 func (c *syncVersionedTransitionTaskConverter) isCloseTransferTaskAcked(
 	closeTransferTask *tasks.CloseExecutionTask,
 ) bool {
+	return isCloseTransferTaskAckedForWorkflow(c.shardContext, closeTransferTask)
+}
+
+func isCloseTransferTaskAckedForWorkflow(
+	shardContext historyi.ShardContext,
+	closeTransferTask *tasks.CloseExecutionTask,
+) bool {
 	if closeTransferTask.TaskID == 0 {
 		return false
 	}
 
-	transferQueueState, ok := c.shardContext.GetQueueState(tasks.CategoryTransfer)
+	transferQueueState, ok := shardContext.GetQueueState(tasks.CategoryTransfer)
 	if !ok {
 		return false
 	}
