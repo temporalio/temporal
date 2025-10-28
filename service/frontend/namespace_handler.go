@@ -513,6 +513,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		if updateReplicationConfig.GetActiveClusterName() != "" {
 			activeClusterChanged = true
 			replicationConfig.ActiveClusterName = updateReplicationConfig.GetActiveClusterName()
+			replicationConfig.State = enumspb.REPLICATION_STATE_NORMAL
 		}
 	}
 
@@ -860,6 +861,7 @@ func (d *namespaceHandler) createResponse(
 			SyncUpdate:                      d.config.EnableUpdateWorkflowExecution(info.Name),
 			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
 			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
+			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}
@@ -883,7 +885,7 @@ func (d *namespaceHandler) createResponse(
 	replicationConfigResult := &replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
 		Clusters:          clusters,
-		State:             replicationConfig.State,
+		State:             replicationConfig.GetState(),
 	}
 
 	var failoverHistory []*replicationpb.FailoverStatus

@@ -5,6 +5,8 @@ deps:
 breaking:
   use:
     - WIRE
+  ignore:
+    - chasm/lib/scheduler/proto/v1/message.proto
 lint:
   use:
     - DEFAULT

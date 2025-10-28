@@ -272,16 +272,16 @@ func (s *taskRefresherSuite) TestRefreshWorkflowCloseTasks() {
 	)
 	s.NoError(err)
 
-	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(closeTime.AsTime(), false).Return(nil).Times(1)
+	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(closeTime.AsTime(), false, false).Return(nil).Times(1)
 
-	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition)
+	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition, false)
 	s.NoError(err)
 
 	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		// TransitionCount is higher than workflow state's last update versioned transition,
 		TransitionCount:          3,
 		NamespaceFailoverVersion: common.EmptyVersion,
-	})
+	}, false)
 	s.NoError(err)
 }
 

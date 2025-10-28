@@ -58,16 +58,16 @@ func (mr *MockSpecProcessorMockRecorder) GetNextTime(arg0, after any) *gomock.Ca
 }
 
 // ProcessTimeRange mocks base method.
-func (m *MockSpecProcessor) ProcessTimeRange(arg0 *Scheduler, start, end time.Time, overlapPolicy enums.ScheduleOverlapPolicy, backfillID string, manual bool, limit *int) (*ProcessedTimeRange, error) {
+func (m *MockSpecProcessor) ProcessTimeRange(arg0 *Scheduler, start, end time.Time, overlapPolicy enums.ScheduleOverlapPolicy, workflowID, backfillID string, manual bool, limit *int) (*ProcessedTimeRange, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessTimeRange", arg0, start, end, overlapPolicy, backfillID, manual, limit)
+	ret := m.ctrl.Call(m, "ProcessTimeRange", arg0, start, end, overlapPolicy, workflowID, backfillID, manual, limit)
 	ret0, _ := ret[0].(*ProcessedTimeRange)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ProcessTimeRange indicates an expected call of ProcessTimeRange.
-func (mr *MockSpecProcessorMockRecorder) ProcessTimeRange(arg0, start, end, overlapPolicy, backfillID, manual, limit any) *gomock.Call {
+func (mr *MockSpecProcessorMockRecorder) ProcessTimeRange(arg0, start, end, overlapPolicy, workflowID, backfillID, manual, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessTimeRange", reflect.TypeOf((*MockSpecProcessor)(nil).ProcessTimeRange), arg0, start, end, overlapPolicy, backfillID, manual, limit)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessTimeRange", reflect.TypeOf((*MockSpecProcessor)(nil).ProcessTimeRange), arg0, start, end, overlapPolicy, workflowID, backfillID, manual, limit)
 }

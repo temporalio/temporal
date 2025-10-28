@@ -1293,15 +1293,16 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
 	syncWorkflowStateTask *tasks.SyncWorkflowStateTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    syncWorkflowStateTask.WorkflowKey.NamespaceID,
-		WorkflowId:     syncWorkflowStateTask.WorkflowKey.WorkflowID,
-		RunId:          syncWorkflowStateTask.WorkflowKey.RunID,
-		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-		TaskId:         syncWorkflowStateTask.TaskID,
-		Version:        syncWorkflowStateTask.Version,
-		VisibilityTime: timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
-		Priority:       syncWorkflowStateTask.Priority,
-		TargetClusters: syncWorkflowStateTask.TargetClusters,
+		NamespaceId:        syncWorkflowStateTask.NamespaceID,
+		WorkflowId:         syncWorkflowStateTask.WorkflowID,
+		RunId:              syncWorkflowStateTask.RunID,
+		TaskType:           enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		TaskId:             syncWorkflowStateTask.TaskID,
+		Version:            syncWorkflowStateTask.Version,
+		VisibilityTime:     timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
+		Priority:           syncWorkflowStateTask.Priority,
+		TargetClusters:     syncWorkflowStateTask.TargetClusters,
+		IsForceReplication: syncWorkflowStateTask.IsForceReplication,
 	}
 }
 
@@ -1323,6 +1324,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 		TaskID:              syncWorkflowStateTask.TaskId,
 		Priority:            syncWorkflowStateTask.Priority,
 		TargetClusters:      syncWorkflowStateTask.TargetClusters,
+		IsForceReplication:  syncWorkflowStateTask.IsForceReplication,
 	}
 }
 
@@ -1386,6 +1388,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
+		IsForceReplication:     syncVersionedTransitionTask.IsForceReplication,
 		TaskEquivalents:        taskInfoEquivalents,
 	}, nil
 }
@@ -1424,6 +1427,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 		TaskEquivalents:        taskEquivalents,
 		IsFirstTask:            syncVersionedTransitionTask.IsFirstTask,
 		TargetClusters:         syncVersionedTransitionTask.TargetClusters,
+		IsForceReplication:     syncVersionedTransitionTask.IsForceReplication,
 	}, nil
 }
 

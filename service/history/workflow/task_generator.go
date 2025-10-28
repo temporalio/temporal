@@ -13,6 +13,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -31,6 +33,7 @@ type (
 		GenerateWorkflowCloseTasks(
 			closedTime time.Time,
 			deleteAfterClose bool,
+			skipCloseTransferTask bool,
 		) error
 		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
 		// This task is used to delete the history events of the workflow execution after the retention period expires.
@@ -88,6 +91,7 @@ type (
 		mutableState      historyi.MutableState
 		config            *configs.Config
 		archivalMetadata  archiver.ArchivalMetadata
+		logger            log.Logger
 	}
 )
 
@@ -100,12 +104,14 @@ func NewTaskGenerator(
 	mutableState historyi.MutableState,
 	config *configs.Config,
 	archivalMetadata archiver.ArchivalMetadata,
+	logger log.Logger,
 ) *TaskGeneratorImpl {
 	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
 		mutableState:      mutableState,
 		config:            config,
 		archivalMetadata:  archivalMetadata,
+		logger:            logger,
 	}
 }
 
@@ -179,20 +185,29 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closedTime time.Time,
 	deleteAfterClose bool,
+	skipCloseTransferTask bool,
 ) error {
 	closeVersion, err := r.mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
 
-	closeExecutionTask := &tasks.CloseExecutionTask{
-		// TaskID, Visiblitytimestamp is set by shard
-		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		Version:          closeVersion,
-		DeleteAfterClose: deleteAfterClose,
-	}
-	closeTasks := []tasks.Task{
-		closeExecutionTask,
+	var closeTasks []tasks.Task
+
+	if !skipCloseTransferTask {
+		closeExecutionTask := &tasks.CloseExecutionTask{
+			// TaskID, Visiblitytimestamp is set by shard
+			WorkflowKey:      r.mutableState.GetWorkflowKey(),
+			Version:          closeVersion,
+			DeleteAfterClose: deleteAfterClose,
+		}
+		closeTasks = append(closeTasks, closeExecutionTask)
+	} else {
+		r.logger.Info("Skipping close transfer task generation - already acked on active cluster",
+			tag.WorkflowNamespaceID(r.mutableState.GetExecutionInfo().GetNamespaceId()),
+			tag.WorkflowID(r.mutableState.GetExecutionInfo().GetWorkflowId()),
+			tag.WorkflowRunID(r.mutableState.GetExecutionState().GetRunId()),
+		)
 	}
 
 	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
@@ -740,10 +755,11 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		syncWorkflowStateTask := []tasks.Task{&tasks.SyncWorkflowStateTask{
 			// TaskID, VisibilityTimestamp is set by shard
-			WorkflowKey:    workflowKey,
-			Version:        lastItem.GetVersion(),
-			Priority:       enumsspb.TASK_PRIORITY_LOW,
-			TargetClusters: targetClusters,
+			WorkflowKey:        workflowKey,
+			Version:            lastItem.GetVersion(),
+			Priority:           enumsspb.TASK_PRIORITY_LOW,
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		}}
 		if r.mutableState.IsTransitionHistoryEnabled() &&
 			// even though current cluster may enabled state transition, but transition history can be cleared
@@ -760,6 +776,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 				NextEventID:         lastItem.GetEventId() + 1,
 				TaskEquivalents:     syncWorkflowStateTask,
 				TargetClusters:      targetClusters,
+				IsForceReplication:  true,
 			}}, 1, nil
 		}
 		return syncWorkflowStateTask, 1, nil
@@ -808,6 +825,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			NextEventID:         lastItem.GetEventId() + 1,
 			TaskEquivalents:     replicationTasks,
 			TargetClusters:      targetClusters,
+			IsForceReplication:  true,
 		}}, 1, nil
 	}
 	return replicationTasks, executionInfo.StateTransitionCount, nil

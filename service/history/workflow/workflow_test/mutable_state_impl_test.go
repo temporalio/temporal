@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
@@ -360,7 +361,7 @@ func TestGetNexusCompletion(t *testing.T) {
 	cases := []struct {
 		name             string
 		mutateState      func(historyi.MutableState) (*historypb.HistoryEvent, error)
-		verifyCompletion func(*testing.T, nexus.OperationCompletion)
+		verifyCompletion func(*testing.T, *historypb.HistoryEvent, nexusrpc.OperationCompletion)
 	}{
 		{
 			name: "success",
@@ -376,14 +377,15 @@ func TestGetNexusCompletion(t *testing.T) {
 					},
 				}, "")
 			},
-			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
-				success, ok := completion.(*nexus.OperationCompletionSuccessful)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
+				success, ok := completion.(*nexusrpc.OperationCompletionSuccessful)
 				require.True(t, ok)
 				require.Equal(t, "application/json", success.Reader.Header.Get("type"))
 				require.Equal(t, "1", success.Reader.Header.Get("length"))
 				buf, err := io.ReadAll(success.Reader)
 				require.NoError(t, err)
 				require.Equal(t, []byte("3"), buf)
+				require.Equal(t, event.GetEventTime().AsTime(), success.CloseTime)
 			},
 		},
 		{
@@ -395,11 +397,12 @@ func TestGetNexusCompletion(t *testing.T) {
 					},
 				}, "")
 			},
-			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
-				failure, ok := completion.(*nexus.OperationCompletionUnsuccessful)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
+				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
 				require.True(t, ok)
 				require.Equal(t, nexus.OperationStateFailed, failure.State)
 				require.Equal(t, "workflow failed", failure.Failure.Message)
+				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
 			},
 		},
 		{
@@ -407,11 +410,12 @@ func TestGetNexusCompletion(t *testing.T) {
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false, nil)
 			},
-			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
-				failure, ok := completion.(*nexus.OperationCompletionUnsuccessful)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
+				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
 				require.True(t, ok)
 				require.Equal(t, nexus.OperationStateFailed, failure.State)
 				require.Equal(t, "operation terminated", failure.Failure.Message)
+				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
 			},
 		},
 		{
@@ -419,11 +423,12 @@ func TestGetNexusCompletion(t *testing.T) {
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionCanceledEvent(mutableState.GetNextEventID(), &commandpb.CancelWorkflowExecutionCommandAttributes{})
 			},
-			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
-				failure, ok := completion.(*nexus.OperationCompletionUnsuccessful)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
+				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
 				require.True(t, ok)
 				require.Equal(t, nexus.OperationStateCanceled, failure.State)
 				require.Equal(t, "operation canceled", failure.Failure.Message)
+				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
 			},
 		},
 	}
@@ -458,7 +463,7 @@ func TestGetNexusCompletion(t *testing.T) {
 			events.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(event, nil).Times(1)
 			completion, err := ms.GetNexusCompletion(context.Background(), "")
 			require.NoError(t, err)
-			tc.verifyCompletion(t, completion)
+			tc.verifyCompletion(t, event, completion)
 		})
 	}
 }

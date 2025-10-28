@@ -37,7 +37,7 @@ func TestFieldSuite(t *testing.T) {
 func (s *fieldSuite) SetupTest() {
 	s.initAssertions()
 	s.controller = gomock.NewController(s.T())
-	s.nodeBackend = NewMockNodeBackend(s.controller)
+	s.nodeBackend = &MockNodeBackend{}
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.registry = NewRegistry(s.logger)
@@ -166,11 +166,11 @@ func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node
 
 func (s *fieldSuite) TestDeferredPointerResolution() {
 	tv := testvars.New(s.T())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
-	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+	s.nodeBackend = &MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 1 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
+	}
 
 	// Create component structure that will simulate NewEntity scenario.
 	sc2 := &TestSubComponent2{
@@ -240,11 +240,11 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 
 func (s *fieldSuite) TestMixedPointerScenario() {
 	tv := testvars.New(s.T())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
-	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+	s.nodeBackend = &MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 1 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
+	}
 
 	existingComponent := &TestSubComponent11{
 		SubComponent11Data: &protoMessageType{CreateRequestId: "existing-component"},
@@ -312,11 +312,11 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 
 func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	tv := testvars.New(s.T())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
-	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+	s.nodeBackend = &MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 1 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
+	}
 
 	s.logger.(*testlogger.TestLogger).
 		Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -20,6 +21,7 @@ type (
 		metricsHandler    metrics.Handler
 		logger            log.SnTaggedLogger
 		namespaceRegistry namespace.Registry
+		enqueueMutex      sync.Map // map[persistence.QueueKey]*sync.Mutex for per-queue locking
 	}
 	// QueueWriter is a subset of persistence.HistoryTaskQueueManager.
 	QueueWriter interface {
@@ -77,13 +79,21 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		}
 	}
 
-	resp, err := q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-		QueueType:     queueKey.QueueType,
-		SourceCluster: queueKey.SourceCluster,
-		TargetCluster: queueKey.TargetCluster,
-		Task:          task,
-		SourceShardID: sourceShardID,
-	})
+	resp, err := func() (*persistence.EnqueueTaskResponse, error) {
+		// Acquire a process-level lock for this specific DLQ to prevent concurrent writes
+		// from multiple shards causing CAS conflicts in the persistence layer.
+		mu := q.getQueueMutex(queueKey)
+		mu.Lock()
+		defer mu.Unlock()
+
+		return q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+			QueueType:     queueKey.QueueType,
+			SourceCluster: queueKey.SourceCluster,
+			TargetCluster: queueKey.TargetCluster,
+			Task:          task,
+			SourceShardID: sourceShardID,
+		})
+	}()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
 	}
@@ -116,4 +126,16 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		namespaceTag,
 	)
 	return nil
+}
+
+// getQueueMutex returns a per-queue mutex, creating it if it doesn't exist.
+// This provides process-level locking to serialize concurrent writes to the same queue.
+func (q *DLQWriter) getQueueMutex(queueKey persistence.QueueKey) *sync.Mutex {
+	if mu, ok := q.enqueueMutex.Load(queueKey); ok {
+		return mu.(*sync.Mutex) //nolint:revive
+	}
+
+	newMutex := &sync.Mutex{}
+	actual, _ := q.enqueueMutex.LoadOrStore(queueKey, newMutex)
+	return actual.(*sync.Mutex) //nolint:revive
 }

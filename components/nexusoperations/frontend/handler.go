@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/components/nexusoperations"
@@ -85,7 +86,8 @@ type completionHandler struct {
 }
 
 // CompleteOperation implements nexus.CompletionHandler.
-func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.CompletionRequest) (retErr error) {
+// nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
+func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
 	startTime := time.Now()
 	if !h.Config.Enabled() {
 		h.preProcessErrorsCounter.Record(1)
@@ -239,7 +241,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	return nil
 }
 
-func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nexus.CompletionRequest, rCtx *requestContext) error {
+func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
 	client, err := h.ForwardingClients.Get(rCtx.namespace.ActiveClusterName())
 	if err != nil {
 		h.Logger.Error("unable to get HTTP client for forward request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(rCtx.namespace.ActiveClusterName()))
@@ -285,7 +287,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 			h.Logger.Error("received unexpected error type when trying to forward Nexus operation completion", tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
-		c := &nexus.OperationCompletionUnsuccessful{
+		c := &nexusrpc.OperationCompletionUnsuccessful{
 			Header:         httpHeaderToNexusHeader(r.HTTPRequest.Header),
 			State:          r.State,
 			OperationToken: r.OperationToken,
@@ -293,7 +295,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 			Links:          r.Links,
 			Failure:        failureErr.Failure,
 		}
-		forwardReq, err = nexus.NewCompletionHTTPRequest(ctx, forwardURL, c)
+		forwardReq, err = nexusrpc.NewCompletionHTTPRequest(ctx, forwardURL, c)
 		if err != nil {
 			h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -464,7 +466,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 }
 
 // TODO(bergundy): Merge this with the interceptRequest method in nexus_handler.go.
-func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.CompletionRequest) error {
+func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc.CompletionRequest) error {
 	var tlsInfo *credentials.TLSInfo
 	if request.HTTPRequest.TLS != nil {
 		tlsInfo = &credentials.TLSInfo{

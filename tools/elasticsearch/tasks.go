@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/olivere/elastic/v7"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -24,29 +25,6 @@ type SetupTask struct {
 	esClient client.CLIClient
 	config   *SetupConfig
 	logger   log.Logger
-}
-
-// Run executes the task
-func (task *SetupTask) Run() error {
-	task.logger.Info("Starting schema setup", tag.NewAnyTag("config", task.config))
-
-	if err := task.setupClusterSettings(); err != nil {
-		task.logger.Error("Failed to setup cluster settings.", tag.Error(err))
-		return err
-	}
-
-	if err := task.setupTemplate(); err != nil {
-		task.logger.Error("Failed to setup template.", tag.Error(err))
-		return err
-	}
-
-	if err := task.setupIndex(); err != nil {
-		task.logger.Error("Failed to setup index.", tag.Error(err))
-		return err
-	}
-
-	task.logger.Info("Schema setup complete")
-	return nil
 }
 
 // setupClusterSettings handles cluster settings configuration
@@ -87,16 +65,24 @@ func (task *SetupTask) setupTemplate() error {
 	return nil
 }
 
-// setupIndex handles index creation
-func (task *SetupTask) setupIndex() error {
+// setupIndex handles index creation. It checks if the index exists and skips creation if it does.
+func (task *SetupTask) setupIndex(ctx context.Context) error {
 	config := task.config
 	if len(config.VisibilityIndex) == 0 {
 		task.logger.Info("Skipping index creation, missing index name")
 		return nil
 	}
 
-	success, err := task.esClient.CreateIndex(context.TODO(), config.VisibilityIndex, nil)
+	success, err := task.esClient.CreateIndex(ctx, config.VisibilityIndex, nil)
 	if err != nil {
+		// Check if the error is an Elasticsearch error and if so check if the index already exists.
+		var esErr *elastic.Error
+		if errors.As(err, &esErr) {
+			if esErr.Status == 400 && esErr.Details != nil && esErr.Details.Type == "resource_already_exists_exception" {
+				task.logger.Info("Index already exists, skipping creation", tag.NewStringTag("indexName", config.VisibilityIndex))
+				return nil
+			}
+		}
 		return task.handleOperationFailure("index creation failed", err)
 	} else if !success {
 		return task.handleOperationFailure("index creation failed without error", errors.New("acknowledged=false"))
@@ -138,10 +124,10 @@ func (task *SetupTask) RunTemplateUpgrade() error {
 }
 
 // RunIndexCreation runs only index creation
-func (task *SetupTask) RunIndexCreation() error {
+func (task *SetupTask) RunIndexCreation(ctx context.Context) error {
 	task.logger.Info("Starting index creation", tag.NewAnyTag("config", task.config))
 
-	if err := task.setupIndex(); err != nil {
+	if err := task.setupIndex(ctx); err != nil {
 		task.logger.Error("Failed to create index.", tag.Error(err))
 		return err
 	}
