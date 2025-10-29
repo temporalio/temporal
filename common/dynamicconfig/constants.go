@@ -387,6 +387,11 @@ If exceeded, failure will be truncated before being stored in mutable state.`,
 		16,
 		`MutableStateTombstoneCountLimit is the maximum number of deleted sub state machines tracked in mutable state.`,
 	)
+	MutableStateMaxPausedActivityTypeCount = NewNamespaceIntSetting(
+		"limit.mutableStateMaxPausedActivityTypeCount",
+		10,
+		`MutableStateMaxPausedActivityTypeCount is the maximum number of activity types that can be paused at once.`,
+	)
 	HistoryCountSuggestContinueAsNew = NewNamespaceIntSetting(
 		"limit.historyCount.suggestContinueAsNew",
 		4*1024,
