@@ -7,6 +7,8 @@ on:
       - cloud/*
       - feature/*
       - release/*
+permissions:
+  contents: read
 
 jobs:
   trigger:

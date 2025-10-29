@@ -4,6 +4,8 @@ on:
     branches:
       - release/*
       - cloud/*
+permissions:
+  contents: read
 jobs:
   check-dependencies:
     runs-on: ubuntu-latest
