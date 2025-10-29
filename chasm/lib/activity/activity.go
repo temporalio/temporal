@@ -1,8 +1,6 @@
 package activity
 
 import (
-	"errors"
-
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -11,9 +9,11 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -36,13 +36,14 @@ type Activity struct {
 	// Standalone only
 	RequestData chasm.Field[*activitypb.ActivityRequestData]
 
-	// Pointer to an implementation of the "store" (for a workflow activity this would be a parent pointer back to
-	// the workflow).
+	// Pointer to an implementation of the "store". for a workflow activity this would be a parent pointer back to
+	// the workflow. For a standalone activity this would be nil.
+	// TODO: revisit a standalone activity pointing to itself once we handle storing it more efficiently.
 	// TODO: figure out better naming.
 	Store chasm.Field[ActivityStore]
 }
 
-// RecordActivityTaskStartedParams holds parameters for HandleRecordActivityTaskStarted method when recording activity
+// RecordActivityTaskStartedParams holds parameters for RecordActivityTaskStarted method when recording activity
 // task started.
 type RecordActivityTaskStartedParams struct {
 	EntityKey        chasm.EntityKey
@@ -75,11 +76,19 @@ func NewStandaloneActivity(
 		return nil, err
 	}
 
+	// TODO flatten this when API is updated
+	options := request.GetOptions()
+
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
-			ActivityType:    request.ActivityType,
-			ActivityOptions: request.Options,
-			Priority:        request.Priority,
+			ActivityType:           request.ActivityType,
+			TaskQueue:              options.GetTaskQueue(),
+			ScheduleToCloseTimeout: options.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout: options.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:    options.GetStartToCloseTimeout(),
+			HeartbeatTimeout:       options.GetHeartbeatTimeout(),
+			RetryPolicy:            options.GetRetryPolicy(),
+			Priority:               request.Priority,
 		},
 		Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
 			Count: 1,
@@ -92,9 +101,6 @@ func NewStandaloneActivity(
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
 
-	// Standalone activities point to themselves as the store.
-	activity.Store = chasm.Field[ActivityStore](chasm.ComponentPointerTo(ctx, activity))
-
 	return activity, nil
 }
 
@@ -105,24 +111,30 @@ func NewEmbeddedActivity(
 ) {
 }
 
-func (a *Activity) createAddActivityTaskRequest(_ chasm.Context, activityRef chasm.ComponentRef) (*matchingservice.AddActivityTaskRequest, error) {
-	protoRef, err := chasm.ComponentRefToProtoRef(activityRef, nil)
+func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, activityRef chasm.ComponentRef) (*matchingservice.AddActivityTaskRequest, error) {
+	// Get latest component ref and unmarshal into proto ref
+	componentBytes, err := ctx.Ref(a)
 	if err != nil {
+		return nil, err
+	}
+
+	protoRef := &persistencepb.ChasmComponentRef{}
+	if err := proto.Unmarshal(componentBytes, protoRef); err != nil {
 		return nil, err
 	}
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
 	return &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            activityRef.NamespaceID,
-		TaskQueue:              a.ActivityOptions.TaskQueue,
-		ScheduleToStartTimeout: a.ActivityOptions.ScheduleToStartTimeout,
-		Priority:               a.Priority,
+		TaskQueue:              a.GetTaskQueue(),
+		ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+		Priority:               a.GetPriority(),
 		ComponentRef:           protoRef,
 	}, nil
 }
 
-// HandleRecordActivityTaskStarted updates the activity on recording activity task started and populates the response.
-func (a *Activity) HandleRecordActivityTaskStarted(ctx chasm.MutableContext, params RecordActivityTaskStartedParams) (*historyservice.RecordActivityTaskStartedResponse, error) {
+// RecordActivityTaskStarted updates the activity on recording activity task started and populates the response.
+func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params RecordActivityTaskStartedParams) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
 		return nil, err
 	}
@@ -147,13 +159,15 @@ func (a *Activity) HandleRecordActivityTaskStarted(ctx chasm.MutableContext, par
 		return nil, err
 	}
 
-	if store == nil {
-		return nil, errors.New("activity store is nil")
-	}
-
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	if err := store.PopulateRecordActivityTaskStartedResponse(ctx, params.EntityKey, response); err != nil {
-		return nil, err
+	if store == nil {
+		if err := a.PopulateRecordActivityTaskStartedResponse(ctx, params.EntityKey, response); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := store.PopulateRecordActivityTaskStartedResponse(ctx, params.EntityKey, response); err != nil {
+			return nil, err
+		}
 	}
 
 	return response, nil
@@ -175,15 +189,13 @@ func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, 
 		return err
 	}
 
-	options := a.GetActivityOptions()
-
 	response.StartedTime = attempt.LastStartedTime
 	response.Attempt = attempt.GetCount()
 	if lastHeartbeat != nil {
 		response.HeartbeatDetails = lastHeartbeat.GetDetails()
 	}
 	response.Priority = a.GetPriority()
-	response.RetryPolicy = options.GetRetryPolicy()
+	response.RetryPolicy = a.GetRetryPolicy()
 	response.ScheduledEvent = &historypb.HistoryEvent{
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
@@ -192,11 +204,11 @@ func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, 
 				ActivityType:           a.GetActivityType(),
 				Input:                  requestData.GetInput(),
 				Header:                 requestData.GetHeader(),
-				TaskQueue:              options.GetTaskQueue(),
-				ScheduleToCloseTimeout: options.GetScheduleToCloseTimeout(),
-				ScheduleToStartTimeout: options.GetScheduleToStartTimeout(),
-				StartToCloseTimeout:    options.GetStartToCloseTimeout(),
-				HeartbeatTimeout:       options.GetHeartbeatTimeout(),
+				TaskQueue:              a.GetTaskQueue(),
+				ScheduleToCloseTimeout: a.GetScheduleToCloseTimeout(),
+				ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
+				StartToCloseTimeout:    a.GetStartToCloseTimeout(),
+				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
 			},
 		},
 	}

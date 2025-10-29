@@ -50,7 +50,7 @@ func Invoke(
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			activityRef,
-			(*activity.Activity).HandleRecordActivityTaskStarted,
+			(*activity.Activity).RecordActivityTaskStarted,
 			activity.RecordActivityTaskStartedParams{
 				EntityKey:        activityRef.EntityKey,
 				VersionDirective: request.GetVersionDirective(),

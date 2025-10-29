@@ -6,11 +6,11 @@ option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;act
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 
 enum ActivityExecutionStatus {
     ACTIVITY_EXECUTION_STATUS_UNSPECIFIED = 0;
@@ -55,22 +55,47 @@ message ActivityState {
     // The type of the activity, a string that maps to a registered activity on a worker.
     temporal.api.common.v1.ActivityType activity_type = 1;
 
-    // Current activity options. May be different from the one used to start the activity.
-    temporal.api.activity.v1.ActivityOptions activity_options = 2;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+
+    // Indicates how long the caller is willing to wait for an activity completion. Limits how long
+    // retries will be attempted. Either this or `start_to_close_timeout` must be specified.
+    //
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_close_timeout = 3;
+    // Limits time an activity task can stay in a task queue before a worker picks it up. This
+    // timeout is always non retryable, as all a retry would achieve is to put it back into the same
+    // queue. Defaults to `schedule_to_close_timeout` or workflow execution timeout if not
+    // specified.
+    //
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_start_timeout = 4;
+    // Maximum time an activity is allowed to execute after being picked up by a worker. This
+    // timeout is always retryable. Either this or `schedule_to_close_timeout` must be
+    // specified.
+    //
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration start_to_close_timeout = 5;
+    // Maximum permitted time between successful worker heartbeats.
+    google.protobuf.Duration heartbeat_timeout = 6;
+    // The retry policy for the activity. Will never exceed `schedule_to_close_timeout`.
+    temporal.api.common.v1.RetryPolicy retry_policy = 7;
 
     // All of the possible activity statuses (covers both the public ActivityExecutionStatus and PendingActivityState).
     // TODO: consider moving this into ActivityAttemptState and renaming that message. This could save mutating two
     // components on each attempt transition.
-    ActivityExecutionStatus status = 3;
+    ActivityExecutionStatus status = 8;
 
     // Time the activity was originally scheduled via a StartActivityExecution request.
-    google.protobuf.Timestamp scheduled_time = 4;
+    google.protobuf.Timestamp scheduled_time = 9;
 
-    // Priority metadata. (TODO: why isn't this part of ActivityOptions?)
-    temporal.api.common.v1.Priority priority = 5;
+    // Priority metadata.
+    temporal.api.common.v1.Priority priority = 10;
 
     // Set if activity cancelation was requested.
-    ActivityCancelState cancel_state = 6;
+    ActivityCancelState cancel_state = 11;
 }
 
 message ActivityCancelState {
