@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -732,8 +732,11 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 
 	var totalLag int64
 	var oldestTime time.Time
+	count := make(map[int32]int64)
 	for _, s := range db.subqueues {
-		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(s.ApproximateBacklogCount), metrics.PriorityTag(locks.Priority(s.Key.Priority)))
+		c := count[s.Key.Priority]
+		c += s.ApproximateBacklogCount
+		count[s.Key.Priority] = c
 		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
@@ -746,6 +749,13 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 		}
 	}
 
+	for _, v := range count {
+		priStr := ""
+		if v > 0 {
+			priStr = strconv.FormatInt(v, 10)
+		}
+		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(v), metrics.StringTag(metrics.TaskPriorityTagName, priStr))
+	}
 	if oldestTime.IsZero() {
 		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	} else {
