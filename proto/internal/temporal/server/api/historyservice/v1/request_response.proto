@@ -734,7 +734,7 @@ message DescribeMutableStateRequest {
 message DescribeMutableStateResponse {
     // CacheMutableState is only available when mutable state is in cache.
     temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 1;
-    // DatabaseMutableState is always available, 
+    // DatabaseMutableState is always available,
     // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
     temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
 }
@@ -1322,3 +1322,14 @@ message UpdateWorkflowExecutionOptionsResponse {
     // Workflow Execution options after update.
     temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
 }
+
+message PauseWorkflowExecutionRequest {
+    option (routing).workflow_id = "pause_request.workflow_execution.workflow_id";
+
+    // Namespace ID of the workflow which is being paused
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PauseWorkflowExecutionRequest pause_request = 2;
+}
+
+message PauseWorkflowExecutionResponse { }
