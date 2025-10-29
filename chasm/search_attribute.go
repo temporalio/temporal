@@ -165,6 +165,7 @@ type SearchAttributeBool struct {
 	searchAttributeDefinition
 }
 
+// NewSearchAttributeBool creates a new boolean search attribute given a predefined chasm field
 func NewSearchAttributeBool(alias string, boolField SearchAttributeFieldBool) SearchAttributeBool {
 	return SearchAttributeBool{
 		searchAttributeDefinition: searchAttributeDefinition{
@@ -185,6 +186,7 @@ func newSearchAttributeBoolByField(field string) SearchAttributeBool {
 	}
 }
 
+// Value sets the boolean value of the search attribute.
 func (s SearchAttributeBool) Value(value bool) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,
@@ -198,6 +200,7 @@ type SearchAttributeDateTime struct {
 	searchAttributeDefinition
 }
 
+// NewSearchAttributeDateTime creates a new date time search attribute given a predefined chasm field
 func NewSearchAttributeDateTime(alias string, datetimeField SearchAttributeFieldDateTime) SearchAttributeDateTime {
 	return SearchAttributeDateTime{
 		searchAttributeDefinition: searchAttributeDefinition{
@@ -218,6 +221,7 @@ func newSearchAttributeDateTimeByField(field string) SearchAttributeDateTime {
 	}
 }
 
+// Value sets the date time value of the search attribute.
 func (s SearchAttributeDateTime) Value(value time.Time) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,
@@ -231,6 +235,7 @@ type SearchAttributeInt struct {
 	searchAttributeDefinition
 }
 
+// NewSearchAttributeInt creates a new integer search attribute given a predefined chasm field
 func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) SearchAttributeInt {
 	return SearchAttributeInt{
 		searchAttributeDefinition: searchAttributeDefinition{
@@ -251,6 +256,7 @@ func newSearchAttributeIntByField(field string) SearchAttributeInt {
 	}
 }
 
+// Value sets the integer value of the search attribute.
 func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,
@@ -264,6 +270,7 @@ type SearchAttributeDouble struct {
 	searchAttributeDefinition
 }
 
+// NewSearchAttributeDouble creates a new double search attribute given a predefined chasm field
 func NewSearchAttributeDouble(alias string, doubleField SearchAttributeFieldDouble) SearchAttributeDouble {
 	return SearchAttributeDouble{
 		searchAttributeDefinition: searchAttributeDefinition{
@@ -284,6 +291,7 @@ func newSearchAttributeDoubleByField(field string) SearchAttributeDouble {
 	}
 }
 
+// Value sets the double value of the search attribute.
 func (s SearchAttributeDouble) Value(value float64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,
@@ -297,6 +305,7 @@ type SearchAttributeKeyword struct {
 	searchAttributeDefinition
 }
 
+// NewSearchAttributeKeyword creates a new keyword search attribute given a predefined chasm field
 func NewSearchAttributeKeyword(alias string, keywordField SearchAttributeFieldKeyword) SearchAttributeKeyword {
 	return SearchAttributeKeyword{
 		searchAttributeDefinition: searchAttributeDefinition{
@@ -317,6 +326,7 @@ func newSearchAttributeKeywordByField(field string) SearchAttributeKeyword {
 	}
 }
 
+// Value sets the string value of the search attribute.
 func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,
@@ -330,6 +340,7 @@ type SearchAttributeKeywordList struct {
 	searchAttributeDefinition
 }
 
+// NewSearchAttributeKeywordList creates a new keyword list search attribute given a predefined chasm field
 func NewSearchAttributeKeywordList(alias string, keywordListField SearchAttributeFieldKeywordList) SearchAttributeKeywordList {
 	return SearchAttributeKeywordList{
 		searchAttributeDefinition: searchAttributeDefinition{
@@ -349,6 +360,8 @@ func newSearchAttributeKeywordListByField(field string) SearchAttributeKeywordLi
 		},
 	}
 }
+
+// Value sets the string list value of the search attribute.
 func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,

@@ -10,7 +10,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -70,7 +69,6 @@ const (
 )
 
 var (
-	TestKeywordSearchAttribute            = newSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
 	TestComponentStartTimeSearchAttribute = NewSearchAttributeDateTime(TestComponentStartTimeSAKey, SearchAttributeFieldDateTime01)
 	TestComponentRunIDPredefinedSA        = newSearchAttributeKeywordByField(TestComponentRunIDSAKey)
 
@@ -110,6 +108,7 @@ func (tc *TestComponent) SearchAttributes(_ Context) []SearchAttributeKeyValue {
 	return []SearchAttributeKeyValue{
 		TestComponentStartTimeSearchAttribute.Value(tc.ComponentData.GetStartTime().AsTime()),
 		TestComponentRunIDPredefinedSA.Value(tc.ComponentData.GetRunId()),
+		SearchAttributeTemporalScheduledByID.Value(tc.ComponentData.GetRunId()),
 	}
 }
 

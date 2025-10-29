@@ -15,6 +15,7 @@ const (
 )
 
 const (
+	TestScheduleID           = "TestScheduleID"
 	PayloadTotalCountSAAlias = "PayloadTotalCount"
 	PayloadTotalSizeSAAlias  = "PayloadTotalSize"
 )
@@ -151,6 +152,7 @@ func (s *PayloadStore) SearchAttributes(
 	return []chasm.SearchAttributeKeyValue{
 		PayloadTotalCountSearchAttribute.Value(s.State.TotalCount),
 		PayloadTotalSizeSearchAttribute.Value(s.State.TotalSize),
+		chasm.SearchAttributeTemporalScheduledByID.Value(TestScheduleID),
 	}
 }
 

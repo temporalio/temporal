@@ -32,12 +32,14 @@ type VisibilityMemoProvider interface {
 	Memo(Context) map[string]VisibilityValue
 }
 
+// VisibilitySearchAttributesMapper is a mapper for CHASM search attributes.
 type VisibilitySearchAttributesMapper struct {
 	aliasToField map[string]string
 	fieldToAlias map[string]string
 	saTypeMap    map[string]enumspb.IndexedValueType
 }
 
+// Alias returns the alias for a given field.
 func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
 	if v == nil {
 		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
@@ -49,6 +51,7 @@ func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
 	return alias, nil
 }
 
+// Field returns the field for a given alias.
 func (v *VisibilitySearchAttributesMapper) Field(alias string) (string, error) {
 	if v == nil {
 		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
@@ -60,6 +63,7 @@ func (v *VisibilitySearchAttributesMapper) Field(alias string) (string, error) {
 	return field, nil
 }
 
+// SATypeMap returns the type map for the CHASM search attributes.
 func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.IndexedValueType {
 	if v == nil {
 		return nil
