@@ -329,6 +329,9 @@ func (e *ChasmEngine) PollComponent(
 		select {
 		// TODO: make use of data sent w/ notification
 		case notification := <-channel:
+			if !isChasmNotification(notification) {
+				continue
+			}
 			fmt.Fprintf(os.Stderr, "⬇️ Received notification (subscriber: %s)\n", subscriberID[:8])
 			_ = notification // TODO: use notification data for staleness checks
 			// Received a notification. Re-acquire the lock and check the predicate.
@@ -356,6 +359,15 @@ func (e *ChasmEngine) PollComponent(
 			return nil, serviceerror.NewDeadlineExceeded("long-poll timed out")
 		}
 	}
+}
+
+func isChasmNotification(notification *events.Notification) bool {
+	// TODO: implement proper way for chasm components to ignore notifications sent by NotifyNewHistorySnapshotEvent
+	// HACK:
+	if notification.WorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED && notification.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+		return true
+	}
+	return false
 }
 
 // getExecutionLeaseAndCheckPredicate reads the component data with the lock held and evaluates
