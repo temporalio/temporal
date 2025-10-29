@@ -45,17 +45,11 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
 	if activityRefProto := request.GetComponentRef(); len(activityRefProto) > 0 {
-		activityRef, err := chasm.DeserializeComponentRef(activityRefProto)
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
-			activityRef,
+			activityRefProto,
 			(*activity.Activity).RecordActivityTaskStarted,
 			activity.RecordActivityTaskStartedParams{
-				EntityKey:        activityRef.EntityKey,
 				VersionDirective: request.GetVersionDirective(),
 				WorkerIdentity:   request.GetPollRequest().GetIdentity(),
 			},

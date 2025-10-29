@@ -44,7 +44,6 @@ type Activity struct {
 // RecordActivityTaskStartedParams holds parameters for RecordActivityTaskStarted method when recording activity
 // task started.
 type RecordActivityTaskStartedParams struct {
-	EntityKey        chasm.EntityKey
 	VersionDirective *taskqueuespb.TaskVersionDirective
 	WorkerIdentity   string
 }
@@ -152,13 +151,23 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 		return nil, err
 	}
 
+	activityRefBytes, err := ctx.Ref(a)
+	if err != nil {
+		return nil, err
+	}
+
+	activityRef, err := chasm.DeserializeComponentRef(activityRefBytes)
+	if err != nil {
+		return nil, err
+	}
+
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	if store == nil {
-		if err := a.PopulateRecordActivityTaskStartedResponse(ctx, params.EntityKey, response); err != nil {
+		if err := a.PopulateRecordActivityTaskStartedResponse(ctx, activityRef.EntityKey, response); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := store.PopulateRecordActivityTaskStartedResponse(ctx, params.EntityKey, response); err != nil {
+		if err := store.PopulateRecordActivityTaskStartedResponse(ctx, activityRef.EntityKey, response); err != nil {
 			return nil, err
 		}
 	}
