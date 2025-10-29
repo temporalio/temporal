@@ -64,7 +64,6 @@ func Decode(
 			if err != nil {
 				// If the search attribute name is not in typeMap but the payload has type metadata,
 				// we can still decode it (e.g., for CHASM search attributes).
-				// Only set error if payload also lacks type metadata.
 				if _, hasTypeMetadata := saPayload.Metadata[MetadataType]; !hasTypeMetadata {
 					lastErr = err
 				}

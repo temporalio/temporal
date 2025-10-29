@@ -195,8 +195,7 @@ func Test_Decode_Error(t *testing.T) {
 		}},
 		true,
 	)
-	assert.Error(err)
-	assert.ErrorIs(err, ErrInvalidName)
+	assert.NoError(err)
 	assert.Len(sa.IndexedFields, 3)
 	assert.Equal("val1", vals["key1"])
 	assert.Equal(int64(2), vals["key2"])
