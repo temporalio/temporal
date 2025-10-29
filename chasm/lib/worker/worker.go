@@ -15,24 +15,13 @@ const (
 	Archetype chasm.Archetype = "Worker"
 )
 
-// WorkerInactiveError is returned when a heartbeat is received for an inactive worker.
-// Client should re-register with a new WorkerInstanceKey.
-type WorkerInactiveError struct{}
-
-func (e *WorkerInactiveError) Error() string {
-	return "worker is inactive: re-register with new WorkerInstanceKey"
+// HeartbeatRequest is the internal request for CHASM component updates
+type HeartbeatRequest struct {
+	WorkerHeartbeat *workerpb.WorkerHeartbeat
+	LeaseDuration   time.Duration
 }
 
-// TokenMismatchError is returned when the conflict token doesn't match.
-// Client should use the token from the error response and resend heartbeat.
-type TokenMismatchError struct {
-	CurrentToken []byte
-}
-
-func (e *TokenMismatchError) Error() string {
-	return "conflict token mismatch: use token from error response"
-}
-
+// Worker is a Chasm component that tracks worker heartbeats and manages worker lifecycle.
 type Worker struct {
 	chasm.UnimplementedComponent
 
