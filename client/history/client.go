@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -231,12 +230,12 @@ func (c *clientImpl) RecordActivityTaskStarted(
 	if len(request.GetComponentRef()) == 0 {
 		shardID = c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	} else {
-		componentRef, err := chasm.DeserializeComponentRef(request.GetComponentRef())
+		componentRef, err := c.tokenSerializer.DeserializeChasmComponentRef(request.GetComponentRef())
 		if err != nil {
 			return nil, err
 		}
 
-		shardID = c.shardIDFromWorkflowID(componentRef.NamespaceID, componentRef.BusinessID)
+		shardID = c.shardIDFromWorkflowID(componentRef.GetNamespaceId(), componentRef.GetBusinessId())
 	}
 
 	var response *historyservice.RecordActivityTaskStartedResponse
