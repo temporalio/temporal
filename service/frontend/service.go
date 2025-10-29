@@ -219,10 +219,10 @@ type Config struct {
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	WorkerHeartbeatsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowPauseEnabled    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerHeartbeatsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ListWorkersEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerCommandsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkerStateTracking dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]

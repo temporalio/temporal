@@ -2,6 +2,8 @@ package worker
 
 import (
 	"go.temporal.io/server/chasm"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc"
 )
@@ -9,15 +11,20 @@ import (
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	leaseExpiryTaskExecutor *LeaseExpiryTaskExecutor
+	handler                   *handler
+	leaseExpiryTaskExecutor   *LeaseExpiryTaskExecutor
+	workerCleanupTaskExecutor *WorkerCleanupTaskExecutor
 }
 
 func NewLibrary(
 	logger log.Logger,
 	config *Config,
+	dc *dynamicconfig.Collection,
 ) *Library {
 	return &Library{
-		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(logger),
+		handler:                   newHandler(dc),
+		leaseExpiryTaskExecutor:   NewLeaseExpiryTaskExecutor(logger, config),
+		workerCleanupTaskExecutor: NewWorkerCleanupTaskExecutor(logger),
 	}
 }
 
@@ -42,5 +49,5 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 }
 
 func (l *Library) RegisterServices(server *grpc.Server) {
-	// No gRPC services for Worker currently
+	workerstatepb.RegisterWorkerServiceServer(server, l.handler)
 }
