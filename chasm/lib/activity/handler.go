@@ -108,8 +108,10 @@ func (h *handler) PollActivityExecution(ctx context.Context, req *activitypb.Pol
 
 				newTransitionCount := ref.GetEntityLastUpdateVersionedTransition().GetTransitionCount()
 
-				if prevTransitionCount == -1 {
-					// Last seen count unknown - capture new state and return without waiting
+				// we're waiting for new transition count to exceed last seen
+
+				if prevTransitionCount == -1 || newTransitionCount > prevTransitionCount {
+					// Prev count unknown or less than new - capture new state and return
 					newStateChangeToken = []byte(strconv.FormatInt(newTransitionCount, 10))
 
 					if !request.ExcludeInfo {
@@ -127,24 +129,9 @@ func (h *handler) PollActivityExecution(ctx context.Context, req *activitypb.Pol
 					// TODO: error code?
 					return nil, false, serviceerror.NewFailedPrecondition(
 						fmt.Sprintf("invalid activity state: last seen transition count (%d) exceeds current (%d)", prevTransitionCount, newTransitionCount))
-				} else if newTransitionCount == prevTransitionCount {
+				} else {
 					// No change yet - keep waiting
 					return nil, false, nil
-				} else {
-					// State has changed - capture new state and stop waiting
-					newStateChangeToken = []byte(strconv.FormatInt(newTransitionCount, 10))
-
-					if !request.ExcludeInfo {
-						activityInfo, err = a.buildActivityExecutionInfo(ctx, chasm.EntityKey{
-							NamespaceID: req.GetNamespaceId(),
-							BusinessID:  request.GetActivityId(),
-							EntityID:    request.GetRunId(),
-						})
-						if err != nil {
-							return nil, false, err
-						}
-					}
-					return nil, true, nil
 				}
 			}
 
