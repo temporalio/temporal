@@ -2747,7 +2747,7 @@ func (n *Node) ExecutePureTask(
 
 	// Ensure this node's component value is hydrated before execution. Component
 	// will also check access rules.
-	component, err := n.Component(validationContext, ComponentRef{})
+	_, err := n.Component(validationContext, ComponentRef{})
 	if err != nil {
 		// NotFound errors are expected here and we can safely skip the task execution.
 		if errors.As(err, new(*serviceerror.NotFound)) {
@@ -2766,7 +2766,7 @@ func (n *Node) ExecutePureTask(
 	}
 
 	executionContext := NewMutableContext(progressIntentCtx, n)
-	component, err = n.Component(executionContext, ComponentRef{})
+	component, err := n.Component(executionContext, ComponentRef{})
 	if err != nil {
 		return false, err
 	}

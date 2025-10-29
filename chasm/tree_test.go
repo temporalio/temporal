@@ -1608,9 +1608,9 @@ func (s *nodeSuite) TestGetComponent() {
 
 			if ok {
 				if tc.nodeDirty {
-					s.True(node.valueState > valueStateSynced)
+					s.Greater(node.valueState, valueStateSynced)
 				} else {
-					s.True(node.valueState <= valueStateSynced)
+					s.LessOrEqual(node.valueState, valueStateSynced)
 				}
 			}
 		})
