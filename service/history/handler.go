@@ -2611,3 +2611,36 @@ func (h *Handler) ResetActivity(
 	}
 	return response, nil
 }
+
+// PauseWorkflowExecution is used to pause a running workflow execution.  This results in
+// WorkflowExecutionPaused event recorded in the history.
+func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (_ *historyservice.PauseWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowExecution := request.PauseRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err2 := engine.PauseWorkflowExecution(ctx, request)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return resp, nil
+}
