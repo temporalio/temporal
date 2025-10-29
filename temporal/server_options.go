@@ -30,11 +30,12 @@ type (
 	serverOptions struct {
 		serviceNames map[primitives.ServiceName]struct{}
 
-		config         *config.Config
-		configDir      string
-		env            string
-		zone           string
-		hostsByService map[primitives.ServiceName]static.Hosts
+		config               *config.Config
+		configDir            string
+		env                  string
+		zone                 string
+		serverConfigFilePath string
+		hostsByService       map[primitives.ServiceName]static.Hosts
 
 		startupSynchronizationMode synchronizationModeParams
 
@@ -91,13 +92,23 @@ func (so *serverOptions) loadAndValidate() error {
 }
 
 func (so *serverOptions) loadConfig() error {
+	if so.serverConfigFilePath != "" {
+		cfg, err := config.Load(
+			config.WithConfigFile(so.serverConfigFilePath),
+		)
+		if err != nil {
+			return fmt.Errorf("could not load config file: %w", err)
+		}
+		so.config = cfg
+		return nil
+	}
 	cfg, err := config.Load(
 		config.WithEnv(so.env),
 		config.WithConfigDir(so.configDir),
 		config.WithZone(so.zone),
 	)
 	if err != nil {
-		return fmt.Errorf("config file corrupted: %w", err)
+		return fmt.Errorf("could not load config file: %w", err)
 	}
 	so.config = cfg
 	return nil
