@@ -3770,11 +3770,14 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 }
 
 func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition() {
+	if !s.useNewDeploymentData {
+		s.T().Skip("This test is only supported on new deployment data")
+	}
 	/*
 		The aim of this test is to show the following does not occur when using revisionNumber mechanics:
 		- If the workflow TQ lags behind the activity TQ, with respect to the current version of a deployment, the activity should not be
 		- redirected to a new deployment and be thought of as an independent activity.
-		- Rather than the above, the activity should commence a workflow transition!
+		- Rather, the activity should commence a workflow transition!
 
 
 			Test plan:
@@ -3857,8 +3860,10 @@ func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition(
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-// TODO (Shivam): Does not work just yet.
-func (s *Versioning3Suite) TestActivityQLags_DependentActivityCompletesOnTheNewVersion() {
+func (s *Versioning3Suite) TestActivityQLags_DependentActivityOnUnversionedCompletesOnTheNewVersion() {
+	if !s.useNewDeploymentData {
+		s.T().Skip("This test is only supported on new deployment data")
+	}
 	/*
 		The aim of this test is to show the following does not occur when using revisionNumber mechanics:
 		- If the activity TQ lags behind the workflow TQ, with respect to the current version of a deployment, the activity should not be
@@ -3866,8 +3871,8 @@ func (s *Versioning3Suite) TestActivityQLags_DependentActivityCompletesOnTheNewV
 
 			Test plan:
 			- Use only one read and write partition.
-			- Update the userData, for workflow and activity TQ, by setting current version to v0.
-			- Let a controller poller complete the workflow task on v0 and schedule an activity task.
+			- Update the userData, for workflow, by setting current version to v0.
+			- Let a controlled poller complete the workflow task on v0 and schedule an activity task.
 			- We should see the activity task be dispatched to a v0 poller even though it's lagging behind the workflow TQ.
 	*/
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -3919,5 +3924,100 @@ func (s *Versioning3Suite) TestActivityQLags_DependentActivityCompletesOnTheNewV
 	// Verify that the workflow is running on v0.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		s.verifyWorkflowVersioning(tv0, vbUnpinned, tv0.Deployment(), nil, nil)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNewVersion() {
+	if !s.useNewDeploymentData {
+		s.T().Skip("This test is only supported on new deployment data")
+	}
+	/*
+		The aim of this test is to show the following does not occur when using revisionNumber mechanics:
+		- If the activity TQ lags behind the workflow TQ, with respect to the current version of a deployment, the activity should not be
+		- dispatched to the deployment found in the un-synced activity TQ.
+		- The main difference between this test and TestActivityQLags_DependentActivityOnUnversionedCompletesOnTheNewVersion is that this one
+		- shall have the activity TQ versioned to some build ID.
+
+			Test plan:
+			- Use only one read and write partition.
+			- Update the userData, for workflow and activity TQ, by setting current version to v0.
+			- Let a controlled poller complete the workflow task on v0 and schedule another workflow task.
+			- Update the userData, this time for the workflow TQ only, by setting the current version to v1.
+			- Let a controlled poller complete the workflow task on v1 and schedule an activity task.
+			- We should see the activity task be dispatched to a v1 poller even though it's lagging behind the workflow TQ.
+	*/
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	tv0 := testvars.New(s).WithBuildIDNumber(0)
+	tv1 := tv0.WithBuildIDNumber(1)
+
+	// Update the userData for the workflow TQ by setting the current version to v0
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv0, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            1,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv0.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
+		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+	}}, []string{}, tqTypeWf, tqTypeAct)
+	// Wait until all task queue partitions know that v0 is current.
+	s.waitForDeploymentDataPropagation(tv0, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// Start a workflow on v0.
+	s.startWorkflow(tv0, nil)
+
+	// Let a controlled poller complete the workflow task on v0 and schedule another workflow task.
+	s.pollWftAndHandle(tv0, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			resp := respondEmptyWft(tv0, false, vbUnpinned)
+			resp.ForceCreateNewWorkflowTask = true
+			return resp, nil
+		})
+
+	// Verify that the workflow is running on v0.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		s.verifyWorkflowVersioning(tv0, vbUnpinned, tv0.Deployment(), nil, nil)
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Update the userData for the workflow TQ *only* by setting the current version to v1
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            2,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
+		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+	}}, []string{}, tqTypeWf)
+	// Wait until all task queue partitions know that v1 is current.
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf)
+
+	// Register the v1 worker in the activity TQ to prevent matching from thinking this as an independent unpinned activity.
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, nil, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
+		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+	}}, []string{}, tqTypeAct)
+
+	// Let a controlled poller complete the workflow task on v1 and schedule an activity task.
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondWftWithActivities(tv1, tv1, false, vbUnpinned, "activity1"), nil
+		})
+
+	// Start an idle activity poller on v0. This poller should not receive any activity tasks.
+	go s.idlePollActivity(tv0, true, ver3MinPollTime, "activity should not go to the old deployment")
+
+	// Start a poller on v1. This shall make the activity task queue part of the same deployment (dependant activity).
+	activityTaskCh := make(chan struct{}, 1)
+	s.pollActivityAndHandle(tv1, activityTaskCh,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondActivity(), nil
+		})
+
+	<-activityTaskCh
+
+	// Verify that the workflow is still running on v1.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 	}, 10*time.Second, 100*time.Millisecond)
 }
