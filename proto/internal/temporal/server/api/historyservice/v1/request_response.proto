@@ -234,6 +234,9 @@ message RecordWorkflowTaskStartedRequest {
     temporal.api.deployment.v1.Deployment scheduled_deployment = 9;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues 
+    // that may arise due to stale routing configs in task queue partitions.
+    int64 task_dispatch_revision_number = 11;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -307,6 +310,9 @@ message RecordActivityTaskStartedRequest {
     reserved 11;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 12;
+    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues 
+    // that may arise due to stale routing configs in task queue partitions.
+    int64 task_dispatch_revision_number = 13;
 }
 
 message RecordActivityTaskStartedResponse {

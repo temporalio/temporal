@@ -99,7 +99,6 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
-	scheduledRevisionNumber int64,
 ) error {
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -117,7 +116,6 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
 		Priority:               priority,
-		RevisionNumber:         scheduledRevisionNumber,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
@@ -154,7 +152,6 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	directive *taskqueuespb.TaskVersionDirective,
 	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
-	scheduledRevisionNumber int64,
 ) error {
 	var sst *durationpb.Duration
 	if workflowTaskScheduleToStartTimeout > 0 {
@@ -172,7 +169,6 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 		Priority:               priority,
-		RevisionNumber:         scheduledRevisionNumber,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls

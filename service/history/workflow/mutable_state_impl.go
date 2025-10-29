@@ -8552,6 +8552,9 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	).Record(1)
 
 	// Since a transition has completed, we increment the revision number.
+	// fmt.Println("INCREMENTING REVISION NUMBER LETS GOOOOOOOOOOO")
+	// fmt.Println("preTransitionEffectiveDeployment", preTransitionEffectiveDeployment)
+	// fmt.Println("deployment", deployment)
 	ms.IncrementRevisionNumber()
 
 	return nil

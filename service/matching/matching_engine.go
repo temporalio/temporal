@@ -502,7 +502,6 @@ func (e *matchingEngineImpl) updateTaskQueue(partition tqid.Partition, mgr taskQ
 	e.partitions[partition.Key()] = mgr
 }
 
-// AddWorkflowTask either delivers task directly to waiting poller or saves it into task queue persistence.
 func (e *matchingEngineImpl) AddWorkflowTask(
 	ctx context.Context,
 	addRequest *matchingservice.AddWorkflowTaskRequest,
@@ -538,6 +537,12 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		CreateTime:       timestamppb.New(now),
 		VersionDirective: addRequest.VersionDirective,
 		Priority:         addRequest.Priority,
+	}
+
+	if taskInfo.GetVersionDirective().GetRevisionNumber() > 1 {
+		fmt.Println("--------------------------------")
+		fmt.Println("Revision number scheduled by history is", taskInfo.GetVersionDirective().GetRevisionNumber())
+		fmt.Println("--------------------------------")
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -2900,8 +2905,9 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
-		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
-		VersionDirective:    task.event.Data.VersionDirective,
+		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
+		VersionDirective:           task.event.Data.VersionDirective,
+		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -2958,8 +2964,9 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
-		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
-		VersionDirective:    task.event.Data.VersionDirective,
+		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
+		VersionDirective:           task.event.Data.VersionDirective,
+		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)

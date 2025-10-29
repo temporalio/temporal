@@ -584,7 +584,6 @@ type AddWorkflowTaskRequest struct {
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,12,opt,name=priority,proto3" json:"priority,omitempty"`
-	RevisionNumber   int64                     `protobuf:"varint,13,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -682,13 +681,6 @@ func (x *AddWorkflowTaskRequest) GetPriority() *v11.Priority {
 	return nil
 }
 
-func (x *AddWorkflowTaskRequest) GetRevisionNumber() int64 {
-	if x != nil {
-		return x.RevisionNumber
-	}
-	return 0
-}
-
 type AddWorkflowTaskResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// When present, it means that the task is spooled to a versioned queue of this build ID
@@ -752,11 +744,8 @@ type AddActivityTaskRequest struct {
 	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Stamp            int32                     `protobuf:"varint,12,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,13,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
-	// during enqueue time.
-	RevisionNumber int64 `protobuf:"varint,14,opt,name=revision_number,json=revisionNumber,proto3" json:"revision_number,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *AddActivityTaskRequest) Reset() {
@@ -857,13 +846,6 @@ func (x *AddActivityTaskRequest) GetPriority() *v11.Priority {
 		return x.Priority
 	}
 	return nil
-}
-
-func (x *AddActivityTaskRequest) GetRevisionNumber() int64 {
-	if x != nil {
-		return x.RevisionNumber
-	}
-	return 0
 }
 
 type AddActivityTaskResponse struct {
@@ -5086,7 +5068,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x06header\x18\x10 \x01(\v2\x1e.temporal.api.common.v1.HeaderR\x06header\x12h\n" +
 	"\x17poller_scaling_decision\x18\x11 \x01(\v20.temporal.api.taskqueue.v1.PollerScalingDecisionR\x15pollerScalingDecision\x12<\n" +
 	"\bpriority\x18\x12 \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12F\n" +
-	"\fretry_policy\x18\x13 \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\"\xb0\x05\n" +
+	"\fretry_policy\x18\x13 \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\"\x87\x05\n" +
 	"\x16AddWorkflowTaskRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12C\n" +
@@ -5098,10 +5080,9 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x11version_directive\x18\n" +
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12T\n" +
 	"\fforward_info\x18\v \x01(\v21.temporal.server.api.taskqueue.v1.TaskForwardInfoR\vforwardInfo\x12<\n" +
-	"\bpriority\x18\f \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12'\n" +
-	"\x0frevision_number\x18\r \x01(\x03R\x0erevisionNumber\"E\n" +
+	"\bpriority\x18\f \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\"E\n" +
 	"\x17AddWorkflowTaskResponse\x12*\n" +
-	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xcc\x05\n" +
+	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xa3\x05\n" +
 	"\x16AddActivityTaskRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12C\n" +
@@ -5114,8 +5095,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12T\n" +
 	"\fforward_info\x18\v \x01(\v21.temporal.server.api.taskqueue.v1.TaskForwardInfoR\vforwardInfo\x12\x14\n" +
 	"\x05stamp\x18\f \x01(\x05R\x05stamp\x12<\n" +
-	"\bpriority\x18\r \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12'\n" +
-	"\x0frevision_number\x18\x0e \x01(\x03R\x0erevisionNumberJ\x04\b\x03\x10\x04\"E\n" +
+	"\bpriority\x18\r \x01(\v2 .temporal.api.common.v1.PriorityR\bpriorityJ\x04\b\x03\x10\x04\"E\n" +
 	"\x17AddActivityTaskResponse\x12*\n" +
 	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xd3\x03\n" +
 	"\x14QueryWorkflowRequest\x12!\n" +

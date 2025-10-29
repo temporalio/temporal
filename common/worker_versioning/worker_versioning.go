@@ -239,11 +239,13 @@ func MakeDirectiveForWorkflowTask(
 	hasCompletedWorkflowTask bool,
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
+	revisionNumber int64,
 ) *taskqueuespb.TaskVersionDirective {
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return &taskqueuespb.TaskVersionDirective{
 			Behavior:          behavior,
 			DeploymentVersion: DeploymentVersionFromDeployment(deployment),
+			RevisionNumber:    revisionNumber,
 		}
 	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {

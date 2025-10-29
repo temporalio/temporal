@@ -196,6 +196,7 @@ func (u *Updater) ApplyRequest(
 		ms.HasCompletedAnyWorkflowTask(),
 		ms.GetEffectiveVersioningBehavior(),
 		ms.GetEffectiveDeployment(),
+		ms.GetRevisionNumber(),
 	)
 
 	return &api.UpdateWorkflowAction{
