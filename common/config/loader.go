@@ -148,22 +148,29 @@ func load(opts *loadOptions, config any) error {
 		}
 		return loadAndUnmarshalContent(content, filepath.Base(opts.configFilePath), opts.envMap, config)
 	}
-	// loa the configuration from a set of
-	// yaml config files found in the config directory
-	//
-	// The loader first fetches the set of files matching
-	// a pre-determined naming convention, then sorts
-	// them by hierarchy order and after that, simply
-	// loads the files one after another with the
-	// key/values in the later files overriding the key/values
-	// in the earlier files
-	//
-	// The hierarchy is as follows from lowest to highest
-	//
-	//	base.yaml
-	//	    env.yaml   -- environment is one of the input params ex-development
-	//	      env_az.yaml -- zone is another input param
+	return loadLegacy(opts, config)
 
+}
+
+// loadLegacy loads configuration data from a set of YAML files
+// located in the config directory.
+//
+// Deprecated: This loader is maintained only for backward compatibility
+// and should not be used in new code.
+//
+// The loader first identifies all files matching a predefined
+// naming convention, then sorts them according to their hierarchy.
+// It then loads the files sequentially, with key/value pairs in
+// later files overriding those in earlier ones.
+//
+// The hierarchy, from lowest to highest precedence, is as follows:
+//
+//   base.yaml
+//     env.yaml     -- where "environment" is one of the input parameters (e.g., "development")
+//       env_az.yaml -- where "zone" is another input parameter
+
+func loadLegacy(opts *loadOptions, config any) error {
+	stdlog.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", opts.env, opts.zone, opts.configDir)
 	if opts.env == "" {
 		opts.env = envDevelopment
 	}
