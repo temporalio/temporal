@@ -9,7 +9,7 @@ import "google/protobuf/timestamp.proto";
 // Task that fires when a worker session lease expires.
 message LeaseExpiryTask {
     // Time at which the lease expires.
-    google.protobuf.Timestamp lease_deadline = 1;
+    google.protobuf.Timestamp lease_expiration_time = 1;
 }
 
 // Task for cleanup of expired sessions.

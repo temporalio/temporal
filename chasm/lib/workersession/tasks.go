@@ -59,14 +59,14 @@ func (e *LeaseExpiryTaskExecutor) isLeaseExpiryStillValid(
 	}
 
 	// If no lease deadline set, lease expiry is not valid.
-	if component.LeaseDeadline == nil {
+	if component.LeaseExpirationTime == nil {
 		return false
 	}
 
 	// Timer is valid if its deadline is >= the current lease deadline.
 	// (i.e., it hasn't been superseded by a newer heartbeat).
-	taskDeadline := task.LeaseDeadline.AsTime()
-	componentDeadline := component.LeaseDeadline.AsTime()
+	taskDeadline := task.LeaseExpirationTime.AsTime()
+	componentDeadline := component.LeaseExpirationTime.AsTime()
 	return !taskDeadline.Before(componentDeadline)
 }
 
