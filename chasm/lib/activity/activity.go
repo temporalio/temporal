@@ -111,7 +111,7 @@ func NewEmbeddedActivity(
 ) {
 }
 
-func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, activityRef chasm.ComponentRef) (*matchingservice.AddActivityTaskRequest, error) {
+func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID string) (*matchingservice.AddActivityTaskRequest, error) {
 	// Get latest component ref and unmarshal into proto ref
 	componentBytes, err := ctx.Ref(a)
 	if err != nil {
@@ -125,7 +125,7 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, activityRef c
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
 	return &matchingservice.AddActivityTaskRequest{
-		NamespaceId:            activityRef.NamespaceID,
+		NamespaceId:            namespaceID,
 		TaskQueue:              a.GetTaskQueue(),
 		ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
 		Priority:               a.GetPriority(),

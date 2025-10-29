@@ -54,7 +54,7 @@ func (e *activityDispatchTaskExecutor) Execute(
 		ctx,
 		activityRef,
 		(*Activity).createAddActivityTaskRequest,
-		activityRef,
+		activityRef.NamespaceID,
 	)
 	if err != nil {
 		return err
