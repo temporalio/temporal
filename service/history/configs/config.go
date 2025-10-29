@@ -392,6 +392,8 @@ type Config struct {
 
 	// Worker-Versioning related settings
 	UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	WorkflowPauseEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -743,6 +745,8 @@ func NewConfig(
 
 		// Worker-Versioning related
 		UseRevisionNumberForWorkerVersioning: dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
+
+		WorkflowPauseEnabled: dynamicconfig.WorkflowPauseEnabled.Get(dc),
 	}
 
 	return cfg
