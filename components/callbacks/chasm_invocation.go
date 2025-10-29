@@ -57,13 +57,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
-	ref := &persistencespb.ChasmComponentRef{}
-	err = proto.Unmarshal(decodedRef, ref)
-	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef: %v", err)}
-	}
-
-	request, err := c.getHistoryRequest(ref)
+	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
 		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
 	}
@@ -82,7 +76,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 }
 
 func (c chasmInvocation) getHistoryRequest(
-	ref *persistencespb.ChasmComponentRef,
+	ref []byte,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 

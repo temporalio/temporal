@@ -58,6 +58,8 @@ message RoutingOptions {
     string task_token = 6;
     // Request will be routed by resolving the namespace ID and the workflow ID from the first task info element.
     string task_infos = 7;
+    // Request will be routed by resolving the namespace ID and the workflow ID from this chasm ref to a given shard.
+    string chasm_component_ref = 8;
 }
 
 message StartWorkflowExecutionRequest {
@@ -1145,12 +1147,8 @@ message ListTasksResponse {
 }
 
 message CompleteNexusOperationChasmRequest {
-    option (routing) = {
-        namespace_id: "completion.component_ref.namespace_id"
-        // TODO - fix after merge
-        // business_id: "completion.component_ref.business_id"
-        workflow_id: "completion.component_ref.business_id"
-    };
+    option (routing).chasm_component_ref = "completion.component_ref";
+
     // Completion token - holds information for locating an entity and the corresponding component.
     temporal.server.api.token.v1.NexusOperationCompletion completion = 1;
     oneof outcome {

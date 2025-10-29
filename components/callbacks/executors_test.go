@@ -487,11 +487,13 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					// Verify completion token
 					require.NotNil(t, req.Completion)
 					require.NotNil(t, req.Completion.ComponentRef)
-					require.Equal(t, "namespace-id", req.Completion.ComponentRef.NamespaceId)
-					require.Equal(t, "business-id", req.Completion.ComponentRef.BusinessId)
-					require.Equal(t, "entity-id", req.Completion.ComponentRef.EntityId)
+					var ref persistencespb.ChasmComponentRef
+					require.NoError(t, proto.Unmarshal(req.Completion.ComponentRef, &ref))
+					require.Equal(t, "namespace-id", ref.NamespaceId)
+					require.Equal(t, "business-id", ref.BusinessId)
+					require.Equal(t, "entity-id", ref.EntityId)
+					require.Equal(t, "test-archetype", ref.Archetype)
 					require.Equal(t, "request-id", req.Completion.RequestId)
-					require.Equal(t, "test-archetype", req.Completion.ComponentRef.Archetype)
 
 					// Verify successful operation data
 					require.NotNil(t, req.GetSuccess())
@@ -614,26 +616,6 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				return comp
 			}(),
 			headerValue:          "invalid-base64!!!",
-			expectsInternalError: true,
-			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
-				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
-			},
-		},
-		{
-			name: "invalid-protobuf-in-ref",
-			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
-				// No RPC call expected
-				return historyservicemock.NewMockHistoryServiceClient(ctrl)
-			},
-			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
-				)
-				require.NoError(t, err)
-				return comp
-			}(),
-			headerValue:          base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
 			expectsInternalError: true,
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
