@@ -1208,7 +1208,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool
 		if s.useNewDeploymentData {
 			s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
 				CurrentDeploymentVersion:  nil,
-				CurrentVersionChangedTime: nil,
+				CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
 				RevisionNumber:            2,
 			}, map[string]*deploymentspb.WorkerDeploymentVersionData{}, []string{}, tqTypeWf, tqTypeAct)
 		} else {
@@ -1357,7 +1357,7 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 		if s.useNewDeploymentData {
 			s.updateTaskQueueDeploymentDataWithRoutingConfig(tv2, &deploymentpb.RoutingConfig{
 				CurrentDeploymentVersion:  nil,
-				CurrentVersionChangedTime: nil,
+				CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
 				RevisionNumber:            3,
 			}, map[string]*deploymentspb.WorkerDeploymentVersionData{}, []string{}, tqTypeWf, tqTypeAct)
 		} else {

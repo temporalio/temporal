@@ -1109,6 +1109,13 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		var currentDeploymentQueue physicalTaskQueueManager
 
 		if targetDeployment == nil && taskDirectiveRevisionNumber > targetDeploymentRevisionNumber {
+			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+				fmt.Println("--------------------------------")
+				fmt.Println("targetDeployment", targetDeployment)
+				fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
+				fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
+				fmt.Println("--------------------------------")
+			}
 			// When workflow moves from unversioned to versioned, but task-queue partition did not get the changes.
 			currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
 			taskDispatchRevisionNumber = taskDirectiveRevisionNumber
@@ -1202,10 +1209,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	fmt.Println("--------------------------------")
-	fmt.Println("targetDeployment", targetDeployment)
-	fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-	fmt.Println("taskDispatchRevisionNumber", taskDispatchRevisionNumber)
-	fmt.Println("--------------------------------")
+	if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		fmt.Println("targetDeployment", targetDeployment)
+		fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
+		fmt.Println("taskDispatchRevisionNumber", taskDispatchRevisionNumber)
+		fmt.Println("--------------------------------")
+	}
 
 	if forwardInfo != nil {
 		// Forwarded from child partition - only do sync match.
