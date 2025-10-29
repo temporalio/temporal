@@ -67,7 +67,7 @@ func buildCLI() *cli.App {
 		},
 		&cli.StringFlag{
 			Name:    "config-file",
-			Usage:   "path to config file (absolute or relative to root)",
+			Usage:   "path to config file (absolute or relative to current working directory)",
 			EnvVars: []string{config.EnvKeyConfigFile},
 		},
 		&cli.BoolFlag{
