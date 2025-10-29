@@ -207,7 +207,7 @@ func recordActivityTaskStarted(
 		// to the poller deployment. Otherwise, it means the activity is independently versioned, we
 		// allow it to start without affecting the workflow.
 
-		wftDepVer, err := getDeploymentVersionForWorkflowId(ctx,
+		wftDepVer, wftDepRevNum, err := getDeploymentVersionAndRevisionNumberForWorkflowId(ctx,
 			request.NamespaceId,
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -233,7 +233,7 @@ func recordActivityTaskStarted(
 
 		// Note: We use > instead of >= because a non-backlogged activity task could have the same revision number as the MS and that should not commence a transition.
 		// The following check MUST be done if the pollerDeployment and wftDepVer are from the same deployment series.
-		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) || (pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepVer.GetRevisionNumber()) {
+		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) || (pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepRevNum) {
 			oldRevisionNumber := mutableState.GetRevisionNumber()
 			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
@@ -301,14 +301,14 @@ func recordActivityTaskStarted(
 
 // TODO (Shahab): move this method to a better place
 // TODO: cache this result (especially if the answer is true)
-func getDeploymentVersionForWorkflowId(
+func getDeploymentVersionAndRevisionNumberForWorkflowId(
 	ctx context.Context,
 	namespaceID string,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	matchingClient matchingservice.MatchingServiceClient,
 	workflowId string,
-) (*deploymentspb.WorkerDeploymentVersion, error) {
+) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
 	resp, err := matchingClient.GetTaskQueueUserData(ctx,
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   namespaceID,
@@ -316,17 +316,17 @@ func getDeploymentVersionForWorkflowId(
 			TaskQueueType: taskQueueType,
 		})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
 	if !ok {
 		// The TQ is unversioned
-		return nil, nil
+		return nil, 0, nil
 	}
 
-	// TODO (Shivam): Fetch the revision number from the routing config.
-	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	return worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId), nil
+	current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
+	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
 
 func processActivityWorkflowRules(

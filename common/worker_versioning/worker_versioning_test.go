@@ -117,7 +117,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			current, ramping := CalculateTaskQueueVersioningInfo(tt.data)
+			current, ramping, _, _ := CalculateTaskQueueVersioningInfo(tt.data)
 			if !current.Equal(tt.wantCurrent) {
 				t.Errorf("got current = %v, want %v", current, tt.wantCurrent)
 			}
@@ -143,8 +143,8 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := FindDeploymentVersionForWorkflowID(tt.current, tt.ramping, "my-wf-id"); !got.Equal(tt.want) {
-				t.Errorf("FindDeploymentVersionForWorkflowID() = %v, want %v", got, tt.want)
+			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current, tt.ramping, nil, nil, "my-wf-id"); !got.Equal(tt.want) {
+				t.Errorf("FindTargetDeploymentVersionAndRevisionNumberForWorkflowID() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -176,7 +176,7 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			histogram := make(map[string]int)
 			runs := 1000000
 			for i := 0; i < runs; i++ {
-				v := FindDeploymentVersionForWorkflowID(current, ramping, "wf-"+strconv.Itoa(i))
+				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, nil, nil, "wf-"+strconv.Itoa(i))
 				histogram[v.GetBuildId()]++
 			}
 

@@ -651,14 +651,27 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		if err != nil {
 			return nil, err
 		}
-		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
-		info := &taskqueuepb.TaskQueueVersioningInfo{
-			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
-			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToStringV31(current.GetVersion()),
-			CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current.GetVersion()),
-			UpdateTime:               current.GetRoutingUpdateTime(),
+		current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+
+		var info *taskqueuepb.TaskQueueVersioningInfo
+		if current != nil {
+			info = &taskqueuepb.TaskQueueVersioningInfo{
+				//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
+				CurrentVersion:           worker_versioning.WorkerDeploymentVersionToStringV31(current.GetVersion()),
+				CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current.GetVersion()),
+				UpdateTime:               current.GetRoutingUpdateTime(),
+			}
+		} else {
+			// Use currentVersionRoutingConfig to populate the task queue versioning info.
+			info = &taskqueuepb.TaskQueueVersioningInfo{
+				//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
+				CurrentVersion:           worker_versioning.ExternalWorkerDeploymentVersionToStringV31(currentVersionRoutingConfig.GetCurrentDeploymentVersion()),
+				CurrentDeploymentVersion: currentVersionRoutingConfig.GetCurrentDeploymentVersion(),
+				UpdateTime:               currentVersionRoutingConfig.GetCurrentVersionChangedTime(),
+			}
 		}
-		if ramping.GetRampingSinceTime() != nil {
+
+		if ramping != nil {
 			info.RampingVersionPercentage = ramping.GetRampPercentage()
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
 			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
@@ -667,7 +680,15 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 			if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
 				info.UpdateTime = ramping.GetRoutingUpdateTime()
 			}
+		} else if rampingVersionRoutingConfig != nil {
+			info.RampingVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(rampingVersionRoutingConfig.GetRampingDeploymentVersion())
+			info.RampingDeploymentVersion = rampingVersionRoutingConfig.GetRampingDeploymentVersion()
+			info.RampingVersionPercentage = rampingVersionRoutingConfig.GetRampingVersionPercentage()
+			if info.GetUpdateTime().AsTime().Before(rampingVersionRoutingConfig.GetRampingVersionPercentageChangedTime().AsTime()) {
+				info.UpdateTime = rampingVersionRoutingConfig.GetRampingVersionPercentageChangedTime()
+			}
 		}
+
 		resp.DescResponse.VersioningInfo = info
 	}
 	return resp, nil
@@ -1006,7 +1027,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	isQuery bool,
 ) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, rcRevisionNumber int64, err error) {
 	// Represents the revision number used by the task and is max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
-	var taskDispatchRevisionNumber int64
+	var taskDispatchRevisionNumber, targetDeploymentRevisionNumber int64
 
 	wfBehavior := directive.GetBehavior()
 	deployment := worker_versioning.DirectiveDeployment(directive)
@@ -1018,11 +1039,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	deploymentData := perTypeUserData.GetDeploymentData()
 	deploymentsData := deploymentData.GetDeploymentsData()
 
-	// Fetching the RoutingConfig based on the deployment of the workflow task.
-	// TODO (Shivam): Push this to the pinned case.
-	routingConfigRevisionNumber := int64(0)
 	var workerDeploymentData *persistencespb.WorkerDeploymentData
-
 	taskDirectiveRevisionNumber := directive.GetRevisionNumber()
 
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
@@ -1060,7 +1077,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		if deploymentsData != nil && directive.GetDeploymentVersion() != nil {
 			workerDeploymentData = deploymentsData[directive.GetDeploymentVersion().GetDeploymentName()] // don't use workflow's directive, use current version.
 			if workerDeploymentData != nil && workerDeploymentData.GetRoutingConfig() != nil {
-				routingConfigRevisionNumber = workerDeploymentData.GetRoutingConfig().GetRevisionNumber()
+				targetDeploymentRevisionNumber = workerDeploymentData.GetRoutingConfig().GetRevisionNumber()
 			}
 		}
 
@@ -1084,22 +1101,15 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 	}
 
-	// TODO (Shivam) - Update this?
-	if deploymentsData != nil && directive.GetDeploymentVersion() != nil {
-		workerDeploymentData = deploymentsData[directive.GetDeploymentVersion().GetDeploymentName()] // don't use workflow's directive, use current version.
-		if workerDeploymentData != nil && workerDeploymentData.GetRoutingConfig() != nil {
-			routingConfigRevisionNumber = workerDeploymentData.GetRoutingConfig().GetRevisionNumber()
-		}
-	}
-
-	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)                                                                                                    // TODO (Shivam): Two extra return values (routingConfigLatestCurrentVersion, routingConfigLatestRampingVersion) are needed here.
-	targetDeployment, targetDeploymentRevisionNumber := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId)) // TODO (Shivam): Pass along the revision number of either current/ramping
+	current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
+	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
 	if directive.GetAssignedBuildId() == "" {
 		var currentDeploymentQueue physicalTaskQueueManager
 
-		if currentDeployment == nil && taskDirectiveRevisionNumber > routingConfigRevisionNumber {
-			// When Workflow moved from unversioned to versioned, but task-queue partition did not get the changes.
+		if targetDeployment == nil && taskDirectiveRevisionNumber > targetDeploymentRevisionNumber {
+			// When workflow moves from unversioned to versioned, but task-queue partition did not get the changes.
 			currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
 			taskDispatchRevisionNumber = taskDirectiveRevisionNumber
 			if forwardInfo == nil {
@@ -1110,9 +1120,9 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				// Forwarded from child partition - only do sync match.
 				return nil, currentDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
 			}
-		} else if currentDeployment != nil {
+		} else if targetDeployment != nil {
 			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-				if !deployment.Equal(currentDeployment) {
+				if !deployment.Equal(targetDeployment) {
 					// Current deployment has changed, so the workflow should move to a normal queue to
 					// get redirected to the new deployment.
 					return nil, nil, nil, 0, serviceerrors.NewStickyWorkerUnavailable()
@@ -1137,9 +1147,9 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 
 			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 				fmt.Println("--------------------------------")
-				fmt.Println("routingConfigRevisionNumber", routingConfigRevisionNumber)
+				fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
 				fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-				fmt.Println("currentDeployment", currentDeployment)
+				fmt.Println("targetDeployment", targetDeployment)
 				fmt.Println("deployment from history", deployment)
 				fmt.Println("--------------------------------")
 			}
@@ -1151,18 +1161,18 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			// 		This can happen if the user decides to move the task-queue the wf is running on into a different deployment.
 			//		 which can have a different routingConfigRevisionNumber. In this case, we choose the currentDeployment.
 			if IndependentUnpinnedActivity {
-				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
-				taskDispatchRevisionNumber = routingConfigRevisionNumber
-			} else if currentDeployment.GetSeriesName() != deployment.GetSeriesName() {
-				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
-				taskDispatchRevisionNumber = routingConfigRevisionNumber // This is wrong. We need the current deployment of the task queue.
-			} else if routingConfigRevisionNumber >= taskDirectiveRevisionNumber {
+				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
+			} else if targetDeployment.GetSeriesName() != deployment.GetSeriesName() {
+				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
+			} else if targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 				if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 					fmt.Println("ACTIVITY TASK BEING DISPATCHED TO Routing Config current DEPLOYMENT")
 				}
 				// Choose the currentDeployment in case of tie for the case of unversioned.
-				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
-				taskDispatchRevisionNumber = routingConfigRevisionNumber
+				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
 			} else {
 				if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 					fmt.Println("ACTIVITY TASK BEING DISPATCHED TO Task directive DEPLOYMENT")
@@ -1175,7 +1185,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				fmt.Println("--------------------------------")
 				fmt.Println("For task type", pm.partition.TaskType())
 				fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-				fmt.Println("routingConfigRevisionNumber", routingConfigRevisionNumber)
+				fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
 				fmt.Println("taskDispatchRevisionNumber in getPhysicalQueuesForAdd", taskDispatchRevisionNumber)
 				fmt.Println("--------------------------------")
 			}
@@ -1190,6 +1200,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			}
 		}
 	}
+
+	fmt.Println("--------------------------------")
+	fmt.Println("targetDeployment", targetDeployment)
+	fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
+	fmt.Println("taskDispatchRevisionNumber", taskDispatchRevisionNumber)
+	fmt.Println("--------------------------------")
 
 	if forwardInfo != nil {
 		// Forwarded from child partition - only do sync match.
