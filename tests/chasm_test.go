@@ -95,7 +95,7 @@ func (s *ChasmTestSuite) TestNewPayloadStore_ConflictPolicy() {
 			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
 		},
 	)
-	s.IsType(&chasm.ExecutionAlreadyStartedError{}, err)
+	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
 
 	resp, err = tests.NewPayloadStoreHandler(
 		chasm.NewEngineContext(ctx, s.chasmEngine),

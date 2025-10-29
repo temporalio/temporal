@@ -349,7 +349,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
 			chasm.BusinessIDConflictPolicyFail,
 		),
 	)
-	s.IsType(&chasm.ExecutionAlreadyStartedError{}, err)
+	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
 }
 
 func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
@@ -383,7 +383,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
 			chasm.BusinessIDConflictPolicyFail,
 		),
 	)
-	s.IsType(&chasm.ExecutionAlreadyStartedError{}, err)
+	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
 }
 
 func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_UseExisting() {
@@ -463,7 +463,7 @@ func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_TerminateExisting() {
 			chasm.BusinessIDConflictPolicyTerminateExisting,
 		),
 	)
-	s.IsType(&serviceerror.Unimplemented{}, err)
+	s.ErrorAs(err, new(*serviceerror.Unimplemented))
 }
 
 func (s *chasmEngineSuite) newTestEntityFn(
