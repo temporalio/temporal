@@ -2,6 +2,7 @@ package callback
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"reflect"
@@ -9,7 +10,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -19,9 +24,15 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -57,7 +68,7 @@ func setFieldValue[T any](field *chasm.Field[T], value T) {
 }
 
 // Test the full executeInvocationTask flow with chasm.ComponentRef
-func TestExecuteInvocationTask(t *testing.T) {
+func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 	cases := []struct {
 		name                  string
 		caller                HTTPCaller
@@ -267,210 +278,6 @@ func TestExecuteInvocationTask(t *testing.T) {
 	}
 }
 
-// Test loadInvocationArgs with ComponentRef
-func TestLoadInvocationArgs(t *testing.T) {
-	tests := []struct {
-		name          string
-		nexusURL      string
-		expectChasm   bool
-		expectNexus   bool
-		setupCallback func(*Callback)
-	}{
-		{
-			name:        "chasm-internal-callback",
-			nexusURL:    chasm.NexusCompletionHandlerURL,
-			expectChasm: true,
-			setupCallback: func(cb *Callback) {
-				cb.Callback.Variant = &callbackspb.Callback_Nexus_{
-					Nexus: &callbackspb.Callback_Nexus{
-						Url: chasm.NexusCompletionHandlerURL,
-					},
-				}
-			},
-		},
-		{
-			name:        "external-nexus-callback",
-			nexusURL:    "http://external:8080",
-			expectNexus: true,
-			setupCallback: func(cb *Callback) {
-				cb.Callback.Variant = &callbackspb.Callback_Nexus_{
-					Nexus: &callbackspb.Callback_Nexus{
-						Url: "http://external:8080",
-					},
-				}
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			// Setup time source
-			timeSource := clock.NewEventTimeSource()
-			timeSource.Update(time.Now())
-
-			// Create callback
-			callback := &Callback{
-				CallbackState: &callbackspb.CallbackState{
-					RequestId: "request-id",
-					Callback: &callbackspb.Callback{
-						Variant: &callbackspb.Callback_Nexus_{
-							Nexus: &callbackspb.Callback_Nexus{
-								Url: tc.nexusURL,
-							},
-						},
-					},
-					Attempt: 1,
-				},
-			}
-			tc.setupCallback(callback)
-
-			// Setup completion getter
-			completion, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
-			require.NoError(t, err)
-			completionGetter := &mockNexusCompletionGetter{
-				completion: completion,
-			}
-			// Set the CanGetNexusCompletion field using reflection
-			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
-
-			// Create mock engine and setup expectations
-			mockEngine := chasm.NewMockEngine(ctrl)
-			mockEngine.EXPECT().ReadComponent(
-				gomock.Any(),
-				gomock.Any(),
-				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
-				// Create a mock context
-				mockCtx := &chasm.MockContext{
-					HandleNow: func(component chasm.Component) time.Time {
-						return timeSource.Now()
-					},
-					HandleRef: func(component chasm.Component) ([]byte, error) {
-						return []byte{}, nil
-					},
-				}
-
-				// Call the readFn with our callback
-				return readFn(mockCtx, callback)
-			})
-
-			// Create ComponentRef
-			ref := chasm.NewComponentRef[*Callback](chasm.EntityKey{
-				NamespaceID: "namespace-id",
-				BusinessID:  "workflow-id",
-				EntityID:    "run-id",
-			})
-
-			// Create context with engine
-			ctx := chasm.NewEngineContext(context.Background(), mockEngine)
-
-			// Test loadInvocationArgs via ReadComponent
-			invokable, err := chasm.ReadComponent(
-				ctx,
-				ref,
-				(*Callback).loadInvocationArgs,
-				ctx,
-			)
-
-			// Verify the invokable was created successfully
-			require.NoError(t, err)
-			require.NotNil(t, invokable)
-		})
-	}
-}
-
-// Test saveResult transitions
-func TestSaveResult(t *testing.T) {
-	tests := []struct {
-		name           string
-		result         invocationResult
-		expectedStatus callbackspb.CallbackStatus
-	}{
-		{
-			name:           "success",
-			result:         invocationResultOK{},
-			expectedStatus: callbackspb.CALLBACK_STATUS_SUCCEEDED,
-		},
-		{
-			name:           "retry",
-			result:         invocationResultRetry{err: errors.New("retry me"), retryPolicy: backoff.NewExponentialRetryPolicy(time.Second)},
-			expectedStatus: callbackspb.CALLBACK_STATUS_BACKING_OFF,
-		},
-		{
-			name:           "fail",
-			result:         invocationResultFail{err: errors.New("permanent fail")},
-			expectedStatus: callbackspb.CALLBACK_STATUS_FAILED,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			timeSource := clock.NewEventTimeSource()
-			timeSource.Update(time.Now())
-
-			// Create callback
-			callback := &Callback{
-				CallbackState: &callbackspb.CallbackState{
-					RequestId: "request-id",
-					Status:    callbackspb.CALLBACK_STATUS_SCHEDULED,
-					Attempt:   1,
-				},
-			}
-
-			// Create mock engine and setup expectations
-			mockEngine := chasm.NewMockEngine(ctrl)
-			mockEngine.EXPECT().UpdateComponent(
-				gomock.Any(),
-				gomock.Any(),
-				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
-				// Create a mock mutable context
-				mockCtx := &chasm.MockMutableContext{
-					MockContext: chasm.MockContext{
-						HandleNow: func(component chasm.Component) time.Time {
-							return timeSource.Now()
-						},
-						HandleRef: func(component chasm.Component) ([]byte, error) {
-							return []byte{}, nil
-						},
-					},
-				}
-
-				// Call the updateFn with our callback
-				err := updateFn(mockCtx, callback)
-				return nil, err
-			})
-
-			ref := chasm.NewComponentRef[*Callback](chasm.EntityKey{
-				NamespaceID: "namespace-id",
-				BusinessID:  "workflow-id",
-				EntityID:    "run-id",
-			})
-
-			// Create context with engine
-			ctx := chasm.NewEngineContext(context.Background(), mockEngine)
-
-			// Test saveResult via UpdateComponent
-			_, _, err := chasm.UpdateComponent(
-				ctx,
-				ref,
-				(*Callback).saveResult,
-				tc.result,
-			)
-
-			// Verify no error and correct status was set
-			require.NoError(t, err)
-			require.Equal(t, tc.expectedStatus, callback.Status)
-		})
-	}
-}
-
 // TestProcessBackoffTask tests the backoff task execution that transitions
 // a callback from BACKING_OFF to SCHEDULED state and adds an invocation task.
 func TestProcessBackoffTask(t *testing.T) {
@@ -539,4 +346,350 @@ func TestProcessBackoffTask(t *testing.T) {
 	require.IsType(t, &callbackspb.InvocationTask{}, mockCtx.Tasks[0].Payload)
 	invTask := mockCtx.Tasks[0].Payload.(*callbackspb.InvocationTask)
 	require.Equal(t, int32(1), invTask.Attempt)
+}
+
+func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
+	dummyRef := persistencespb.ChasmComponentRef{
+		NamespaceId: "namespace-id",
+		BusinessId:  "business-id",
+		EntityId:    "entity-id",
+		Archetype:   "test-archetype",
+	}
+
+	serializedRef, err := dummyRef.Marshal()
+	require.NoError(t, err)
+	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
+	dummyTime := time.Now().UTC()
+
+	createPayloadBytes := func(data []byte) []byte {
+		p := &commonpb.Payload{Data: data}
+		payloadBytes, err := proto.Marshal(p)
+		require.NoError(t, err)
+		return payloadBytes
+	}
+
+	cases := []struct {
+		name                 string
+		setupHistoryClient   func(*testing.T, *gomock.Controller) resource.HistoryClient
+		completion           nexusrpc.OperationCompletion
+		headerValue          string
+		expectsInternalError bool
+		assertOutcome        func(*testing.T, *Callback)
+	}{
+		{
+			name: "success-with-successful-operation",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+					// Verify completion token
+					require.NotNil(t, req.Completion)
+					require.NotNil(t, req.Completion.ComponentRef)
+					require.Equal(t, "namespace-id", req.Completion.ComponentRef.NamespaceId)
+					require.Equal(t, "business-id", req.Completion.ComponentRef.BusinessId)
+					require.Equal(t, "entity-id", req.Completion.ComponentRef.EntityId)
+					require.Equal(t, "request-id", req.Completion.RequestId)
+					require.Equal(t, "test-archetype", req.Completion.ComponentRef.Archetype)
+
+					// Verify successful operation data
+					require.NotNil(t, req.GetSuccess())
+					require.Equal(t, []byte("result-data"), req.GetSuccess().Data)
+					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+
+					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+				})
+				return client
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						CloseTime: dummyTime,
+					},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback) {
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+			},
+		},
+		{
+			name: "success-with-failed-operation",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).DoAndReturn(func(ctx context.Context, req *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+					require.NotNil(t, req.Completion)
+					require.NotNil(t, req.GetFailure())
+					require.Equal(t, req.CloseTime.AsTime(), dummyTime)
+
+					return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+				})
+				return client
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionUnsuccessful(
+					&nexus.OperationError{
+						State: nexus.OperationStateFailed,
+						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
+					},
+					nexusrpc.OperationCompletionUnsuccessfulOptions{
+						CloseTime: dummyTime,
+					},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback) {
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+			},
+		},
+		{
+			name: "retryable-rpc-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, status.Error(codes.Unavailable, "service unavailable"))
+				return client
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:          encodedRef,
+			expectsInternalError: true,
+			assertOutcome: func(t *testing.T, cb *Callback) {
+				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+			},
+		},
+		{
+			name: "non-retryable-rpc-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil, status.Error(codes.InvalidArgument, "invalid request"))
+				return client
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:          encodedRef,
+			expectsInternalError: true,
+			assertOutcome: func(t *testing.T, cb *Callback) {
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+		{
+			name: "invalid-base64-header",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:          "invalid-base64!!!",
+			expectsInternalError: true,
+			assertOutcome: func(t *testing.T, cb *Callback) {
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+		{
+			name: "invalid-protobuf-in-ref",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.OperationCompletion {
+				comp, err := nexusrpc.NewOperationCompletionSuccessful(
+					createPayloadBytes([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{},
+				)
+				require.NoError(t, err)
+				return comp
+			}(),
+			headerValue:          base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
+			expectsInternalError: true,
+			assertOutcome: func(t *testing.T, cb *Callback) {
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// Setup namespace
+			ns := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:   "namespace-id",
+					Name: "namespace-name",
+				},
+				Config: &persistencespb.NamespaceConfig{},
+			})
+
+			// Setup history client
+			historyClient := tc.setupHistoryClient(t, ctrl)
+
+			// Setup logger and time source
+			logger := log.NewNoopLogger()
+			timeSource := clock.NewEventTimeSource()
+			timeSource.Update(time.Now())
+
+			// Create headers
+			headers := make(map[string]string)
+			if tc.headerValue != "" {
+				headers[commonnexus.CallbackTokenHeader] = tc.headerValue
+			}
+
+			// Create callback with chasm internal URL
+			callback := &Callback{
+				CallbackState: &callbackspb.CallbackState{
+					RequestId:        "request-id",
+					RegistrationTime: timestamppb.New(timeSource.Now()),
+					Callback: &callbackspb.Callback{
+						Variant: &callbackspb.Callback_Nexus_{
+							Nexus: &callbackspb.Callback_Nexus{
+								Url:    chasm.NexusCompletionHandlerURL,
+								Header: headers,
+							},
+						},
+					},
+					Status:  callbackspb.CALLBACK_STATUS_SCHEDULED,
+					Attempt: 1,
+				},
+			}
+
+			// Set up the CompletionSource field
+			completionGetter := &mockNexusCompletionGetter{
+				completion: tc.completion,
+			}
+			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
+
+			// Create mock namespace registry
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
+
+			// Create mock engine and setup expectations
+			mockEngine := chasm.NewMockEngine(ctrl)
+			mockEngine.EXPECT().ReadComponent(
+				gomock.Any(),
+				gomock.Any(),
+				gomock.Any(),
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
+				// Create a mock context
+				mockCtx := &chasm.MockContext{
+					HandleNow: func(component chasm.Component) time.Time {
+						return timeSource.Now()
+					},
+					HandleRef: func(component chasm.Component) ([]byte, error) {
+						return []byte{}, nil
+					},
+					HandleExecutionKey: func() chasm.EntityKey {
+						return chasm.EntityKey{
+							NamespaceID: "namespace-id",
+							BusinessID:  "workflow-id",
+							EntityID:    "run-id",
+						}
+					},
+				}
+
+				// Call the readFn with our callback
+				return readFn(mockCtx, callback)
+			})
+
+			mockEngine.EXPECT().UpdateComponent(
+				gomock.Any(),
+				gomock.Any(),
+				gomock.Any(),
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
+				// Create a mock mutable context
+				mockCtx := &chasm.MockMutableContext{
+					MockContext: chasm.MockContext{
+						HandleNow: func(component chasm.Component) time.Time {
+							return timeSource.Now()
+						},
+						HandleRef: func(component chasm.Component) ([]byte, error) {
+							return []byte{}, nil
+						},
+					},
+				}
+
+				// Call the updateFn with our callback
+				err := updateFn(mockCtx, callback)
+				return nil, err
+			})
+
+			executor := InvocationTaskExecutor{
+				InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
+					Config: &Config{
+						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+						RetryPolicy: func() backoff.RetryPolicy {
+							return backoff.NewExponentialRetryPolicy(time.Second)
+						},
+					},
+					NamespaceRegistry: nsRegistry,
+					MetricsHandler:    metrics.NoopMetricsHandler,
+					Logger:            logger,
+					HistoryClient:     historyClient,
+					ChasmEngine:       mockEngine,
+				},
+			}
+
+			// Create ComponentRef
+			ref := chasm.NewComponentRef[*Callback](chasm.EntityKey{
+				NamespaceID: "namespace-id",
+				BusinessID:  "workflow-id",
+				EntityID:    "run-id",
+			})
+
+			// Create context with engine
+			ctx := chasm.NewEngineContext(context.Background(), mockEngine)
+
+			// Execute the invocation task
+			task := &callbackspb.InvocationTask{Attempt: 1}
+			err = executor.Invoke(
+				ctx,
+				ref,
+				chasm.TaskAttributes{},
+				task,
+			)
+
+			if tc.expectsInternalError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "internal error, reference-id:")
+			} else {
+				require.NoError(t, err)
+			}
+
+			tc.assertOutcome(t, callback)
+		})
+	}
 }
