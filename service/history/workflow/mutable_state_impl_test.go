@@ -5370,7 +5370,7 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 			Category:            tasks.CategoryTimer,
 		}
 		s.mutableState.AddTasks(task)
-		s.True(len(s.mutableState.chasmPureTasks) <= s.mockConfig.ChasmMaxInMemoryPureTasks())
+		s.LessOrEqual(len(s.mutableState.chasmPureTasks), s.mockConfig.ChasmMaxInMemoryPureTasks())
 
 		visTimestamp = visTimestamp.Add(-time.Minute)
 	}
@@ -5380,7 +5380,7 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 		VisibilityTimestamp: visTimestamp,
 		Category:            tasks.CategoryTimer,
 	})
-	s.Equal(2, len(s.mutableState.chasmPureTasks))
+	s.Len(s.mutableState.chasmPureTasks, 2)
 }
 
 func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
@@ -5427,7 +5427,7 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
 			s.mutableState.DeleteCHASMPureTasks(tc.maxScheduledTime)
-			s.Equal(tc.expectedRemaining, len(s.mutableState.chasmPureTasks))
+			s.Len(s.mutableState.chasmPureTasks, tc.expectedRemaining)
 			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
 		})
 	}
