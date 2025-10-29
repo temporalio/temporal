@@ -113,10 +113,13 @@ func (h *handler) PollActivityExecution(ctx context.Context, req *activitypb.Pol
 					newStateChangeToken = []byte(strconv.FormatInt(newTransitionCount, 10))
 
 					if !request.ExcludeInfo {
-						// TODO: construct full ActivityExecutionInfo
-						activityInfo = &activity.ActivityExecutionInfo{
-							ActivityId: request.GetActivityId(),
-							RunId:      request.GetRunId(),
+						activityInfo, err = a.buildActivityExecutionInfo(ctx, chasm.EntityKey{
+							NamespaceID: req.GetNamespaceId(),
+							BusinessID:  request.GetActivityId(),
+							EntityID:    request.GetRunId(),
+						})
+						if err != nil {
+							return nil, false, err
 						}
 					}
 					return nil, true, nil
@@ -132,10 +135,13 @@ func (h *handler) PollActivityExecution(ctx context.Context, req *activitypb.Pol
 					newStateChangeToken = []byte(strconv.FormatInt(newTransitionCount, 10))
 
 					if !request.ExcludeInfo {
-						// TODO: construct full ActivityExecutionInfo
-						activityInfo = &activity.ActivityExecutionInfo{
-							ActivityId: request.GetActivityId(),
-							RunId:      request.GetRunId(),
+						activityInfo, err = a.buildActivityExecutionInfo(ctx, chasm.EntityKey{
+							NamespaceID: req.GetNamespaceId(),
+							BusinessID:  request.GetActivityId(),
+							EntityID:    request.GetRunId(),
+						})
+						if err != nil {
+							return nil, false, err
 						}
 					}
 					return nil, true, nil
@@ -158,10 +164,13 @@ func (h *handler) PollActivityExecution(ctx context.Context, req *activitypb.Pol
 					currentCount := ref.GetEntityLastUpdateVersionedTransition().GetTransitionCount()
 					newStateChangeToken = []byte(strconv.FormatInt(currentCount, 10))
 					if !request.ExcludeInfo {
-						// TODO: construct full ActivityExecutionInfo
-						activityInfo = &activity.ActivityExecutionInfo{
-							ActivityId: request.GetActivityId(),
-							RunId:      request.GetRunId(),
+						activityInfo, err = a.buildActivityExecutionInfo(ctx, chasm.EntityKey{
+							NamespaceID: req.GetNamespaceId(),
+							BusinessID:  request.GetActivityId(),
+							EntityID:    request.GetRunId(),
+						})
+						if err != nil {
+							return nil, false, err
 						}
 					}
 				}
