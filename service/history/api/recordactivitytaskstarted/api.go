@@ -230,8 +230,10 @@ func recordActivityTaskStarted(
 		// 1. The workflow will be dispatching to the same deployment as the activity but has not yet.
 		// 2. The workflow TQ is lagging behind the activity TQ, with respect to the current version of a deployment. Note: The check to see if the activity task
 		//    belongs to the same deployment as the workflow is done in matching itself.
+
 		// Note: We use > instead of >= because a non-backlogged activity task could have the same revision number as the MS and that should not commence a transition.
-		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) || request.TaskDispatchRevisionNumber > mutableState.GetRevisionNumber() {
+		// The following check MUST be done if the pollerDeployment and wftDepVer are from the same deployment series.
+		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) || (pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepVer.GetRevisionNumber()) {
 			oldRevisionNumber := mutableState.GetRevisionNumber()
 			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
@@ -321,6 +323,8 @@ func getDeploymentVersionForWorkflowId(
 		// The TQ is unversioned
 		return nil, nil
 	}
+
+	// TODO (Shivam): Fetch the revision number from the routing config.
 	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
 	return worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId), nil
 }

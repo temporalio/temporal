@@ -8555,6 +8555,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// fmt.Println("INCREMENTING REVISION NUMBER LETS GOOOOOOOOOOO")
 	// fmt.Println("preTransitionEffectiveDeployment", preTransitionEffectiveDeployment)
 	// fmt.Println("deployment", deployment)
+	// TODO (Shivam): Pass along the rev number and equate it.
 	ms.IncrementRevisionNumber()
 
 	return nil

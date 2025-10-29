@@ -1989,6 +1989,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 				applyUpdatesToDeploymentData := rc == nil
 				if rc != nil {
+					// TODO (Shivam): hmmmmm, do we want >= or only >?
 					if rc.GetRevisionNumber() >= tqWorkerDeploymentData.GetRoutingConfig().GetRevisionNumber() {
 						changed = true
 						// Update routing config when newer or equal revision is provided
