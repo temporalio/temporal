@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.worker.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
+
+import "chasm/lib/worker/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+service WorkerService {
+    rpc RecordHeartbeat(RecordHeartbeatRequest) returns (RecordHeartbeatResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "worker_instance_key";
+    }
+}

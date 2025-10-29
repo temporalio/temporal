@@ -12,7 +12,6 @@ import (
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/workflowservice/v1"
-	_ "go.temporal.io/server/api/routing/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -129,14 +128,12 @@ var File_temporal_server_chasm_lib_worker_proto_v1_request_response_proto protor
 
 const file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/worker/proto/v1/request_response.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto\"\xd5\x01\n" +
+	"@temporal/server/chasm/lib/worker/proto/v1/request_response.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a6temporal/api/workflowservice/v1/request_response.proto\"\xd5\x01\n" +
 	"\x16RecordHeartbeatRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12h\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequestR\x0ffrontendRequest\x12.\n" +
 	"\x13worker_instance_key\x18\x03 \x01(\tR\x11workerInstanceKey\"\x19\n" +
-	"\x17RecordHeartbeatResponse2\xc5\x01\n" +
-	"\rWorkerService\x12\xb3\x01\n" +
-	"\x0fRecordHeartbeat\x12A.temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatRequest\x1aB.temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatResponse\"\x19\x92\xc4\x03\x15\x1a\x13worker_instance_keyB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
+	"\x17RecordHeartbeatResponseB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -158,10 +155,8 @@ var file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_goType
 }
 var file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_depIdxs = []int32{
 	2, // 0: temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest
-	0, // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerService.RecordHeartbeat:input_type -> temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatRequest
-	1, // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerService.RecordHeartbeat:output_type -> temporal.server.chasm.lib.worker.proto.v1.RecordHeartbeatResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -180,7 +175,7 @@ func file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_init(
 			NumEnums:      0,
 			NumMessages:   2,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   0,
 		},
 		GoTypes:           file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_goTypes,
 		DependencyIndexes: file_temporal_server_chasm_lib_worker_proto_v1_request_response_proto_depIdxs,
