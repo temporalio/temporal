@@ -14,7 +14,7 @@ func TestNewWorkerSession(t *testing.T) {
 	// Verify basic initialization
 	require.NotNil(t, session)
 	require.Equal(t, workersessionpb.WORKER_SESSION_STATUS_ACTIVE, session.Status)
-	require.Nil(t, session.LeaseDeadline)
+	require.Nil(t, session.LeaseExpirationTime)
 }
 
 func TestWorkerSessionLifecycleState(t *testing.T) {

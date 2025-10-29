@@ -13,7 +13,7 @@ import (
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -23,31 +23,29 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Task that fires when a worker session heartbeat timeout expires
-type HeartbeatTimeoutTask struct {
+// Task that fires when a worker session lease expires.
+type LeaseExpiryTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The timeout duration that was configured when this task was scheduled
-	TimeoutDuration *durationpb.Duration `protobuf:"bytes,1,opt,name=timeout_duration,json=timeoutDuration,proto3" json:"timeout_duration,omitempty"`
-	// The last heartbeat time when this timer was started (for validation)
-	LastHeartbeatTimestampNanos int64 `protobuf:"varint,2,opt,name=last_heartbeat_timestamp_nanos,json=lastHeartbeatTimestampNanos,proto3" json:"last_heartbeat_timestamp_nanos,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	// Time at which the lease expires.
+	LeaseExpirationTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=lease_expiration_time,json=leaseExpirationTime,proto3" json:"lease_expiration_time,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
-func (x *HeartbeatTimeoutTask) Reset() {
-	*x = HeartbeatTimeoutTask{}
+func (x *LeaseExpiryTask) Reset() {
+	*x = LeaseExpiryTask{}
 	mi := &file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *HeartbeatTimeoutTask) String() string {
+func (x *LeaseExpiryTask) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*HeartbeatTimeoutTask) ProtoMessage() {}
+func (*LeaseExpiryTask) ProtoMessage() {}
 
-func (x *HeartbeatTimeoutTask) ProtoReflect() protoreflect.Message {
+func (x *LeaseExpiryTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -59,30 +57,21 @@ func (x *HeartbeatTimeoutTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HeartbeatTimeoutTask.ProtoReflect.Descriptor instead.
-func (*HeartbeatTimeoutTask) Descriptor() ([]byte, []int) {
+// Deprecated: Use LeaseExpiryTask.ProtoReflect.Descriptor instead.
+func (*LeaseExpiryTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *HeartbeatTimeoutTask) GetTimeoutDuration() *durationpb.Duration {
+func (x *LeaseExpiryTask) GetLeaseExpirationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.TimeoutDuration
+		return x.LeaseExpirationTime
 	}
 	return nil
 }
 
-func (x *HeartbeatTimeoutTask) GetLastHeartbeatTimestampNanos() int64 {
-	if x != nil {
-		return x.LastHeartbeatTimestampNanos
-	}
-	return 0
-}
-
-// Task for periodic cleanup of expired sessions
+// Task for cleanup of expired sessions.
 type SessionCleanupTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Maximum age for completed/expired sessions to keep
-	MaxAge        *durationpb.Duration `protobuf:"bytes,1,opt,name=max_age,json=maxAge,proto3" json:"max_age,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -117,23 +106,14 @@ func (*SessionCleanupTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *SessionCleanupTask) GetMaxAge() *durationpb.Duration {
-	if x != nil {
-		return x.MaxAge
-	}
-	return nil
-}
-
 var File_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/workersession/proto/v1/tasks.proto\x120temporal.server.chasm.lib.workersession.proto.v1\x1a\x1egoogle/protobuf/duration.proto\"\xa1\x01\n" +
-	"\x14HeartbeatTimeoutTask\x12D\n" +
-	"\x10timeout_duration\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x0ftimeoutDuration\x12C\n" +
-	"\x1elast_heartbeat_timestamp_nanos\x18\x02 \x01(\x03R\x1blastHeartbeatTimestampNanos\"H\n" +
-	"\x12SessionCleanupTask\x122\n" +
-	"\amax_age\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x06maxAgeBSZQgo.temporal.io/server/chasm/lib/workersession/gen/workersessionpb;workersessionpbb\x06proto3"
+	"<temporal/server/chasm/lib/workersession/proto/v1/tasks.proto\x120temporal.server.chasm.lib.workersession.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"a\n" +
+	"\x0fLeaseExpiryTask\x12N\n" +
+	"\x15lease_expiration_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\"\x14\n" +
+	"\x12SessionCleanupTaskBSZQgo.temporal.io/server/chasm/lib/workersession/gen/workersessionpb;workersessionpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -149,18 +129,17 @@ func file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_rawDescGZ
 
 var file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_goTypes = []any{
-	(*HeartbeatTimeoutTask)(nil), // 0: temporal.server.chasm.lib.workersession.proto.v1.HeartbeatTimeoutTask
-	(*SessionCleanupTask)(nil),   // 1: temporal.server.chasm.lib.workersession.proto.v1.SessionCleanupTask
-	(*durationpb.Duration)(nil),  // 2: google.protobuf.Duration
+	(*LeaseExpiryTask)(nil),       // 0: temporal.server.chasm.lib.workersession.proto.v1.LeaseExpiryTask
+	(*SessionCleanupTask)(nil),    // 1: temporal.server.chasm.lib.workersession.proto.v1.SessionCleanupTask
+	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_depIdxs = []int32{
-	2, // 0: temporal.server.chasm.lib.workersession.proto.v1.HeartbeatTimeoutTask.timeout_duration:type_name -> google.protobuf.Duration
-	2, // 1: temporal.server.chasm.lib.workersession.proto.v1.SessionCleanupTask.max_age:type_name -> google.protobuf.Duration
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	2, // 0: temporal.server.chasm.lib.workersession.proto.v1.LeaseExpiryTask.lease_expiration_time:type_name -> google.protobuf.Timestamp
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_workersession_proto_v1_tasks_proto_init() }

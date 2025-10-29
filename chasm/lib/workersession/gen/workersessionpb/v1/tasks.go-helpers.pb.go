@@ -5,35 +5,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type HeartbeatTimeoutTask to the protobuf v3 wire format
-func (val *HeartbeatTimeoutTask) Marshal() ([]byte, error) {
+// Marshal an object of type LeaseExpiryTask to the protobuf v3 wire format
+func (val *LeaseExpiryTask) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type HeartbeatTimeoutTask from the protobuf v3 wire format
-func (val *HeartbeatTimeoutTask) Unmarshal(buf []byte) error {
+// Unmarshal an object of type LeaseExpiryTask from the protobuf v3 wire format
+func (val *LeaseExpiryTask) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *HeartbeatTimeoutTask) Size() int {
+func (val *LeaseExpiryTask) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two HeartbeatTimeoutTask values are equivalent by recursively
+// Equal returns whether two LeaseExpiryTask values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *HeartbeatTimeoutTask) Equal(that interface{}) bool {
+func (this *LeaseExpiryTask) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *HeartbeatTimeoutTask
+	var that1 *LeaseExpiryTask
 	switch t := that.(type) {
-	case *HeartbeatTimeoutTask:
+	case *LeaseExpiryTask:
 		that1 = t
-	case HeartbeatTimeoutTask:
+	case LeaseExpiryTask:
 		that1 = &t
 	default:
 		return false

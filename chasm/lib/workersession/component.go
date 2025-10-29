@@ -29,13 +29,10 @@ func NewWorkerSession() *WorkerSession {
 // LifecycleState returns the current lifecycle state of the worker session.
 func (ws *WorkerSession) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch ws.Status {
-	case workersessionpb.WORKER_SESSION_STATUS_ACTIVE:
-		return chasm.LifecycleStateRunning
-	case workersessionpb.WORKER_SESSION_STATUS_EXPIRED:
-		return chasm.LifecycleStateRunning // Still running until cleanup completes.
 	case workersessionpb.WORKER_SESSION_STATUS_TERMINATED:
 		return chasm.LifecycleStateCompleted
 	default:
+		// Active sessions and expired sessions awaiting cleanup are still running.
 		return chasm.LifecycleStateRunning
 	}
 }

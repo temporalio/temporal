@@ -24,7 +24,7 @@ func RecordHeartbeat(ctx chasm.MutableContext, ws *WorkerSession, leaseDeadline 
 // scheduleLeaseExpiry schedules a timer task that will fire when the lease expires.
 func scheduleLeaseExpiry(ctx chasm.MutableContext, ws *WorkerSession, leaseDeadline time.Time) {
 	expiryTask := &workersessionpb.LeaseExpiryTask{
-		LeaseDeadline: timestamppb.New(leaseDeadline),
+		LeaseExpirationTime: timestamppb.New(leaseDeadline),
 	}
 
 	taskAttrs := chasm.TaskAttributes{
@@ -47,7 +47,7 @@ var TransitionHeartbeatReceived = chasm.NewTransition(
 	workersessionpb.WORKER_SESSION_STATUS_ACTIVE,
 	func(ctx chasm.MutableContext, ws *WorkerSession, event EventHeartbeatReceived) error {
 		// Store client-provided lease deadline.
-		ws.LeaseDeadline = timestamppb.New(event.LeaseDeadline)
+		ws.LeaseExpirationTime = timestamppb.New(event.LeaseDeadline)
 
 		// Schedule new lease expiry timer.
 		scheduleLeaseExpiry(ctx, ws, event.LeaseDeadline)

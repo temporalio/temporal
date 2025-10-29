@@ -19,8 +19,8 @@ func TestRecordHeartbeat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify lease deadline was set
-	require.NotNil(t, session.LeaseDeadline)
-	require.Equal(t, leaseDeadline.Unix(), session.LeaseDeadline.AsTime().Unix())
+	require.NotNil(t, session.LeaseExpirationTime)
+	require.Equal(t, leaseDeadline.Unix(), session.LeaseExpirationTime.AsTime().Unix())
 
 	// Verify session is still active
 	require.Equal(t, workersessionpb.WORKER_SESSION_STATUS_ACTIVE, session.Status)
@@ -31,7 +31,7 @@ func TestRecordHeartbeat(t *testing.T) {
 	// Verify the task is a LeaseExpiryTask
 	task, ok := ctx.Tasks[0].Payload.(*workersessionpb.LeaseExpiryTask)
 	require.True(t, ok)
-	require.Equal(t, leaseDeadline.Unix(), task.LeaseDeadline.AsTime().Unix())
+	require.Equal(t, leaseDeadline.Unix(), task.LeaseExpirationTime.AsTime().Unix())
 }
 
 func TestTransitionHeartbeatReceived(t *testing.T) {
@@ -51,8 +51,8 @@ func TestTransitionHeartbeatReceived(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify state was updated
-	require.NotNil(t, session.LeaseDeadline)
-	require.Equal(t, leaseDeadline.Unix(), session.LeaseDeadline.AsTime().Unix())
+	require.NotNil(t, session.LeaseExpirationTime)
+	require.Equal(t, leaseDeadline.Unix(), session.LeaseExpirationTime.AsTime().Unix())
 	require.Equal(t, workersessionpb.WORKER_SESSION_STATUS_ACTIVE, session.Status)
 
 	// Verify task was scheduled
@@ -107,7 +107,7 @@ func TestTransitionCleanupCompleted(t *testing.T) {
 	require.Equal(t, workersessionpb.WORKER_SESSION_STATUS_TERMINATED, session.Status)
 
 	// Verify no additional tasks were scheduled
-	require.Len(t, ctx.Tasks, 0)
+	require.Empty(t, ctx.Tasks)
 }
 
 func TestScheduleLeaseExpiry(t *testing.T) {
@@ -124,7 +124,7 @@ func TestScheduleLeaseExpiry(t *testing.T) {
 	// Verify task details
 	task, ok := ctx.Tasks[0].Payload.(*workersessionpb.LeaseExpiryTask)
 	require.True(t, ok)
-	require.Equal(t, leaseDeadline.Unix(), task.LeaseDeadline.AsTime().Unix())
+	require.Equal(t, leaseDeadline.Unix(), task.LeaseExpirationTime.AsTime().Unix())
 	require.Equal(t, leaseDeadline, ctx.Tasks[0].Attributes.ScheduledTime)
 	require.Empty(t, ctx.Tasks[0].Attributes.Destination) // Local execution
 }
@@ -137,13 +137,13 @@ func TestMultipleHeartbeats(t *testing.T) {
 	firstDeadline := time.Now().Add(30 * time.Second)
 	err := RecordHeartbeat(ctx, session, firstDeadline)
 	require.NoError(t, err)
-	require.Equal(t, firstDeadline.Unix(), session.LeaseDeadline.AsTime().Unix())
+	require.Equal(t, firstDeadline.Unix(), session.LeaseExpirationTime.AsTime().Unix())
 
 	// Second heartbeat extends the lease
 	secondDeadline := time.Now().Add(60 * time.Second)
 	err = RecordHeartbeat(ctx, session, secondDeadline)
 	require.NoError(t, err)
-	require.Equal(t, secondDeadline.Unix(), session.LeaseDeadline.AsTime().Unix())
+	require.Equal(t, secondDeadline.Unix(), session.LeaseExpirationTime.AsTime().Unix())
 
 	// Verify two tasks were scheduled (one for each heartbeat)
 	require.Len(t, ctx.Tasks, 2)

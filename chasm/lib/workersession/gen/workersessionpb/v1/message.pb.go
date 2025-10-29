@@ -24,7 +24,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Status of a worker session
+// Status of a worker session.
 type WorkerSessionStatus int32
 
 const (
@@ -89,27 +89,13 @@ func (WorkerSessionStatus) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-// WorkerSession state that tracks metadata about a worker session and its heartbeats
+// Metadata about the worker session.
 type WorkerSessionState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique identifier for the worker
-	WorkerId string `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
-	// Namespace ID where the worker is operating
-	NamespaceId string `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Task queue the worker is polling from
-	TaskQueue string `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	// When the session started
-	SessionStartTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=session_start_time,json=sessionStartTime,proto3" json:"session_start_time,omitempty"`
-	// Last time we received a heartbeat from this worker
-	LastHeartbeatTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3" json:"last_heartbeat_time,omitempty"`
-	// Current status of the worker session
-	Status WorkerSessionStatus `protobuf:"varint,6,opt,name=status,proto3,enum=temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionStatus" json:"status,omitempty"`
-	// Number of heartbeats received in this session
-	HeartbeatCount int64 `protobuf:"varint,7,opt,name=heartbeat_count,json=heartbeatCount,proto3" json:"heartbeat_count,omitempty"`
-	// Worker build ID for versioning
-	WorkerBuildId string `protobuf:"bytes,8,opt,name=worker_build_id,json=workerBuildId,proto3" json:"worker_build_id,omitempty"`
-	// Additional metadata about the worker
-	Metadata      *WorkerMetadata `protobuf:"bytes,9,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	// Time at which the lease expires.
+	LeaseExpirationTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=lease_expiration_time,json=leaseExpirationTime,proto3" json:"lease_expiration_time,omitempty"`
+	// Current status of the worker session.
+	Status        WorkerSessionStatus `protobuf:"varint,2,opt,name=status,proto3,enum=temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionStatus" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -144,37 +130,9 @@ func (*WorkerSessionState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *WorkerSessionState) GetWorkerId() string {
+func (x *WorkerSessionState) GetLeaseExpirationTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.WorkerId
-	}
-	return ""
-}
-
-func (x *WorkerSessionState) GetNamespaceId() string {
-	if x != nil {
-		return x.NamespaceId
-	}
-	return ""
-}
-
-func (x *WorkerSessionState) GetTaskQueue() string {
-	if x != nil {
-		return x.TaskQueue
-	}
-	return ""
-}
-
-func (x *WorkerSessionState) GetSessionStartTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.SessionStartTime
-	}
-	return nil
-}
-
-func (x *WorkerSessionState) GetLastHeartbeatTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastHeartbeatTime
+		return x.LeaseExpirationTime
 	}
 	return nil
 }
@@ -186,142 +144,14 @@ func (x *WorkerSessionState) GetStatus() WorkerSessionStatus {
 	return WORKER_SESSION_STATUS_UNSPECIFIED
 }
 
-func (x *WorkerSessionState) GetHeartbeatCount() int64 {
-	if x != nil {
-		return x.HeartbeatCount
-	}
-	return 0
-}
-
-func (x *WorkerSessionState) GetWorkerBuildId() string {
-	if x != nil {
-		return x.WorkerBuildId
-	}
-	return ""
-}
-
-func (x *WorkerSessionState) GetMetadata() *WorkerMetadata {
-	if x != nil {
-		return x.Metadata
-	}
-	return nil
-}
-
-// Additional metadata about the worker
-type WorkerMetadata struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Worker version/build information
-	WorkerVersion string `protobuf:"bytes,1,opt,name=worker_version,json=workerVersion,proto3" json:"worker_version,omitempty"`
-	// SDK name and version
-	SdkName    string `protobuf:"bytes,2,opt,name=sdk_name,json=sdkName,proto3" json:"sdk_name,omitempty"`
-	SdkVersion string `protobuf:"bytes,3,opt,name=sdk_version,json=sdkVersion,proto3" json:"sdk_version,omitempty"`
-	// Host information where worker is running
-	Hostname string `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	// Process ID of the worker
-	ProcessId int32 `protobuf:"varint,5,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
-	// Capabilities of this worker
-	Capabilities  []string `protobuf:"bytes,6,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WorkerMetadata) Reset() {
-	*x = WorkerMetadata{}
-	mi := &file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WorkerMetadata) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WorkerMetadata) ProtoMessage() {}
-
-func (x *WorkerMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WorkerMetadata.ProtoReflect.Descriptor instead.
-func (*WorkerMetadata) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *WorkerMetadata) GetWorkerVersion() string {
-	if x != nil {
-		return x.WorkerVersion
-	}
-	return ""
-}
-
-func (x *WorkerMetadata) GetSdkName() string {
-	if x != nil {
-		return x.SdkName
-	}
-	return ""
-}
-
-func (x *WorkerMetadata) GetSdkVersion() string {
-	if x != nil {
-		return x.SdkVersion
-	}
-	return ""
-}
-
-func (x *WorkerMetadata) GetHostname() string {
-	if x != nil {
-		return x.Hostname
-	}
-	return ""
-}
-
-func (x *WorkerMetadata) GetProcessId() int32 {
-	if x != nil {
-		return x.ProcessId
-	}
-	return 0
-}
-
-func (x *WorkerMetadata) GetCapabilities() []string {
-	if x != nil {
-		return x.Capabilities
-	}
-	return nil
-}
-
 var File_temporal_server_chasm_lib_workersession_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	">temporal/server/chasm/lib/workersession/proto/v1/message.proto\x120temporal.server.chasm.lib.workersession.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x97\x04\n" +
-	"\x12WorkerSessionState\x12\x1b\n" +
-	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12!\n" +
-	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1d\n" +
-	"\n" +
-	"task_queue\x18\x03 \x01(\tR\ttaskQueue\x12H\n" +
-	"\x12session_start_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10sessionStartTime\x12J\n" +
-	"\x13last_heartbeat_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastHeartbeatTime\x12]\n" +
-	"\x06status\x18\x06 \x01(\x0e2E.temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionStatusR\x06status\x12'\n" +
-	"\x0fheartbeat_count\x18\a \x01(\x03R\x0eheartbeatCount\x12&\n" +
-	"\x0fworker_build_id\x18\b \x01(\tR\rworkerBuildId\x12\\\n" +
-	"\bmetadata\x18\t \x01(\v2@.temporal.server.chasm.lib.workersession.proto.v1.WorkerMetadataR\bmetadata\"\xd2\x01\n" +
-	"\x0eWorkerMetadata\x12%\n" +
-	"\x0eworker_version\x18\x01 \x01(\tR\rworkerVersion\x12\x19\n" +
-	"\bsdk_name\x18\x02 \x01(\tR\asdkName\x12\x1f\n" +
-	"\vsdk_version\x18\x03 \x01(\tR\n" +
-	"sdkVersion\x12\x1a\n" +
-	"\bhostname\x18\x04 \x01(\tR\bhostname\x12\x1d\n" +
-	"\n" +
-	"process_id\x18\x05 \x01(\x05R\tprocessId\x12\"\n" +
-	"\fcapabilities\x18\x06 \x03(\tR\fcapabilities*\xa7\x01\n" +
+	">temporal/server/chasm/lib/workersession/proto/v1/message.proto\x120temporal.server.chasm.lib.workersession.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc3\x01\n" +
+	"\x12WorkerSessionState\x12N\n" +
+	"\x15lease_expiration_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\x12]\n" +
+	"\x06status\x18\x02 \x01(\x0e2E.temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionStatusR\x06status*\xa7\x01\n" +
 	"\x13WorkerSessionStatus\x12%\n" +
 	"!WORKER_SESSION_STATUS_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cWORKER_SESSION_STATUS_ACTIVE\x10\x01\x12!\n" +
@@ -341,23 +171,20 @@ func file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_rawDesc
 }
 
 var file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_goTypes = []any{
 	(WorkerSessionStatus)(0),      // 0: temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionStatus
 	(*WorkerSessionState)(nil),    // 1: temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionState
-	(*WorkerMetadata)(nil),        // 2: temporal.server.chasm.lib.workersession.proto.v1.WorkerMetadata
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_depIdxs = []int32{
-	3, // 0: temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionState.session_start_time:type_name -> google.protobuf.Timestamp
-	3, // 1: temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionState.last_heartbeat_time:type_name -> google.protobuf.Timestamp
-	0, // 2: temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionState.status:type_name -> temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionStatus
-	2, // 3: temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionState.metadata:type_name -> temporal.server.chasm.lib.workersession.proto.v1.WorkerMetadata
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	2, // 0: temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionState.lease_expiration_time:type_name -> google.protobuf.Timestamp
+	0, // 1: temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionState.status:type_name -> temporal.server.chasm.lib.workersession.proto.v1.WorkerSessionStatus
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_init() }
@@ -371,7 +198,7 @@ func file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_init() 
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_workersession_proto_v1_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
