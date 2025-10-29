@@ -99,7 +99,7 @@ func (s *ChasmTestSuite) TestPayloadStore_UpdateComponent() {
 	)
 	s.NoError(err)
 	s.Equal(int64(1), descResp.State.TotalCount)
-	s.True(descResp.State.TotalSize > 0)
+	s.Positive(descResp.State.TotalSize)
 }
 
 func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
