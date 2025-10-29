@@ -6,7 +6,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -15,16 +14,14 @@ const (
 	TotalSizeMemoFieldName  = "TotalSize"
 )
 
-// TODO: Register proper SA for TotalCount and TotalSize
-// For now, CHASM framework does NOT support Per-Component SearchAttributes
-// so just update a random existing pre-defined SA to make sure the logic works.
 const (
-	TestKeywordSAFieldName  = searchattribute.TemporalScheduledById
-	TestKeywordSAFieldValue = "test-keyword-value"
+	PayloadTotalCountSAAlias = "PayloadTotalCount"
+	PayloadTotalSizeSAAlias  = "PayloadTotalSize"
 )
 
 var (
-	TestKeywordSearchAttribute = chasm.NewSearchAttributeKeyword(TestKeywordSAFieldName, chasm.SearchAttributeFieldKeyword01)
+	PayloadTotalCountSearchAttribute = chasm.NewSearchAttributeInt(PayloadTotalCountSAAlias, chasm.SearchAttributeFieldInt01)
+	PayloadTotalSizeSearchAttribute  = chasm.NewSearchAttributeInt(PayloadTotalSizeSAAlias, chasm.SearchAttributeFieldInt02)
 
 	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
 	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)
@@ -152,7 +149,8 @@ func (s *PayloadStore) SearchAttributes(
 	ctx chasm.Context,
 ) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
-		TestKeywordSearchAttribute.Value(TestKeywordSAFieldValue),
+		PayloadTotalCountSearchAttribute.Value(s.State.TotalCount),
+		PayloadTotalSizeSearchAttribute.Value(s.State.TotalSize),
 	}
 }
 

@@ -471,7 +471,12 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		tp, err := saTypeMap.GetType(name)
 		if err != nil {
-			return nil, err
+			// Skip validation for CHASM search attributes - they have type metadata embedded in payloads
+			if !searchattribute.IsChasmSearchAttribute(name) {
+				return nil, err
+			}
+			// For CHASM attributes, skip the keyword list normalization since we don't have the type
+			continue
 		}
 		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
 			switch v := value.(type) {

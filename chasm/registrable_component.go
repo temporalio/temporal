@@ -75,9 +75,9 @@ func WithSearchAttributes(
 		}
 
 		for _, sa := range searchAttributes {
-			alias := sa.definition().Alias
-			field := sa.definition().Field
-			valueType := sa.definition().ValueType
+			alias := sa.definition().alias
+			field := sa.definition().field
+			valueType := sa.definition().valueType
 
 			if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
 				//nolint:forbidigo
