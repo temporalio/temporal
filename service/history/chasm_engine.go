@@ -370,8 +370,10 @@ func isChasmNotification(notification *events.Notification) bool {
 	return false
 }
 
-// getExecutionLeaseAndCheckPredicate reads the component data with the lock held and evaluates
-// predicateFn. It returns the lock unreleased.
+// getExecutionLeaseAndCheckPredicate is a helper function for PollComponent. It uses
+// getExecutionLease to read the component data and acquire the locked lease (with consistency
+// assertions) and then evaluates predicateFn. It returns the locked lease together with shard
+// context; if the predicateFn is satisfied it also returns a serialized ref to the component data.
 func (e *ChasmEngine) getExecutionLeaseAndCheckPredicate(
 	ctx context.Context,
 	entityRef chasm.ComponentRef,
@@ -404,12 +406,12 @@ func (e *ChasmEngine) getExecutionLeaseAndCheckPredicate(
 		return nil, nil, nil, err
 	}
 
-	_, waitConditionMet, err := predicateFn(chasmContext, component)
+	_, predicateSatisfied, err := predicateFn(chasmContext, component)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	if waitConditionMet {
+	if predicateSatisfied {
 		newEntityRef, err := chasmContext.Ref(component)
 		if err != nil {
 			return nil, nil, nil, serviceerror.NewInternalf("componentRef: %+v: %s", entityRef, err)
@@ -418,7 +420,6 @@ func (e *ChasmEngine) getExecutionLeaseAndCheckPredicate(
 		return newEntityRef, shardContext, executionLease, nil
 	}
 
-	// wait condition not met
 	fmt.Fprintf(os.Stderr, "  🕰️ Predicate not satisfied - entering long-poll\n")
 	return nil, shardContext, executionLease, nil
 }
