@@ -2,7 +2,7 @@
 // plugins:
 // - protoc-gen-go-grpc
 // - protoc
-// source: temporal/server/chasm/lib/worker/proto/v1/request_response.proto
+// source: temporal/server/chasm/lib/worker/proto/v1/service.proto
 
 package workerpb
 
@@ -27,7 +27,6 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkerServiceClient interface {
-	// RecordHeartbeat records a worker heartbeat.
 	RecordHeartbeat(ctx context.Context, in *RecordHeartbeatRequest, opts ...grpc.CallOption) (*RecordHeartbeatResponse, error)
 }
 
@@ -52,7 +51,6 @@ func (c *workerServiceClient) RecordHeartbeat(ctx context.Context, in *RecordHea
 // All implementations must embed UnimplementedWorkerServiceServer
 // for forward compatibility
 type WorkerServiceServer interface {
-	// RecordHeartbeat records a worker heartbeat.
 	RecordHeartbeat(context.Context, *RecordHeartbeatRequest) (*RecordHeartbeatResponse, error)
 	mustEmbedUnimplementedWorkerServiceServer()
 }
@@ -108,5 +106,5 @@ var WorkerService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "temporal/server/chasm/lib/worker/proto/v1/request_response.proto",
+	Metadata: "temporal/server/chasm/lib/worker/proto/v1/service.proto",
 }
