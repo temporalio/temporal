@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -224,14 +225,18 @@ func (c *clientImpl) RecordActivityTaskStarted(
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	var shardID int32
-	componentRef := request.GetComponentRef()
 
 	// For Chasm components we need to route the shard based on business ID. Note that shardIDFromWorkflowID simply
 	// calculates the hash from the ID so it works for both workflowID and businessID.
-	if componentRef != nil {
-		shardID = c.shardIDFromWorkflowID(componentRef.GetNamespaceId(), componentRef.GetBusinessId())
-	} else {
+	if len(request.GetComponentRef()) == 0 {
 		shardID = c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
+	} else {
+		componentRef, err := chasm.DeserializeComponentRef(request.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+
+		shardID = c.shardIDFromWorkflowID(componentRef.NamespaceID, componentRef.BusinessID)
 	}
 
 	var response *historyservice.RecordActivityTaskStartedResponse

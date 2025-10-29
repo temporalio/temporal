@@ -44,8 +44,11 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
-	if activityRefProto := request.GetComponentRef(); activityRefProto != nil {
-		activityRef := chasm.ProtoRefToComponentRef(activityRefProto)
+	if activityRefProto := request.GetComponentRef(); len(activityRefProto) > 0 {
+		activityRef, err := chasm.DeserializeComponentRef(activityRefProto)
+		if err != nil {
+			return nil, err
+		}
 
 		response, _, err := chasm.UpdateComponent(
 			ctx,
