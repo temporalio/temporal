@@ -15,6 +15,9 @@ const (
 	Archetype chasm.Archetype = "Callback"
 )
 
+var _ chasm.Component = (*Callback)(nil)
+var _ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
+
 // Callback represents a callback component in CHASM.
 type Callback struct {
 	chasm.UnimplementedComponent
@@ -104,26 +107,26 @@ func (c *Callback) loadInvocationArgs(
 func (c *Callback) saveResult(
 	ctx chasm.MutableContext,
 	result invocationResult,
-) (struct{}, error) {
+) (chasm.NoValue, error) {
 	switch r := result.(type) {
 	case invocationResultOK:
 		err := TransitionSucceeded.Apply(ctx, c, EventSucceeded{Time: ctx.Now(c)})
-		return struct{}{}, err
+		return nil, err
 	case invocationResultRetry:
 		err := TransitionAttemptFailed.Apply(ctx, c, EventAttemptFailed{
 			Time:        ctx.Now(c),
 			Err:         r.err,
 			RetryPolicy: r.retryPolicy,
 		})
-		return struct{}{}, err
+		return nil, err
 	case invocationResultFail:
 		err := TransitionFailed.Apply(ctx, c, EventFailed{
 			Time: ctx.Now(c),
 			Err:  r.err,
 		})
-		return struct{}{}, err
+		return nil, err
 	default:
-		return struct{}{}, queues.NewUnprocessableTaskError(
+		return nil, queues.NewUnprocessableTaskError(
 			fmt.Sprintf("unrecognized callback result %v", result),
 		)
 	}
