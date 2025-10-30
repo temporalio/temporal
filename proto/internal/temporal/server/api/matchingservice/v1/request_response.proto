@@ -130,9 +130,9 @@ message AddActivityTaskRequest {
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
     int32 stamp = 12;
     temporal.api.common.v1.Priority priority = 13;
-  // Reference to the Chasm component for activity execution (if applicable). For standalone activities, all required
-  // start information is carried within // this component, obviating the need to use the fields that apply to embedded
-  // activities.
+    // Reference to the Chasm component for activity execution (if applicable). For standalone activities, all required
+    // start information is carried within // this component, obviating the need to use the fields that apply to embedded
+    // activities.
     bytes component_ref = 14;
 }
 
