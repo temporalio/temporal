@@ -237,7 +237,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -390,7 +390,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -453,7 +453,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Paused()
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -512,7 +512,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	taskID := s.mustGenerateTaskID()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
@@ -573,7 +573,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	taskID := s.mustGenerateTaskID()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
@@ -625,7 +625,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -683,7 +683,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMis
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 
@@ -752,7 +752,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -876,7 +876,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -942,7 +942,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1005,7 +1005,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1073,7 +1073,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1135,7 +1135,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1242,7 +1242,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 			ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
