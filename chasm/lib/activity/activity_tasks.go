@@ -2,7 +2,6 @@ package activity
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -155,12 +154,8 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 	}
 
 	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED || task.Attempt != attempt.Count {
-		fmt.Println("Validating StartToClose timeout task for activity FALSE:", activity, "attempt:", task.Attempt, "time: ", ctx.Now(activity))
-
 		return false, nil
 	}
-
-	fmt.Println("Validating StartToClose timeout task for activity TRUE:", activity, "attempt:", task.Attempt, "time: ", ctx.Now(activity))
 
 	return true, nil
 }
