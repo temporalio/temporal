@@ -2,6 +2,8 @@ package history
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -834,7 +836,7 @@ func (e *historyEngineImpl) UpdateWorkflowExecutionOptions(
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
 	notification *events.Notification,
 ) {
-
+	fmt.Fprintln(os.Stderr, "⬆️ Broadcasting notification: ", notification)
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
 }
 

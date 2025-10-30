@@ -90,3 +90,103 @@ func createDefaultInput() *commonpb.Payloads {
 		},
 	}
 }
+
+func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateChange() {
+	// Long poll for any state change. PollActivityTaskQueue is used to cause a state change.
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	s.OverrideDynamicConfig(
+		dynamicconfig.EnableChasm,
+		true,
+	)
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := uuid.New().String()
+
+	startResp, err := s.startActivity(ctx, activityID, taskQueue)
+	require.NoError(t, err)
+
+	// First poll lacks token and therefore responds immediately, returning a token
+	firstPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstPollResp.StateChangeLongPollToken)
+
+	taskQueuePollErr := make(chan error, 1)
+	activityPollDone := make(chan struct{})
+	var activityPollResp *workflowservice.PollActivityExecutionResponse
+	var activityPollErr error
+
+	go func() {
+		defer close(activityPollDone)
+		// Second poll uses token and therefore waits for a state transition
+		activityPollResp, activityPollErr = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					LongPollToken: firstPollResp.StateChangeLongPollToken,
+				},
+			},
+		})
+	}()
+
+	// TODO: race here: subscription might not be established yet
+
+	// Worker picks up activity task, triggering transition (via RecordActivityTaskStarted)
+	go func() {
+		_, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		taskQueuePollErr <- err
+	}()
+
+	select {
+	case <-activityPollDone:
+		require.NoError(t, activityPollErr)
+		require.NotNil(t, activityPollResp)
+		require.Equal(t, activityID, activityPollResp.Info.ActivityId)
+		require.Equal(t, startResp.RunId, activityPollResp.Info.RunId)
+	case <-ctx.Done():
+		t.Fatal("PollActivityExecution timed out")
+	}
+
+	err = <-taskQueuePollErr
+	require.NoError(t, err)
+}
+
+func (s *standaloneActivityTestSuite) startActivity(ctx context.Context, activityID string, taskQueue string) (*workflowservice.StartActivityExecutionResponse, error) {
+	return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		ActivityType: &commonpb.ActivityType{
+			Name: "test-activity-type",
+		},
+		Input: &commonpb.Payloads{
+			Payloads: []*commonpb.Payload{},
+		},
+		Options: &activitypb.ActivityOptions{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		},
+		RequestId: "test-request-id",
+	})
+}
+
+func (s *standaloneActivityTestSuite) pollActivityTaskQueue(ctx context.Context, taskQueue string) (*workflowservice.PollActivityTaskQueueResponse, error) {
+	return s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test-identity",
+	})
+}

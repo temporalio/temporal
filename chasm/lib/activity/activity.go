@@ -3,6 +3,7 @@ package activity
 import (
 	"errors"
 
+	"go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -214,4 +215,74 @@ func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.P
 		Details:      details,
 	})
 	return nil, nil
+}
+
+// buildActivityExecutionInfo constructs an ActivityExecutionInfo from the CHASM activity component.
+// namespace, activityID, and runID come from the CHASM component key, not from persisted data.
+func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context, key chasm.EntityKey) (*activity.ActivityExecutionInfo, error) {
+	if a.ActivityState == nil {
+		return nil, errors.New("activity state is nil")
+	}
+
+	// Convert internal status to external status and run state
+	var status enumspb.ActivityExecutionStatus
+	var runState enumspb.PendingActivityState
+
+	switch a.GetStatus() {
+	// TODO: support pause states
+	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+		runState = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+		runState = enumspb.PENDING_ACTIVITY_STATE_STARTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+		runState = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	}
+
+	requestData, err := a.RequestData.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &activity.ActivityExecutionInfo{
+		ActivityId:      key.BusinessID,
+		RunId:           key.EntityID,
+		ActivityType:    a.GetActivityType(),
+		ActivityOptions: a.GetActivityOptions(),
+		Status:          status,
+		RunState:        runState,
+		ScheduledTime:   a.GetScheduledTime(),
+		Priority:        a.GetPriority(),
+		Header:          requestData.GetHeader(),
+
+		// TODO: These fields are left at zero value for now:
+		// - StartedTime
+		// - LastHeartbeatTime
+		// - HeartbeatDetails
+		// - RetryInfo
+		// - AutoResetPoints
+		// - ClockTime
+	}
+
+	return info, nil
 }

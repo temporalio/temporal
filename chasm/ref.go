@@ -100,6 +100,10 @@ func (r *ComponentRef) ShardingKey(
 	return rc.shardingFn(r.EntityKey), nil
 }
 
+func (r *ComponentRef) GetEntityLastUpdateVersionedTransition() *persistencespb.VersionedTransition {
+	return r.entityLastUpdateVT
+}
+
 func (r *ComponentRef) Serialize(
 	registry *Registry,
 ) ([]byte, error) {

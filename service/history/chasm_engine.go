@@ -4,21 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -199,6 +205,10 @@ func (e *ChasmEngine) UpdateComponent(
 		return nil, err
 	}
 
+	if err := notifyChasmComponentUpdate(shardContext, ref); err != nil {
+		shardContext.GetLogger().Error("failed to send CHASM component update notification", tag.Error(err))
+	}
+
 	newSerializedRef, err := mutableContext.Ref(component)
 	if err != nil {
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
@@ -247,8 +257,171 @@ func (e *ChasmEngine) PollComponent(
 	predicateFn func(chasm.Context, chasm.Component) (any, bool, error),
 	operationFn func(chasm.MutableContext, chasm.Component, any) error,
 	opts ...chasm.TransitionOption,
-) (newEntityRef []byte, retError error) {
-	return nil, serviceerror.NewUnimplemented("PollComponent is not yet supported")
+) (newEntityRef []byte, err error) {
+
+	// if operationFn != nil {
+	// 	return nil, fmt.Errorf("PollComponent operationFn not supported (TODO: remove from interface)")
+	// }
+
+	newEntityRef, shardContext, executionLease, err := e.getExecutionLeaseAndCheckPredicate(ctx, entityRef, predicateFn)
+	if err != nil {
+		executionLease.GetReleaseFn()(nil)
+		return nil, err
+	}
+	if newEntityRef != nil {
+		executionLease.GetReleaseFn()(nil)
+		return newEntityRef, nil
+	}
+
+	// Wait condition not met, need to long-poll
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		executionLease.GetReleaseFn()(nil)
+		return nil, err
+	}
+
+	// TODO: make public watch method
+	historyEngine, ok := engine.(*historyEngineImpl)
+	if !ok {
+		executionLease.GetReleaseFn()(nil)
+		return nil, serviceerror.NewInternalf("unexpected engine type: %T", engine)
+	}
+
+	workflowKey := definition.NewWorkflowKey(
+		entityRef.EntityKey.NamespaceID,
+		entityRef.EntityKey.BusinessID,
+		entityRef.EntityKey.EntityID,
+	)
+
+	// See e.g. get_workflow_util.go:131-134
+	subscriberID, channel, err := historyEngine.eventNotifier.WatchHistoryEvent(workflowKey)
+	if err != nil {
+		executionLease.GetReleaseFn()(nil)
+		return nil, err
+	}
+	fmt.Fprintf(os.Stderr, "📡 Subscribed (ID: %s) for %s/%s\n",
+		subscriberID[:8], workflowKey.NamespaceID[:8], workflowKey.WorkflowID)
+	defer func() {
+		_ = historyEngine.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID)
+	}()
+
+	executionLease.GetReleaseFn()(nil)
+
+	// Set up long-poll timeout
+	// See get_workflow_util.go:185-193
+	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(entityRef.EntityKey.NamespaceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// See get_workflow_util.go:27
+	const longPollSoftTimeout = time.Second
+	longPollInterval := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	longPollCtx, cancel := context.WithTimeout(ctx, longPollInterval-longPollSoftTimeout)
+	defer cancel()
+
+	// Long-polling loop
+	// See get_workflow_util.go:195-252
+	for {
+		select {
+		// TODO: make use of data sent w/ notification
+		case notification := <-channel:
+			if !isChasmNotification(notification) {
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "⬇️ Received notification (subscriber: %s)\n", subscriberID[:8])
+			_ = notification // TODO: use notification data for staleness checks
+			// Received a notification. Re-acquire the lock and check the predicate.
+			newEntityRef, _, executionLease, err := e.getExecutionLeaseAndCheckPredicate(ctx, entityRef, predicateFn)
+
+			if err != nil {
+				// TODO: If the error was failure to acquire the lock, check how we should handle
+				// that. What are common reasons for failing to acquire the lock?
+				executionLease.GetReleaseFn()(nil)
+				return nil, err
+			}
+			if newEntityRef != nil {
+				executionLease.GetReleaseFn()(nil)
+				return newEntityRef, nil
+			}
+
+			// TODO: staleness checks (check for stale notification)
+			// cf. get_workflow_util.go:220-222 which checks if notification is out of date
+
+			// Condition still not met, release lock and continue polling
+			executionLease.GetReleaseFn()(nil)
+
+		case <-longPollCtx.Done():
+			// TODO: or return empty response?
+			return nil, serviceerror.NewDeadlineExceeded("long-poll timed out")
+		}
+	}
+}
+
+func isChasmNotification(notification *events.Notification) bool {
+	// TODO: implement proper way for chasm components to ignore notifications sent by NotifyNewHistorySnapshotEvent
+	// HACK:
+	if notification.WorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED && notification.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+		return true
+	}
+	return false
+}
+
+// getExecutionLeaseAndCheckPredicate is a helper function for PollComponent. It uses
+// getExecutionLease to read the component data and acquire the locked lease (with consistency
+// assertions) and then evaluates predicateFn. It returns the locked lease together with shard
+// context; if the predicateFn is satisfied it also returns a serialized ref to the component data.
+func (e *ChasmEngine) getExecutionLeaseAndCheckPredicate(
+	ctx context.Context,
+	entityRef chasm.ComponentRef,
+	predicateFn func(chasm.Context, chasm.Component) (any, bool, error),
+) ([]byte, historyi.ShardContext, api.WorkflowLease, error) {
+
+	fmt.Println("🔍 Evaluating predicate")
+
+	// Obtain chasm tree with lock
+	// cf. service/history/api/get_workflow_util.go:60-68 (GetMutableStateWithConsistencyCheck)
+	// cf. get_workflow_util.go:137-144 (state reloaded after notification)
+	shardContext, executionLease, err := e.getExecutionLease(ctx, entityRef)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
+	if !ok {
+		fmt.Println("  🌈 error: invalid CHASM tree")
+		return nil, nil, nil, serviceerror.NewInternalf(
+			"invalid CHASM tree, encountered type: %T, expected type: %T",
+			executionLease.GetMutableState().ChasmTree(),
+			&chasm.Node{},
+		)
+	}
+
+	chasmContext := chasm.NewContext(ctx, chasmTree)
+	component, err := chasmTree.Component(chasmContext, entityRef)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	_, predicateSatisfied, err := predicateFn(chasmContext, component)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if predicateSatisfied {
+		newEntityRef, err := chasmContext.Ref(component)
+		if err != nil {
+			return nil, nil, nil, serviceerror.NewInternalf("componentRef: %+v: %s", entityRef, err)
+		}
+		fmt.Fprintf(os.Stderr, "  ✅ Predicate satisfied - returning immediately\n")
+		return newEntityRef, shardContext, executionLease, nil
+	}
+
+	fmt.Fprintf(os.Stderr, "  🕰️ Predicate not satisfied - entering long-poll\n")
+	return nil, shardContext, executionLease, nil
 }
 
 func (e *ChasmEngine) constructTransitionOptions(
@@ -372,6 +545,7 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newEntityParams.events,
 	)
 	if err == nil {
+		// TODO(dan): send notification on creation?
 		return currentRunInfo{}, false, nil
 	}
 
@@ -524,6 +698,7 @@ func (e *ChasmEngine) handleReusePolicy(
 	if err != nil {
 		return chasm.EntityKey{}, nil, err
 	}
+	// TODO(dan): send notification on creation?
 
 	serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
 	if err != nil {
@@ -601,4 +776,36 @@ func (e *ChasmEngine) getExecutionLease(
 	}
 
 	return shardContext, entityLease, err
+}
+
+// notifyChasmComponentUpdate sends a notification when a CHASM component has been updated.
+func notifyChasmComponentUpdate(
+	shardContext historyi.ShardContext,
+	entityRef chasm.ComponentRef,
+) error {
+	engine, err := shardContext.GetEngine(context.Background())
+	if err != nil {
+		return err
+	}
+	// TODO
+	// For now we do not send any information with the notification; the subscriber must read the
+	// component data again.
+	engine.NotifyNewHistoryEvent(events.NewNotification(
+		entityRef.NamespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: entityRef.BusinessID,
+			RunId:      entityRef.EntityID,
+		},
+		-1,
+		-1,
+		-1,
+		-1,
+		enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+		&historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{},
+		},
+		nil,
+	))
+	return nil
 }
