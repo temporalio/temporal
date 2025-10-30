@@ -469,14 +469,14 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	// In SQLite, keyword list can return a string when there's only one element.
 	// This changes it into a slice.
 	for name, value := range rowSearchAttributes {
+		// TODO: CHASM search attributes are not in the typeMap and SQL only stores raw values (no metadata).
+		// The Encode() call below will fail to add type metadata, causing decode issues.
+		if searchattribute.IsChasmSearchAttribute(name) {
+			continue
+		}
 		tp, err := saTypeMap.GetType(name)
 		if err != nil {
-			// TODO: CHASM search attributes are not in the typeMap and SQL only stores raw values (no metadata).
-			// The Encode() call below will fail to add type metadata, causing decode issues.
-			if !searchattribute.IsChasmSearchAttribute(name) {
-				return nil, err
-			}
-			continue
+			return nil, err
 		}
 		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
 			switch v := value.(type) {
