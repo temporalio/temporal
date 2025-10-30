@@ -3068,6 +3068,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// Check if CHASM scheduler experiment is enabled
+	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String()) {
+		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
+	}
+
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
@@ -4567,7 +4573,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
 		WorkflowId:               request.GetJobId(),
-		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayload,
 		Identity:                 identity,
@@ -6004,23 +6010,36 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	if err != nil {
 		return nil, err
 	}
-	// Validation: prohibit setting rate limit on workflow task queues
-	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+
+	// Validate rate limits
+	queueRateLimit := request.GetUpdateQueueRateLimit()
+	if queueRateLimit.GetRateLimit() != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, serviceerror.NewInvalidArgument("Setting rate limit on workflow task queues is not allowed.")
 	}
-	queueRateLimit := request.GetUpdateQueueRateLimit()
-	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
-	// Validate rate limits
 	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
 		return nil, err
+	}
+	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
+	if fairnessKeyRateLimitDefault.GetRateLimit() != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return nil, serviceerror.NewInvalidArgument("Setting fairness key rate limit on workflow task queues is not allowed.")
 	}
 	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
 		return nil, err
 	}
+
 	// Validate identity field
 	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
 		return nil, err
 	}
+
+	// Validate Fairness Weight Updates
+	setFairnessWeightOverrides := request.GetSetFairnessWeightOverrides()
+	unsetFairnessWeightOverrides := request.GetUnsetFairnessWeightOverrides()
+	limit := wh.config.MaxFairnessWeightOverrideConfigLimit(request.GetNamespace(), request.TaskQueue, request.TaskQueueType)
+	if err := validateFairnessWeightUpdate(setFairnessWeightOverrides, unsetFairnessWeightOverrides, limit); err != nil {
+		return nil, err
+	}
+
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
 		NamespaceId:           namespaceID.String(),
 		UpdateTaskqueueConfig: request,

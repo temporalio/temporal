@@ -12,8 +12,8 @@ var ErrInvalidTransition = errors.New("invalid transition")
 // A StateMachine is anything that can get and set a comparable state S and re-generate tasks based on current state.
 // It is meant to be used with [Transition] objects to safely transition their state on a given event.
 type StateMachine[S comparable] interface {
-	State() S
-	SetState(S)
+	StateMachineState() S
+	SetStateMachineState(S)
 }
 
 // Transition represents a state machine transition for a machine of type SM with state S and event E.
@@ -38,17 +38,17 @@ func NewTransition[S comparable, SM StateMachine[S], E any](src []S, dst S, appl
 
 // Possible returns a boolean indicating whether the transition is possible for the current state.
 func (t Transition[S, SM, E]) Possible(sm SM) bool {
-	return slices.Contains(t.Sources, sm.State())
+	return slices.Contains(t.Sources, sm.StateMachineState())
 }
 
 // Apply applies a transition event to the given state machine changing the state machine's state to the transition's
 // Destination on success.
 func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) error {
-	prevState := sm.State()
+	prevState := sm.StateMachineState()
 	if !t.Possible(sm) {
 		return fmt.Errorf("%w from %v: %v", ErrInvalidTransition, prevState, event)
 	}
 
-	sm.SetState(t.Destination)
+	sm.SetStateMachineState(t.Destination)
 	return t.apply(sm, ctx, event)
 }

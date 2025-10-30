@@ -193,6 +193,7 @@ var (
 		"DispatchByNamespaceAndTaskQueue": {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DispatchByEndpoint":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"CompleteNexusOperation":          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"CompleteNexusOperationChasm":     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 	}
 )
 

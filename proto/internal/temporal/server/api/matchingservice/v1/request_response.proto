@@ -106,6 +106,8 @@ message AddWorkflowTaskRequest {
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
     temporal.api.common.v1.Priority priority = 12;
+    // Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
+    int32 stamp = 13;
 }
 
 message AddWorkflowTaskResponse {

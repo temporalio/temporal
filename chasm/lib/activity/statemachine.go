@@ -9,7 +9,7 @@ import (
 var _ chasm.StateMachine[activitypb.ActivityExecutionStatus] = (*Activity)(nil)
 
 // State returns the current status of the activity.
-func (a *Activity) State() activitypb.ActivityExecutionStatus {
+func (a *Activity) StateMachineState() activitypb.ActivityExecutionStatus {
 	if a.ActivityState == nil {
 		return activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 	}
@@ -17,7 +17,7 @@ func (a *Activity) State() activitypb.ActivityExecutionStatus {
 }
 
 // SetState sets the status of the activity.
-func (a *Activity) SetState(state activitypb.ActivityExecutionStatus) {
+func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus) {
 	a.Status = state
 }
 

@@ -213,6 +213,7 @@ func GrpcServerOptionsProvider(
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
+	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
@@ -274,6 +275,9 @@ func GrpcServerOptionsProvider(
 
 	streamInterceptor := []grpc.StreamServerInterceptor{
 		telemetryInterceptor.StreamIntercept,
+	}
+	if len(customStreamInterceptors) > 0 {
+		streamInterceptor = append(streamInterceptor, customStreamInterceptors...)
 	}
 
 	grpcServerOptions = append(

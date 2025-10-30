@@ -1,5 +1,3 @@
-//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination tree_mock.go
-
 package chasm
 
 import (
@@ -22,6 +20,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -189,6 +188,11 @@ type (
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
 		) (bool, error)
+		IsWorkflow() bool
+		GetNexusCompletion(
+			ctx context.Context,
+			requestID string,
+		) (nexusrpc.OperationCompletion, error)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -1125,6 +1129,8 @@ func (n *Node) deserializeComponentNode(
 					mapFieldV.SetMapIndex(mapKeyV, chasmFieldV)
 				}
 			}
+		case fieldKindMutableState:
+			field.val.Set(reflect.ValueOf(n.backend))
 		}
 	}
 
@@ -1388,6 +1394,11 @@ func (n *Node) executeImmediatePureTasks() error {
 }
 
 func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
+	if n.backend.IsWorkflow() {
+		// Workflow manages its lifecycle directly in mutable state.
+		return false, nil
+	}
+
 	if n.valueState != valueStateNeedSerialize {
 		return false, nil
 	}

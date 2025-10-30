@@ -114,6 +114,7 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 }
 
 func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
+	req.Endpoint = c.endpointName
 	return &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: c.namespace.ID().String(),
 		TaskQueue:   &taskqueuepb.TaskQueue{Name: c.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -438,6 +439,7 @@ func (h *nexusHandler) StartOperation(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -602,6 +604,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.logger.Error("received error from matching service for Nexus CancelOperation request", tag.Error(err))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -700,6 +703,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 			commonnexus.RouteDispatchNexusTaskByEndpoint.Path(oc.endpointID))
 	} else {
 		// Fallback to dispatch by namespace and task queue since those have already been resolved by this point.
+		// NOTE: When forwarding by namespace and task queue, the endpoint name is not preserved and cannot be provided to a worker polling.
 		baseURL, err = url.JoinPath(
 			httpClient.BaseURL(),
 			commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(commonnexus.NamespaceAndTaskQueue{

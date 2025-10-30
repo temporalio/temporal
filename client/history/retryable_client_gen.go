@@ -56,6 +56,21 @@ func (c *retryableClient) CompleteNexusOperation(
 	return resp, err
 }
 
+func (c *retryableClient) CompleteNexusOperationChasm(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationChasmRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	var resp *historyservice.CompleteNexusOperationChasmResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CompleteNexusOperationChasm(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeepHealthCheck(
 	ctx context.Context,
 	request *historyservice.DeepHealthCheckRequest,
