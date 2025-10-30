@@ -57,7 +57,7 @@ func (s *HandlerTestSuite) TestDropKeyspaceError() {
 	args := []string{"./tool", "drop-keyspace", "-f", "--keyspace", ""}
 	app := buildCLIOptions()
 	err := app.Run(args)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *HandlerTestSuite) TestCreateKeyspaceError() {
@@ -70,5 +70,5 @@ func (s *HandlerTestSuite) TestCreateKeyspaceError() {
 	args := []string{"./tool", "create-keyspace", "--keyspace", ""}
 	app := buildCLIOptions()
 	err := app.Run(args)
-	s.Nil(err)
+	s.NoError(err)
 }

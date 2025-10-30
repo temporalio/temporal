@@ -40,7 +40,7 @@ func (s *LoaderSuite) TestBaseYaml() {
 
 	data := buildConfig(false, "", "")
 	err := os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
-	s.Nil(err)
+	s.NoError(err)
 
 	envs := []string{"", "prod"}
 	zones := []string{"", "us-east-1a"}
@@ -49,7 +49,7 @@ func (s *LoaderSuite) TestBaseYaml() {
 		for _, zone := range zones {
 			var cfg testConfig
 			err = Load(env, dir, zone, &cfg)
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal("hello__", cfg.Items.Item1)
 			s.Equal("world__", cfg.Items.Item2)
 		}
@@ -84,7 +84,7 @@ func (s *LoaderSuite) TestHierarchy() {
 	for _, tc := range testCases {
 		var cfg testConfig
 		err := Load(tc.env, dir, tc.zone, &cfg)
-		s.Nil(err)
+		s.NoError(err)
 		s.Equal(tc.item1, cfg.Items.Item1)
 		s.Equal(tc.item2, cfg.Items.Item2)
 	}
@@ -98,7 +98,7 @@ func (s *LoaderSuite) TestInvalidPath() {
 
 func (s *LoaderSuite) createFile(dir string, file string, template bool, env string, zone string) {
 	err := os.WriteFile(path(dir, file), []byte(buildConfig(template, env, zone)), fileMode)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func buildConfig(template bool, env, zone string) string {

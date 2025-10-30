@@ -218,7 +218,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -304,7 +304,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -374,7 +374,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 			FirstWorkflowTaskBackoff: durationpb.New(backoff),
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	taskID := int64(59)
 	wt := addWorkflowTaskScheduledEvent(mutableState)

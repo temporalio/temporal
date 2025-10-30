@@ -247,7 +247,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		IsGlobalNamespace: true,
 	})
 	err := s.namespaceReplicator.Execute(context.Background(), task)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_Duplicate() {
@@ -292,7 +292,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	}}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
 	err := s.namespaceReplicator.Execute(context.Background(), task)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NamespaceNotExist() {
@@ -377,7 +377,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		IsGlobalNamespace: true,
 	})
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_UpdateActiveCluster() {
@@ -480,7 +480,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		NotificationVersion: updateFailoverVersion,
 	})
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_NoUpdateActiveCluster() {
@@ -574,7 +574,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		NotificationVersion: updateFailoverVersion,
 	})
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_UpdateActiveCluster() {
@@ -656,7 +656,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		NotificationVersion: updateFailoverVersion,
 	})
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_NoUpdateActiveCluster() {
@@ -726,5 +726,5 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
 	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
-	s.Nil(err)
+	s.NoError(err)
 }

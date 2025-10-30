@@ -47,6 +47,6 @@ func (s *serviceErrorWithDPanicSuite) TestNewDPanicInDev() {
 
 	s.Panics(nil, func() {
 		err := NewInternalErrorWithDPanic(logger, "Must panic!")
-		s.Nil(err)
+		s.NoError(err)
 	})
 }

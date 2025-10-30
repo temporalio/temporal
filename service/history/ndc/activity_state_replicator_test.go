@@ -561,7 +561,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 	).AnyTimes()
 
 	err := s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
@@ -598,7 +598,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 	).AnyTimes()
 
 	err := s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
@@ -1035,7 +1035,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie() {
@@ -1141,7 +1141,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie() {
@@ -1243,7 +1243,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombie() {
@@ -1349,5 +1349,5 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	).AnyTimes()
 
 	err = s.nDCActivityStateReplicator.SyncActivitiesState(context.Background(), request)
-	s.Nil(err)
+	s.NoError(err)
 }

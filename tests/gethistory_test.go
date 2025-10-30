@@ -513,7 +513,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			WaitNewEvent:    isLongPoll,
 			NextPageToken:   token,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		return responseInner.RawHistory, responseInner.NextPageToken
 	}
 
@@ -526,7 +526,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			MaximumPageSize: int32(100),
 			NextPageToken:   token,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		return responseInner.RawHistory, responseInner.NextPageToken
 	}
 
@@ -675,7 +675,7 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
 	s.NoError(err)
 
 	wfeResponse, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.Nil(err)
+	s.NoError(err)
 
 	eventDefaultOrder := s.GetHistory(s.Namespace().String(), wfeResponse.WorkflowExecutionInfo.Execution)
 	eventDefaultOrder = reverseSlice(eventDefaultOrder)

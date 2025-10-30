@@ -103,7 +103,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 	s.Nil(cachedProgress)
 
 	err := s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
-	s.Nil(err)
+	s.NoError(err)
 
 	// get existing progress
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
@@ -120,7 +120,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions2, versionHistoryItems2)
-	s.Nil(err)
+	s.NoError(err)
 
 	expected2 := &ReplicationProgress{
 		versionedTransitions:         [][]*persistencespb.VersionedTransition{versionedTransitions2},
@@ -143,7 +143,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion+1),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions3, versionHistoryItems3)
-	s.Nil(err)
+	s.NoError(err)
 
 	expected3 := &ReplicationProgress{
 		versionedTransitions:         [][]*persistencespb.VersionedTransition{versionedTransitions2, versionedTransitions3},
@@ -156,7 +156,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 
 	// noop update: versioned transition and version history are already included in the existing progress
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
-	s.Nil(err)
+	s.NoError(err)
 
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
 	s.DeepEqual(expected3, cachedProgress)

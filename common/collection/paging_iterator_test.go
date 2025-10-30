@@ -74,7 +74,7 @@ func (s *pagingIteratorSuite) TestIteration_NoErr() {
 	ite := NewPagingIterator(pagingFn)
 	for ite.HasNext() {
 		num, err := ite.Next()
-		s.Nil(err)
+		s.NoError(err)
 		result = append(result, num)
 	}
 	s.Equal([]int{1, 2, 3, 4, 5, 6}, result)

@@ -475,7 +475,7 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 	if expectedError != nil {
 		s.ErrorAs(err, &expectedError)
 	} else {
-		s.Nil(err)
+		s.NoError(err)
 	}
 	wg.Wait()
 }
@@ -576,7 +576,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		NextPageToken: nil,
 	}
 
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(expectedResp, resp)
 }
 
@@ -1685,7 +1685,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 			Identity:  identity,
 		},
 	}, metrics.NoopMetricsHandler)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(emptyPollActivityTaskQueueResponse, resp)
 }
 
@@ -1715,7 +1715,7 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 			Identity:  identity,
 		}},
 		metrics.NoopMetricsHandler)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(pollResp)
 
 	// Sanity check: adding a task should succeed with the queue loaded
@@ -2137,14 +2137,14 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// This is only for unit test purpose
 	blm.taskAckManager.setReadLevel(blm.getDB().GetMaxReadLevel(0))
 	batch, err := blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
+	s.NoError(err)
 	s.EqualValues(0, len(batch.tasks))
 	s.EqualValues(blm.getDB().GetMaxReadLevel(0), batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
 	blm.taskAckManager.setReadLevel(0)
 	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
+	s.NoError(err)
 	s.EqualValues(rangeSize, len(batch.tasks))
 	s.EqualValues(rangeSize, batch.readLevel)
 	s.True(batch.isReadBatchDone)
@@ -2177,7 +2177,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	}
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(dbq))
 	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
+	s.NoError(err)
 	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
 	s.True(batch.isReadBatchDone)
 }

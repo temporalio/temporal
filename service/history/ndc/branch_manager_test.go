@@ -130,7 +130,7 @@ func (s *branchMgrSuite) TestCreateNewBranch() {
 		})
 
 	newIndex, err := s.nDCBranchMgr.createNewBranch(context.Background(), baseBranchToken, baseBranchLCAEventID, newVersionHistory)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(int32(1), newIndex)
 
 	compareVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(

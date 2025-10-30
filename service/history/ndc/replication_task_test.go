@@ -66,7 +66,7 @@ func (s *replicationTaskSuite) TestValidateEventsSlice() {
 
 	v, err := validateEventsSlice(eS1, eS2)
 	s.Equal(int64(2), v)
-	s.Nil(err)
+	s.NoError(err)
 
 	v, err = validateEventsSlice(eS1, eS3)
 	s.Equal(int64(0), v)
@@ -112,7 +112,7 @@ func (s *replicationTaskSuite) TestValidateEvents() {
 	}
 
 	v, err := validateEvents(eS1)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(int64(2), v)
 
 	v, err = validateEvents(eS2)

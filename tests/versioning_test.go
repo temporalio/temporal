@@ -2281,7 +2281,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	var maxStartedTimestamp time.Time
 	for wh.HasNext() {
 		he, err := wh.Next()
-		s.Nil(err)
+		s.NoError(err)
 		var taskStartedStamp *commonpb.WorkerVersionStamp
 		var taskRedirectCounter int64
 		var buildId string
@@ -3997,7 +3997,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		return resp.GetCount() > 0
 	}, 5*time.Second, 50*time.Millisecond)
 
@@ -4065,7 +4065,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 			Namespace: s.Namespace().String(),
 			Query:     queryARunning,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		return resp.GetCount() > 0
 	}, 3*time.Second, 50*time.Millisecond)
 
@@ -5083,7 +5083,7 @@ func (s *VersioningIntegSuite) validateWorkflowEventsVersionStamps(
 	checkedInheritedBuildId := false
 	for wh.HasNext() {
 		he, err := wh.Next()
-		s.Nil(err)
+		s.NoError(err)
 		if !checkedInheritedBuildId {
 			// first event
 			checkedInheritedBuildId = true

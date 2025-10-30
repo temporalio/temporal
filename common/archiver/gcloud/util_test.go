@@ -92,10 +92,10 @@ func (s *utilSuite) TestSerializeDeserializeGetHistoryToken() {
 	}
 
 	serializedToken, err := serializeToken(token)
-	s.Nil(err)
+	s.NoError(err)
 
 	deserializedToken, err := deserializeGetHistoryToken(serializedToken)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(token, deserializedToken)
 }
 

@@ -325,7 +325,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	// set target history batches such that a single call to next will read all of history
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 16*testDefaultHistoryEventSize, nil)
 	blob, err := itr.Next(context.Background())
-	s.Nil(err)
+	s.NoError(err)
 
 	expectedIteratorState := historyIteratorState{
 		// when iteration is finished page token is not advanced

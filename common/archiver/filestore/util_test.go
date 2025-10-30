@@ -398,16 +398,16 @@ func (s *UtilSuite) TestSerializeDeserializeGetHistoryToken() {
 	}
 
 	serializedToken, err := serializeToken(token)
-	s.Nil(err)
+	s.NoError(err)
 
 	deserializedToken, err := deserializeGetHistoryToken(serializedToken)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(token, deserializedToken)
 }
 
 func (s *UtilSuite) createFile(dir string, filename string) {
 	err := os.WriteFile(filepath.Join(dir, filename), []byte("file contents"), testFileMode)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *UtilSuite) assertFileExists(filepath string) {

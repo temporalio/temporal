@@ -426,7 +426,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStartTime() {
 		PageSize:    2,
 		Query:       queryStr,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.Executions))
 	s.assertOpenExecutionEquals(openRecord2, resp.Executions[0])
 
@@ -436,7 +436,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStartTime() {
 		PageSize:    2,
 		Query:       queryStr,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(2, len(resp.Executions))
 
 	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
@@ -444,7 +444,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStartTime() {
 		PageSize:    2,
 		Query:       queryStr + ` AND WorkflowType = "visibility-workflow-1"`,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.Executions))
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 }
@@ -497,7 +497,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 		PageSize:    2,
 		Query:       `WorkflowType = "visibility-workflow-1"`,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.Executions))
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 
@@ -534,7 +534,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 		PageSize:    2,
 		Query:       `WorkflowType = "visibility-workflow-2"`,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.Executions))
 	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
 }
@@ -587,7 +587,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 		PageSize:    2,
 		Query:       `WorkflowId = "visibility-filtering-test1"`,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.Executions))
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 
@@ -624,7 +624,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 		PageSize:    2,
 		Query:       `WorkflowId = "visibility-filtering-test2"`,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.Executions))
 	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
 }
@@ -685,7 +685,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 		PageSize:    5,
 		Query:       `ExecutionStatus = "Failed"`,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(1, len(resp.Executions))
 	s.assertClosedExecutionEquals(closeRecord2, resp.Executions[0])
 }
@@ -1057,7 +1057,7 @@ func (s *VisibilityPersistenceSuite) listWithPagination(namespaceID namespace.ID
 		PageSize:    pageSize,
 		Query:       "",
 	})
-	s.Nil(err)
+	s.NoError(err)
 	executions = append(executions, resp.Executions...)
 
 	for len(resp.NextPageToken) > 0 {
@@ -1067,7 +1067,7 @@ func (s *VisibilityPersistenceSuite) listWithPagination(namespaceID namespace.ID
 			Query:         "",
 			NextPageToken: resp.NextPageToken,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		executions = append(executions, resp.Executions...)
 	}
 
@@ -1095,7 +1095,7 @@ func (s *VisibilityPersistenceSuite) createClosedWorkflowRecord(
 		HistoryLength:     5,
 	}
 	err := s.VisibilityMgr.RecordWorkflowExecutionClosed(s.ctx, closeReq)
-	s.Nil(err)
+	s.NoError(err)
 	return closeReq
 }
 
@@ -1125,7 +1125,7 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 		},
 	}
 	err := s.VisibilityMgr.RecordWorkflowExecutionStarted(s.ctx, startReq)
-	s.Nil(err)
+	s.NoError(err)
 	return startReq
 }
 

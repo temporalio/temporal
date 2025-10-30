@@ -691,7 +691,7 @@ func (s *streamSenderSuite) TestSendLive() {
 		channel,
 		watermark0,
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.True(!s.streamSender.IsValid())
 }
 

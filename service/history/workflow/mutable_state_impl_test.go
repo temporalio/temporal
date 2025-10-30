@@ -1334,7 +1334,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
 			s.mutableState.namespaceEntry = s.newNamespaceCacheEntry()
 			csum, err := tc.closeTxFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 			s.NotNil(csum.Value)
 			s.Equal(enumsspb.CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY, csum.Flavor)
 			s.Equal(mutableStateChecksumPayloadV1, csum.Version)
@@ -1348,7 +1348,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// generate checksum again and verify its the same
 			csum, err = tc.closeTxFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 			s.NotNil(csum.Value)
 			s.Equal(dbState.Checksum.Value, csum.Value)
 
@@ -1736,7 +1736,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		uuid.New(),
 		workflowStartEvent,
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	// setup transient workflow task
 	wt, err := s.mutableState.ApplyWorkflowTaskScheduledEvent(
@@ -1749,7 +1749,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(wt)
 
 	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
@@ -1764,11 +1764,11 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		int64(0),
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(wt)
 
 	err = s.mutableState.ApplyWorkflowTaskFailedEvent()
-	s.Nil(err)
+	s.NoError(err)
 
 	workflowTaskAttempt = int32(123)
 	newWorkflowTaskScheduleEvent := &historypb.HistoryEvent{
@@ -1806,7 +1806,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(wt)
 
 	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
@@ -1821,7 +1821,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		int64(0),
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(wt)
 
 	s.mutableState.SetHistoryBuilder(historybuilder.NewImmutable([]*historypb.HistoryEvent{
@@ -2345,7 +2345,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 
 			// Normal WT is persisted as is.
 			execInfo, err := tc.closeTxFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, execInfo.WorkflowTaskType)
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskScheduledEventId)
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskStartedEventId)
@@ -2354,7 +2354,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 
 			// Speculative WT is converted to normal.
 			execInfo, err = tc.closeTxFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, execInfo.WorkflowTaskType)
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskScheduledEventId)
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskStartedEventId)
@@ -2842,7 +2842,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			}
 
 			execInfo, err := tc.txFunc(s.mutableState)
-			s.Nil(err)
+			s.NoError(err)
 
 			protorequire.ProtoSliceEqual(t, expectedTransitionHistory, execInfo.TransitionHistory)
 		})
@@ -3337,7 +3337,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			execInfo, err := tc.txFunc(s.mutableState)
 			s.NotNil(execInfo.PreviousTransitionHistory)
 			s.Nil(execInfo.TransitionHistory)
-			s.Nil(err)
+			s.NoError(err)
 		})
 	}
 }
@@ -4368,7 +4368,7 @@ func (s *mutableStateSuite) TestExecutionInfoClone() {
 			&info.NamespaceId,
 		}
 	})
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *mutableStateSuite) addChangesForStateReplication(state *persistencespb.WorkflowMutableState) {

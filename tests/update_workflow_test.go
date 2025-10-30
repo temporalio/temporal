@@ -5049,7 +5049,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					// poll update to ensure same outcome is returned
 					pollRes, err := s.pollUpdate(tv,
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					s.Nil(err)
+					s.NoError(err)
 					s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 
 					s.EqualHistoryEvents(`
@@ -5139,7 +5139,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				// poll update to ensure same outcome is returned
 				pollRes, err := s.pollUpdate(tv,
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-				s.Nil(err)
+				s.NoError(err)
 				s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 
 				s.EqualHistoryEvents(`
@@ -5248,7 +5248,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				// poll update to ensure same outcome is returned
 				pollRes, err := s.pollUpdate(tv,
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-				s.Nil(err)
+				s.NoError(err)
 				s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 			})
 
@@ -5353,7 +5353,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					// poll update to ensure same outcome is returned
 					pollRes, err := s.pollUpdate(tv,
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					s.Nil(err)
+					s.NoError(err)
 					s.Equal(uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String(), pollRes.Outcome.String())
 				})
 			}
@@ -5458,7 +5458,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			// poll update to ensure same outcome is returned
 			pollRes, err := s.pollUpdate(tv,
 				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 		})
 

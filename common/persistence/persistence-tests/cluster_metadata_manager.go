@@ -55,7 +55,7 @@ func (s *ClusterMetadataManagerSuite) TearDownSuite() {
 // TestClusterMembershipEmptyInitially verifies the GetClusterMembers() works with an initial empty table
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipEmptyInitially() {
 	resp, err := s.ClusterMetadataManager.GetClusterMembers(s.ctx, &p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp)
 	s.Empty(resp.ActiveMembers)
 }
@@ -72,11 +72,11 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 	}
 
 	err := s.ClusterMetadataManager.UpsertClusterMembership(s.ctx, req)
-	s.Nil(err)
+	s.NoError(err)
 
 	resp, err := s.ClusterMetadataManager.GetClusterMembers(s.ctx, &p.GetClusterMembersRequest{})
 
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp)
 	s.NotEmpty(resp.ActiveMembers)
 
@@ -127,7 +127,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 }
 
 func (s *ClusterMetadataManagerSuite) validateUpsert(req *p.UpsertClusterMembershipRequest, resp *p.GetClusterMembersResponse, err error) {
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp)
 	s.NotEmpty(resp.ActiveMembers)
 	s.Equal(len(resp.ActiveMembers), 1)
@@ -153,7 +153,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 	}
 
 	err := s.ClusterMetadataManager.UpsertClusterMembership(s.ctx, req)
-	s.Nil(err)
+	s.NoError(err)
 
 	resp, err := s.ClusterMetadataManager.GetClusterMembers(
 		s.ctx,
@@ -168,7 +168,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 		&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Millisecond, HostIDEquals: req.HostID},
 	)
 
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp)
 	s.Empty(resp.ActiveMembers)
 
@@ -177,7 +177,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 		&p.GetClusterMembersRequest{RoleEquals: p.Matching},
 	)
 
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp)
 	s.Empty(resp.ActiveMembers)
 
@@ -186,7 +186,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 		&p.GetClusterMembersRequest{SessionStartedAfter: time.Now().UTC()},
 	)
 
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp)
 	s.Empty(resp.ActiveMembers)
 
@@ -241,7 +241,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 func (s *ClusterMetadataManagerSuite) waitForPrune(waitFor time.Duration) {
 	s.Eventually(func() bool {
 		err := s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
-		s.Nil(err)
+		s.NoError(err)
 
 		resp, err := s.ClusterMetadataManager.GetClusterMembers(
 			s.ctx,
@@ -316,7 +316,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 				IsConnectionEnabled:      true,
 			}})
 
-	s.Nil(err)
+	s.NoError(err)
 	s.True(initialResp) // request should be applied as this is first initialize
 
 	// Case 3 - Get, data persisted
@@ -324,7 +324,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(s.ctx, &p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 
 	// Validate they match our initializations
-	s.Nil(err)
+	s.NoError(err)
 	s.True(getResp != nil)
 	s.Equal(clusterNameToPersist, getResp.ClusterName)
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
@@ -344,14 +344,14 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 			HistoryShardCount: int32(77),
 		}})
 
-	s.Nil(err)
+	s.NoError(err)
 	s.False(secondResp) // Should not have applied, and should match values from first request
 
 	// Refetch persisted
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(s.ctx, &p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 
 	// Validate they match our initial values
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(getResp)
 	s.Equal(clusterNameToPersist, getResp.ClusterName)
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
@@ -373,16 +373,16 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 		ClusterMetadata: getResp.ClusterMetadata,
 		Version:         getResp.Version,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.True(thirdResp)
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(s.ctx, &p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(getResp)
 	s.Equal("1.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
 
 	// Case 6 - Delete Cluster Metadata
 	err = s.ClusterMetadataManager.DeleteClusterMetadata(s.ctx, &p.DeleteClusterMetadataRequest{ClusterName: clusterNameToPersist})
-	s.Nil(err)
+	s.NoError(err)
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(s.ctx, &p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 
 	// Validate they match our initializations
@@ -406,7 +406,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 				IsGlobalNamespaceEnabled: true,
 				IsConnectionEnabled:      true,
 			}})
-	s.Nil(err)
+	s.NoError(err)
 	s.True(initialResp)
 
 	// Case 8 - Get, data persisted
@@ -414,7 +414,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(s.ctx, &p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 
 	// Validate they match our initializations
-	s.Nil(err)
+	s.NoError(err)
 	s.True(getResp != nil)
 	s.Equal(clusterNameToPersist, getResp.ClusterName)
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)

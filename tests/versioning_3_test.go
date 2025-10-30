@@ -673,7 +673,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNe
 		Namespace: s.Namespace().String(),
 		Execution: execution,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(describeCall)
 
 	// Since the poller accepted the update, the Worker Deployment Version that completed the last workflow task

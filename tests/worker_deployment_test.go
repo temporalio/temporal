@@ -387,7 +387,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 		Version:        firstVersion.DeploymentVersionString(),
 		ConflictToken:  cT,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
@@ -411,7 +411,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 		ConflictToken:           cT,
 		IgnoreMissingTaskQueues: true, // here until we have 'has version started' safeguard in place
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
@@ -1302,7 +1302,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
@@ -1374,7 +1374,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	// nolint:staticcheck // SA1019: old worker versioning
 	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 
@@ -1554,7 +1554,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
@@ -1698,7 +1698,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 		Namespace:      s.Namespace().String(),
 		DeploymentName: currentVars.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name:       currentVars.DeploymentSeries(),
@@ -2089,7 +2089,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 
 	// check that the current version's task queues have ramping version == __unversioned__
@@ -2849,7 +2849,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	}
 
 	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
-	s.Nil(err)
+	s.NoError(err)
 
 	// Wait for pollers going away
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -2885,7 +2885,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		DeploymentName: tv1.DeploymentSeries(),
 		Identity:       tv1.ClientIdentity(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Describe Worker Deployment should give not found
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -2978,7 +2978,7 @@ func (s *WorkerDeploymentSuite) tryDeleteVersion(
 		Identity:  tv.ClientIdentity(),
 	})
 	if expectedError == "" {
-		s.Nil(err)
+		s.NoError(err)
 	} else {
 		s.Error(err)
 		s.Contains(err.Error(), expectedError)

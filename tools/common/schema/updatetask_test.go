@@ -206,7 +206,7 @@ func (s *UpdateTaskTestSuite) runReadManifestTest(
 
 	file := dir + "/manifest.json"
 	err := os.WriteFile(file, []byte(input), os.FileMode(0644))
-	s.Nil(err)
+	s.NoError(err)
 
 	m, err := readManifest(os.DirFS(dir), ".")
 	if isErr {

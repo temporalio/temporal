@@ -28,11 +28,11 @@ func (s *SetupSchemaTestSuite) TearDownSuite() {
 func (s *SetupSchemaTestSuite) TestCreateKeyspace() {
 	s.Nil(RunTool([]string{"./tool", "create", "-k", "foobar123", "--rf", "1"}))
 	err := s.client.dropKeyspace("foobar123")
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *SetupSchemaTestSuite) TestSetupSchema() {
 	client, err := newTestCQLClient(s.DBName)
-	s.Nil(err)
+	s.NoError(err)
 	s.RunSetupTest(buildCLIOptions(), client, "-k", createTestCQLFileContent(), []string{"tasks", "events"})
 }

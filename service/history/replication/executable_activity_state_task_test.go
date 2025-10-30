@@ -382,7 +382,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		ActivitiesInfo: activityTask.activityInfos,
 	})
 	err := batchResult.Execute()
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_ShouldNotBatch() {

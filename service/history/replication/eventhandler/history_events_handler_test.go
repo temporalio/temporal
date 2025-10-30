@@ -125,7 +125,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_RemoteOnly() {
 		nil,
 		"",
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_HandleLocalThenRemote() {
@@ -217,7 +217,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 		nil,
 		"",
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *historyEventHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
@@ -268,7 +268,7 @@ func (s *historyEventHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 		workflowKey,
 		versionHistory.Items,
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLocalAndCommit() {
@@ -325,7 +325,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLo
 		workflowKey,
 		versionHistory.Items,
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ExistButNotEnoughEvents_DataLose() {

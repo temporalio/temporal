@@ -52,7 +52,7 @@ func (s *LogSuite) TestNewLogger() {
 	log := BuildZapLogger(cfg)
 	s.NotNil(log)
 	_, err := os.Stat(dir + "/test.log")
-	s.Nil(err)
+	s.NoError(err)
 	log.DPanic("Development default is false; should not panic here!")
 	s.Panics(nil, func() {
 		log.Panic("Must Panic")
@@ -66,7 +66,7 @@ func (s *LogSuite) TestNewLogger() {
 	log = BuildZapLogger(cfg)
 	s.NotNil(log)
 	_, err = os.Stat(dir + "/test.log")
-	s.Nil(err)
+	s.NoError(err)
 	s.Panics(nil, func() {
 		log.DPanic("Must panic!")
 	})
