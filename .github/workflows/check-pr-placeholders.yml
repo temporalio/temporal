@@ -27,15 +27,6 @@ jobs:
 
             let violations = [];
 
-            // Detect HTML comments
-            const htmlCommentRegex = /<!--[\s\S]*?-->/g;
-            const htmlComments = body.match(htmlCommentRegex);
-            if (htmlComments) {
-              htmlComments.forEach((comment) => {
-                violations.push(`HTML comment detected: "${comment.substring(0, 50)}${comment.length > 50 ? '...' : ''}"`);
-              });
-            }
-
             // Detect placeholder lines: entire line starts and ends with _
             lines.forEach((line, idx) => {
               if (/^_.*_$/.test(line.trim())) {
