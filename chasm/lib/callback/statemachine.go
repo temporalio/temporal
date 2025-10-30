@@ -29,9 +29,9 @@ type EventRescheduled struct{}
 var TransitionRescheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_BACKING_OFF},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
-	func(cb *Callback, mctx chasm.MutableContext, event EventRescheduled) error {
+	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		mctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{Attempt: cb.Attempt})
 		return nil
 	},
 )
@@ -46,7 +46,7 @@ type EventAttemptFailed struct {
 var TransitionAttemptFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_BACKING_OFF,
-	func(cb *Callback, mctx chasm.MutableContext, event EventAttemptFailed) error {
+	func(cb *Callback, ctx chasm.MutableContext, event EventAttemptFailed) error {
 		cb.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
 		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
@@ -60,7 +60,7 @@ var TransitionAttemptFailed = chasm.NewTransition(
 				},
 			},
 		}
-		mctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
