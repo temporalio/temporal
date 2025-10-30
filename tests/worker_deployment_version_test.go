@@ -1129,6 +1129,37 @@ func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
 	}, 10*time.Second, 50*time.Millisecond)
 }
 
+func (s *DeploymentVersionSuite) checkWorkflowUpdateOptionsEventIdentity(
+	ctx context.Context,
+	wf *commonpb.WorkflowExecution,
+	expectedIdentity string,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: s.Namespace().String(),
+			Execution: wf,
+		})
+		a.NoError(err)
+		a.NotNil(resp)
+		events := resp.GetHistory().GetEvents()
+		for resp.NextPageToken != nil { // probably there won't ever be more than one page of events in these tests
+			resp, err = s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+				Namespace: s.Namespace().String(),
+				Execution: wf,
+			})
+			a.NoError(err)
+			a.NotNil(resp)
+			events = append(events, resp.GetHistory().GetEvents()...)
+		}
+		for _, event := range events {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+				a.Equal(event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetIdentity(), expectedIdentity)
+			}
+		}
+	}, 10*time.Second, 50*time.Millisecond)
+}
+
 func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *testvars.TestVars) {
 	// Querying the Deployment Version
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -1260,10 +1291,12 @@ func (s *DeploymentVersionSuite) setAndCheckOverride(ctx context.Context, tv *te
 		WorkflowExecution:        tv.WorkflowExecution(),
 		WorkflowExecutionOptions: opts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+		Identity:                 tv.ClientIdentity(),
 	})
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), opts))
 	s.checkDescribeWorkflowAfterOverride(ctx, tv.WorkflowExecution(), override)
+	s.checkWorkflowUpdateOptionsEventIdentity(ctx, tv.WorkflowExecution(), tv.ClientIdentity())
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
@@ -1406,7 +1439,7 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 		Namespace: s.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
 			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-				Identity:                 uuid.New(),
+				Identity:                 tv.ClientIdentity(),
 				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: pinnedOverride},
 				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			},
@@ -1423,6 +1456,7 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 	// check all the workflows
 	for _, wf := range workflows {
 		s.checkDescribeWorkflowAfterOverride(ctx, wf, pinnedOverride)
+		s.checkWorkflowUpdateOptionsEventIdentity(ctx, wf, tv.ClientIdentity())
 	}
 
 	// unset with empty update opts with mutation mask
@@ -1434,7 +1468,7 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 		Executions: workflows,
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
 			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
-				Identity:                 uuid.New(),
+				Identity:                 tv.ClientIdentity(),
 				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			},
@@ -1448,6 +1482,7 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 	// check all the workflows
 	for _, wf := range workflows {
 		s.checkDescribeWorkflowAfterOverride(ctx, wf, nil)
+		s.checkWorkflowUpdateOptionsEventIdentity(ctx, wf, tv.ClientIdentity())
 	}
 }
 
