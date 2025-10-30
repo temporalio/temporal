@@ -287,7 +287,7 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
 }
 
 message RecordActivityTaskStartedRequest {
-    option (routing).workflow_id = "workflow_execution.workflow_id";
+    option (routing).custom = true;
 
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
@@ -307,6 +307,10 @@ message RecordActivityTaskStartedRequest {
     reserved 11;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 12;
+    // Reference to the Chasm component for activity execution (if applicable). For standalone activities, all necessary
+    // start information is carried within this component, obviating the need to use the fields that apply to embedded
+    // activities with the exception of version_directive.
+    bytes component_ref = 13;
 }
 
 message RecordActivityTaskStartedResponse {

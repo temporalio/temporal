@@ -9,14 +9,17 @@ import (
 type library struct {
 	chasm.UnimplementedLibrary
 
-	handler *handler
+	handler                      *handler
+	ActivityDispatchTaskExecutor *activityDispatchTaskExecutor
 }
 
 func newLibrary(
 	handler *handler,
+	ActivityDispatchTaskExecutor *activityDispatchTaskExecutor,
 ) *library {
 	return &library{
-		handler: handler,
+		handler:                      handler,
+		ActivityDispatchTaskExecutor: ActivityDispatchTaskExecutor,
 	}
 }
 
@@ -31,5 +34,15 @@ func (l *library) RegisterServices(server *grpc.Server) {
 func (l *library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Activity]("activity"),
+	}
+}
+
+func (l *library) Tasks() []*chasm.RegistrableTask {
+	return []*chasm.RegistrableTask{
+		chasm.NewRegistrableSideEffectTask[*Activity, *activitypb.ActivityDispatchTask](
+			"dispatchActivity",
+			l.ActivityDispatchTaskExecutor,
+			l.ActivityDispatchTaskExecutor,
+		),
 	}
 }
