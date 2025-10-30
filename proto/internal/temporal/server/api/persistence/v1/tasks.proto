@@ -58,6 +58,19 @@ message TaskQueueInfo {
     // the range id. For compatibility, ack level and backlog count for subqueue 0
     // is copied into TaskQueueInfo.
     repeated SubqueueInfo subqueues = 9;
+
+    // For transitioning from tasks (v1) to tasks_v2 and back:
+    //
+    // If this TaskQueueInfo is in v1 and this is set, then v2 may have tasks.
+    // If this TaskQueueInfo is in v2 and this is set, then v1 may have tasks.
+    //
+    // New metadata starts with this flag set (we could skip this when useNewMatcher is off).
+    // Whenever locking any metadata as the inactive one (drain-only), this should be set.
+    // If the flag is true, no tasks should be written to the active table until the inactive
+    // table has also been locked (and the flag set there for a potential reverse transition).
+    // After determinining that the inactive table has no more tasks left, then this
+    // can be cleared on the active table.
+    bool other_has_tasks = 10;
 }
 
 message SubqueueInfo {

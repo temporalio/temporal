@@ -45,6 +45,7 @@ type (
 		RangeSize                                int64
 		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		EnableMigration                          dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -55,6 +56,7 @@ type (
 		BreakdownMetricsByTaskQueue              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
 		ForwarderMaxOutstandingPolls             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingTasks             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxRatePerSecond                dynamicconfig.FloatPropertyFnWithTaskQueueFilter
@@ -144,6 +146,7 @@ type (
 		NewMatcherSub              func(func(bool)) (bool, func())
 		EnableFairness             bool
 		EnableFairnessSub          func(func(bool)) (bool, func())
+		EnableMigration            func() bool
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -252,6 +255,7 @@ func NewConfig(
 		RangeSize:                                100000,
 		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
+		EnableMigration:                          dynamicconfig.MatchingEnableMigration.Get(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
@@ -270,6 +274,7 @@ func NewConfig(
 		BreakdownMetricsByTaskQueue:              dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
+		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
 		ForwarderMaxOutstandingPolls:             dynamicconfig.MatchingForwarderMaxOutstandingPolls.Get(dc),
 		ForwarderMaxOutstandingTasks:             dynamicconfig.MatchingForwarderMaxOutstandingTasks.Get(dc),
 		ForwarderMaxRatePerSecond:                dynamicconfig.MatchingForwarderMaxRatePerSecond.Get(dc),
@@ -342,6 +347,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		EnableFairnessSub: func(cb func(bool)) (bool, func()) {
 			return config.EnableFairnessSub(ns.String(), taskQueueName, taskType, cb)
+		},
+		EnableMigration: func() bool {
+			return config.EnableMigration(ns.String(), taskQueueName, taskType)
 		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)

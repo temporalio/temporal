@@ -473,6 +473,7 @@ func (s *TaskSerializer) transferWorkflowTaskToProto(
 		Version:                 workflowTask.Version,
 		TaskId:                  workflowTask.TaskID,
 		VisibilityTime:          timestamppb.New(workflowTask.VisibilityTimestamp),
+		Stamp:                   workflowTask.Stamp,
 	}
 }
 
@@ -490,6 +491,7 @@ func (s *TaskSerializer) transferWorkflowTaskFromProto(
 		TaskQueue:           workflowTask.TaskQueue,
 		ScheduledEventID:    workflowTask.ScheduledEventId,
 		Version:             workflowTask.Version,
+		Stamp:               workflowTask.Stamp,
 	}
 }
 
@@ -736,6 +738,7 @@ func (s *TaskSerializer) timerWorkflowTaskToProto(
 		EventId:             workflowTimer.EventID,
 		TaskId:              workflowTimer.TaskID,
 		VisibilityTime:      timestamppb.New(workflowTimer.VisibilityTimestamp),
+		Stamp:               workflowTimer.Stamp,
 	}
 }
 
@@ -754,6 +757,7 @@ func (s *TaskSerializer) timerWorkflowTaskFromProto(
 		ScheduleAttempt:     workflowTimer.ScheduleAttempt,
 		TimeoutType:         workflowTimer.TimeoutType,
 		Version:             workflowTimer.Version,
+		Stamp:               workflowTimer.Stamp,
 	}
 }
 
@@ -1293,15 +1297,16 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
 	syncWorkflowStateTask *tasks.SyncWorkflowStateTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    syncWorkflowStateTask.WorkflowKey.NamespaceID,
-		WorkflowId:     syncWorkflowStateTask.WorkflowKey.WorkflowID,
-		RunId:          syncWorkflowStateTask.WorkflowKey.RunID,
-		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-		TaskId:         syncWorkflowStateTask.TaskID,
-		Version:        syncWorkflowStateTask.Version,
-		VisibilityTime: timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
-		Priority:       syncWorkflowStateTask.Priority,
-		TargetClusters: syncWorkflowStateTask.TargetClusters,
+		NamespaceId:        syncWorkflowStateTask.NamespaceID,
+		WorkflowId:         syncWorkflowStateTask.WorkflowID,
+		RunId:              syncWorkflowStateTask.RunID,
+		TaskType:           enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		TaskId:             syncWorkflowStateTask.TaskID,
+		Version:            syncWorkflowStateTask.Version,
+		VisibilityTime:     timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
+		Priority:           syncWorkflowStateTask.Priority,
+		TargetClusters:     syncWorkflowStateTask.TargetClusters,
+		IsForceReplication: syncWorkflowStateTask.IsForceReplication,
 	}
 }
 
@@ -1323,6 +1328,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 		TaskID:              syncWorkflowStateTask.TaskId,
 		Priority:            syncWorkflowStateTask.Priority,
 		TargetClusters:      syncWorkflowStateTask.TargetClusters,
+		IsForceReplication:  syncWorkflowStateTask.IsForceReplication,
 	}
 }
 

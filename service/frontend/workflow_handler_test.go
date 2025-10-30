@@ -2244,7 +2244,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
@@ -2305,7 +2305,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
@@ -2369,7 +2369,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
@@ -2443,7 +2443,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
@@ -2501,7 +2501,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
@@ -2565,7 +2565,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			_ ...grpc.CallOption,
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
+			s.Equal(batcher.BatchWFTypeProtobufName, request.StartRequest.WorkflowType.Name)
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
@@ -3893,5 +3893,66 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		resp, err := wh.PatchSchedule(ctx, request)
 		s.Nil(resp)
 		s.Error(err)
+	})
+}
+
+func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.Run("rate limit on workflow task queue should return error", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).Times(1)
+
+		request := &workflowservice.UpdateTaskQueueConfigRequest{
+			Namespace:     s.testNamespace.String(),
+			TaskQueue:     "test-task-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			UpdateQueueRateLimit: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+				RateLimit: &taskqueuepb.RateLimit{},
+			},
+		}
+
+		resp, err := wh.UpdateTaskQueueConfig(s.T().Context(), request)
+		s.Nil(resp)
+		s.EqualError(err, "Setting rate limit on workflow task queues is not allowed.")
+	})
+
+	s.Run("fairness key rate limit on workflow task queue should return error", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).Times(1)
+
+		request := &workflowservice.UpdateTaskQueueConfigRequest{
+			Namespace:     s.testNamespace.String(),
+			TaskQueue:     "test-task-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			UpdateFairnessKeyRateLimitDefault: &workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate{
+				RateLimit: &taskqueuepb.RateLimit{},
+			},
+		}
+
+		resp, err := wh.UpdateTaskQueueConfig(s.T().Context(), request)
+		s.Nil(resp)
+		s.EqualError(err, "Setting fairness key rate limit on workflow task queues is not allowed.")
+	})
+
+	s.Run("fairness weight override on workflow task queue should return success", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).Times(1)
+		s.mockMatchingClient.EXPECT().UpdateTaskQueueConfig(gomock.Any(), gomock.Any()).Return(
+			&matchingservice.UpdateTaskQueueConfigResponse{
+				UpdatedTaskqueueConfig: &taskqueuepb.TaskQueueConfig{},
+			}, nil).Times(1)
+
+		request := &workflowservice.UpdateTaskQueueConfigRequest{
+			Namespace:     s.testNamespace.String(),
+			TaskQueue:     "test-task-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			SetFairnessWeightOverrides: map[string]float32{
+				"key1": 1.5,
+				"key2": 2.0,
+			},
+		}
+
+		resp, err := wh.UpdateTaskQueueConfig(s.T().Context(), request)
+		s.NoError(err)
+		s.NotNil(resp)
 	})
 }

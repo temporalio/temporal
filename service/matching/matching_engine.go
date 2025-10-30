@@ -425,11 +425,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	if err != nil {
 		return nil, false, err
 	}
-	nsName := namespaceEntry.Name()
 
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
-	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(nsName, partition, tqConfig)
+	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
 	onUserDataChanged := func() { newPM.userDataChanged() }
 	userDataManager := newUserDataManager(
@@ -472,26 +471,33 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 }
 
 func (e *matchingEngineImpl) loggerAndMetricsForPartition(
-	nsName namespace.Name,
+	nsEntry *namespace.Namespace,
 	partition tqid.Partition,
 	tqConfig *taskQueueConfig,
 ) (log.Logger, log.Logger, metrics.Handler) {
+	nsName := nsEntry.Name().String()
+	var nsState string
+	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
+		nsState = metrics.ActiveNamespaceStateTagValue
+	} else {
+		nsState = metrics.PassiveNamespaceStateTagValue
+	}
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName.String()))
+		tag.WorkflowNamespace(nsName))
 	throttledLogger := log.With(e.throttledLogger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName.String()))
+		tag.WorkflowNamespace(nsName))
 	metricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
-		nsName.String(),
+		nsName,
 		partition,
 		tqConfig.BreakdownMetricsByTaskQueue(),
 		tqConfig.BreakdownMetricsByPartition(),
 		metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-	)
+	).WithTags(metrics.NamespaceStateTag(nsState))
 	return logger, throttledLogger, metricsHandler
 }
 
@@ -536,6 +542,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		ExpiryTime:       expirationTime,
 		CreateTime:       timestamppb.New(now),
 		VersionDirective: addRequest.VersionDirective,
+		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
 	}
 
@@ -2903,6 +2910,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		Stamp:                      task.event.Data.GetStamp(),
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
