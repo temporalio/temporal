@@ -99,8 +99,7 @@ func (i *instrumentation) oneOf(counterName string) {
 }
 
 func (i *instrumentation) stateChange(updateID string, from, to state) {
-	softassert.Sometimes(
-		i.log,
+	softassert.Sometimes(i.log).Debug(
 		"update state change",
 		tag.ComponentWorkflowUpdate,
 		tag.NewStringTag("update-id", updateID),
