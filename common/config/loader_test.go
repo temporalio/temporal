@@ -230,7 +230,7 @@ services:
 				return []loadOption{WithConfigFile("/nonexistent/path/config.yaml")}
 			},
 			expectError:   true,
-			errorContains: "failed to read config file",
+			errorContains: "could not read config file",
 		},
 	}
 
