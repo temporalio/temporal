@@ -744,8 +744,9 @@ type AddActivityTaskRequest struct {
 	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Stamp            int32                     `protobuf:"varint,12,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,13,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Reference to the Chasm component for activity execution (if applicable). The component will have all the
-	// necessary data, deprecating the need for the separate request fields used here.
+	// Reference to the Chasm component for activity execution (if applicable). For standalone activities, all
+	// necessary start information is carried within this component, obviating the need to use the fields that apply to
+	// embedded activities.
 	ComponentRef  []byte `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

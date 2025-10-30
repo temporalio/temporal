@@ -1618,8 +1618,9 @@ type RecordActivityTaskStartedRequest struct {
 	ScheduledDeployment *v16.Deployment `protobuf:"bytes,10,opt,name=scheduled_deployment,json=scheduledDeployment,proto3" json:"scheduled_deployment,omitempty"`
 	// Versioning directive that was sent by history when scheduling the task.
 	VersionDirective *v112.TaskVersionDirective `protobuf:"bytes,12,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	// Reference to the Chasm component for activity execution (if applicable). The component will have all the
-	// necessary data, deprecating the need for the separate request fields used here.
+	// Reference to the Chasm component for activity execution (if applicable). For standalone activities, all necessary
+	// start information is carried within this component, obviating the need to use the fields that apply to embedded
+	// activities with the exception of version_directive.
 	ComponentRef  []byte `protobuf:"bytes,13,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
