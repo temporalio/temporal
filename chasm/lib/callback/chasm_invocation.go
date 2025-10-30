@@ -67,13 +67,14 @@ func (c chasmInvocation) Invoke(
 		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
+	// Validate that the bytes are a valid ChasmComponentRef
 	ref := &persistencespb.ChasmComponentRef{}
 	err = proto.Unmarshal(decodedRef, ref)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef: %v", err)}
+		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef", err)}
 	}
 
-	request, err := c.getHistoryRequest(ref)
+	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
 		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
 	}
@@ -119,12 +120,12 @@ func isRetryableRPCResponse(err error) bool {
 }
 
 func (c chasmInvocation) getHistoryRequest(
-	ref *persistencespb.ChasmComponentRef,
+	refBytes []byte,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
 	completion := &tokenspb.NexusOperationCompletion{
-		ComponentRef: ref,
+		ComponentRef: refBytes,
 		RequestId:    c.requestID,
 	}
 

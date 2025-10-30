@@ -387,11 +387,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					// Verify completion token
 					require.NotNil(t, req.Completion)
 					require.NotNil(t, req.Completion.ComponentRef)
-					require.Equal(t, "namespace-id", req.Completion.ComponentRef.NamespaceId)
-					require.Equal(t, "business-id", req.Completion.ComponentRef.BusinessId)
-					require.Equal(t, "entity-id", req.Completion.ComponentRef.EntityId)
 					require.Equal(t, "request-id", req.Completion.RequestId)
-					require.Equal(t, "test-archetype", req.Completion.ComponentRef.Archetype)
 
 					// Verify successful operation data
 					require.NotNil(t, req.GetSuccess())
