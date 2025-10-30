@@ -301,7 +301,6 @@ func (s *Versioning3Suite) TestPinnedQuery_RollbackDrainedVersion() {
 	)
 }
 
-// TODO (Shivam): This may fail right now with new deployment stuff.
 func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, rollback bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -3861,7 +3860,7 @@ func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition(
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *Versioning3Suite) TestActivityQLags_DependentActivityOnUnversionedCompletesOnTheNewVersion() {
+func (s *Versioning3Suite) TestActivityTQLags_DependentActivityOnUnversionedCompletesOnTheNewVersion() {
 	if !s.useNewDeploymentData {
 		s.T().Skip("This test is only supported on new deployment data")
 	}
