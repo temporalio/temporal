@@ -61,8 +61,9 @@ func (i *instrumentation) countTooMany() {
 	i.oneOf(metrics.WorkflowExecutionUpdateTooMany.Name())
 }
 
-func (i *instrumentation) countAborted() {
-	i.oneOf(metrics.WorkflowExecutionUpdateAborted.Name())
+func (i *instrumentation) countAborted(reason AbortReason) {
+	i.metrics.Counter(metrics.WorkflowExecutionUpdateAborted.Name()).
+		Record(1, metrics.ReasonTag(metrics.ReasonString(reason.String())))
 }
 
 func (i *instrumentation) countContinueAsNewSuggestions() {
