@@ -175,7 +175,7 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 	interval := calculateRetryInterval(retryPolicy, attempt.Count)
 	isNegativeInterval := retryPolicy.GetMaximumInterval().AsDuration() == 0 && interval <= 0 // From existing workflow activity retry behavior
 
-	// Retry task if we have remaining attempts
+	// Retry task if we have remaining attempts. A retry involves transitioning the activity back to scheduled state.
 	if (retryPolicy.GetMaximumAttempts() == 0 || task.GetAttempt() < retryPolicy.GetMaximumAttempts()) && (!isNegativeInterval) {
 		attempt.LastAttemptCompleteTime = timestamppb.New(ctx.Now(activity))
 		attempt.Count += 1

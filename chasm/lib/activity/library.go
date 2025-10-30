@@ -10,25 +10,25 @@ type library struct {
 	chasm.UnimplementedLibrary
 
 	handler                            *handler
-	ActivityDispatchTaskExecutor       *activityDispatchTaskExecutor
-	ScheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor
-	ScheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor
-	StartToCloseTimeoutTaskExecutor    *startToCloseTimeoutTaskExecutor
+	activityDispatchTaskExecutor       *activityDispatchTaskExecutor
+	scheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor
+	scheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor
+	startToCloseTimeoutTaskExecutor    *startToCloseTimeoutTaskExecutor
 }
 
 func newLibrary(
 	handler *handler,
-	ActivityDispatchTaskExecutor *activityDispatchTaskExecutor,
-	ScheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor,
-	ScheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor,
-	StartToCloseTimeoutTaskExecutor *startToCloseTimeoutTaskExecutor,
+	activityDispatchTaskExecutor *activityDispatchTaskExecutor,
+	scheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor,
+	scheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor,
+	startToCloseTimeoutTaskExecutor *startToCloseTimeoutTaskExecutor,
 ) *library {
 	return &library{
 		handler:                            handler,
-		ActivityDispatchTaskExecutor:       ActivityDispatchTaskExecutor,
-		ScheduleToStartTimeoutTaskExecutor: ScheduleToStartTimeoutTaskExecutor,
-		ScheduleToCloseTimeoutTaskExecutor: ScheduleToCloseTimeoutTaskExecutor,
-		StartToCloseTimeoutTaskExecutor:    StartToCloseTimeoutTaskExecutor,
+		activityDispatchTaskExecutor:       activityDispatchTaskExecutor,
+		scheduleToStartTimeoutTaskExecutor: scheduleToStartTimeoutTaskExecutor,
+		scheduleToCloseTimeoutTaskExecutor: scheduleToCloseTimeoutTaskExecutor,
+		startToCloseTimeoutTaskExecutor:    startToCloseTimeoutTaskExecutor,
 	}
 }
 
@@ -50,23 +50,23 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask[*Activity, *activitypb.ActivityDispatchTask](
 			"dispatchActivity",
-			l.ActivityDispatchTaskExecutor,
-			l.ActivityDispatchTaskExecutor,
+			l.activityDispatchTaskExecutor,
+			l.activityDispatchTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
 			"scheduleToStartTimer",
-			l.ScheduleToStartTimeoutTaskExecutor,
-			l.ScheduleToStartTimeoutTaskExecutor,
+			l.scheduleToStartTimeoutTaskExecutor,
+			l.scheduleToStartTimeoutTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
 			"scheduleToCloseTimer",
-			l.ScheduleToCloseTimeoutTaskExecutor,
-			l.ScheduleToCloseTimeoutTaskExecutor,
+			l.scheduleToCloseTimeoutTaskExecutor,
+			l.scheduleToCloseTimeoutTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
 			"startToCloseTimer",
-			l.StartToCloseTimeoutTaskExecutor,
-			l.StartToCloseTimeoutTaskExecutor,
+			l.startToCloseTimeoutTaskExecutor,
+			l.startToCloseTimeoutTaskExecutor,
 		),
 	}
 }
