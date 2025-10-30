@@ -1112,7 +1112,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	// When using the new deployment format, we use revision number mechanics.
 	if directive.GetAssignedBuildId() == "" {
 
-		if targetDeployment == nil && taskDirectiveRevisionNumber > targetDeploymentRevisionNumber {
+		if targetDeployment == nil && taskDirectiveRevisionNumber > targetDeploymentRevisionNumber && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
 			// When workflow moves from unversioned to versioned, but task-queue partition did not get the changes.
 			targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
 			taskDispatchRevisionNumber = taskDirectiveRevisionNumber
@@ -1141,6 +1141,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			// If the  activity task queue is not present in the current version of the deployment, it is considered an independent unpinned activity.
 			var IndependentUnpinnedActivity bool
 			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
+
+				// Check the old deployment data format.
+				if !worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(targetDeployment)) {
+					IndependentUnpinnedActivity = true
+				}
+
 				workerDeploymentData = deploymentsData[targetDeployment.GetSeriesName()]
 				if workerDeploymentData != nil && workerDeploymentData.GetVersions() != nil && workerDeploymentData.GetVersions()[targetDeployment.GetBuildId()] == nil {
 					IndependentUnpinnedActivity = true
@@ -1155,16 +1161,11 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			if IndependentUnpinnedActivity {
 				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
 				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
-			} else if targetDeployment.GetSeriesName() != deployment.GetSeriesName() {
-				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
-				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
-			} else if targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
-				// Choose the currentDeployment in case of tie for the case of unversioned.
-				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
-				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
 			} else {
-				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
-				taskDispatchRevisionNumber = taskDirectiveRevisionNumber
+				// This is a workflow task. Choose the right targetDeploymentQueue based with/without revision number mechanics.
+				targetDeploymentQueue, taskDispatchRevisionNumber, err = pm.chooseTargetQueueByFlag(
+					ctx, deployment, targetDeployment, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber,
+				)
 			}
 
 			if forwardInfo == nil {
@@ -1279,6 +1280,34 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	return spoolQueue, syncMatchQueue, userDataChanged, taskDispatchRevisionNumber, err
+}
+
+// chooseTargetQueueByFlag picks the target queue and dispatch revision number.
+// If UseRevisionNumberForWorkerVersioning is enabled, it uses the revision
+// comparison; otherwise it always chooses targetDeployment.
+// TODO (Shivam): This function can be simplified to literally one if check.
+func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
+	ctx context.Context,
+	deployment *deploymentpb.Deployment,
+	targetDeployment *deploymentpb.Deployment,
+	targetDeploymentRevisionNumber int64,
+	taskDirectiveRevisionNumber int64,
+) (physicalTaskQueueManager, int64, error) {
+	if pm.engine != nil && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
+		if targetDeployment.GetSeriesName() != deployment.GetSeriesName() {
+			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+			return q, targetDeploymentRevisionNumber, err
+		} else if targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
+			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+			return q, targetDeploymentRevisionNumber, err
+		}
+		q, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
+		return q, taskDirectiveRevisionNumber, err
+	}
+
+	// When not using revision number mechanics, always choose the targetDeployment.
+	q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+	return q, targetDeploymentRevisionNumber, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {

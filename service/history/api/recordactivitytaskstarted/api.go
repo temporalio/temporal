@@ -219,21 +219,16 @@ func recordActivityTaskStarted(
 			return nil, rejectCodeUndefined, err
 		}
 
-		// fmt.Println("--------------------------------")
-		// fmt.Println("pollerDeployment", pollerDeployment)
-		// fmt.Println("wftDepVer", wftDepVer)
-		// fmt.Println("request.TaskDispatchRevisionNumber", request.TaskDispatchRevisionNumber) // This should be 2.
-		// fmt.Println("oldRevisionNumber", mutableState.GetRevisionNumber())
-		// fmt.Println("--------------------------------")
-
 		// We start a transition if one of the following conditions are met:
 		// 1. The workflow will be dispatching to the same deployment as the activity but has not yet.
 		// 2. The workflow TQ is lagging behind the activity TQ, with respect to the current version of a deployment. Note: The check to see if the activity task
 		//    belongs to the same deployment as the workflow is done in matching itself.
 
 		// Note: We use > instead of >= because a non-backlogged activity task could have the same revision number as the MS and that should not commence a transition.
-		// The following check MUST be done if the pollerDeployment and wftDepVer are from the same deployment series.
-		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) || (pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepRevNum) {
+		// The following check MUST be done if the pollerDeployment and wftDepVer are from the same deployment series AND if the dynamic config is enabled.
+		useRevisionNumber := shardContext.GetConfig().UseRevisionNumberForWorkerVersioning(namespaceName)
+		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) ||
+			(useRevisionNumber && pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepRevNum) {
 			oldRevisionNumber := mutableState.GetRevisionNumber()
 			if err := mutableState.StartDeploymentTransition(pollerDeployment, request.TaskDispatchRevisionNumber); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
