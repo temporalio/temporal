@@ -77,7 +77,6 @@ func newScheduleToStartTimeoutTaskExecutor() *scheduleToStartTimeoutTaskExecutor
 	return &scheduleToStartTimeoutTaskExecutor{}
 }
 
-// TODO - validate with stamp instead of attempt? https://github.com/temporalio/temporal/pull/8536
 func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 	ctx chasm.Context,
 	activity *Activity,
