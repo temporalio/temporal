@@ -41,8 +41,7 @@ type Activity struct {
 	Store chasm.Field[ActivityStore]
 }
 
-// RecordActivityTaskStartedParams holds parameters for RecordActivityTaskStarted method when recording activity
-// task started.
+// RecordActivityTaskStartedParams holds parameters for RecordActivityTaskStarted
 type RecordActivityTaskStartedParams struct {
 	VersionDirective *taskqueuespb.TaskVersionDirective
 	WorkerIdentity   string
@@ -63,7 +62,7 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
-// NewStandaloneActivity creates a new activity component and launches associated tasks to start execution.
+// NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.
 func NewStandaloneActivity(
 	ctx chasm.MutableContext,
 	request *workflowservice.StartActivityExecutionRequest,
