@@ -119,16 +119,6 @@ func (c *clientImpl) DeprecateNamespace(
 	return c.client.DeprecateNamespace(ctx, request, opts...)
 }
 
-func (c *clientImpl) DescribeActivityExecution(
-	ctx context.Context,
-	request *workflowservice.DescribeActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.DescribeActivityExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.DescribeActivityExecution(ctx, request, opts...)
-}
-
 func (c *clientImpl) DescribeBatchOperation(
 	ctx context.Context,
 	request *workflowservice.DescribeBatchOperationRequest,
@@ -247,16 +237,6 @@ func (c *clientImpl) FetchWorkerConfig(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.FetchWorkerConfig(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetActivityExecutionResult(
-	ctx context.Context,
-	request *workflowservice.GetActivityExecutionResultRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetActivityExecutionResultResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.GetActivityExecutionResult(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetClusterInfo(
@@ -537,6 +517,16 @@ func (c *clientImpl) PauseActivityExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.PauseActivityExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PollActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollActivityExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PollActivityExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollActivityTaskQueue(

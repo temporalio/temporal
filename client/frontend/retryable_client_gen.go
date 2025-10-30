@@ -176,21 +176,6 @@ func (c *retryableClient) DeprecateNamespace(
 	return resp, err
 }
 
-func (c *retryableClient) DescribeActivityExecution(
-	ctx context.Context,
-	request *workflowservice.DescribeActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.DescribeActivityExecutionResponse, error) {
-	var resp *workflowservice.DescribeActivityExecutionResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.DescribeActivityExecution(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) DescribeBatchOperation(
 	ctx context.Context,
 	request *workflowservice.DescribeBatchOperationRequest,
@@ -365,21 +350,6 @@ func (c *retryableClient) FetchWorkerConfig(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.FetchWorkerConfig(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) GetActivityExecutionResult(
-	ctx context.Context,
-	request *workflowservice.GetActivityExecutionResultRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetActivityExecutionResultResponse, error) {
-	var resp *workflowservice.GetActivityExecutionResultResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.GetActivityExecutionResult(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -800,6 +770,21 @@ func (c *retryableClient) PauseActivityExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PauseActivityExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PollActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PollActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollActivityExecutionResponse, error) {
+	var resp *workflowservice.PollActivityExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollActivityExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
