@@ -30,7 +30,23 @@ func TestRecordHeartbeat(t *testing.T) {
 	require.Equal(t, leaseDeadline, ctx.Tasks[0].Attributes.ScheduledTime)
 }
 
-func TestTransitionHeartbeatReceived(t *testing.T) {
+func TestUpdateWorkerLease(t *testing.T) {
+	worker := NewWorker()
+	ctx := &chasm.MockMutableContext{}
+	leaseDeadline := time.Now().Add(30 * time.Second)
+
+	updateWorkerLease(ctx, worker, leaseDeadline)
+
+	// Verify lease deadline was set
+	require.NotNil(t, worker.LeaseExpirationTime)
+	require.Equal(t, leaseDeadline.Unix(), worker.LeaseExpirationTime.AsTime().Unix())
+
+	// Verify lease expiry task was scheduled
+	require.Len(t, ctx.Tasks, 1)
+	require.Equal(t, leaseDeadline, ctx.Tasks[0].Attributes.ScheduledTime)
+}
+
+func TestTransitionActiveHeartbeat(t *testing.T) {
 	worker := NewWorker()
 	ctx := &chasm.MockMutableContext{}
 
@@ -43,7 +59,7 @@ func TestTransitionHeartbeatReceived(t *testing.T) {
 	}
 
 	// Apply the transition
-	err := TransitionHeartbeatReceived.Apply(ctx, worker, event)
+	err := TransitionActiveHeartbeat.Apply(ctx, worker, event)
 	require.NoError(t, err)
 
 	// Verify state was updated
@@ -144,18 +160,71 @@ func TestMultipleHeartbeats(t *testing.T) {
 	require.Len(t, ctx.Tasks, 2)
 }
 
-func TestInvalidTransitions(t *testing.T) {
+func TestWorkerResurrection(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 
-	t.Run("HeartbeatOnInactiveWorker", func(t *testing.T) {
+	t.Run("ResurrectionFromInactive", func(t *testing.T) {
 		worker := NewWorker()
 		worker.Status = workerpb.WORKER_STATUS_INACTIVE
 
 		leaseDeadline := time.Now().Add(30 * time.Second)
 		err := RecordHeartbeat(ctx, worker, leaseDeadline)
 
-		// Should fail because worker is not active
+		// Should succeed - worker resurrection handles same identity reconnection
+		require.NoError(t, err)
+		require.Equal(t, workerpb.WORKER_STATUS_ACTIVE, worker.Status)
+		require.NotNil(t, worker.LeaseExpirationTime)
+		require.Equal(t, leaseDeadline.Unix(), worker.LeaseExpirationTime.AsTime().Unix())
+
+		// Verify new lease expiry task was scheduled
+		require.Len(t, ctx.Tasks, 1)
+		require.Equal(t, leaseDeadline, ctx.Tasks[0].Attributes.ScheduledTime)
+	})
+}
+
+func TestTransitionWorkerResurrection(t *testing.T) {
+	worker := NewWorker()
+	worker.Status = workerpb.WORKER_STATUS_INACTIVE
+	ctx := &chasm.MockMutableContext{}
+
+	heartbeatTime := time.Now()
+	leaseDeadline := heartbeatTime.Add(30 * time.Second)
+
+	event := EventHeartbeatReceived{
+		Time:          heartbeatTime,
+		LeaseDeadline: leaseDeadline,
+	}
+
+	// Apply the resurrection transition directly
+	err := TransitionWorkerResurrection.Apply(ctx, worker, event)
+	require.NoError(t, err)
+
+	// Verify state changed to active
+	require.Equal(t, workerpb.WORKER_STATUS_ACTIVE, worker.Status)
+
+	// Verify lease was updated
+	require.NotNil(t, worker.LeaseExpirationTime)
+	require.Equal(t, leaseDeadline.Unix(), worker.LeaseExpirationTime.AsTime().Unix())
+
+	// Verify task was scheduled
+	require.Len(t, ctx.Tasks, 1)
+	require.Equal(t, leaseDeadline, ctx.Tasks[0].Attributes.ScheduledTime)
+}
+
+func TestInvalidTransitions(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+
+	t.Run("HeartbeatOnCleanedUpWorker", func(t *testing.T) {
+		worker := NewWorker()
+		worker.Status = workerpb.WORKER_STATUS_CLEANED_UP
+
+		leaseDeadline := time.Now().Add(30 * time.Second)
+		err := RecordHeartbeat(ctx, worker, leaseDeadline)
+
+		// Should fail because worker is cleaned up (terminal state)
 		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot record heartbeat for worker in state")
+		require.Contains(t, err.Error(), "WORKER_STATUS_CLEANED_UP")
 	})
 
 	t.Run("LeaseExpiryOnCleanedUpWorker", func(t *testing.T) {

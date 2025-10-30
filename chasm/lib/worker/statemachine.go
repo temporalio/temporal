@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/chasm"
@@ -13,12 +14,30 @@ const (
 	inactiveWorkerCleanupDelay = 60 * time.Minute
 )
 
-// RecordHeartbeat processes a heartbeat by applying the heartbeat received transition.
+// updateWorkerLease is a shared helper that updates the worker's lease and schedules expiry.
+func updateWorkerLease(ctx chasm.MutableContext, w *Worker, leaseDeadline time.Time) {
+	w.LeaseExpirationTime = timestamppb.New(leaseDeadline)
+	scheduleLeaseExpiry(ctx, w, leaseDeadline)
+}
+
+// RecordHeartbeat processes a heartbeat by applying the appropriate transition based on worker state.
 func RecordHeartbeat(ctx chasm.MutableContext, w *Worker, leaseDeadline time.Time) error {
-	return TransitionHeartbeatReceived.Apply(ctx, w, EventHeartbeatReceived{
-		Time:          time.Now(),
-		LeaseDeadline: leaseDeadline,
-	})
+	switch w.Status {
+	case workerpb.WORKER_STATUS_ACTIVE:
+		return TransitionActiveHeartbeat.Apply(ctx, w, EventHeartbeatReceived{
+			Time:          time.Now(),
+			LeaseDeadline: leaseDeadline,
+		})
+	case workerpb.WORKER_STATUS_INACTIVE:
+		// Handle worker resurrection after network partition
+		return TransitionWorkerResurrection.Apply(ctx, w, EventHeartbeatReceived{
+			Time:          time.Now(),
+			LeaseDeadline: leaseDeadline,
+		})
+	default:
+		// CLEANED_UP or other states - not allowed
+		return fmt.Errorf("cannot record heartbeat for worker in state %v", w.Status)
+	}
 }
 
 // scheduleLeaseExpiry schedules a timer task that will fire when the lease expires.
@@ -39,16 +58,12 @@ type EventHeartbeatReceived struct {
 	LeaseDeadline time.Time
 }
 
-// TransitionHeartbeatReceived handles heartbeat reception, extending the lease and scheduling a new timeout.
-var TransitionHeartbeatReceived = chasm.NewTransition(
+// TransitionActiveHeartbeat handles heartbeat reception for active workers, extending the lease.
+var TransitionActiveHeartbeat = chasm.NewTransition(
 	[]workerpb.WorkerStatus{workerpb.WORKER_STATUS_ACTIVE},
 	workerpb.WORKER_STATUS_ACTIVE,
 	func(ctx chasm.MutableContext, w *Worker, event EventHeartbeatReceived) error {
-		// Store client-provided lease deadline.
-		w.LeaseExpirationTime = timestamppb.New(event.LeaseDeadline)
-
-		// Schedule new lease expiry timer.
-		scheduleLeaseExpiry(ctx, w, event.LeaseDeadline)
+		updateWorkerLease(ctx, w, event.LeaseDeadline)
 		return nil
 	},
 )
@@ -83,6 +98,18 @@ var TransitionCleanupCompleted = chasm.NewTransition(
 	[]workerpb.WorkerStatus{workerpb.WORKER_STATUS_INACTIVE},
 	workerpb.WORKER_STATUS_CLEANED_UP,
 	func(ctx chasm.MutableContext, w *Worker, event EventCleanupCompleted) error {
+		return nil
+	},
+)
+
+// TransitionWorkerResurrection handles worker reconnection when in INACTIVE state.
+// This is a special case for when the same worker process reconnects after network partition.
+// Note: Any activities associated with this worker have already been cancelled and rescheduled.
+var TransitionWorkerResurrection = chasm.NewTransition(
+	[]workerpb.WorkerStatus{workerpb.WORKER_STATUS_INACTIVE},
+	workerpb.WORKER_STATUS_ACTIVE,
+	func(ctx chasm.MutableContext, w *Worker, event EventHeartbeatReceived) error {
+		updateWorkerLease(ctx, w, event.LeaseDeadline)
 		return nil
 	},
 )
