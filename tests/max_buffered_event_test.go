@@ -36,7 +36,7 @@ func (s *MaxBufferedEventSuite) SetupSuite() {
 		dynamicconfig.MutableStateSizeLimitWarn.Key():  200,
 		dynamicconfig.MutableStateSizeLimitError.Key(): 410 * 1024, // 410KB
 	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
