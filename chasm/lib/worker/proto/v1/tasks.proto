@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.worker.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
+
+// Task that fires when a worker lease expires.
+message LeaseExpiryTask {
+}
+
+// Task for cleanup of expired workers.
+message WorkerCleanupTask {
+}

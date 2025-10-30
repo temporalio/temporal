@@ -1,6 +1,6 @@
-package workersession
+package worker
 
-// Config holds minimal configuration for WorkerSession.
+// Config holds minimal configuration for Worker.
 type Config struct {
 	// Reserved for future configuration options.
 }
