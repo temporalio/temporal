@@ -1053,18 +1053,9 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 
 		// Preventing Query tasks from being dispatched to a drained version with no workers
-		// TODO (Shivam): Please change this since the internal protos have changed over here.
 		if isQuery {
-			for _, versionData := range deploymentData.GetVersions() {
-				if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
-					if versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
-						versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
-						return nil, nil, nil, 0, serviceerror.NewFailedPreconditionf(ErrBlackholedQuery,
-							versionStr,
-							versionStr,
-						)
-					}
-				}
+			if err := pm.checkQueryBlackholed(deploymentData, deployment); err != nil {
+				return nil, nil, nil, 0, err
 			}
 		}
 
@@ -1328,6 +1319,29 @@ func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildPoll(buildId string) 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildTask(buildId string) {
 	pm.logger.Warn("unknown build ID in task", tag.BuildId(buildId))
 	pm.metricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
+}
+
+func (pm *taskQueuePartitionManagerImpl) checkQueryBlackholed(
+	deploymentData *persistencespb.DeploymentData,
+	deployment *deploymentpb.Deployment,
+) error {
+	// Check old format
+	for _, versionData := range deploymentData.GetVersions() {
+		if versionData.GetVersion() != nil && worker_versioning.DeploymentVersionFromDeployment(deployment).Equal(versionData.GetVersion()) {
+			if versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
+				versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
+				return serviceerror.NewFailedPreconditionf(ErrBlackholedQuery, versionStr, versionStr)
+			}
+		}
+	}
+	// Check new format
+	for _, workerDeploymentData := range deploymentData.GetDeploymentsData() {
+		if workerDeploymentData.GetVersions() != nil && workerDeploymentData.GetVersions()[deployment.GetBuildId()] != nil &&
+			workerDeploymentData.GetVersions()[deployment.GetBuildId()].GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
+			return serviceerror.NewFailedPreconditionf(ErrBlackholedQuery, deployment.GetBuildId(), deployment.GetBuildId())
+		}
+	}
+	return nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.TaskQueueTypeUserData, <-chan struct{}, error) {
