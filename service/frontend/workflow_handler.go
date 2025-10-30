@@ -6015,7 +6015,7 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 		return nil, err
 	}
 	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
-	if fairnessKeyRateLimitDefault != nil && fairnessKeyRateLimitDefault.RateLimit != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+	if fairnessKeyRateLimitDefault.GetRateLimit() != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, serviceerror.NewInvalidArgument("Setting fairness key rate limit on workflow task queues is not allowed.")
 	}
 	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
