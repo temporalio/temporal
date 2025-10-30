@@ -583,6 +583,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
+		ComponentRef:     addRequest.ComponentRef,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -2928,6 +2929,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:    task.event.Data.VersionDirective,
+		ComponentRef:        task.event.Data.GetComponentRef(),
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
