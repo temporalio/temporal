@@ -62,11 +62,9 @@ func NewExecutableWorkflowStateTask(
 			replicationTask,
 		),
 		req: &historyservice.ReplicateWorkflowStateRequest{
-			NamespaceId:              namespaceID,
-			WorkflowState:            task.GetWorkflowState(),
-			RemoteCluster:            sourceClusterName,
-			IsForceReplication:       task.GetIsForceReplication(),
-			IsCloseTransferTaskAcked: task.GetIsCloseTransferTaskAcked(),
+			NamespaceId:   namespaceID,
+			WorkflowState: task.GetWorkflowState(),
+			RemoteCluster: sourceClusterName,
 		},
 	}
 }

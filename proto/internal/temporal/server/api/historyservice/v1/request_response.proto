@@ -606,8 +606,6 @@ message ReplicateWorkflowStateRequest {
     temporal.server.api.persistence.v1.WorkflowMutableState workflow_state = 1;
     string remote_cluster = 2;
     string namespace_id= 3;
-    bool is_force_replication = 4;
-    bool is_close_transfer_task_acked = 5;
 }
 
 message ReplicateWorkflowStateResponse {

@@ -223,21 +223,13 @@ func convertWorkflowStateReplicationTask(
 			if err := common.DiscardUnknownProto(workflowMutableState); err != nil {
 				return nil, err
 			}
-
-			isCloseTransferTaskAcked := isCloseTransferTaskAckedForWorkflow(shardContext, &tasks.CloseExecutionTask{
-				WorkflowKey: mutableState.GetWorkflowKey(),
-				TaskID:      mutableState.GetExecutionInfo().GetCloseTransferTaskId(),
-			})
-
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 				SourceTaskId: taskInfo.TaskID,
 				Priority:     taskInfo.Priority,
 				Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
 					SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-						WorkflowState:            workflowMutableState,
-						IsForceReplication:       taskInfo.IsForceReplication,
-						IsCloseTransferTaskAcked: isCloseTransferTaskAcked,
+						WorkflowState: workflowMutableState,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -686,13 +678,6 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		return nil, err
 	}
 	currentHistoryCopy := versionhistory.CopyVersionHistory(currentHistory)
-
-	// Extract data from mutable state before releasing the lock
-	closeTransferTask := &tasks.CloseExecutionTask{
-		WorkflowKey: mutableState.GetWorkflowKey(),
-		TaskID:      executionInfo.GetCloseTransferTaskId(),
-	}
-
 	var syncStateResult *SyncStateResult
 	if taskInfo.IsFirstTask {
 		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
@@ -725,13 +710,9 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		return nil, err
 	}
 
-	// WARNING: do not access mutable state after this point. If you are using mutable state in this function, be warned that the
-	// releaseFunc that is being passed into this function is what is used to release the lock we are holding on mutable state. If
-	// you use mutable state after the releaseFunc has been called, you will be accessing mutable state without holding the lock.
-	// Deep copy what you need.
-
-	syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(closeTransferTask)
+	syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(mutableState)
 	syncStateResult.VersionedTransitionArtifact.IsForceReplication = taskInfo.IsForceReplication
+	// do not access mutable state after this point
 
 	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, syncStateResult.VersionedTransitionHistory, currentHistoryCopy.Items)
 	if err != nil {
@@ -871,22 +852,22 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 }
 
 func (c *syncVersionedTransitionTaskConverter) isCloseTransferTaskAcked(
-	closeTransferTask *tasks.CloseExecutionTask,
+	mutableState historyi.MutableState,
 ) bool {
-	return isCloseTransferTaskAckedForWorkflow(c.shardContext, closeTransferTask)
-}
+	closeTransferTaskID := mutableState.GetExecutionInfo().CloseTransferTaskId
 
-func isCloseTransferTaskAckedForWorkflow(
-	shardContext historyi.ShardContext,
-	closeTransferTask *tasks.CloseExecutionTask,
-) bool {
-	if closeTransferTask.TaskID == 0 {
+	if closeTransferTaskID == 0 {
 		return false
 	}
 
-	transferQueueState, ok := shardContext.GetQueueState(tasks.CategoryTransfer)
+	transferQueueState, ok := c.shardContext.GetQueueState(tasks.CategoryTransfer)
 	if !ok {
 		return false
+	}
+
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: mutableState.GetWorkflowKey(),
+		TaskID:      closeTransferTaskID,
 	}
 
 	return queues.IsTaskAcked(closeTransferTask, transferQueueState)

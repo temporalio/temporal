@@ -116,10 +116,6 @@ func (a *actionSliceCount) findAndCompactLowSliceCount(
 	targetSliceCount int,
 ) bool {
 	currentSliceCount := a.monitor.GetTotalSliceCount()
-	if currentSliceCount <= targetSliceCount {
-		return true
-	}
-
 	candidates := make([]compactCandidate, 0, currentSliceCount)
 	for readerID, reader := range readers {
 		if !readerPredicate(readerID) {
