@@ -163,6 +163,7 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	if store == nil {
+		// TODO Get entity key from from context once we rebase on main
 		if err := a.PopulateRecordActivityTaskStartedResponse(ctx, activityRef.EntityKey, response); err != nil {
 			return nil, err
 		}

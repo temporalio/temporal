@@ -40,7 +40,7 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 func (l *library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask[*Activity, *activitypb.ActivityDispatchTask](
-			"startActivity",
+			"dispatchActivity",
 			l.ActivityDispatchTaskExecutor,
 			l.ActivityDispatchTaskExecutor,
 		),
