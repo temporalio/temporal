@@ -6008,7 +6008,7 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 
 	// Validate rate limits
 	queueRateLimit := request.GetUpdateQueueRateLimit()
-	if queueRateLimit != nil && queueRateLimit.RateLimit != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+	if queueRateLimit.GetRateLimit() != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, serviceerror.NewInvalidArgument("Setting rate limit on workflow task queues is not allowed.")
 	}
 	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
