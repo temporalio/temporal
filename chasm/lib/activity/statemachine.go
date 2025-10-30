@@ -27,7 +27,18 @@ var TransitionScheduled = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-	func(_ *Activity, _ chasm.MutableContext, _ any) error {
+	func(a *Activity, ctx chasm.MutableContext, _ any) error {
+		attempt, err := a.Attempt.Get(ctx)
+		if err != nil {
+			return err
+		}
+
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{},
+			&activitypb.ActivityDispatchTask{
+				Attempt: attempt.GetCount(),
+			})
 		return nil
 	},
 )
