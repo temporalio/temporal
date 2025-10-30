@@ -24,6 +24,8 @@ type Callback struct {
 
 	// Interface to retrieve Nexus operation completion data
 	CompletionSource chasm.Field[CompletionSource]
+	
+	status *callbackspb.CallbackStatus
 }
 
 func NewCallback(
@@ -47,11 +49,11 @@ func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-func (c *Callback) State() callbackspb.CallbackStatus {
+func (c *Callback) StateMachineState() callbackspb.CallbackStatus {
 	return c.Status
 }
 
-func (c *Callback) SetState(status callbackspb.CallbackStatus) {
+func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
 	c.Status = status
 }
 

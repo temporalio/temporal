@@ -542,6 +542,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		ExpiryTime:       expirationTime,
 		CreateTime:       timestamppb.New(now),
 		VersionDirective: addRequest.VersionDirective,
+		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
 	}
 
@@ -2868,6 +2869,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:    task.event.Data.VersionDirective,
+		Stamp:               task.event.Data.GetStamp(),
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)

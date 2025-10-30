@@ -6,6 +6,11 @@ import (
 	"context"
 )
 
+// NoValue is a sentinel type representing no value.
+// Useful for accessing components using the engine methods (e.g., [GetComponent]) with a function that does not need to
+// return any information.
+type NoValue = *struct{}
+
 type Engine interface {
 	NewEntity(
 		context.Context,
