@@ -191,14 +191,6 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, serviceerrors.NewActivityStartDuringTransition()
 	}
 
-	// fmt.Println("--------------------------------")
-	// fmt.Println("pollerDeployment", pollerDeployment)
-	// fmt.Println("wfDeployment", wfDeployment)
-	// fmt.Println("wfBehavior", wfBehavior)
-	// fmt.Println("request.TaskDispatchRevisionNumber", request.TaskDispatchRevisionNumber)
-	// fmt.Println("oldRevisionNumber", mutableState.GetRevisionNumber())
-	// fmt.Println("--------------------------------")
-
 	if !pollerDeployment.Equal(wfDeployment) &&
 		// Independent activities of pinned workflows are redirected. They should not start a transition on wf.
 		wfBehavior != enumspb.VERSIONING_BEHAVIOR_PINNED {
@@ -207,7 +199,7 @@ func recordActivityTaskStarted(
 		// to the poller deployment. Otherwise, it means the activity is independently versioned, we
 		// allow it to start without affecting the workflow.
 
-		wftDepVer, wftDepRevNum, err := getDeploymentVersionAndRevisionNumberForWorkflowId(ctx,
+		wftDepVer, wftDepRevNum, err := getDeploymentVersionAndRevisionNumberForWorkflowID(ctx,
 			request.NamespaceId,
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -225,11 +217,10 @@ func recordActivityTaskStarted(
 		//    belongs to the same deployment as the workflow is done in matching itself.
 
 		// Note: We use > instead of >= because a non-backlogged activity task could have the same revision number as the MS and that should not commence a transition.
-		// The following check MUST be done if the pollerDeployment and wftDepVer are from the same deployment series AND if the dynamic config is enabled.
+		// Note: Revision number mechanics are only involved if the dynamic config is enabled.
 		useRevisionNumber := shardContext.GetConfig().UseRevisionNumberForWorkerVersioning(namespaceName)
 		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) ||
 			(useRevisionNumber && pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepRevNum) {
-			oldRevisionNumber := mutableState.GetRevisionNumber()
 			if err := mutableState.StartDeploymentTransition(pollerDeployment, request.TaskDispatchRevisionNumber); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 					// This must be a task from a time that the workflow was unpinned, but it's
@@ -240,13 +231,7 @@ func recordActivityTaskStarted(
 				}
 				return nil, rejectCodeUndefined, err
 			}
-			fmt.Println("pollerDeployment", pollerDeployment)
-			fmt.Println("wftDepVer", wftDepVer)
-			fmt.Println("request.TaskDispatchRevisionNumber", request.TaskDispatchRevisionNumber)
-			fmt.Println("oldRevisionNumber", oldRevisionNumber)
-			fmt.Println("--------------------------------")
-			fmt.Println("Activity started a transition and now will be dropped")
-			fmt.Println("NEW MS revision number is", mutableState.GetRevisionNumber())
+
 			// This activity started a transition, make sure the MS changes are written but
 			// reject the activity task.
 			return nil, rejectCodeStartedTransition, nil
@@ -296,7 +281,7 @@ func recordActivityTaskStarted(
 
 // TODO (Shahab): move this method to a better place
 // TODO: cache this result (especially if the answer is true)
-func getDeploymentVersionAndRevisionNumberForWorkflowId(
+func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	ctx context.Context,
 	namespaceID string,
 	taskQueueName string,

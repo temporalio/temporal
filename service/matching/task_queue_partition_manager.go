@@ -680,6 +680,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 				info.UpdateTime = ramping.GetRoutingUpdateTime()
 			}
 		} else if rampingVersionRoutingConfig != nil {
+			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 			info.RampingVersion = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(rampingVersionRoutingConfig.GetRampingDeploymentVersion())
 			info.RampingDeploymentVersion = rampingVersionRoutingConfig.GetRampingDeploymentVersion()
 			info.RampingVersionPercentage = rampingVersionRoutingConfig.GetRampingVersionPercentage()
@@ -1025,6 +1026,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	workflowId string,
 	isQuery bool,
 ) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, rcRevisionNumber int64, err error) {
+	// Note: Revision number mechanics are only involved if the dynamic config, UseRevisionNumberForWorkerVersioning, is enabled.
 	// Represents the revision number used by the task and is max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
 	var taskDispatchRevisionNumber, targetDeploymentRevisionNumber int64
 
@@ -1104,14 +1106,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 
 	var targetDeploymentQueue physicalTaskQueueManager
 
-	// fmt.Println("targetDeploymentVersion", targetDeploymentVersion)
-	// fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-	// fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-	// fmt.Println("isNewDeploymentFormat", isNewDeploymentFormat)
-
-	// When using the new deployment format, we use revision number mechanics.
 	if directive.GetAssignedBuildId() == "" {
-
 		if targetDeployment == nil && taskDirectiveRevisionNumber > targetDeploymentRevisionNumber && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
 			// When workflow moves from unversioned to versioned, but task-queue partition did not get the changes.
 			targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
@@ -1138,7 +1133,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 
 			var err error
 
-			// If the  activity task queue is not present in the current version of the deployment, it is considered an independent unpinned activity.
+			// If the  activity task queue is not present in the current version of the deployment, it is considered an independent unpinned activity and
+			// should be dispatched to the currentDeployment of their TQ
 			var IndependentUnpinnedActivity bool
 			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 
@@ -1152,17 +1148,11 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 					IndependentUnpinnedActivity = true
 				}
 			}
-			// TODO (Shivam): The following should not be done for independent activities since they are eventually consistent.
 
-			// 1. Independent unpinned activities should be dispatched to the currentDeployment of their TQ. Eventually consistent.
-			// 2. Else wise, revision number mechanics only works if the deployment are the same. So check if the two deployments are equal.
-			// 		This can happen if the user decides to move the task-queue the wf is running on into a different deployment.
-			//		 which can have a different routingConfigRevisionNumber. In this case, we choose the currentDeployment.
 			if IndependentUnpinnedActivity {
 				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
 				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
 			} else {
-				// This is a workflow task. Choose the right targetDeploymentQueue based with/without revision number mechanics.
 				targetDeploymentQueue, taskDispatchRevisionNumber, err = pm.chooseTargetQueueByFlag(
 					ctx, deployment, targetDeployment, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber,
 				)
@@ -1294,10 +1284,7 @@ func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 	taskDirectiveRevisionNumber int64,
 ) (physicalTaskQueueManager, int64, error) {
 	if pm.engine != nil && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
-		if targetDeployment.GetSeriesName() != deployment.GetSeriesName() {
-			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
-			return q, targetDeploymentRevisionNumber, err
-		} else if targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
+		if targetDeployment.GetSeriesName() != deployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
 			return q, targetDeploymentRevisionNumber, err
 		}
@@ -1350,6 +1337,7 @@ func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildTask(buildId string) 
 	pm.metricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
 }
 
+//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 func (pm *taskQueuePartitionManagerImpl) checkQueryBlackholed(
 	deploymentData *persistencespb.DeploymentData,
 	deployment *deploymentpb.Deployment,

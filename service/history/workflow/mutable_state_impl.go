@@ -4925,11 +4925,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		).Record(1)
 	}
 
-	// // Increment the scheduled routing config counter only if the effective deployment changes.
-	// if !proto.Equal(ms.GetEffectiveDeployment(), prevEffectiveDeployment) {
-	// 	ms.IncrementRevisionNumber()
-	// }
-
 	return event, nil
 }
 
@@ -8398,11 +8393,6 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		),
 	).Record(1)
 
-	// Since a transition has completed, we increment the revision number.
-	// fmt.Println("INCREMENTING REVISION NUMBER LETS GOOOOOOOOOOO")
-	// fmt.Println("preTransitionEffectiveDeployment", preTransitionEffectiveDeployment)
-	// fmt.Println("deployment", deployment)
-	// TODO (Shivam): Pass along the rev number and equate it.
 	ms.SetRevisionNumber(revisionNumber)
 
 	return nil

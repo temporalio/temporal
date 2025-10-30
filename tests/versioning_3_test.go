@@ -3610,27 +3610,27 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 
 	// Make numWorkflows different workflow ID's so that we can verify that all workflows are running on v0.
 	numWorkflows := 10
-	wfVars_v0 := make([]*testvars.TestVars, numWorkflows)
-	wfVars_v1 := make([]*testvars.TestVars, numWorkflows)
+	wfVarsV0 := make([]*testvars.TestVars, numWorkflows)
+	wfVarsV1 := make([]*testvars.TestVars, numWorkflows)
 
 	for i := 0; i < numWorkflows; i++ {
-		wfVars_v0[i] = tv0.WithWorkflowIDNumber(i)
-		wfVars_v1[i] = tv1.WithWorkflowIDNumber(i)
+		wfVarsV0[i] = tv0.WithWorkflowIDNumber(i)
+		wfVarsV1[i] = tv1.WithWorkflowIDNumber(i)
 	}
 
 	// Start all different workflows on version v0.
 	for i := 0; i < numWorkflows; i++ {
-		s.startWorkflow(wfVars_v0[i], nil)
+		s.startWorkflow(wfVarsV0[i], nil)
 	}
 
 	// Poll for workflows on v0.
 	channels := make([]chan struct{}, numWorkflows)
 	for i := 0; i < numWorkflows; i++ {
 		channels[i] = make(chan struct{})
-		s.pollWftAndHandle(wfVars_v0[i], false, channels[i],
+		s.pollWftAndHandle(wfVarsV0[i], false, channels[i],
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.NotNil(task)
-				resp := respondEmptyWft(wfVars_v0[i], false, vbUnpinned)
+				resp := respondEmptyWft(wfVarsV0[i], false, vbUnpinned)
 				resp.ForceCreateNewWorkflowTask = true
 				return resp, nil
 			})
@@ -3643,14 +3643,14 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	// Verify that all workflows are running on v0.
 	for i := 0; i < numWorkflows; i++ {
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			s.verifyWorkflowVersioning(wfVars_v0[i], vbUnpinned, tv0.Deployment(), nil, nil)
+			s.verifyWorkflowVersioning(wfVarsV0[i], vbUnpinned, tv0.Deployment(), nil, nil)
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 
 	// Verify that all workflows are running on v0 by using v1 vars
 	for i := 0; i < numWorkflows; i++ {
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			s.verifyWorkflowVersioning(wfVars_v1[i], vbUnpinned, tv0.Deployment(), nil, nil)
+			s.verifyWorkflowVersioning(wfVarsV1[i], vbUnpinned, tv0.Deployment(), nil, nil)
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 
@@ -3670,10 +3670,10 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	channels = make([]chan struct{}, numWorkflows)
 	for i := 0; i < numWorkflows; i++ {
 		channels[i] = make(chan struct{})
-		s.pollWftAndHandle(wfVars_v1[i], false, channels[i],
+		s.pollWftAndHandle(wfVarsV1[i], false, channels[i],
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.NotNil(task)
-				resp := respondEmptyWft(wfVars_v1[i], false, vbUnpinned)
+				resp := respondEmptyWft(wfVarsV1[i], false, vbUnpinned)
 				resp.ForceCreateNewWorkflowTask = true
 				return resp, nil
 			})
@@ -3685,12 +3685,12 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	// Verify that all workflows are running on v1.
 	for i := 0; i < numWorkflows; i++ {
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			s.verifyWorkflowVersioning(wfVars_v1[i], vbUnpinned, tv1.Deployment(), nil, nil)
+			s.verifyWorkflowVersioning(wfVarsV1[i], vbUnpinned, tv1.Deployment(), nil, nil)
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 
 	// Rollback the userData to v0. Using the lower API here.
-	s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
+	_, err := s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
 		NamespaceId: s.NamespaceID().String(),
 		TaskQueue:   tv0.TaskQueue().GetName(),
 		UserData: &persistencespb.VersionedTaskQueueUserData{
@@ -3737,21 +3737,22 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 			Version: 0,
 		},
 	})
-
+	s.NoError(err)
 	// Even though the userData is rolled back to v0, the workflows should only continue to run on v1.
 	// Start idle pollers on v0 and ensure they never receive a task.
 	for i := 0; i < numWorkflows; i++ {
-		go s.idlePollWorkflow(wfVars_v0[i], true, ver3MinPollTime, "workflows should not go to the old deployment")
+		//nolint:testifylint
+		go s.idlePollWorkflow(wfVarsV0[i], true, ver3MinPollTime, "workflows should not go to the old deployment")
 	}
 
 	// Complete all workflows on v1.
 	channels = make([]chan struct{}, numWorkflows)
 	for i := 0; i < numWorkflows; i++ {
 		channels[i] = make(chan struct{})
-		s.pollWftAndHandle(wfVars_v1[i], false, channels[i],
+		s.pollWftAndHandle(wfVarsV1[i], false, channels[i],
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.NotNil(task)
-				return respondCompleteWorkflow(wfVars_v1[i], vbUnpinned), nil
+				return respondCompleteWorkflow(wfVarsV1[i], vbUnpinned), nil
 			})
 	}
 	// Wait for channels to be closed
@@ -3762,7 +3763,7 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	// Verify that all workflows are completed on v1.
 	for i := 0; i < numWorkflows; i++ {
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			s.verifyWorkflowVersioning(wfVars_v1[i], vbUnpinned, tv1.Deployment(), nil, nil)
+			s.verifyWorkflowVersioning(wfVarsV1[i], vbUnpinned, tv1.Deployment(), nil, nil)
 		}, 60*time.Second, 100*time.Millisecond)
 	}
 }
@@ -4011,6 +4012,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 		})
 
 	// Start an idle activity poller on v0. This poller should not receive any activity tasks
+	//nolint:testifylint
 	go s.idlePollActivity(tv0, true, ver3MinPollTime, "activity should not go to the old deployment")
 
 	// Start a poller on v1
@@ -4101,6 +4103,7 @@ func (s *Versioning3Suite) TestActivityTQLags_IndependentActivityDispatchesToIts
 		})
 
 	// Start an idle activity poller on v1. This poller should not receive any activity tasks
+	//nolint:testifylint
 	go s.idlePollActivity(tv1, true, ver3MinPollTime, "activity should not go to the old deployment")
 
 	// Start an activity poller on v0.
