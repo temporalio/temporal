@@ -325,7 +325,7 @@ func getDeploymentVersionAndRevisionNumberForWorkflowId(
 	}
 
 	current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	targetDeploymentVersion, targetDeploymentRevisionNumber, _ := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
 

@@ -4023,10 +4023,9 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
+// Fallback of revision number mechanics: Independent activities are eventually consistent.
 func (s *Versioning3Suite) TestActivityTQLags_IndependentActivityDispatchesToItsCurrentDeployment() {
-	if !s.useNewDeploymentData {
-		s.T().Skip("This test is only supported on new deployment data")
-	}
+	s.T().Skip("This test is skipped because revision number mechanics does not prevent bouncing for independent activities.")
 	/*
 		The aim of this test is to show that an independent unpinned activity is dispatched to its current deployment
 		and this works even with revision number mechanics.

@@ -535,28 +535,22 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 	currentVersionRoutingConfig *deploymentpb.RoutingConfig,
 	rampingVersionRoutingConfig *deploymentpb.RoutingConfig,
 	workflowId string,
-) (*deploymentspb.WorkerDeploymentVersion, int64, bool) {
+) (*deploymentspb.WorkerDeploymentVersion, int64) {
 	// Find most recent currentDeploymentVersion by comparing old vs new format timestamps
 	var finalCurrentDep *deploymentspb.WorkerDeploymentVersion
 	var finalCurrentRev int64
-	var finalCurrentIsNew, finalRampingIsNew bool
 
 	oldCurrentTime := current.GetRoutingUpdateTime().AsTime()
 	newCurrentTime := currentVersionRoutingConfig.GetCurrentVersionChangedTime().AsTime()
 
-	// TODO (Shivam): Discuss this with the team. Here, ties are broken in favor of the new format. What do we do?
-	// Example: If activity TQ does not have a version at all, and the workflow TQ did have a version, we would use the new format and use revision number mechanics.
-	// This breaks if the workflow TQ did not use revision number mechanics but the activity TQ does.
 	if newCurrentTime.After(oldCurrentTime) || newCurrentTime.Equal(oldCurrentTime) {
 		// New format current is more recent
 		finalCurrentDep = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(currentVersionRoutingConfig.GetCurrentDeploymentVersion()))
 		finalCurrentRev = currentVersionRoutingConfig.GetRevisionNumber()
-		finalCurrentIsNew = true
 	} else {
 		// Old format current is more recent
 		finalCurrentDep = current.GetVersion()
 		finalCurrentRev = 0
-		finalCurrentIsNew = false
 	}
 
 	// Find most recent rampingDeploymentVersion by comparing old vs new format timestamps
@@ -579,28 +573,26 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 		finalRampingDep = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(rampingVersionRoutingConfig.GetRampingDeploymentVersion()))
 		finalRampingRev = rampingVersionRoutingConfig.GetRevisionNumber()
 		finalRampPercentage = rampingVersionRoutingConfig.GetRampingVersionPercentage()
-		finalRampingIsNew = true
 	} else {
 		// Old format ramping is more recent
 		finalRampingDep = ramping.GetVersion()
 		finalRampingRev = 0
 		finalRampPercentage = ramping.GetRampPercentage()
-		finalRampingIsNew = false
 	}
 
 	// Apply ramp logic using final values
 	if finalRampPercentage <= 0 {
 		// No ramp
-		return finalCurrentDep, finalCurrentRev, finalCurrentIsNew
+		return finalCurrentDep, finalCurrentRev
 	} else if finalRampPercentage == 100 {
-		return finalRampingDep, finalRampingRev, finalRampingIsNew
+		return finalRampingDep, finalRampingRev
 	}
 	// Partial ramp. Decide based on workflow ID
 	wfRampThreshold := calcRampThreshold(workflowId)
 	if wfRampThreshold <= float64(finalRampPercentage) {
-		return finalRampingDep, finalRampingRev, finalRampingIsNew
+		return finalRampingDep, finalRampingRev
 	}
-	return finalCurrentDep, finalCurrentRev, finalCurrentIsNew
+	return finalCurrentDep, finalCurrentRev
 }
 
 // calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the

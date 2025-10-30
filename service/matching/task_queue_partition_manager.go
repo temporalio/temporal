@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -1109,21 +1108,32 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
-	targetDeploymentVersion, targetDeploymentRevisionNumber, isNewDeploymentFormat := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
 	var targetDeploymentQueue physicalTaskQueueManager
 
-	fmt.Println("targetDeploymentVersion", targetDeploymentVersion)
-	fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-	fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-	fmt.Println("isNewDeploymentFormat", isNewDeploymentFormat)
+	// fmt.Println("targetDeploymentVersion", targetDeploymentVersion)
+	// fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
+	// fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
+	// fmt.Println("isNewDeploymentFormat", isNewDeploymentFormat)
 
-	// If the targetDeployment is using the old deployment format, we handle is without using revision number mechanics.
-	if !isNewDeploymentFormat {
-		if targetDeployment != nil &&
-			// Make sure the wf is not v1-2 versioned
-			directive.GetAssignedBuildId() == "" {
+	// When using the new deployment format, we use revision number mechanics.
+	if directive.GetAssignedBuildId() == "" {
+
+		if targetDeployment == nil && taskDirectiveRevisionNumber > targetDeploymentRevisionNumber {
+			// When workflow moves from unversioned to versioned, but task-queue partition did not get the changes.
+			targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
+			taskDispatchRevisionNumber = taskDirectiveRevisionNumber
+			if forwardInfo == nil {
+				// Task is not forwarded, so it can be spooled if sync match fails.
+				// Unpinned tasks are spooled in default queue
+				return pm.defaultQueue, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
+			} else {
+				// Forwarded from child partition - only do sync match.
+				return nil, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
+			}
+		} else if targetDeployment != nil {
 			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 				if !deployment.Equal(targetDeployment) {
 					// Current deployment has changed, so the workflow should move to a normal queue to
@@ -1135,82 +1145,44 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				return pm.defaultQueue, pm.defaultQueue, userDataChanged, 0, nil
 			}
 
-			targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+			var err error
+
+			// If the  activity task queue is not present in the current version of the deployment, it is considered an independent unpinned activity.
+			var IndependentUnpinnedActivity bool
+			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
+				workerDeploymentData = deploymentsData[targetDeployment.GetSeriesName()]
+				if workerDeploymentData != nil && workerDeploymentData.GetVersions() != nil && workerDeploymentData.GetVersions()[targetDeployment.GetBuildId()] == nil {
+					IndependentUnpinnedActivity = true
+				}
+			}
+			// TODO (Shivam): The following should not be done for independent activities since they are eventually consistent.
+
+			// 1. Independent unpinned activities should be dispatched to the currentDeployment of their TQ. Eventually consistent.
+			// 2. Else wise, revision number mechanics only works if the deployment are the same. So check if the two deployments are equal.
+			// 		This can happen if the user decides to move the task-queue the wf is running on into a different deployment.
+			//		 which can have a different routingConfigRevisionNumber. In this case, we choose the currentDeployment.
+			if IndependentUnpinnedActivity {
+				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
+			} else if targetDeployment.GetSeriesName() != deployment.GetSeriesName() {
+				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
+			} else if targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
+				// Choose the currentDeployment in case of tie for the case of unversioned.
+				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
+			} else {
+				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
+				taskDispatchRevisionNumber = taskDirectiveRevisionNumber
+			}
+
 			if forwardInfo == nil {
 				// Task is not forwarded, so it can be spooled if sync match fails.
 				// Unpinned tasks are spooled in default queue
-				return pm.defaultQueue, targetDeploymentQueue, userDataChanged, 0, err
+				return pm.defaultQueue, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
 			} else {
 				// Forwarded from child partition - only do sync match.
-				return nil, targetDeploymentQueue, userDataChanged, 0, err
-			}
-		}
-	} else {
-		// When using the new deployment format, we use revision number mechanics.
-		if directive.GetAssignedBuildId() == "" {
-
-			if targetDeployment == nil && taskDirectiveRevisionNumber > targetDeploymentRevisionNumber {
-				// When workflow moves from unversioned to versioned, but task-queue partition did not get the changes.
-				targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
-				taskDispatchRevisionNumber = taskDirectiveRevisionNumber
-				if forwardInfo == nil {
-					// Task is not forwarded, so it can be spooled if sync match fails.
-					// Unpinned tasks are spooled in default queue
-					return pm.defaultQueue, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
-				} else {
-					// Forwarded from child partition - only do sync match.
-					return nil, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
-				}
-			} else if targetDeployment != nil {
-				if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-					if !deployment.Equal(targetDeployment) {
-						// Current deployment has changed, so the workflow should move to a normal queue to
-						// get redirected to the new deployment.
-						return nil, nil, nil, 0, serviceerrors.NewStickyWorkerUnavailable()
-					}
-
-					// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-					return pm.defaultQueue, pm.defaultQueue, userDataChanged, 0, nil
-				}
-
-				var err error
-
-				// If the  activity task queue is not present in the current version of the deployment, it is considered an independent unpinned activity.
-				var IndependentUnpinnedActivity bool
-				if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-					if workerDeploymentData != nil && workerDeploymentData.GetVersions() != nil && workerDeploymentData.GetVersions()[targetDeployment.GetBuildId()] == nil {
-						IndependentUnpinnedActivity = true
-					}
-				}
-				// TODO (Shivam): The following should not be done for independent activities since they are eventually consistent.
-
-				// 1. Independent unpinned activities should be dispatched to the currentDeployment of their TQ. Eventually consistent.
-				// 2. Else wise, revision number mechanics only works if the deployment are the same. So check if the two deployments are equal.
-				// 		This can happen if the user decides to move the task-queue the wf is running on into a different deployment.
-				//		 which can have a different routingConfigRevisionNumber. In this case, we choose the currentDeployment.
-				if IndependentUnpinnedActivity {
-					targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
-					taskDispatchRevisionNumber = targetDeploymentRevisionNumber
-				} else if targetDeployment.GetSeriesName() != deployment.GetSeriesName() {
-					targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
-					taskDispatchRevisionNumber = targetDeploymentRevisionNumber
-				} else if targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
-					// Choose the currentDeployment in case of tie for the case of unversioned.
-					targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
-					taskDispatchRevisionNumber = targetDeploymentRevisionNumber
-				} else {
-					targetDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
-					taskDispatchRevisionNumber = taskDirectiveRevisionNumber
-				}
-
-				if forwardInfo == nil {
-					// Task is not forwarded, so it can be spooled if sync match fails.
-					// Unpinned tasks are spooled in default queue
-					return pm.defaultQueue, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
-				} else {
-					// Forwarded from child partition - only do sync match.
-					return nil, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
-				}
+				return nil, targetDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
 			}
 		}
 	}
