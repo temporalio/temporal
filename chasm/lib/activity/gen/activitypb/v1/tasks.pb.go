@@ -24,7 +24,8 @@ const (
 
 type ActivityDispatchTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution.
+	// The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
+	// need to guard against any concurrent operations where the originally intended task may be outdated.
 	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
