@@ -88,7 +88,6 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 		return false, err
 	}
 
-	// TODO make sure we handle resets when we support them, as they will reset the attempt count
 	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED || task.Attempt != attempt.Count {
 		return false, nil
 	}
@@ -122,7 +121,6 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
 		return false, err
 	}
 
-	// TODO make sure we handle resets when we support them, as they will reset the attempt count
 	if !TransitionTimedOut.Possible(activity) || task.Attempt != attempt.Count {
 		return false, nil
 	}
@@ -156,7 +154,6 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 		return false, err
 	}
 
-	// TODO make sure we handle resets when we support them, as they will reset the attempt count
 	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED || task.Attempt != attempt.Count {
 		fmt.Println("Validating StartToClose timeout task for activity FALSE:", activity, "attempt:", task.Attempt, "time: ", ctx.Now(activity))
 
