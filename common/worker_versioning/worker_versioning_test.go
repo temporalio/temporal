@@ -144,7 +144,7 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current, tt.ramping, nil, nil, "my-wf-id"); !got.Equal(tt.want) {
+			if got, _, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current, tt.ramping, nil, nil, "my-wf-id"); !got.Equal(tt.want) {
 				t.Errorf("FindTargetDeploymentVersionAndRevisionNumberForWorkflowID() = %v, want %v", got, tt.want)
 			}
 		})
@@ -177,7 +177,7 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			histogram := make(map[string]int)
 			runs := 1000000
 			for i := 0; i < runs; i++ {
-				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, nil, nil, "wf-"+strconv.Itoa(i))
+				v, _, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, nil, nil, "wf-"+strconv.Itoa(i))
 				histogram[v.GetBuildId()]++
 			}
 
@@ -385,7 +385,7 @@ func TestFindDeploymentVersionForWorkflowID_MixedOldAndNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotDep, gotRev := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
+			gotDep, gotRev, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 				tt.oldCurrent,
 				tt.oldRamping,
 				tt.newCurrentConfig,

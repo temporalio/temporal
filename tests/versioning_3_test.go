@@ -301,6 +301,7 @@ func (s *Versioning3Suite) TestPinnedQuery_RollbackDrainedVersion() {
 	)
 }
 
+// TODO (Shivam): This may fail right now with new deployment stuff.
 func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, rollback bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

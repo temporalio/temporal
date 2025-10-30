@@ -4954,10 +4954,10 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		).Record(1)
 	}
 
-	// Increment the scheduled routing config counter only if the effective deployment changes.
-	if !proto.Equal(ms.GetEffectiveDeployment(), prevEffectiveDeployment) {
-		ms.IncrementRevisionNumber()
-	}
+	// // Increment the scheduled routing config counter only if the effective deployment changes.
+	// if !proto.Equal(ms.GetEffectiveDeployment(), prevEffectiveDeployment) {
+	// 	ms.IncrementRevisionNumber()
+	// }
 
 	return event, nil
 }
@@ -8487,7 +8487,7 @@ func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningB
 // If there is a pending workflow task that is not started yet, it'll be rescheduled after
 // transition start.
 // This method must be called with a version different from the effective version.
-func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) error {
+func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment, revisionNumber int64) error {
 	wfBehavior := ms.GetEffectiveVersioningBehavior()
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		// WF is pinned so we reject the transition.
@@ -8556,7 +8556,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// fmt.Println("preTransitionEffectiveDeployment", preTransitionEffectiveDeployment)
 	// fmt.Println("deployment", deployment)
 	// TODO (Shivam): Pass along the rev number and equate it.
-	ms.IncrementRevisionNumber()
+	ms.SetRevisionNumber(revisionNumber)
 
 	return nil
 }
@@ -8565,8 +8565,8 @@ func (ms *MutableStateImpl) GetRevisionNumber() int64 {
 	return ms.GetExecutionInfo().GetVersioningInfo().GetRevisionNumber()
 }
 
-func (ms *MutableStateImpl) IncrementRevisionNumber() {
-	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber++
+func (ms *MutableStateImpl) SetRevisionNumber(revisionNumber int64) {
+	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

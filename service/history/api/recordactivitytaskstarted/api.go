@@ -235,7 +235,7 @@ func recordActivityTaskStarted(
 		// The following check MUST be done if the pollerDeployment and wftDepVer are from the same deployment series.
 		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) || (pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepRevNum) {
 			oldRevisionNumber := mutableState.GetRevisionNumber()
-			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+			if err := mutableState.StartDeploymentTransition(pollerDeployment, request.TaskDispatchRevisionNumber); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 					// This must be a task from a time that the workflow was unpinned, but it's
 					// now pinned so can't transition. Matching can drop the task safely.
@@ -325,7 +325,7 @@ func getDeploymentVersionAndRevisionNumberForWorkflowId(
 	}
 
 	current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
+	targetDeploymentVersion, targetDeploymentRevisionNumber, _ := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
 

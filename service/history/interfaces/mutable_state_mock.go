@@ -2827,18 +2827,6 @@ func (mr *MockMutableStateMockRecorder) HasStartedWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStartedWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasStartedWorkflowTask))
 }
 
-// IncrementRevisionNumber mocks base method.
-func (m *MockMutableState) IncrementRevisionNumber() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "IncrementRevisionNumber")
-}
-
-// IncrementRevisionNumber indicates an expected call of IncrementRevisionNumber.
-func (mr *MockMutableStateMockRecorder) IncrementRevisionNumber() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).IncrementRevisionNumber))
-}
-
 // InitTransitionHistory mocks base method.
 func (m *MockMutableState) InitTransitionHistory() {
 	m.ctrl.T.Helper()
@@ -3250,6 +3238,18 @@ func (mr *MockMutableStateMockRecorder) SetHistoryTree(executionTimeout, runTime
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), executionTimeout, runTimeout, treeID)
 }
 
+// SetRevisionNumber mocks base method.
+func (m *MockMutableState) SetRevisionNumber(revisionNumber int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRevisionNumber", revisionNumber)
+}
+
+// SetRevisionNumber indicates an expected call of SetRevisionNumber.
+func (mr *MockMutableStateMockRecorder) SetRevisionNumber(revisionNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).SetRevisionNumber), revisionNumber)
+}
+
 // SetSpeculativeWorkflowTaskTimeoutTask mocks base method.
 func (m *MockMutableState) SetSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error {
 	m.ctrl.T.Helper()
@@ -3339,17 +3339,17 @@ func (mr *MockMutableStateMockRecorder) ShouldResetActivityTimerTaskMask(current
 }
 
 // StartDeploymentTransition mocks base method.
-func (m *MockMutableState) StartDeploymentTransition(arg0 *deployment.Deployment) error {
+func (m *MockMutableState) StartDeploymentTransition(arg0 *deployment.Deployment, revisionNumber int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartDeploymentTransition", arg0)
+	ret := m.ctrl.Call(m, "StartDeploymentTransition", arg0, revisionNumber)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StartDeploymentTransition indicates an expected call of StartDeploymentTransition.
-func (mr *MockMutableStateMockRecorder) StartDeploymentTransition(arg0 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) StartDeploymentTransition(arg0, revisionNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).StartDeploymentTransition), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).StartDeploymentTransition), arg0, revisionNumber)
 }
 
 // StartTransaction mocks base method.

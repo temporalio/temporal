@@ -357,9 +357,9 @@ type (
 		// activities.
 		// If there is a pending workflow task that is not started yet, it'll be rescheduled after
 		// transition start.
-		StartDeploymentTransition(deployment *deploymentpb.Deployment) error
+		StartDeploymentTransition(deployment *deploymentpb.Deployment, revisionNumber int64) error
 		GetRevisionNumber() int64
-		IncrementRevisionNumber()
+		SetRevisionNumber(revisionNumber int64)
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent
