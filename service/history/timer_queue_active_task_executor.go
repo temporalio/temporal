@@ -911,7 +911,7 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 		metrics.HeartbeatTimeoutCounter.With(metricsScope).Record(1)
 	}
 
-	softassert.Sometimes(t.logger).Debug("activity task timed out",
+	softassert.Sometimes(t.logger).Debug("timer queue task timed out",
 		tag.NewStringTag("timer-type", timerType.String()),
 		tag.Operation(operation),
 		tag.Attempt(taskAttempt),

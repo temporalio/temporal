@@ -113,10 +113,6 @@ func (w *taskWriter) appendTask(
 		}
 	default: // channel is full, throttle
 		metrics.TaskWriteThrottlePerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
-		softassert.Sometimes(w.logger).Warn("task writer throttled",
-			tag.WorkflowTaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
-			tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()),
-		)
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,

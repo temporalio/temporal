@@ -486,7 +486,7 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	if errors.As(err, &terr) {
 		isTerminal := terr.IsTerminalTaskError()
 		if isTerminal {
-			softassert.Sometimes(e.logger).Error("terminal task error detected",
+			softassert.Sometimes(e.logger).Debug("terminal task error detected",
 				tag.TaskType(e.GetType()),
 				tag.Error(err),
 			)
@@ -501,14 +501,12 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
 		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1)
+		softassert.Sometimes(e.logger).Debug("internal non-retryable task processing error",
+			tag.TaskType(e.GetType()),
+			tag.Error(err),
+		)
 		// Only DQL/drop when configured to
 		shouldDLQ := e.dlqInternalErrors()
-		if shouldDLQ {
-			softassert.Sometimes(e.logger).Error("internal error with DLQ enabled",
-				tag.TaskType(e.GetType()),
-				tag.Error(err),
-			)
-		}
 		return shouldDLQ
 	}
 
@@ -771,10 +769,6 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is useful for errors like workflow busy, which doesn't have to wait for
 	// the longer rescheduling backoff.
 	if attempt > resubmitMaxAttempts {
-		softassert.Sometimes(e.logger).Debug("task acked multiple times",
-			tag.TaskType(e.GetType()),
-			tag.NewInt32("ack-attempt", int32(attempt)),
-		)
 		return false
 	}
 
