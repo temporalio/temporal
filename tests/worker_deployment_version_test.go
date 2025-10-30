@@ -1145,8 +1145,9 @@ func (s *DeploymentVersionSuite) checkWorkflowUpdateOptionsEventIdentity(
 		events := resp.GetHistory().GetEvents()
 		for resp.NextPageToken != nil { // probably there won't ever be more than one page of events in these tests
 			resp, err = s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace: s.Namespace().String(),
-				Execution: wf,
+				Namespace:     s.Namespace().String(),
+				Execution:     wf,
+				NextPageToken: resp.NextPageToken,
 			})
 			a.NoError(err)
 			a.NotNil(resp)
