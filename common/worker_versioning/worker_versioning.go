@@ -659,9 +659,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 				routingConfigLatestCurrentVersion = routingConfig
 			}
 
-			if t := routingConfig.GetRampingVersionChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionChangedTime().AsTime()) {
-				routingConfigLatestRampingVersion = routingConfig
-			} else if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
+			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
 				routingConfigLatestRampingVersion = routingConfig
 			}
 		}
@@ -796,6 +794,10 @@ func WorkerDeploymentVersionToStringV32(v *deploymentspb.WorkerDeploymentVersion
 		return ""
 	}
 	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+}
+
+func BuildIDToStringV32(deploymentName, buildID string) string {
+	return deploymentName + WorkerDeploymentVersionIdDelimiter + buildID
 }
 
 func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {

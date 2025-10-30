@@ -1327,12 +1327,25 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+
+				// Fetch buildIDs from old deploymentData format
 				for _, v := range typedUserData.GetDeploymentData().GetVersions() {
 					if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
 						continue
 					}
-					buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
-					buildIds = append(buildIds, buildId)
+					deploymentVersion := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
+					buildIds = append(buildIds, deploymentVersion)
+				}
+
+				// Fetch buildIDs from new deploymentData format
+				for deploymentName, v := range typedUserData.GetDeploymentData().GetDeploymentsData() {
+					if v.GetVersions() == nil {
+						continue
+					}
+					for buildId := range v.GetVersions() {
+						deploymentVersion := worker_versioning.BuildIDToStringV32(deploymentName, buildId)
+						buildIds = append(buildIds, deploymentVersion)
+					}
 				}
 			}
 
