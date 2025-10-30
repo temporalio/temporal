@@ -7,7 +7,6 @@ option go_package = "go.temporal.io/server/api/token/v1;token";
 import "google/protobuf/timestamp.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/chasm.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 
 message HistoryContinuation {
@@ -87,5 +86,5 @@ message NexusOperationCompletion {
     // Allows completing a started operation after a workflow has been reset.
     string request_id = 5;
     // Reference to the CHASM component to be informed of the completion.
-    temporal.server.api.persistence.v1.ChasmComponentRef component_ref = 6;
+    bytes component_ref = 6;
 }

@@ -5,9 +5,11 @@ package temporal.server.chasm.lib.callbacks.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspb";
 
 message InvocationTask {
-    // The base URL for nexus callbacks.
-    // Will have other meanings as more callback use cases are added.
-    string url = 1;
+    // The attempt number for this invocation.
+    int32 attempt = 1;
 }
 
-message BackoffTask {}
+message BackoffTask {
+    // The attempt number for this invocation.
+    int32 attempt = 1;
+}

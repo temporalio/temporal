@@ -7,6 +7,8 @@ breaking:
     - WIRE
   ignore:
     - chasm/lib/scheduler/proto/v1/message.proto
+    # TODO seankane: remove after merging #8499
+    - chasm/lib/callback/proto/v1/tasks.proto
 lint:
   use:
     - DEFAULT
