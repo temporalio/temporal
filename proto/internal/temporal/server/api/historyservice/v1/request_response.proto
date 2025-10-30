@@ -58,6 +58,8 @@ message RoutingOptions {
     string task_token = 6;
     // Request will be routed by resolving the namespace ID and the workflow ID from the first task info element.
     string task_infos = 7;
+    // Request will be routed by resolving the namespace ID and the workflow ID from this chasm ref to a given shard.
+    string chasm_component_ref = 8;
 }
 
 message StartWorkflowExecutionRequest {
@@ -234,6 +236,8 @@ message RecordWorkflowTaskStartedRequest {
     temporal.api.deployment.v1.Deployment scheduled_deployment = 9;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    // Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
+    int32 stamp = 11;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -355,6 +359,7 @@ message IsWorkflowTaskValidRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.server.api.clock.v1.VectorClock clock = 3;
     int64 scheduled_event_id = 4;
+    int32 stamp = 5;
 }
 
 message IsWorkflowTaskValidResponse {
@@ -606,6 +611,8 @@ message ReplicateWorkflowStateRequest {
     temporal.server.api.persistence.v1.WorkflowMutableState workflow_state = 1;
     string remote_cluster = 2;
     string namespace_id= 3;
+    bool is_force_replication = 4;
+    bool is_close_transfer_task_acked = 5;
 }
 
 message ReplicateWorkflowStateResponse {
@@ -1143,12 +1150,8 @@ message ListTasksResponse {
 }
 
 message CompleteNexusOperationChasmRequest {
-    option (routing) = {
-        namespace_id: "completion.component_ref.namespace_id"
-        // TODO - fix after merge
-        // business_id: "completion.component_ref.business_id"
-        workflow_id: "completion.component_ref.business_id"
-    };
+    option (routing).chasm_component_ref = "completion.component_ref";
+
     // Completion token - holds information for locating an entity and the corresponding component.
     temporal.server.api.token.v1.NexusOperationCompletion completion = 1;
     oneof outcome {
