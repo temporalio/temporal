@@ -37,10 +37,13 @@ func TestReplays(t *testing.T) {
 
 	// Create deployment workflow wrapper to match production registration
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+		workflowVersionGetter := func() workerdeployment.DeploymentWorkflowVersion {
+			return workerdeployment.InitialVersion
+		}
 		maxVersionsGetter := func() int {
 			return 100
 		}
-		return workerdeployment.Workflow(ctx, maxVersionsGetter, args)
+		return workerdeployment.Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
 	}
 
 	replayer.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentVersionWorkflowType})

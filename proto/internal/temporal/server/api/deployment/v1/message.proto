@@ -146,6 +146,14 @@ message WorkerDeploymentLocalState {
     // Number of task queues which will be synced in a single batch.
     int32 sync_batch_size = 6;
     string manager_identity = 7;
+    // Track async propagations in progress per build ID. Map: build_id -> revision numbers.
+    // Used to track which propagations are still pending across continue-as-new.
+    map<string, PropagatingRevisions> propagating_revisions = 8;
+}
+
+// Tracks revision numbers that are currently propagating for a specific build ID
+message PropagatingRevisions {
+    repeated int64 revision_numbers = 1;
 }
 
 message WorkerDeploymentVersionSummary {
@@ -222,6 +230,10 @@ message SyncVersionStateUpdateArgs {
     // Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
     // Can be in the range [0, 100] if the version is ramping.
     float ramp_percentage = 4;
+
+    // Full routing config for async propagation mode. When present, the version workflow
+    // will propagate the entire routing config asynchronously. When absent, sync mode is used.
+    temporal.api.deployment.v1.RoutingConfig routing_config = 5;
 }
 
 // used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
@@ -244,6 +256,12 @@ message SyncDrainageInfoSignalArgs {
 message SyncDrainageStatusSignalArgs {
     string version = 1;
     temporal.api.enums.v1.VersionDrainageStatus drainage_status = 2;
+}
+
+// Sent from Version workflow to Worker Deployment workflow when async propagation completes
+message PropagationCompletionInfo {
+    int64 revision_number = 1;
+    string build_id = 2;
 }
 
 
@@ -275,12 +293,16 @@ message SyncDeploymentVersionUserDataRequest {
     WorkerDeploymentVersion version = 1;
     repeated SyncUserData sync = 2;
     // if true, the version will be forgotten from the task queue user data.
-    bool forget_version = 3; 
+    bool forget_version = 3;
 
     message SyncUserData {
         string name = 1;
         repeated temporal.api.enums.v1.TaskQueueType types = 2;
         DeploymentVersionData data = 3;
+        // Async mode: full routing config to propagate (includes revision_number)
+        temporal.api.deployment.v1.RoutingConfig update_routing_config = 4;
+        // Async mode: version-specific data to upsert
+        WorkerDeploymentVersionData upsert_version_data = 5;
     }
 }
 

@@ -45,6 +45,8 @@ type (
 		signalHandler                *SignalHandler
 		drainageStatusSyncInProgress bool
 		forceCAN                     bool
+		// Track if async propagations are in progress (prevents CaN)
+		asyncPropagationsInProgress int
 	}
 )
 
@@ -211,6 +213,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
 				d.drainageStatusSyncInProgress == false &&
+				d.asyncPropagationsInProgress == 0 && // Don't CaN while async propagations are in progress
 				(d.forceCAN || d.stateChanged))
 	})
 	if err != nil {
@@ -516,21 +519,33 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	state := d.GetVersionState()
 	newStatus := d.findNewVersionStatus(args)
 
-	// Build version data with updated routing information and new status
-	versionData := &deploymentspb.DeploymentVersionData{
-		Version:           d.VersionState.Version,
-		RoutingUpdateTime: args.RoutingUpdateTime,
-		CurrentSinceTime:  args.CurrentSinceTime,
-		RampingSinceTime:  args.RampingSinceTime,
-		RampPercentage:    args.RampPercentage,
-		Status:            newStatus,
-	}
+	// Determine propagation mode based on routing config presence
+	isAsyncMode := args.RoutingConfig != nil
 
-	// sync version information to all the task queues
-	err = d.syncVersionDataToTaskQueues(ctx, versionData)
-	if err != nil {
-		// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
-		return nil, err
+	if isAsyncMode {
+		// ASYNC MODE: propagate full routing config
+		err = d.syncRoutingConfigToTaskQueues(ctx, args.RoutingConfig, newStatus)
+		if err != nil {
+			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+			return nil, err
+		}
+	} else {
+		// SYNC MODE: propagate only version data (existing behavior)
+		versionData := &deploymentspb.DeploymentVersionData{
+			Version:           d.VersionState.Version,
+			RoutingUpdateTime: args.RoutingUpdateTime,
+			CurrentSinceTime:  args.CurrentSinceTime,
+			RampingSinceTime:  args.RampingSinceTime,
+			RampPercentage:    args.RampPercentage,
+			Status:            newStatus,
+		}
+
+		// sync version information to all the task queues
+		err = d.syncVersionDataToTaskQueues(ctx, versionData)
+		if err != nil {
+			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+			return nil, err
+		}
 	}
 
 	// apply changes to current and ramping
@@ -807,4 +822,134 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 	}
 
 	return nil
+}
+
+// syncRoutingConfigToTaskQueues performs async propagation of routing config
+func (d *VersionWorkflowRunner) syncRoutingConfigToTaskQueues(
+	ctx workflow.Context,
+	routingConfig *deploymentpb.RoutingConfig,
+	newStatus enumspb.WorkerDeploymentVersionStatus,
+) error {
+	state := d.GetVersionState()
+
+	// Build WorkerDeploymentVersionData for this version from current state
+	versionData := &deploymentspb.WorkerDeploymentVersionData{
+		Status: newStatus,
+	}
+
+	// Build sync request batches with routing config (async mode)
+	batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+	var currentBatch []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData
+
+	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+		byType := state.TaskQueueFamilies[tqName]
+		var types []enumspb.TaskQueueType
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
+			types = append(types, enumspb.TaskQueueType(tqType))
+		}
+
+		currentBatch = append(currentBatch, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+			Name:                tqName,
+			Types:               types,
+			UpdateRoutingConfig: routingConfig,
+			UpsertVersionData:   versionData,
+		})
+
+		if len(currentBatch) == int(d.VersionState.SyncBatchSize) {
+			batches = append(batches, currentBatch)
+			currentBatch = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+		}
+	}
+	if len(currentBatch) > 0 {
+		batches = append(batches, currentBatch)
+	}
+
+	// Start async propagation - DON'T WAIT
+	// Extract revision number from routing config
+	revisionNumber := routingConfig.RevisionNumber
+
+	// Increment counter to prevent CaN while propagation is in progress
+	d.asyncPropagationsInProgress++
+
+	workflow.Go(ctx, func(gCtx workflow.Context) {
+		defer func() {
+			// Decrement counter when propagation completes
+			d.asyncPropagationsInProgress--
+		}()
+		d.trackAsyncPropagation(gCtx, batches, revisionNumber)
+	})
+
+	return nil
+}
+
+// trackAsyncPropagation monitors propagation and signals completion
+func (d *VersionWorkflowRunner) trackAsyncPropagation(
+	ctx workflow.Context,
+	batches [][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData,
+	revisionNumber int64,
+) {
+	state := d.GetVersionState()
+	taskQueueMaxVersionsToCheck := make(map[string]int64)
+
+	// Execute all batches
+	for _, batch := range batches {
+		activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
+		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+
+		err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+			Version: state.GetVersion(),
+			Sync:    batch,
+		}).Get(ctx, &syncRes)
+
+		if err != nil {
+			d.logger.Error("async propagation batch failed", "error", err)
+			// Continue with other batches
+			continue
+		}
+
+		// Only check propagation for task queues where routing config actually changed
+		// Task queues with max_version = -1 indicate no routing change, skip those
+		for tqName, maxVersion := range syncRes.TaskQueueMaxVersions {
+			if maxVersion != -1 {
+				taskQueueMaxVersionsToCheck[tqName] = maxVersion
+			}
+		}
+	}
+
+	// Wait for propagation to complete only for task queues where config changed
+	if len(taskQueueMaxVersionsToCheck) > 0 {
+		activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
+		err := workflow.ExecuteActivity(
+			activityCtx,
+			d.a.CheckWorkerDeploymentUserDataPropagation,
+			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+				TaskQueueMaxVersions: taskQueueMaxVersionsToCheck,
+			}).Get(ctx, nil)
+
+		if err != nil {
+			d.logger.Error("async propagation check failed", "error", err)
+			return
+		}
+	}
+
+	// Signal deployment workflow that propagation completed
+	d.signalPropagationComplete(ctx, revisionNumber)
+}
+
+// signalPropagationComplete sends a signal to the deployment workflow when async propagation completes
+func (d *VersionWorkflowRunner) signalPropagationComplete(ctx workflow.Context, revisionNumber int64) {
+	err := workflow.SignalExternalWorkflow(
+		ctx,
+		worker_versioning.GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
+		"",
+		PropagationCompleteSignal,
+		&deploymentspb.PropagationCompletionInfo{
+			RevisionNumber: revisionNumber,
+			BuildId:        d.VersionState.Version.BuildId,
+		},
+	).Get(ctx, nil)
+
+	if err != nil {
+		d.logger.Error("could not signal propagation completion", "error", err)
+	}
 }
