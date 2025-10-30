@@ -9,17 +9,26 @@ import (
 type library struct {
 	chasm.UnimplementedLibrary
 
-	handler                      *handler
-	ActivityDispatchTaskExecutor *activityDispatchTaskExecutor
+	handler                            *handler
+	ActivityDispatchTaskExecutor       *activityDispatchTaskExecutor
+	ScheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor
+	ScheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor
+	StartToCloseTimeoutTaskExecutor    *startToCloseTimeoutTaskExecutor
 }
 
 func newLibrary(
 	handler *handler,
 	ActivityDispatchTaskExecutor *activityDispatchTaskExecutor,
+	ScheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor,
+	ScheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor,
+	StartToCloseTimeoutTaskExecutor *startToCloseTimeoutTaskExecutor,
 ) *library {
 	return &library{
-		handler:                      handler,
-		ActivityDispatchTaskExecutor: ActivityDispatchTaskExecutor,
+		handler:                            handler,
+		ActivityDispatchTaskExecutor:       ActivityDispatchTaskExecutor,
+		ScheduleToStartTimeoutTaskExecutor: ScheduleToStartTimeoutTaskExecutor,
+		ScheduleToCloseTimeoutTaskExecutor: ScheduleToCloseTimeoutTaskExecutor,
+		StartToCloseTimeoutTaskExecutor:    StartToCloseTimeoutTaskExecutor,
 	}
 }
 
@@ -43,6 +52,21 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 			"dispatchActivity",
 			l.ActivityDispatchTaskExecutor,
 			l.ActivityDispatchTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"scheduleToStartTimer",
+			l.ScheduleToStartTimeoutTaskExecutor,
+			l.ScheduleToStartTimeoutTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"scheduleToCloseTimer",
+			l.ScheduleToCloseTimeoutTaskExecutor,
+			l.ScheduleToCloseTimeoutTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"startToCloseTimer",
+			l.StartToCloseTimeoutTaskExecutor,
+			l.StartToCloseTimeoutTaskExecutor,
 		),
 	}
 }

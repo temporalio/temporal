@@ -27,8 +27,6 @@ type TerminateComponentRequest struct {
 
 type TerminateComponentResponse struct{}
 
-type NoValue *struct{}
-
 // Embed UnimplementedComponent to get forward compatibility
 type UnimplementedComponent struct{}
 

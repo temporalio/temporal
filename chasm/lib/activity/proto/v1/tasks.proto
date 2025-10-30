@@ -9,3 +9,18 @@ message ActivityDispatchTask {
     // need to guard against any concurrent operations where the originally intended task may be outdated.
     int32 attempt = 1;
 }
+
+message ScheduleToStartTimeoutTask {
+  // The current attempt number for this activity execution.
+  int32 attempt = 1;
+}
+
+message ScheduleToCloseTimeoutTask {
+  // The current attempt number for this activity execution.
+  int32 attempt = 1;
+}
+
+message StartToCloseTimeoutTask {
+  // The current attempt number for this activity execution.
+  int32 attempt = 1;
+}
