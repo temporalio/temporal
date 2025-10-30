@@ -552,21 +552,12 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		tag.Attempt(int32(attempt)),
 		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
 		tag.LifeCycleProcessingFailed,
+		tag.NewStringTag("task-category", e.GetCategory().Name()),
 	)
 	if attempt > taskCriticalLogMetricAttempts {
-		softassert.Sometimes(e.logger).Error("Critical error processing task, retrying.",
-			tag.TaskType(e.GetType()),
-			tag.Error(err),
-			tag.ErrorType(err),
-			tag.Attempt(int32(attempt)),
-			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
-			tag.LifeCycleProcessingFailed,
-			tag.NewInt32("attempt", int32(attempt)),
-			tag.NewStringTag("task-category", e.GetCategory().Name()),
-			tag.OperationCritical,
-		)
+		softassert.Sometimes(logger).Error("Critical error processing task, retrying.")
 	} else {
-		logger.Warn("Fail to process task")
+		softassert.Sometimes(logger).Warn("Fail to process task")
 	}
 
 	if e.isUnexpectedNonRetryableError(err) {

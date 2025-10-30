@@ -232,7 +232,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if retError != nil {
 			cancelled := effects.Cancel(ctx)
 			if cancelled {
-				handler.logger.Info("Canceled effects due to error.",
+				softassert.Sometimes(handler.logger).Info("Canceled effects due to error",
 					tag.Error(retError),
 					tag.WorkflowID(token.GetWorkflowId()),
 					tag.WorkflowRunID(token.GetRunId()),

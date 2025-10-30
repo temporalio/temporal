@@ -87,27 +87,3 @@ func (s *sometimesLogger) Warn(staticMessage string, tags ...tag.Tag) {
 func (s *sometimesLogger) Error(staticMessage string, tags ...tag.Tag) {
 	s.logger.Error(staticMessage, tags...)
 }
-
-// DPanic logs a message at dpanic level.
-//
-// `staticMessage` is expected to be a static string to help with grouping and searching logs.
-// Dynamic information should be passed via `tags`.
-func (s *sometimesLogger) DPanic(staticMessage string, tags ...tag.Tag) {
-	s.logger.DPanic(staticMessage, tags...)
-}
-
-// Panic logs a message at panic level.
-//
-// `staticMessage` is expected to be a static string to help with grouping and searching logs.
-// Dynamic information should be passed via `tags`.
-func (s *sometimesLogger) Panic(staticMessage string, tags ...tag.Tag) {
-	s.logger.Panic(staticMessage, tags...)
-}
-
-// Fatal logs a message at fatal level.
-//
-// `staticMessage` is expected to be a static string to help with grouping and searching logs.
-// Dynamic information should be passed via `tags`.
-func (s *sometimesLogger) Fatal(staticMessage string, tags ...tag.Tag) {
-	s.logger.Fatal(staticMessage, tags...)
-}
