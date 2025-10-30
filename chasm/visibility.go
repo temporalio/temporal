@@ -54,7 +54,7 @@ func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
 // Field returns the field for a given alias.
 func (v *VisibilitySearchAttributesMapper) Field(alias string) (string, error) {
 	if v == nil {
-		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
+		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
 	}
 	field, ok := v.aliasToField[alias]
 	if !ok {
