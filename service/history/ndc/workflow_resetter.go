@@ -949,6 +949,7 @@ func reapplyEvents(
 				requestID,
 				callbacks,
 				event.Links,
+				attr.GetIdentity(),
 			); err != nil {
 				return reappliedEvents, err
 			}
@@ -1162,7 +1163,7 @@ func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, r
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask())
+			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask(), "")
 			if err != nil {
 				return err
 			}

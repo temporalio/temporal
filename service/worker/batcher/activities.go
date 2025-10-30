@@ -495,6 +495,7 @@ func startTaskProcessorProtobuf(
 							WorkflowExecution:        execution,
 							WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
+							Identity:                 operation.UpdateWorkflowOptionsOperation.Identity,
 						})
 						return err
 					})
