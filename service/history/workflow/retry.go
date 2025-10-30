@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"math"
 	"slices"
 	"time"
 
@@ -28,12 +27,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
-
-func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
-	return time.Duration(int64(float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
-}
-
 // TODO treat 0 as 0, not infinite
 
 func getBackoffInterval(
@@ -55,9 +48,9 @@ func getBackoffInterval(
 	// Check if the remote worker sent an application failure indicating a custom backoff duration.
 	delayedRetryDuration := nextRetryDelayFrom(failure)
 	if delayedRetryDuration != nil {
-		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, makeBackoffAlgorithm(delayedRetryDuration))
+		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, backoff.MakeBackoffAlgorithm(delayedRetryDuration))
 	}
-	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
+	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, backoff.ExponentialBackoffAlgorithm)
 }
 
 func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
@@ -82,7 +75,7 @@ func nextBackoffInterval(
 	maxInterval *durationpb.Duration,
 	expirationTime *timestamppb.Timestamp,
 	backoffCoefficient float64,
-	intervalCalculator BackoffCalculatorAlgorithmFunc,
+	intervalCalculator backoff.BackoffCalculatorAlgorithmFunc,
 ) (time.Duration, enumspb.RetryState) {
 	// TODO remove below checks, most are already set with correct values
 	if currentAttempt < 1 {

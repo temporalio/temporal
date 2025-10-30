@@ -1,9 +1,12 @@
 package activity
 
 import (
+	"fmt"
+
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -33,6 +36,7 @@ type Activity struct {
 	LastHeartbeat chasm.Field[*activitypb.ActivityHeartbeatState]
 	// Standalone only
 	RequestData chasm.Field[*activitypb.ActivityRequestData]
+	Outcome     chasm.Field[*activitypb.ActivityOutcome]
 
 	// Pointer to an implementation of the "store". for a workflow activity this would be a parent pointer back to
 	// the workflow. For a standalone activity this would be nil.
@@ -94,6 +98,7 @@ func NewStandaloneActivity(
 			Header:       request.Header,
 			UserMetadata: request.UserMetadata,
 		}),
+		Outcome:    chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
 
@@ -150,29 +155,50 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 		return nil, err
 	}
 
-	activityRefBytes, err := ctx.Ref(a)
-	if err != nil {
-		return nil, err
-	}
-
-	activityRef, err := chasm.DeserializeComponentRef(activityRefBytes)
-	if err != nil {
-		return nil, err
-	}
-
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	if store == nil {
-		// TODO Get entity key from from context once we rebase on main
-		if err := a.PopulateRecordActivityTaskStartedResponse(ctx, activityRef.EntityKey, response); err != nil {
+		if err := a.PopulateRecordActivityTaskStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := store.PopulateRecordActivityTaskStartedResponse(ctx, activityRef.EntityKey, response); err != nil {
+		if err := store.PopulateRecordActivityTaskStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
 			return nil, err
 		}
 	}
 
 	return response, nil
+}
+
+func (a *Activity) handleActivityTimedOut(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
+	outcome, err := a.Outcome.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	failure := &failurepb.Failure{
+		Message: fmt.Sprintf("activity %v timed out", timeoutType.String()),
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: timeoutType,
+			},
+		},
+	}
+
+	outcome.Variant = &activitypb.ActivityOutcome_Failed_{
+		Failed: &activitypb.ActivityOutcome_Failed{
+			Failure: failure,
+		},
+	}
+
+	attempt, err := a.Attempt.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	attempt.LastFailure = failure
+	attempt.LastAttemptCompleteTime = timestamppb.New(ctx.Now(a))
+
+	return nil
 }
 
 func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {

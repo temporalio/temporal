@@ -2,10 +2,12 @@ package backoff
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -167,5 +169,26 @@ func IgnoreErrors(errorsToExclude []error) func(error) bool {
 		}
 
 		return true
+	}
+}
+
+// BackoffCalculatorAlgorithmFunc is a function type that calculates backoff duration based on
+// initial duration, coefficient, and current attempt number.
+type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
+
+// ExponentialBackoffAlgorithm calculates the backoff duration using exponential algorithm.
+// The result is initInterval * (backoffCoefficient ^ (currentAttempt - 1)).
+func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
+	return time.Duration(int64(float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
+}
+
+// MakeBackoffAlgorithm creates a BackoffCalculatorAlgorithmFunc that returns a fixed delay if requestedDelay is non-nil,
+// otherwise falls back to exponential backoff algorithm.
+func MakeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgorithmFunc {
+	return func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration {
+		if requestedDelay != nil {
+			return *requestedDelay
+		}
+		return ExponentialBackoffAlgorithm(duration, coefficient, currentAttempt)
 	}
 }
