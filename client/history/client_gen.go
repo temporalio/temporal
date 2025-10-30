@@ -75,7 +75,12 @@ func (c *clientImpl) CompleteNexusOperationChasm(
 	request *historyservice.CompleteNexusOperationChasmRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetCompletion().GetComponentRef().GetNamespaceId(), request.GetCompletion().GetComponentRef().GetBusinessId())
+	ref, err := c.tokenSerializer.DeserializeChasmComponentRef(request.GetCompletion().GetComponentRef())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
+	}
+	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())
+	
 	var response *historyservice.CompleteNexusOperationChasmResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
