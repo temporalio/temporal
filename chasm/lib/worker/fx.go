@@ -1,4 +1,4 @@
-package workersession
+package worker
 
 import (
 	"go.temporal.io/server/chasm"
@@ -13,7 +13,7 @@ func Register(
 }
 
 var Module = fx.Module(
-	"chasm.lib.workersession",
+	"chasm.lib.worker",
 	fx.Provide(NewLibrary),
 	fx.Invoke(Register),
 )

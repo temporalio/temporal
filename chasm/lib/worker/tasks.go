@@ -1,10 +1,10 @@
-package workersession
+package worker
 
 import (
 	"time"
 
 	"go.temporal.io/server/chasm"
-	workersessionpb "go.temporal.io/server/chasm/lib/workersession/gen/workersessionpb/v1"
+	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common/log"
 )
 
@@ -22,12 +22,12 @@ func NewLeaseExpiryTaskExecutor(logger log.Logger) *LeaseExpiryTaskExecutor {
 // Execute is called when a lease expiry timer fires.
 func (e *LeaseExpiryTaskExecutor) Execute(
 	ctx chasm.MutableContext,
-	component *WorkerSession,
+	component *Worker,
 	attrs chasm.TaskAttributes,
-	task *workersessionpb.LeaseExpiryTask,
+	task *workerpb.LeaseExpiryTask,
 ) error {
 	// Validate that this lease expiry is still relevant.
-	if !e.isLeaseExpiryStillValid(component, task) {
+	if !e.isLeaseExpiryStillValid(component, attrs) {
 		e.logger.Debug("Lease expiry task is no longer valid, ignoring")
 		return nil
 	}
@@ -41,20 +41,20 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 // Validate checks if the lease expiry task is still valid (implements TaskValidator interface).
 func (e *LeaseExpiryTaskExecutor) Validate(
 	ctx chasm.Context,
-	component *WorkerSession,
+	component *Worker,
 	attrs chasm.TaskAttributes,
-	task *workersessionpb.LeaseExpiryTask,
+	task *workerpb.LeaseExpiryTask,
 ) (bool, error) {
-	return e.isLeaseExpiryStillValid(component, task), nil
+	return e.isLeaseExpiryStillValid(component, attrs), nil
 }
 
 // isLeaseExpiryStillValid checks if this lease expiry is still the latest lease deadline.
 func (e *LeaseExpiryTaskExecutor) isLeaseExpiryStillValid(
-	component *WorkerSession,
-	task *workersessionpb.LeaseExpiryTask,
+	component *Worker,
+	attrs chasm.TaskAttributes,
 ) bool {
-	// If session is not active, lease expiry is not valid.
-	if component.Status != workersessionpb.WORKER_SESSION_STATUS_ACTIVE {
+	// If worker is not active, lease expiry is not valid.
+	if component.Status != workerpb.WORKER_STATUS_ACTIVE {
 		return false
 	}
 
@@ -65,35 +65,35 @@ func (e *LeaseExpiryTaskExecutor) isLeaseExpiryStillValid(
 
 	// Timer is valid if its deadline is >= the current lease deadline.
 	// (i.e., it hasn't been superseded by a newer heartbeat).
-	taskDeadline := task.LeaseExpirationTime.AsTime()
+	taskDeadline := attrs.ScheduledTime
 	componentDeadline := component.LeaseExpirationTime.AsTime()
 	return !taskDeadline.Before(componentDeadline)
 }
 
-// SessionCleanupTaskExecutor handles cleanup of expired sessions.
-type SessionCleanupTaskExecutor struct {
+// WorkerCleanupTaskExecutor handles cleanup of inactive workers.
+type WorkerCleanupTaskExecutor struct {
 	logger log.Logger
 }
 
-func NewSessionCleanupTaskExecutor(logger log.Logger) *SessionCleanupTaskExecutor {
-	return &SessionCleanupTaskExecutor{
+func NewWorkerCleanupTaskExecutor(logger log.Logger) *WorkerCleanupTaskExecutor {
+	return &WorkerCleanupTaskExecutor{
 		logger: logger,
 	}
 }
 
-// Execute is called to clean up expired sessions.
-func (e *SessionCleanupTaskExecutor) Execute(
+// Execute is called to clean up inactive workers.
+func (e *WorkerCleanupTaskExecutor) Execute(
 	ctx chasm.MutableContext,
-	component *WorkerSession,
+	component *Worker,
 	attrs chasm.TaskAttributes,
-	task *workersessionpb.SessionCleanupTask,
+	task *workerpb.WorkerCleanupTask,
 ) error {
-	// Only clean up if session is expired.
-	if component.Status != workersessionpb.WORKER_SESSION_STATUS_EXPIRED {
-		return nil // Not expired, nothing to clean up.
+	// Only clean up if worker is inactive.
+	if component.Status != workerpb.WORKER_STATUS_INACTIVE {
+		return nil // Not inactive, nothing to clean up.
 	}
 
-	e.logger.Info("Cleaning up expired worker session")
+	e.logger.Info("Cleaning up inactive worker")
 
 	// Apply the cleanup completed transition.
 	return TransitionCleanupCompleted.Apply(ctx, component, EventCleanupCompleted{
@@ -102,12 +102,12 @@ func (e *SessionCleanupTaskExecutor) Execute(
 }
 
 // Validate checks if cleanup is still needed.
-func (e *SessionCleanupTaskExecutor) Validate(
+func (e *WorkerCleanupTaskExecutor) Validate(
 	ctx chasm.Context,
-	component *WorkerSession,
+	component *Worker,
 	attrs chasm.TaskAttributes,
-	task *workersessionpb.SessionCleanupTask,
+	task *workerpb.WorkerCleanupTask,
 ) (bool, error) {
-	// Only valid if session is expired.
-	return component.Status == workersessionpb.WORKER_SESSION_STATUS_EXPIRED, nil
+	// Only valid if worker is inactive.
+	return component.Status == workerpb.WORKER_STATUS_INACTIVE, nil
 }
