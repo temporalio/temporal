@@ -163,20 +163,6 @@ func (c *metricClient) DeprecateNamespace(
 	return c.client.DeprecateNamespace(ctx, request, opts...)
 }
 
-func (c *metricClient) DescribeActivityExecution(
-	ctx context.Context,
-	request *workflowservice.DescribeActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.DescribeActivityExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDescribeActivityExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.DescribeActivityExecution(ctx, request, opts...)
-}
-
 func (c *metricClient) DescribeBatchOperation(
 	ctx context.Context,
 	request *workflowservice.DescribeBatchOperationRequest,
@@ -343,20 +329,6 @@ func (c *metricClient) FetchWorkerConfig(
 	}()
 
 	return c.client.FetchWorkerConfig(ctx, request, opts...)
-}
-
-func (c *metricClient) GetActivityExecutionResult(
-	ctx context.Context,
-	request *workflowservice.GetActivityExecutionResultRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.GetActivityExecutionResultResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientGetActivityExecutionResult")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.GetActivityExecutionResult(ctx, request, opts...)
 }
 
 func (c *metricClient) GetClusterInfo(
@@ -735,6 +707,20 @@ func (c *metricClient) PauseActivityExecution(
 	}()
 
 	return c.client.PauseActivityExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) PollActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PollActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollActivityExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPollActivityExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollActivityExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) PollActivityTaskQueue(
