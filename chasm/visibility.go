@@ -42,7 +42,7 @@ type VisibilitySearchAttributesMapper struct {
 // Alias returns the alias for a given field.
 func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
 	if v == nil {
-		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper is not registered")
+		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
 	}
 	alias, ok := v.fieldToAlias[field]
 	if !ok {
