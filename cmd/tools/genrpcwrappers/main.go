@@ -233,7 +233,7 @@ func toGetter(snake string) string {
 func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.RoutingOptions) string {
 	t := reqType.Elem() // we know it's a pointer
 
-	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" {
+	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" && routingOptions.ChasmComponentRef != "" {
 		log.Fatalf("Found more than one routing directive in %s", t)
 	}
 	if routingOptions.AnyHost {
@@ -266,6 +266,15 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 	}
 	shardID := c.shardIDFromWorkflowID(%s, taskToken.GetWorkflowId())
 `, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
+	}
+	if routingOptions.ChasmComponentRef != "" {
+		verifyFieldExists(t, routingOptions.ChasmComponentRef)
+		return fmt.Sprintf(`ref, err := c.tokenSerializer.DeserializeChasmComponentRef(%s)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
+	}
+	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())
+	`, toGetter(routingOptions.ChasmComponentRef))
 	}
 	if routingOptions.TaskInfos != "" {
 		verifyFieldExists(t, routingOptions.TaskInfos)

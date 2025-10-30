@@ -65,9 +65,11 @@ type RoutingOptions struct {
 	// Request will be routed by resolving the namespace ID and the workflow ID from this task token to a given shard.
 	TaskToken string `protobuf:"bytes,6,opt,name=task_token,json=taskToken,proto3" json:"task_token,omitempty"`
 	// Request will be routed by resolving the namespace ID and the workflow ID from the first task info element.
-	TaskInfos     string `protobuf:"bytes,7,opt,name=task_infos,json=taskInfos,proto3" json:"task_infos,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TaskInfos string `protobuf:"bytes,7,opt,name=task_infos,json=taskInfos,proto3" json:"task_infos,omitempty"`
+	// Request will be routed by resolving the namespace ID and the workflow ID from this chasm ref to a given shard.
+	ChasmComponentRef string `protobuf:"bytes,8,opt,name=chasm_component_ref,json=chasmComponentRef,proto3" json:"chasm_component_ref,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *RoutingOptions) Reset() {
@@ -145,6 +147,13 @@ func (x *RoutingOptions) GetTaskToken() string {
 func (x *RoutingOptions) GetTaskInfos() string {
 	if x != nil {
 		return x.TaskInfos
+	}
+	return ""
+}
+
+func (x *RoutingOptions) GetChasmComponentRef() string {
+	if x != nil {
+		return x.ChasmComponentRef
 	}
 	return ""
 }
@@ -1124,8 +1133,10 @@ type RecordWorkflowTaskStartedRequest struct {
 	ScheduledDeployment *v16.Deployment `protobuf:"bytes,9,opt,name=scheduled_deployment,json=scheduledDeployment,proto3" json:"scheduled_deployment,omitempty"`
 	// Versioning directive that was sent by history when scheduling the task.
 	VersionDirective *v112.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
+	Stamp         int32 `protobuf:"varint,11,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedRequest) Reset() {
@@ -1219,6 +1230,13 @@ func (x *RecordWorkflowTaskStartedRequest) GetVersionDirective() *v112.TaskVersi
 		return x.VersionDirective
 	}
 	return nil
+}
+
+func (x *RecordWorkflowTaskStartedRequest) GetStamp() int32 {
+	if x != nil {
+		return x.Stamp
+	}
+	return 0
 }
 
 type RecordWorkflowTaskStartedResponse struct {
@@ -2070,6 +2088,7 @@ type IsWorkflowTaskValidRequest struct {
 	Execution        *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
 	Clock            *v17.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
 	ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
+	Stamp            int32                  `protobuf:"varint,5,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2128,6 +2147,13 @@ func (x *IsWorkflowTaskValidRequest) GetClock() *v17.VectorClock {
 func (x *IsWorkflowTaskValidRequest) GetScheduledEventId() int64 {
 	if x != nil {
 		return x.ScheduledEventId
+	}
+	return 0
+}
+
+func (x *IsWorkflowTaskValidRequest) GetStamp() int32 {
+	if x != nil {
+		return x.Stamp
 	}
 	return 0
 }
@@ -4141,12 +4167,14 @@ func (*ReplicateEventsV2Response) Descriptor() ([]byte, []int) {
 }
 
 type ReplicateWorkflowStateRequest struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
-	WorkflowState *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3" json:"workflow_state,omitempty"`
-	RemoteCluster string                    `protobuf:"bytes,2,opt,name=remote_cluster,json=remoteCluster,proto3" json:"remote_cluster,omitempty"`
-	NamespaceId   string                    `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState    `protogen:"open.v1"`
+	WorkflowState            *v19.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3" json:"workflow_state,omitempty"`
+	RemoteCluster            string                    `protobuf:"bytes,2,opt,name=remote_cluster,json=remoteCluster,proto3" json:"remote_cluster,omitempty"`
+	NamespaceId              string                    `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	IsForceReplication       bool                      `protobuf:"varint,4,opt,name=is_force_replication,json=isForceReplication,proto3" json:"is_force_replication,omitempty"`
+	IsCloseTransferTaskAcked bool                      `protobuf:"varint,5,opt,name=is_close_transfer_task_acked,json=isCloseTransferTaskAcked,proto3" json:"is_close_transfer_task_acked,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ReplicateWorkflowStateRequest) Reset() {
@@ -4198,6 +4226,20 @@ func (x *ReplicateWorkflowStateRequest) GetNamespaceId() string {
 		return x.NamespaceId
 	}
 	return ""
+}
+
+func (x *ReplicateWorkflowStateRequest) GetIsForceReplication() bool {
+	if x != nil {
+		return x.IsForceReplication
+	}
+	return false
+}
+
+func (x *ReplicateWorkflowStateRequest) GetIsCloseTransferTaskAcked() bool {
+	if x != nil {
+		return x.IsCloseTransferTaskAcked
+	}
+	return false
 }
 
 type ReplicateWorkflowStateResponse struct {
@@ -9778,7 +9820,7 @@ var File_temporal_server_api_historyservice_v1_request_response_proto protorefle
 
 const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/api/historyservice/v1/request_response.proto\x12%temporal.server.api.historyservice.v1\x1a google/protobuf/descriptor.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/history/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a&temporal/api/workflow/v1/message.proto\x1a#temporal/api/query/v1/message.proto\x1a&temporal/api/protocol/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a#temporal/api/nexus/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a*temporal/server/api/enums/v1/cluster.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a+temporal/server/api/enums/v1/workflow.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/namespace/v1/message.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a0temporal/server/api/replication/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\x1a*temporal/server/api/token/v1/message.proto\x1a-temporal/server/api/workflow/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a:temporal/server/api/adminservice/v1/request_response.proto\x1a'temporal/server/api/common/v1/dlq.proto\"\xe0\x01\n" +
+	"<temporal/server/api/historyservice/v1/request_response.proto\x12%temporal.server.api.historyservice.v1\x1a google/protobuf/descriptor.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/history/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a&temporal/api/workflow/v1/message.proto\x1a#temporal/api/query/v1/message.proto\x1a&temporal/api/protocol/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a#temporal/api/nexus/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a*temporal/server/api/enums/v1/cluster.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a+temporal/server/api/enums/v1/workflow.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/namespace/v1/message.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a0temporal/server/api/replication/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\x1a*temporal/server/api/token/v1/message.proto\x1a-temporal/server/api/workflow/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a:temporal/server/api/adminservice/v1/request_response.proto\x1a'temporal/server/api/common/v1/dlq.proto\"\x90\x02\n" +
 	"\x0eRoutingOptions\x12\x16\n" +
 	"\x06custom\x18\x01 \x01(\bR\x06custom\x12\x19\n" +
 	"\bany_host\x18\x02 \x01(\bR\aanyHost\x12\x19\n" +
@@ -9789,7 +9831,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\n" +
 	"task_token\x18\x06 \x01(\tR\ttaskToken\x12\x1d\n" +
 	"\n" +
-	"task_infos\x18\a \x01(\tR\ttaskInfos\"\x8e\n" +
+	"task_infos\x18\a \x01(\tR\ttaskInfos\x12.\n" +
+	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\x8e\n" +
 	"\n" +
 	"\x1dStartWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
@@ -9891,7 +9934,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x0estart_workflow\x18\x01 \x01(\v2E.temporal.server.api.historyservice.v1.StartWorkflowExecutionResponseH\x00R\rstartWorkflow\x12q\n" +
 	"\x0fupdate_workflow\x18\x02 \x01(\v2F.temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponseH\x00R\x0eupdateWorkflowB\n" +
 	"\n" +
-	"\bresponse\"\xe7\x05\n" +
+	"\bresponse\"\xfd\x05\n" +
 	" RecordWorkflowTaskStartedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12X\n" +
 	"\x12workflow_execution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\x12,\n" +
@@ -9903,7 +9946,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16build_id_redirect_info\x18\b \x01(\v25.temporal.server.api.taskqueue.v1.BuildIdRedirectInfoR\x13buildIdRedirectInfo\x12Y\n" +
 	"\x14scheduled_deployment\x18\t \x01(\v2&.temporal.api.deployment.v1.DeploymentR\x13scheduledDeployment\x12c\n" +
 	"\x11version_directive\x18\n" +
-	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\x94\n" +
+	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
+	"\x05stamp\x18\v \x01(\x05R\x05stamp:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\x94\n" +
 	"\n" +
 	"!RecordWorkflowTaskStartedResponse\x12I\n" +
 	"\rworkflow_type\x18\x01 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x129\n" +
@@ -9994,12 +10038,13 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	" RespondWorkflowTaskFailedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12h\n" +
 	"\x0efailed_request\x18\x02 \x01(\v2A.temporal.api.workflowservice.v1.RespondWorkflowTaskFailedRequestR\rfailedRequest:\x1f\x92\xc4\x03\x1b2\x19failed_request.task_token\"#\n" +
-	"!RespondWorkflowTaskFailedResponse\"\x94\x02\n" +
+	"!RespondWorkflowTaskFailedResponse\"\xaa\x02\n" +
 	"\x1aIsWorkflowTaskValidRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12?\n" +
 	"\x05clock\x18\x03 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12,\n" +
-	"\x12scheduled_event_id\x18\x04 \x01(\x03R\x10scheduledEventId:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"8\n" +
+	"\x12scheduled_event_id\x18\x04 \x01(\x03R\x10scheduledEventId\x12\x14\n" +
+	"\x05stamp\x18\x05 \x01(\x05R\x05stamp:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"8\n" +
 	"\x1bIsWorkflowTaskValidResponse\x12\x19\n" +
 	"\bis_valid\x18\x01 \x01(\bR\aisValid\"\xdd\x01\n" +
 	"\"RecordActivityTaskHeartbeatRequest\x12!\n" +
@@ -10122,11 +10167,13 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x13base_execution_info\x18\x06 \x01(\v22.temporal.server.api.workflow.v1.BaseExecutionInfoR\x11baseExecutionInfo\x12\x1c\n" +
 	"\n" +
 	"new_run_id\x18\a \x01(\tR\bnewRunId:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_id\"\x1b\n" +
-	"\x19ReplicateEventsV2Response\"\xfb\x01\n" +
+	"\x19ReplicateEventsV2Response\"\xed\x02\n" +
 	"\x1dReplicateWorkflowStateRequest\x12_\n" +
 	"\x0eworkflow_state\x18\x01 \x01(\v28.temporal.server.api.persistence.v1.WorkflowMutableStateR\rworkflowState\x12%\n" +
 	"\x0eremote_cluster\x18\x02 \x01(\tR\rremoteCluster\x12!\n" +
-	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceId:/\x92\xc4\x03+*)workflow_state.execution_info.workflow_id\" \n" +
+	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceId\x120\n" +
+	"\x14is_force_replication\x18\x04 \x01(\bR\x12isForceReplication\x12>\n" +
+	"\x1cis_close_transfer_task_acked\x18\x05 \x01(\bR\x18isCloseTransferTaskAcked:/\x92\xc4\x03+*)workflow_state.execution_info.workflow_id\" \n" +
 	"\x1eReplicateWorkflowStateResponse\"\xa7\x01\n" +
 	"\x16SyncShardStatusRequest\x12%\n" +
 	"\x0esource_cluster\x18\x01 \x01(\tR\rsourceCluster\x12\x19\n" +
@@ -10418,7 +10465,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x10ListTasksRequest\x12V\n" +
 	"\arequest\x18\x01 \x01(\v2<.temporal.server.api.adminservice.v1.ListHistoryTasksRequestR\arequest:\x16\x92\xc4\x03\x12\x1a\x10request.shard_id\"n\n" +
 	"\x11ListTasksResponse\x12Y\n" +
-	"\bresponse\x18\x01 \x01(\v2=.temporal.server.api.adminservice.v1.ListHistoryTasksResponseR\bresponse\"\x90\x03\n" +
+	"\bresponse\x18\x01 \x01(\v2=.temporal.server.api.adminservice.v1.ListHistoryTasksResponseR\bresponse\"\xdd\x02\n" +
 	"\"CompleteNexusOperationChasmRequest\x12V\n" +
 	"\n" +
 	"completion\x18\x01 \x01(\v26.temporal.server.api.token.v1.NexusOperationCompletionR\n" +
@@ -10426,7 +10473,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\asuccess\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadH\x00R\asuccess\x12<\n" +
 	"\afailure\x18\x03 \x01(\v2 .temporal.api.failure.v1.FailureH\x00R\afailure\x129\n" +
 	"\n" +
-	"close_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime:Q\x92\xc4\x03M\"%completion.component_ref.namespace_id*$completion.component_ref.business_idB\t\n" +
+	"close_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime:\x1e\x92\xc4\x03\x1aB\x18completion.component_refB\t\n" +
 	"\aoutcome\"%\n" +
 	"#CompleteNexusOperationChasmResponse\"\xe0\x03\n" +
 	"\x1dCompleteNexusOperationRequest\x12V\n" +

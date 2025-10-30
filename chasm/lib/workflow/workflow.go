@@ -8,7 +8,7 @@ import (
 const (
 	// Archetype for today's workflow implementation.
 	// This value is NOT persisted today, and ok to be changed.
-	Archetype chasm.Archetype = "Workflow"
+	Archetype chasm.Archetype = "workflow.Workflow"
 )
 
 type Workflow struct {
