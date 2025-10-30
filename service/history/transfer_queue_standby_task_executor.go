@@ -201,9 +201,6 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		if wtInfo == nil {
 			return nil, nil
 		}
-		if transferTask.Stamp != wtInfo.Stamp {
-			return nil, consts.ErrStaleReference
-		}
 
 		_, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
 		// Task queue is ignored here because at standby, always use original normal task queue,
@@ -524,12 +521,9 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	}
 	defer func() {
 		var verificationErr *verificationErr
-		switch {
-		case retError == consts.ErrTaskRetry,
-			errors.Is(retError, consts.ErrStaleReference),
-			errors.As(retError, &verificationErr):
+		if retError == consts.ErrTaskRetry || errors.As(retError, &verificationErr) {
 			release(nil)
-		default:
+		} else {
 			release(retError)
 		}
 	}()

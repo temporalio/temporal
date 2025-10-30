@@ -192,7 +192,6 @@ func (v *taskValidatorImpl) isTaskValid(
 			},
 			Clock:            task.Data.Clock,
 			ScheduledEventId: task.Data.ScheduledEventId,
-			Stamp:            task.Data.GetStamp(),
 		})
 		switch err.(type) {
 		case nil:

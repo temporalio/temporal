@@ -2372,17 +2372,18 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, errShuttingDown
 	}
 
-	completion := &persistencespb.ChasmNexusCompletion{
+	ref := chasm.ProtoRefToComponentRef(request.Completion.ComponentRef)
+	info := &persistencespb.ChasmNexusCompletion{
 		CloseTime: request.CloseTime,
 		RequestId: request.Completion.RequestId,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
-		completion.Outcome = &persistencespb.ChasmNexusCompletion_Failure{
+		info.Outcome = &persistencespb.ChasmNexusCompletion_Failure{
 			Failure: variant.Failure,
 		}
 	case *historyservice.CompleteNexusOperationChasmRequest_Success:
-		completion.Outcome = &persistencespb.ChasmNexusCompletion_Success{
+		info.Outcome = &persistencespb.ChasmNexusCompletion_Success{
 			Success: variant.Success,
 		}
 	default:
@@ -2393,13 +2394,14 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// this similarly as we would a pure task (holding an exclusive lock), as the
 	// assumption is that the accessed component will be recording (or generating a
 	// task) based on this result.
-	_, _, err := chasm.UpdateComponent[chasm.NexusCompletionHandler](
-		ctx,
-		request.GetCompletion().GetComponentRef(),
-		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
-			return nil, c.HandleNexusCompletion(ctx, completion)
-		},
-		completion)
+	_, err := h.chasmEngine.UpdateComponent(ctx, ref, func(ctx chasm.MutableContext, component chasm.Component) error {
+		handler, ok := component.(chasm.NexusCompletionHandler)
+		if !ok {
+			return serviceerror.NewUnimplementedf("component '%T' does not implement NexusCompletionHandler", component)
+		}
+
+		return handler.HandleNexusCompletion(ctx, info)
+	})
 	if err != nil {
 		return nil, h.convertError(err)
 	}

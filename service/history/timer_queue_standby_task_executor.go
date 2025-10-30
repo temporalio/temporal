@@ -419,9 +419,6 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 		if workflowTask == nil {
 			return nil, nil
 		}
-		if timerTask.Stamp != workflowTask.Stamp {
-			return nil, consts.ErrStaleReference
-		}
 
 		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
 		if err != nil {
