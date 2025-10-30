@@ -81,7 +81,7 @@ func WithSearchAttributes(
 
 			if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
 				//nolint:forbidigo
-				panic(fmt.Sprintf("registrable component validation error: search attribute alias %s is already defined", alias))
+				panic(fmt.Sprintf("registrable component validation error: search attribute alias %q is already defined", alias))
 			}
 			if _, ok := rc.searchAttributesMapper.fieldToAlias[field]; ok {
 				//nolint:forbidigo
