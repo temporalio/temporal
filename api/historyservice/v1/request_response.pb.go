@@ -1662,8 +1662,12 @@ type RecordActivityTaskStartedRequest struct {
 	// Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
 	// that may arise due to stale routing configs in task queue partitions.
 	TaskDispatchRevisionNumber int64 `protobuf:"varint,13,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3" json:"task_dispatch_revision_number,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Reference to the Chasm component for activity execution (if applicable). For standalone activities, all necessary
+	// start information is carried within this component, obviating the need to use the fields that apply to embedded
+	// activities with the exception of version_directive.
+	ComponentRef  []byte `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskStartedRequest) Reset() {
@@ -1771,6 +1775,13 @@ func (x *RecordActivityTaskStartedRequest) GetTaskDispatchRevisionNumber() int64
 		return x.TaskDispatchRevisionNumber
 	}
 	return 0
+}
+
+func (x *RecordActivityTaskStartedRequest) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
 }
 
 type RecordActivityTaskStartedResponse struct {

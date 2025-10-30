@@ -10,6 +10,7 @@ import (
 var HistoryModule = fx.Module(
 	"activity-history",
 	fx.Provide(
+		newActivityDispatchTaskExecutor,
 		newHandler,
 		newLibrary,
 	),

@@ -579,6 +579,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
+		ComponentRef:     addRequest.ComponentRef,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -3059,6 +3060,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		ComponentRef:               task.event.Data.GetComponentRef(),
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
