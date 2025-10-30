@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -1109,13 +1108,6 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		var currentDeploymentQueue physicalTaskQueueManager
 
 		if targetDeployment == nil && taskDirectiveRevisionNumber > targetDeploymentRevisionNumber {
-			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-				fmt.Println("--------------------------------")
-				fmt.Println("targetDeployment", targetDeployment)
-				fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-				fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-				fmt.Println("--------------------------------")
-			}
 			// When workflow moves from unversioned to versioned, but task-queue partition did not get the changes.
 			currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
 			taskDispatchRevisionNumber = taskDirectiveRevisionNumber
@@ -1145,22 +1137,9 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			var IndependentUnpinnedActivity bool
 			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 				if workerDeploymentData != nil && workerDeploymentData.GetVersions() != nil && workerDeploymentData.GetVersions()[directive.GetDeploymentVersion().GetBuildId()] == nil {
-					fmt.Println("OOOOO we think this is an independent unpinned activity")
-					fmt.Println("versions present in workerDeploymentData", workerDeploymentData.GetVersions())
-					fmt.Println("deployment version from directive", directive.GetDeploymentVersion().GetBuildId())
 					IndependentUnpinnedActivity = true
 				}
 			}
-
-			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-				fmt.Println("--------------------------------")
-				fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-				fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-				fmt.Println("targetDeployment", targetDeployment)
-				fmt.Println("deployment from history", deployment)
-				fmt.Println("--------------------------------")
-			}
-
 			// TODO (Shivam): The following should not be done for independent activities since they are eventually consistent.
 
 			// 1. Independent unpinned activities should be dispatched to the currentDeployment of their TQ. Eventually consistent.
@@ -1174,27 +1153,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
 				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
 			} else if targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
-				if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-					fmt.Println("ACTIVITY TASK BEING DISPATCHED TO Routing Config current DEPLOYMENT")
-				}
 				// Choose the currentDeployment in case of tie for the case of unversioned.
 				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
 				taskDispatchRevisionNumber = targetDeploymentRevisionNumber
 			} else {
-				if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-					fmt.Println("ACTIVITY TASK BEING DISPATCHED TO Task directive DEPLOYMENT")
-				}
 				currentDeploymentQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
 				taskDispatchRevisionNumber = taskDirectiveRevisionNumber
-			}
-
-			if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-				fmt.Println("--------------------------------")
-				fmt.Println("For task type", pm.partition.TaskType())
-				fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-				fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-				fmt.Println("taskDispatchRevisionNumber in getPhysicalQueuesForAdd", taskDispatchRevisionNumber)
-				fmt.Println("--------------------------------")
 			}
 
 			if forwardInfo == nil {
@@ -1206,14 +1170,6 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				return nil, currentDeploymentQueue, userDataChanged, taskDispatchRevisionNumber, err
 			}
 		}
-	}
-
-	fmt.Println("--------------------------------")
-	if pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-		fmt.Println("targetDeployment", targetDeployment)
-		fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-		fmt.Println("taskDispatchRevisionNumber", taskDispatchRevisionNumber)
-		fmt.Println("--------------------------------")
 	}
 
 	if forwardInfo != nil {

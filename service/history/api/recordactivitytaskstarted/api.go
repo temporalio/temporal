@@ -191,13 +191,13 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, serviceerrors.NewActivityStartDuringTransition()
 	}
 
-	fmt.Println("--------------------------------")
-	fmt.Println("pollerDeployment", pollerDeployment)
-	fmt.Println("wfDeployment", wfDeployment)
-	fmt.Println("wfBehavior", wfBehavior)
-	fmt.Println("request.TaskDispatchRevisionNumber", request.TaskDispatchRevisionNumber)
-	fmt.Println("oldRevisionNumber", mutableState.GetRevisionNumber())
-	fmt.Println("--------------------------------")
+	// fmt.Println("--------------------------------")
+	// fmt.Println("pollerDeployment", pollerDeployment)
+	// fmt.Println("wfDeployment", wfDeployment)
+	// fmt.Println("wfBehavior", wfBehavior)
+	// fmt.Println("request.TaskDispatchRevisionNumber", request.TaskDispatchRevisionNumber)
+	// fmt.Println("oldRevisionNumber", mutableState.GetRevisionNumber())
+	// fmt.Println("--------------------------------")
 
 	if !pollerDeployment.Equal(wfDeployment) &&
 		// Independent activities of pinned workflows are redirected. They should not start a transition on wf.

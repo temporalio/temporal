@@ -539,12 +539,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		Priority:         addRequest.Priority,
 	}
 
-	if taskInfo.GetVersionDirective().GetRevisionNumber() > 1 {
-		fmt.Println("--------------------------------")
-		fmt.Println("Revision number scheduled by history is", taskInfo.GetVersionDirective().GetRevisionNumber())
-		fmt.Println("--------------------------------")
-	}
-
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
 		forwardInfo: addRequest.ForwardInfo,
