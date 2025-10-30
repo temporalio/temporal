@@ -3933,4 +3933,26 @@ func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
 		s.Nil(resp)
 		s.EqualError(err, "Setting fairness key rate limit on workflow task queues is not allowed.")
 	})
+
+	s.Run("fairness weight override on workflow task queue should return success", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).Times(1)
+		s.mockMatchingClient.EXPECT().UpdateTaskQueueConfig(gomock.Any(), gomock.Any()).Return(
+			&matchingservice.UpdateTaskQueueConfigResponse{
+				UpdatedTaskqueueConfig: &taskqueuepb.TaskQueueConfig{},
+			}, nil).Times(1)
+
+		request := &workflowservice.UpdateTaskQueueConfigRequest{
+			Namespace:     s.testNamespace.String(),
+			TaskQueue:     "test-task-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			SetFairnessWeightOverrides: map[string]float32{
+				"key1": 1.5,
+				"key2": 2.0,
+			},
+		}
+
+		resp, err := wh.UpdateTaskQueueConfig(s.T().Context(), request)
+		s.NoError(err)
+		s.NotNil(resp)
+	})
 }
