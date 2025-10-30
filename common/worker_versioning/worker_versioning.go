@@ -535,36 +535,63 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 	rampingVersionRoutingConfig *deploymentpb.RoutingConfig,
 	workflowId string,
 ) (*deploymentspb.WorkerDeploymentVersion, int64) {
-	var ramp float32
-	var currentVersionRoutingConfigRevisionNumber, rampingVersionRoutingConfigRevisionNumber int64
-	var rampingVersion, currentVersion *deploymentspb.WorkerDeploymentVersion
+	// Find most recent currentDeploymentVersion by comparing old vs new format timestamps
+	var finalCurrentDep *deploymentspb.WorkerDeploymentVersion
+	var finalCurrentRev int64
 
-	if currentVersionRoutingConfig != nil || rampingVersionRoutingConfig != nil {
-		// Using new deployment data format.
-		ramp = rampingVersionRoutingConfig.GetRampingVersionPercentage()
+	oldCurrentTime := current.GetRoutingUpdateTime().AsTime()
+	newCurrentTime := currentVersionRoutingConfig.GetCurrentVersionChangedTime().AsTime()
 
-		currentVersion = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(currentVersionRoutingConfig.GetCurrentDeploymentVersion()))
-		currentVersionRoutingConfigRevisionNumber = currentVersionRoutingConfig.GetRevisionNumber()
-		rampingVersion = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(rampingVersionRoutingConfig.GetRampingDeploymentVersion()))
-		rampingVersionRoutingConfigRevisionNumber = rampingVersionRoutingConfig.GetRevisionNumber()
+	if newCurrentTime.After(oldCurrentTime) {
+		// New format current is more recent
+		finalCurrentDep = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(currentVersionRoutingConfig.GetCurrentDeploymentVersion()))
+		finalCurrentRev = currentVersionRoutingConfig.GetRevisionNumber()
 	} else {
-		ramp = ramping.GetRampPercentage()
-		rampingVersion = ramping.GetVersion()
-		currentVersion = current.GetVersion()
+		// Old format current is more recent (or equal, or new is nil)
+		finalCurrentDep = current.GetVersion()
+		finalCurrentRev = 0
 	}
 
-	if ramp <= 0 {
+	// Find most recent rampingDeploymentVersion by comparing old vs new format timestamps
+	var finalRampingDep *deploymentspb.WorkerDeploymentVersion
+	var finalRampingRev int64
+	var finalRampPercentage float32
+
+	oldRampingTime := ramping.GetRoutingUpdateTime().AsTime()
+	newRampingTimeFromVersion := rampingVersionRoutingConfig.GetRampingVersionChangedTime().AsTime()
+	newRampingTimeFromPercentage := rampingVersionRoutingConfig.GetRampingVersionPercentageChangedTime().AsTime()
+
+	// Choose the most recent timestamp between the two fields
+	newRampingTime := newRampingTimeFromVersion
+	if newRampingTimeFromPercentage.After(newRampingTimeFromVersion) {
+		newRampingTime = newRampingTimeFromPercentage
+	}
+
+	if newRampingTime.After(oldRampingTime) {
+		// New format ramping is more recent
+		finalRampingDep = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(rampingVersionRoutingConfig.GetRampingDeploymentVersion()))
+		finalRampingRev = rampingVersionRoutingConfig.GetRevisionNumber()
+		finalRampPercentage = rampingVersionRoutingConfig.GetRampingVersionPercentage()
+	} else {
+		// Old format ramping is more recent
+		finalRampingDep = ramping.GetVersion()
+		finalRampingRev = 0
+		finalRampPercentage = ramping.GetRampPercentage()
+	}
+
+	// Apply ramp logic using final values
+	if finalRampPercentage <= 0 {
 		// No ramp
-		return currentVersion, currentVersionRoutingConfigRevisionNumber
-	} else if ramp == 100 {
-		return rampingVersion, rampingVersionRoutingConfigRevisionNumber
+		return finalCurrentDep, finalCurrentRev
+	} else if finalRampPercentage == 100 {
+		return finalRampingDep, finalRampingRev
 	}
 	// Partial ramp. Decide based on workflow ID
 	wfRampThreshold := calcRampThreshold(workflowId)
-	if wfRampThreshold <= float64(ramp) {
-		return rampingVersion, rampingVersionRoutingConfigRevisionNumber
+	if wfRampThreshold <= float64(finalRampPercentage) {
+		return finalRampingDep, finalRampingRev
 	}
-	return currentVersion, currentVersionRoutingConfigRevisionNumber
+	return finalCurrentDep, finalCurrentRev
 }
 
 // calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the

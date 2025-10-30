@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -182,6 +183,217 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 
 			assert.InEpsilon(t, .7*float64(runs), histogram[tt.from.GetBuildId()], .02)
 			assert.InEpsilon(t, .3*float64(runs), histogram[tt.to.GetBuildId()], .02)
+		})
+	}
+}
+
+func TestFindDeploymentVersionForWorkflowID_MixedOldAndNew(t *testing.T) {
+	t1 := timestamp.TimePtr(time.Now().Add(-2 * time.Hour))
+	t2 := timestamp.TimePtr(time.Now().Add(-time.Hour))
+	t3 := timestamp.TimePtr(time.Now())
+
+	tests := []struct {
+		name             string
+		oldCurrent       *deploymentspb.DeploymentVersionData
+		oldRamping       *deploymentspb.DeploymentVersionData
+		newCurrentConfig *deploymentpb.RoutingConfig
+		newRampingConfig *deploymentpb.RoutingConfig
+		wantDeployment   *deploymentspb.WorkerDeploymentVersion
+		wantRevision     int64
+	}{
+		{
+			name: "new current wins, new ramping wins, no ramp returns new current",
+			oldCurrent: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RoutingUpdateTime: t1,
+			},
+			oldRamping: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RampPercentage:    0,
+				RoutingUpdateTime: t1,
+			},
+			newCurrentConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  ExternalWorkerDeploymentVersionFromVersion(v2),
+				CurrentVersionChangedTime: t3,
+				RevisionNumber:            10,
+			},
+			newRampingConfig: &deploymentpb.RoutingConfig{
+				RampingVersionPercentage: 0,
+			},
+			wantDeployment: v2,
+			wantRevision:   10,
+		},
+		{
+			name: "new current wins, old ramping wins, no ramp returns new current",
+			oldCurrent: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RoutingUpdateTime: t1,
+			},
+			oldRamping: &deploymentspb.DeploymentVersionData{
+				Version:           v2,
+				RampPercentage:    0,
+				RoutingUpdateTime: t3,
+			},
+			newCurrentConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  ExternalWorkerDeploymentVersionFromVersion(v3),
+				CurrentVersionChangedTime: t2,
+				RevisionNumber:            15,
+			},
+			newRampingConfig: &deploymentpb.RoutingConfig{
+				RampingVersionPercentage: 0,
+			},
+			wantDeployment: v3,
+			wantRevision:   15,
+		},
+		{
+			name: "old current wins, new ramping wins, ramp 100% returns new ramping",
+			oldCurrent: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RoutingUpdateTime: t3,
+			},
+			oldRamping: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RampPercentage:    100,
+				RoutingUpdateTime: t1,
+			},
+			newCurrentConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  ExternalWorkerDeploymentVersionFromVersion(v2),
+				CurrentVersionChangedTime: t2,
+				RevisionNumber:            5,
+			},
+			newRampingConfig: &deploymentpb.RoutingConfig{
+				RampingDeploymentVersion:            ExternalWorkerDeploymentVersionFromVersion(v3),
+				RampingVersionPercentage:            100,
+				RampingVersionChangedTime:           t2,
+				RampingVersionPercentageChangedTime: t2,
+				RevisionNumber:                      20,
+			},
+			wantDeployment: v3,
+			wantRevision:   20,
+		},
+		{
+			name: "old current wins, old ramping wins, no ramp returns old current",
+			oldCurrent: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RoutingUpdateTime: t3,
+			},
+			oldRamping: &deploymentspb.DeploymentVersionData{
+				Version:           v2,
+				RampPercentage:    0,
+				RoutingUpdateTime: t3,
+			},
+			newCurrentConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  ExternalWorkerDeploymentVersionFromVersion(v2),
+				CurrentVersionChangedTime: t2,
+				RevisionNumber:            5,
+			},
+			newRampingConfig: &deploymentpb.RoutingConfig{
+				RampingVersionPercentage: 0,
+			},
+			wantDeployment: v1,
+			wantRevision:   0, // old format has no revision
+		},
+		{
+			name: "old current wins, old ramping wins, ramp 100% returns old ramping",
+			oldCurrent: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RoutingUpdateTime: t3,
+			},
+			oldRamping: &deploymentspb.DeploymentVersionData{
+				Version:           v2,
+				RampPercentage:    100,
+				RoutingUpdateTime: t3,
+			},
+			newCurrentConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  ExternalWorkerDeploymentVersionFromVersion(v3),
+				CurrentVersionChangedTime: t2,
+				RevisionNumber:            5,
+			},
+			newRampingConfig: &deploymentpb.RoutingConfig{
+				RampingDeploymentVersion:            ExternalWorkerDeploymentVersionFromVersion(v3),
+				RampingVersionPercentage:            100,
+				RampingVersionChangedTime:           t1,
+				RampingVersionPercentageChangedTime: t1,
+				RevisionNumber:                      12,
+			},
+			wantDeployment: v2,
+			wantRevision:   0, // old format has no revision
+		},
+		{
+			name: "new current wins with unversioned deployment and revision 2",
+			oldCurrent: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RoutingUpdateTime: t1,
+			},
+			newCurrentConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  nil,
+				CurrentVersionChangedTime: t2,
+				RevisionNumber:            2,
+			},
+			wantDeployment: nil,
+			wantRevision:   2,
+		},
+		{
+			name: "old current wins, new ramping wins, ramp 100% returns new ramping",
+			oldCurrent: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RoutingUpdateTime: t3,
+			},
+			oldRamping: &deploymentspb.DeploymentVersionData{
+				Version:           v2,
+				RampPercentage:    50,
+				RoutingUpdateTime: t1,
+			},
+			newCurrentConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  ExternalWorkerDeploymentVersionFromVersion(v2),
+				CurrentVersionChangedTime: t2,
+				RevisionNumber:            5,
+			},
+			newRampingConfig: &deploymentpb.RoutingConfig{
+				RampingDeploymentVersion:            ExternalWorkerDeploymentVersionFromVersion(v3),
+				RampingVersionPercentage:            100,
+				RampingVersionChangedTime:           t2,
+				RampingVersionPercentageChangedTime: t2,
+				RevisionNumber:                      15,
+			},
+			wantDeployment: v3,
+			wantRevision:   15,
+		},
+		{
+			name: "new current wins, old ramping wins, no ramp returns new current",
+			oldCurrent: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RoutingUpdateTime: t1,
+			},
+			oldRamping: &deploymentspb.DeploymentVersionData{
+				Version:           v1,
+				RampPercentage:    50,
+				RoutingUpdateTime: t3,
+			},
+			newCurrentConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  ExternalWorkerDeploymentVersionFromVersion(v2),
+				CurrentVersionChangedTime: t2,
+				RevisionNumber:            8,
+			},
+			newRampingConfig: &deploymentpb.RoutingConfig{
+				RampingVersionPercentage: 0,
+			},
+			wantDeployment: v2,
+			wantRevision:   8,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotDep, gotRev := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
+				tt.oldCurrent,
+				tt.oldRamping,
+				tt.newCurrentConfig,
+				tt.newRampingConfig,
+				"test-wf-id",
+			)
+			assert.True(t, gotDep.Equal(tt.wantDeployment), "deployment mismatch: got %v, want %v", gotDep, tt.wantDeployment)
+			assert.Equal(t, tt.wantRevision, gotRev, "revision mismatch")
 		})
 	}
 }
