@@ -101,8 +101,10 @@ type TaskInfo struct {
 	// TaskVersionDirective, which is unversioned.)
 	VersionDirective *v11.TaskVersionDirective `protobuf:"bytes,8,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	// Stamp field allows to differentiate between different instances of the same task
-	Stamp         int32         `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	Priority      *v12.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
+	Stamp    int32         `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	Priority *v12.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
+	// Reference to any chasm component associated with this task
+	ComponentRef  []byte `protobuf:"bytes,11,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -203,6 +205,13 @@ func (x *TaskInfo) GetStamp() int32 {
 func (x *TaskInfo) GetPriority() *v12.Priority {
 	if x != nil {
 		return x.Priority
+	}
+	return nil
+}
+
+func (x *TaskInfo) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
 	}
 	return nil
 }
@@ -533,7 +542,7 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x11AllocatedTaskInfo\x12@\n" +
 	"\x04data\x18\x01 \x01(\v2,.temporal.server.api.persistence.v1.TaskInfoR\x04data\x12\x1b\n" +
 	"\ttask_pass\x18\x03 \x01(\x03R\btaskPass\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\x87\x04\n" +
+	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xac\x04\n" +
 	"\bTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -548,7 +557,8 @@ const file_temporal_server_api_persistence_v1_tasks_proto_rawDesc = "" +
 	"\x11version_directive\x18\b \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12<\n" +
 	"\bpriority\x18\n" +
-	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\"\x97\x04\n" +
+	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12#\n" +
+	"\rcomponent_ref\x18\v \x01(\fR\fcomponentRef\"\x97\x04\n" +
 	"\rTaskQueueInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12A\n" +
