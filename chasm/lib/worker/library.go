@@ -1,4 +1,4 @@
-package workersession
+package worker
 
 import (
 	"go.temporal.io/server/chasm"
@@ -9,26 +9,26 @@ import (
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	leaseExpiryTaskExecutor    *LeaseExpiryTaskExecutor
-	sessionCleanupTaskExecutor *SessionCleanupTaskExecutor
+	leaseExpiryTaskExecutor   *LeaseExpiryTaskExecutor
+	workerCleanupTaskExecutor *WorkerCleanupTaskExecutor
 }
 
 func NewLibrary(
 	logger log.Logger,
 ) *Library {
 	return &Library{
-		leaseExpiryTaskExecutor:    NewLeaseExpiryTaskExecutor(logger),
-		sessionCleanupTaskExecutor: NewSessionCleanupTaskExecutor(logger),
+		leaseExpiryTaskExecutor:   NewLeaseExpiryTaskExecutor(logger),
+		workerCleanupTaskExecutor: NewWorkerCleanupTaskExecutor(logger),
 	}
 }
 
 func (l *Library) Name() string {
-	return "workersession"
+	return "worker"
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*WorkerSession]("WorkerSession"),
+		chasm.NewRegistrableComponent[*Worker]("Worker"),
 	}
 }
 
@@ -40,13 +40,13 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 			l.leaseExpiryTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
-			"SessionCleanupTask",
-			l.sessionCleanupTaskExecutor,
-			l.sessionCleanupTaskExecutor,
+			"WorkerCleanupTask",
+			l.workerCleanupTaskExecutor,
+			l.workerCleanupTaskExecutor,
 		),
 	}
 }
 
 func (l *Library) RegisterServices(server *grpc.Server) {
-	// No gRPC services for WorkerSession currently
+	// No gRPC services for Worker currently
 }
