@@ -58,7 +58,7 @@ func (v *VisibilitySearchAttributesMapper) Field(alias string) (string, error) {
 	}
 	field, ok := v.aliasToField[alias]
 	if !ok {
-		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %s", alias))
+		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %q", alias))
 	}
 	return field, nil
 }
