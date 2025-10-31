@@ -1284,8 +1284,9 @@ func (pm *taskQueuePartitionManagerImpl) checkQueryBlackholed(
 			}
 		}
 	}
+
 	// Check new format
-	for _, workerDeploymentData := range deploymentData.GetDeploymentsData() {
+	if workerDeploymentData, ok := deploymentData.GetDeploymentsData()[deployment.GetSeriesName()]; ok {
 		if workerDeploymentData.GetVersions() != nil && workerDeploymentData.GetVersions()[deployment.GetBuildId()] != nil &&
 			workerDeploymentData.GetVersions()[deployment.GetBuildId()].GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED && len(pm.GetAllPollerInfo()) == 0 {
 			return serviceerror.NewFailedPreconditionf(ErrBlackholedQuery, deployment.GetBuildId(), deployment.GetBuildId())

@@ -433,7 +433,7 @@ func (s *TaskQueueStatsSuite) validateTaskQueueStatsByType(
 	halfExpectation.MaxExtraTasks /= 2
 
 	s.validateDescribeTaskQueueWithEnhancedMode(ctx, tqName, tqType, halfExpectation)
-	// s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, halfExpectation)
+	s.validateDescribeWorkerDeploymentVersion(ctx, tqName, tqType, halfExpectation)
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
