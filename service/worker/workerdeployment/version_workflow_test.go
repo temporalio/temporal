@@ -259,7 +259,7 @@ func (s *VersionWorkflowSuite) Test_SyncRoutingConfigAsync() {
 
 		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("sync state update should not have failed with error %v", err)
+				s.Fail("sync state update should not have failed", err)
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {

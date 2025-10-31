@@ -78,7 +78,8 @@ func Workflow(ctx workflow.Context, unsafeWorkflowVersionGetter func() Deploymen
 			func(_ workflow.Context) interface{} { return unsafeWorkflowVersionGetter() },
 			func(a, b interface{}) bool { return a == b }).
 			Get(&workflowRunner.workflowVersion); err != nil {
-			panic("can't get workflow version" + err.Error())
+			workflowRunner.logger.Error("can't get workflow version", err.Error())
+			return err
 		}
 	}
 
@@ -140,11 +141,11 @@ func (d *WorkflowRunner) handlePropagationComplete(completion *deploymentspb.Pro
 		d.State.PropagatingRevisions = make(map[string]*deploymentspb.PropagatingRevisions)
 	}
 
-	buildId := completion.BuildId
+	buildID := completion.BuildId
 	revisionNumber := completion.RevisionNumber
 
 	// Remove this revision from in-progress tracking for this build
-	if revisions, ok := d.State.PropagatingRevisions[buildId]; ok {
+	if revisions, ok := d.State.PropagatingRevisions[buildID]; ok {
 		// Find and remove the revision number
 		filteredRevisions := make([]int64, 0, len(revisions.RevisionNumbers))
 		for _, rev := range revisions.RevisionNumbers {
@@ -155,7 +156,7 @@ func (d *WorkflowRunner) handlePropagationComplete(completion *deploymentspb.Pro
 
 		if len(filteredRevisions) == 0 {
 			// Clean up empty build id entries
-			delete(d.State.PropagatingRevisions, buildId)
+			delete(d.State.PropagatingRevisions, buildID)
 		} else {
 			revisions.RevisionNumbers = filteredRevisions
 		}
@@ -163,7 +164,7 @@ func (d *WorkflowRunner) handlePropagationComplete(completion *deploymentspb.Pro
 
 	d.logger.Info("Propagation completed for revision",
 		"revision", revisionNumber,
-		"build_id", buildId)
+		"build_id", buildID)
 }
 
 func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeploymentVersionSummary) {
@@ -507,6 +508,7 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 }
 
 //revive:disable-next-line:cognitive-complexity
+//nolint:staticcheck // deprecated stuff will be cleaned
 func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *deploymentspb.SetRampingVersionArgs) (*deploymentspb.SetRampingVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
@@ -859,6 +861,7 @@ func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersio
 	return d.validateStateBeforeAcceptingSetCurrent(args)
 }
 
+//nolint:staticcheck // deprecated stuff will be cleaned
 func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentVersionArgs) (*deploymentspb.SetCurrentVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)

@@ -51,13 +51,13 @@ func (s *WorkerDeploymentSuite) TearDownTest() {
 
 func (s *WorkerDeploymentSuite) skipBeforeVersion(version DeploymentWorkflowVersion) {
 	if s.workflowVersion < version {
-		s.T().Skip(fmt.Sprintf("test supports version %v and newer", version))
+		s.T().Skipf("test supports version %v and newer", version)
 	}
 }
 
 func (s *WorkerDeploymentSuite) skipFromVersion(version DeploymentWorkflowVersion) {
 	if s.workflowVersion >= version {
-		s.T().Skip(fmt.Sprintf("test supports version older than %v", version))
+		s.T().Skipf("test supports version older than %v", version)
 	}
 }
 
@@ -299,11 +299,11 @@ func (s *WorkerDeploymentSuite) Test_RevisionIncrementsWithAsyncSetCurrentAndRam
 	s.env.RegisterDelayedCallback(func() {
 		s.env.UpdateWorkflow(SetCurrentVersion, version1, &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("SetCurrentVersion update should not have failed with error %v", err)
+				s.Fail("SetCurrentVersion update should not have failed", err)
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err)
+				s.Require().NoError(err)
 
 				// Query after SetRampingVersion - revision should be 1
 				s.verifyRevisionNumber(1)
@@ -336,11 +336,11 @@ func (s *WorkerDeploymentSuite) Test_RevisionIncrementsWithAsyncSetCurrentAndRam
 	// Now test SetRampingVersion
 	s.env.UpdateWorkflow(SetRampingVersion, version2, &testsuite.TestUpdateCallback{
 		OnReject: func(err error) {
-			s.Fail("SetRampingVersion update should not have failed with error %v", err)
+			s.Fail("SetRampingVersion update should not have failed", err)
 		},
 		OnAccept: func() {},
 		OnComplete: func(result interface{}, err error) {
-			s.NoError(err)
+			s.Require().NoError(err)
 			// After SetRamping completes, verify revision number is 2
 			s.verifyRevisionNumber(2)
 		},
@@ -376,11 +376,11 @@ func (s *WorkerDeploymentSuite) Test_NoRevisionIncrementsWithoutAsyncSetCurrentA
 	s.env.RegisterDelayedCallback(func() {
 		s.env.UpdateWorkflow(SetCurrentVersion, version1, &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("SetCurrentVersion update should not have failed with error %v", err)
+				s.Fail("SetCurrentVersion update should not have failed", err)
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err)
+				s.Require().NoError(err)
 
 				// Query after SetRampingVersion - revision should be 0
 				s.verifyRevisionNumber(0)
@@ -413,11 +413,11 @@ func (s *WorkerDeploymentSuite) Test_NoRevisionIncrementsWithoutAsyncSetCurrentA
 	// Now test SetRampingVersion
 	s.env.UpdateWorkflow(SetRampingVersion, version2, &testsuite.TestUpdateCallback{
 		OnReject: func(err error) {
-			s.Fail("SetRampingVersion update should not have failed with error %v", err)
+			s.Fail("SetRampingVersion update should not have failed", err)
 		},
 		OnAccept: func() {},
 		OnComplete: func(result interface{}, err error) {
-			s.NoError(err)
+			s.Require().NoError(err)
 			// After SetRamping completes, verify revision number is 0
 			s.verifyRevisionNumber(0)
 		},
@@ -474,11 +474,11 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberPassedToContinueAsNew() {
 	s.env.RegisterDelayedCallback(func() {
 		s.env.UpdateWorkflow(SetCurrentVersion, version1, &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("SetCurrentVersion update should not have failed with error %v", err)
+				s.Fail("SetCurrentVersion update should not have failed", err)
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err)
+				s.Require().NoError(err)
 				// Verify revision number is 46 after update
 				s.verifyRevisionNumber(46)
 			},
@@ -507,11 +507,11 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberPassedToContinueAsNew() {
 
 	s.True(s.env.IsWorkflowCompleted())
 	err := s.env.GetWorkflowError()
-	s.NotNil(err, "workflow should have continued as new with state")
+	s.Require().Error(err, "workflow should have continued as new with state")
 	var workflowErr *temporal.WorkflowExecutionError
-	s.ErrorAs(err, &workflowErr, "error should be of type WorkflowExecutionError")
+	s.Require().ErrorAs(err, &workflowErr, "error should be of type WorkflowExecutionError")
 	var canErr *workflow.ContinueAsNewError
-	s.ErrorAs(workflowErr.Unwrap(), &canErr, "error should be of type ContinueAsNewError")
+	s.Require().ErrorAs(workflowErr.Unwrap(), &canErr, "error should be of type ContinueAsNewError")
 	s.Contains(string(canErr.Input.Payloads[0].Data), "\"revisionNumber\":\"46\"")
 }
 
@@ -543,8 +543,8 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberDoesNotIncrementOnFailedSetCu
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
 				// The update should fail due to activity failure
-				s.Error(err)
-				s.ErrorContains(err, "sync failed")
+				s.Require().Error(err)
+				s.Require().ErrorContains(err, "sync failed")
 
 				// Verify revision number did NOT increment (still at initial value)
 				s.verifyRevisionNumber(int(initialRevision))
@@ -604,8 +604,8 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberDoesNotIncrementOnFailedSetRa
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
 				// The update should fail due to activity failure
-				s.Error(err)
-				s.ErrorContains(err, "sync failed")
+				s.Require().Error(err)
+				s.Require().ErrorContains(err, "sync failed")
 
 				// Verify revision number did NOT increment (still at initial value)
 				s.verifyRevisionNumber(int(initialRevision))
@@ -649,14 +649,14 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete() {
 	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
-	buildId := tv.BuildID()
+	buildID := tv.BuildID()
 	revisionNumber := int64(5)
 
 	// Setup initial state with a propagating revision
 	s.env.RegisterDelayedCallback(func() {
 		// Send propagation complete signal
 		s.env.SignalWorkflow(PropagationCompleteSignal, &deploymentspb.PropagationCompletionInfo{
-			BuildId:        buildId,
+			BuildId:        buildID,
 			RevisionNumber: revisionNumber,
 		})
 	}, 1*time.Millisecond)
@@ -667,7 +667,7 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete() {
 		DeploymentName: tv.DeploymentSeries(),
 		State: &deploymentspb.WorkerDeploymentLocalState{
 			PropagatingRevisions: map[string]*deploymentspb.PropagatingRevisions{
-				buildId: {
+				buildID: {
 					RevisionNumbers: []int64{3, revisionNumber, 7},
 				},
 			},
@@ -686,10 +686,10 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete() {
 	s.NoError(queryResult.Get(&state))
 
 	// Verify the revision was removed from the propagating revisions
-	s.Require().Contains(state.State.PropagatingRevisions, buildId)
-	s.NotContains(state.State.PropagatingRevisions[buildId].RevisionNumbers, revisionNumber)
-	s.Contains(state.State.PropagatingRevisions[buildId].RevisionNumbers, int64(3))
-	s.Contains(state.State.PropagatingRevisions[buildId].RevisionNumbers, int64(7))
+	s.Require().Contains(state.State.PropagatingRevisions, buildID)
+	s.NotContains(state.State.PropagatingRevisions[buildID].RevisionNumbers, revisionNumber)
+	s.Contains(state.State.PropagatingRevisions[buildID].RevisionNumbers, int64(3))
+	s.Contains(state.State.PropagatingRevisions[buildID].RevisionNumbers, int64(7))
 }
 
 // Test_HandlePropagationComplete_RemovesEmptyBuildId tests that the deployment workflow
@@ -700,14 +700,14 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete_RemovesEmptyBuild
 	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
-	buildId := tv.BuildID()
+	buildID := tv.BuildID()
 	revisionNumber := int64(5)
 
 	// Setup initial state with only one revision for this build
 	s.env.RegisterDelayedCallback(func() {
 		// Send propagation complete signal
 		s.env.SignalWorkflow(PropagationCompleteSignal, &deploymentspb.PropagationCompletionInfo{
-			BuildId:        buildId,
+			BuildId:        buildID,
 			RevisionNumber: revisionNumber,
 		})
 	}, 1*time.Millisecond)
@@ -718,7 +718,7 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete_RemovesEmptyBuild
 		DeploymentName: tv.DeploymentSeries(),
 		State: &deploymentspb.WorkerDeploymentLocalState{
 			PropagatingRevisions: map[string]*deploymentspb.PropagatingRevisions{
-				buildId: {
+				buildID: {
 					RevisionNumbers: []int64{revisionNumber},
 				},
 			},
@@ -737,7 +737,7 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete_RemovesEmptyBuild
 	s.NoError(queryResult.Get(&state))
 
 	// Verify the build ID entry was removed entirely
-	s.NotContains(state.State.PropagatingRevisions, buildId)
+	s.NotContains(state.State.PropagatingRevisions, buildID)
 }
 
 // Test_SyncUnversionedRamp_AsyncMode tests that syncUnversionedRamp uses async propagation
