@@ -340,7 +340,7 @@ func (e *ExecutableTaskImpl) Resend(
 ) (bool, error) {
 	remainingAttempt--
 	if remainingAttempt < 0 {
-		e.Logger.Error("resend history attempts exceeded",
+		softassert.Sometimes(e.Logger).Error("resend history attempts exceeded",
 			tag.WorkflowNamespaceID(retryErr.NamespaceId),
 			tag.WorkflowID(retryErr.WorkflowId),
 			tag.WorkflowRunID(retryErr.RunId),
@@ -768,7 +768,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	taskInfo := e.ReplicationTask().GetRawTaskInfo()
 
 	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
+		softassert.Sometimes(e.Logger).Error("MarkPoisonPill reached max attempts",
 			tag.SourceCluster(e.SourceClusterName()),
 			tag.ReplicationTask(taskInfo),
 		)
