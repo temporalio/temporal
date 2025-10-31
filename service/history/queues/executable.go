@@ -555,7 +555,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		tag.NewStringTag("task-category", e.GetCategory().Name()),
 	)
 	if attempt > taskCriticalLogMetricAttempts {
-		softassert.Sometimes(logger).Error("Critical error processing task, retrying.")
+		softassert.Sometimes(logger).Error("Critical error processing task, retrying.", tag.OperationCritical)
 	} else {
 		softassert.Sometimes(logger).Warn("Fail to process task")
 	}
