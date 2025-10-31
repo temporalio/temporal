@@ -223,8 +223,7 @@ func TestInvalidTransitions(t *testing.T) {
 
 		// Should fail because worker is cleaned up (terminal state)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "cannot record heartbeat for worker in state")
-		require.Contains(t, err.Error(), "WORKER_STATUS_CLEANED_UP")
+		require.Contains(t, err.Error(), "cannot record heartbeat for worker in state CleanedUp")
 	})
 
 	t.Run("LeaseExpiryOnCleanedUpWorker", func(t *testing.T) {
