@@ -208,7 +208,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			t.Errorf("expected 1 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
 		// add another event to memBufferBatch
-		hb.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "request-id-1", nil, nil)
+		hb.AddWorkflowExecutionOptionsUpdatedEvent(nil, false, "request-id-1", nil, nil, "")
 		if len(hb.memBufferBatch) != 2 {
 			t.Errorf("expected 2 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}

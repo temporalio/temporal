@@ -428,6 +428,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	attachRequestID string,
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
+	identity string,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
 		worker_versioning.ConvertOverrideToV32(versioningOverride),
@@ -435,6 +436,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 		attachRequestID,
 		attachCompletionCallbacks,
 		links,
+		identity,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

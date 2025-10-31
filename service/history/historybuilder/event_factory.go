@@ -383,6 +383,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	attachRequestID string,
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
+	identity string,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -391,6 +392,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			UnsetVersioningOverride:     unsetVersioningOverride,
 			AttachedRequestId:           attachRequestID,
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
+			Identity:                    identity,
 		},
 	}
 	event.Links = links

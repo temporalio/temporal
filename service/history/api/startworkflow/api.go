@@ -663,6 +663,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 					requestID,
 					completionCallbacks,
 					links,
+					"",
 				)
 				return api.UpdateWorkflowWithoutWorkflowTask, err
 			},
