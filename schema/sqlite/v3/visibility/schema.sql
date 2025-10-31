@@ -66,6 +66,22 @@ CREATE TABLE executions_visibility (
   KeywordList02   TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.KeywordList02")) STORED,
   KeywordList03   TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.KeywordList03")) STORED,
 
+  -- Pre-allocated CHASM search attributes
+  TemporalBool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalBool01")),
+  TemporalBool02          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalBool02")),
+  TemporalDatetime01      TIMESTAMP       GENERATED ALWAYS AS (STRFTIME('%Y-%m-%d %H:%M:%f+00:00', JSON_EXTRACT(search_attributes, "$.TemporalDatetime01"))),
+  TemporalDatetime02      TIMESTAMP       GENERATED ALWAYS AS (STRFTIME('%Y-%m-%d %H:%M:%f+00:00', JSON_EXTRACT(search_attributes, "$.TemporalDatetime02"))),
+  TemporalDouble01        DECIMAL(20, 5)  GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalDouble01")),
+  TemporalDouble02        DECIMAL(20, 5)  GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalDouble02")),
+  TemporalInt01           BIGINT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalInt01")),
+  TemporalInt02           BIGINT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalInt02")),
+  TemporalKeyword01       VARCHAR(255)    GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeyword01")),
+  TemporalKeyword02       VARCHAR(255)    GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeyword02")),
+  TemporalKeyword03       VARCHAR(255)    GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeyword03")),
+  TemporalKeyword04       VARCHAR(255)    GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeyword04")),
+  TemporalKeywordList01   TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeywordList01")) STORED,
+  TemporalKeywordList02   TEXT            GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalKeywordList02")) STORED,
+  
   PRIMARY KEY (namespace_id, run_id)
 );
 
@@ -119,6 +135,19 @@ CREATE INDEX by_keyword_08  ON executions_visibility (namespace_id, Keyword08,  
 CREATE INDEX by_keyword_09  ON executions_visibility (namespace_id, Keyword09,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 CREATE INDEX by_keyword_10  ON executions_visibility (namespace_id, Keyword10,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 
+-- Indexes for the pre-allocated  search attributes
+CREATE INDEX by_temporal_bool_01     ON executions_visibility (namespace_id, TemporalBool01,     (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_bool_02     ON executions_visibility (namespace_id, TemporalBool02,     (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_datetime_01 ON executions_visibility (namespace_id, TemporalDatetime01, (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_datetime_02 ON executions_visibility (namespace_id, TemporalDatetime02, (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_double_01   ON executions_visibility (namespace_id, TemporalDouble01,   (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_double_02   ON executions_visibility (namespace_id, TemporalDouble02,   (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_int_01      ON executions_visibility (namespace_id, TemporalInt01,      (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_int_02      ON executions_visibility (namespace_id, TemporalInt02,      (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_keyword_01  ON executions_visibility (namespace_id, TemporalKeyword01,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_keyword_02  ON executions_visibility (namespace_id, TemporalKeyword02,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_keyword_03  ON executions_visibility (namespace_id, TemporalKeyword03,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_keyword_04  ON executions_visibility (namespace_id, TemporalKeyword04,  (COALESCE(close_time, '9999-12-31 23:59:59+00:00')) DESC, start_time DESC, run_id);
 
 CREATE VIRTUAL TABLE executions_visibility_fts_text USING fts5 (
   Text01,
@@ -142,6 +171,8 @@ CREATE VIRTUAL TABLE executions_visibility_fts_keyword_list USING fts5 (
   KeywordList01,
   KeywordList02,
   KeywordList03,
+  TemporalKeywordList01,
+  TemporalKeywordList02,
   content='executions_visibility',
   tokenize="unicode61 remove_diacritics 0 categories 'C* L* M* N* P* S* Z*' separators '♡'"
 );
@@ -170,7 +201,9 @@ BEGIN
     TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
-    KeywordList03
+    KeywordList03,
+    TemporalKeywordList01,
+    TemporalKeywordList02
   ) VALUES (
     NEW.rowid,
     NEW.TemporalChangeVersion,
@@ -180,7 +213,9 @@ BEGIN
     NEW.TemporalReportedProblems,
     NEW.KeywordList01,
     NEW.KeywordList02,
-    NEW.KeywordList03
+    NEW.KeywordList03,
+    NEW.TemporalKeywordList01,
+    NEW.TemporalKeywordList02
   );
 END;
 
@@ -211,7 +246,9 @@ BEGIN
     TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
-    KeywordList03
+    KeywordList03,
+    TemporalKeywordList01,
+    TemporalKeywordList02
   ) VALUES (
     'delete',
     OLD.rowid,
@@ -222,7 +259,9 @@ BEGIN
     OLD.TemporalReportedProblems,
     OLD.KeywordList01,
     OLD.KeywordList02,
-    OLD.KeywordList03
+    OLD.KeywordList03,
+    OLD.TemporalKeywordList01,
+    OLD.TemporalKeywordList02
   );
 END;
 
@@ -264,7 +303,9 @@ BEGIN
     TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
-    KeywordList03
+    KeywordList03,
+    TemporalKeywordList01,
+    TemporalKeywordList02
   ) VALUES (
     'delete',
     OLD.rowid,
@@ -275,7 +316,9 @@ BEGIN
     OLD.TemporalReportedProblems,
     OLD.KeywordList01,
     OLD.KeywordList02,
-    OLD.KeywordList03
+    OLD.KeywordList03,
+    OLD.TemporalKeywordList01,
+    OLD.TemporalKeywordList02
   );
   INSERT INTO executions_visibility_fts_keyword_list (
     rowid,
@@ -286,7 +329,9 @@ BEGIN
     TemporalReportedProblems,
     KeywordList01,
     KeywordList02,
-    KeywordList03
+    KeywordList03,
+    TemporalKeywordList01,
+    TemporalKeywordList02
   ) VALUES (
     NEW.rowid,
     NEW.TemporalChangeVersion,
@@ -296,6 +341,8 @@ BEGIN
     NEW.TemporalReportedProblems,
     NEW.KeywordList01,
     NEW.KeywordList02,
-    NEW.KeywordList03
+    NEW.KeywordList03,
+    NEW.TemporalKeywordList01,
+    NEW.TemporalKeywordList02
   );
 END;
