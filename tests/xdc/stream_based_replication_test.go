@@ -18,6 +18,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -970,4 +975,211 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			s.T().Logf("Failed to write replication stream log for cluster %s: %v", cluster.ClusterName(), err)
 		}
 	}
+}
+
+// TestStreamRecorders demonstrates capturing and dumping both replication and matching service traffic
+func (s *streamBasedReplicationTestSuite) TestStreamRecorders() {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	// Create a global namespace that replicates between clusters
+	ns := s.createGlobalNamespace()
+	s.T().Logf("Created global namespace '%s'", ns)
+
+	// Override standby discard delay to 1 second so standby will process transfer tasks
+	// before the workflow completes, allowing us to capture matching service calls
+	for _, cluster := range s.clusters {
+		cluster.OverrideDynamicConfig(s.T(), dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 0*time.Second)
+	}
+	s.T().Log("Set standby discard delay to 0 seconds for immediate push")
+
+	// Start a worker on cluster 0 (active) to execute the workflow
+	workflowID := "stream-recorder-wf-" + uuid.New()
+	taskQueue := "stream-recorder-tq"
+	sourceClient := s.clusters[0].FrontendClient()
+
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+	})
+	s.NoError(err)
+	defer sdkClient.Close()
+
+	w := worker.New(sdkClient, taskQueue, worker.Options{})
+	w.RegisterWorkflow(longRunningRecorderTestWorkflow)
+	w.RegisterActivity(longRunningRecorderTestActivity)
+	if err := w.Start(); err != nil {
+		s.NoError(err)
+	}
+	defer w.Stop()
+	s.T().Log("Started worker on cluster 0")
+
+	// Start workflow on cluster 0 (active)
+	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:  uuid.New(),
+		Namespace:  ns,
+		WorkflowId: workflowID,
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "longRunningRecorderTestWorkflow",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Input:                    nil,
+		WorkflowExecutionTimeout: durationpb.New(30 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(30 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		Identity:                 "stream-recorder-test",
+	})
+	s.NoError(err)
+	s.T().Logf("Started workflow %s on cluster 0 (active)", workflowID)
+
+	// Wait for workflow to complete on cluster 0
+	s.Eventually(func() bool {
+		resp, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      startResp.GetRunId(),
+			},
+		})
+		if err != nil {
+			return false
+		}
+		status := resp.GetWorkflowExecutionInfo().GetStatus()
+		s.T().Logf("Workflow status on cluster 0: %v", status)
+		return status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 30*time.Second, time.Second)
+	s.T().Log("Workflow completed on cluster 0 (active)")
+
+	// Wait for workflow to replicate to cluster 1
+	targetClient := s.clusters[1].FrontendClient()
+	s.Eventually(func() bool {
+		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      startResp.GetRunId(),
+			},
+		})
+		if err != nil {
+			s.T().Logf("Error describing workflow on cluster 1: %v", err)
+			return false
+		}
+		status := resp.GetWorkflowExecutionInfo().GetStatus()
+		s.T().Logf("Workflow status on cluster 1: %v", status)
+		return status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 30*time.Second, time.Second)
+	s.T().Log("Workflow replicated and completed on cluster 1 (passive)")
+
+	// Wait a bit for all async operations to settle
+	time.Sleep(2 * time.Second)
+
+	// Dump replication stream messages for all clusters
+	s.T().Log("\n========================================")
+	s.T().Log("DUMPING REPLICATION STREAM MESSAGES")
+	s.T().Log("========================================")
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		messages := recorder.GetMessages()
+		s.T().Logf("\nCluster %s: captured %d replication messages", cluster.ClusterName(), len(messages))
+
+		// Write to file
+		if err := recorder.WriteToLog(); err != nil {
+			s.T().Logf("Failed to write replication stream log for cluster %s: %v", cluster.ClusterName(), err)
+		} else {
+			s.T().Logf("Wrote replication messages to: /tmp/replication_stream_messages_%s.txt", cluster.ClusterName())
+		}
+
+		// Print summary
+		sendCount := 0
+		recvCount := 0
+		for _, msg := range messages {
+			if msg.Direction == testcore.DirectionSend {
+				sendCount++
+			} else if msg.Direction == testcore.DirectionRecv {
+				recvCount++
+			}
+		}
+		s.T().Logf("  - Sent: %d messages", sendCount)
+		s.T().Logf("  - Received: %d messages", recvCount)
+	}
+
+	// Dump matching stream messages for all clusters
+	s.T().Log("\n========================================")
+	s.T().Log("DUMPING MATCHING STREAM MESSAGES")
+	s.T().Log("========================================")
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetMatchingStreamRecorder()
+		messages := recorder.GetMessages()
+		s.T().Logf("\nCluster %s: captured %d matching messages", cluster.ClusterName(), len(messages))
+
+		// Write to file
+		if err := recorder.WriteToLog(); err != nil {
+			s.T().Logf("Failed to write matching stream log for cluster %s: %v", cluster.ClusterName(), err)
+		} else {
+			s.T().Logf("Wrote matching messages to: /tmp/matching_stream_messages_%s.txt", cluster.ClusterName())
+		}
+
+		// Print summary by method
+		methodCounts := make(map[string]int)
+		for _, msg := range messages {
+			methodCounts[msg.Method]++
+		}
+		s.T().Log("  Message breakdown by method:")
+		for method, count := range methodCounts {
+			s.T().Logf("    - %s: %d messages", method, count)
+		}
+	}
+
+	s.T().Log("\n========================================")
+	s.T().Log("TEST COMPLETE")
+	s.T().Log("Check /tmp/replication_stream_messages_*.txt for replication traffic")
+	s.T().Log("Check /tmp/matching_stream_messages_*.txt for matching traffic")
+	s.T().Log("========================================")
+}
+
+// longRunningRecorderTestWorkflow is a workflow that executes one activity with a delay
+// to give the standby cluster time to process transfer tasks and push to matching
+func longRunningRecorderTestWorkflow(ctx workflow.Context) error {
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 60 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			MaximumInterval:    1 * time.Second,
+			BackoffCoefficient: 1.0,
+			MaximumAttempts:    5,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	var result string
+	err := workflow.ExecuteActivity(ctx, "longRunningRecorderTestActivity", "test-input").Get(ctx, &result)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// longRunningRecorderTestActivity is an activity that fails the first 2 attempts
+// to test standby cluster pushing retry tasks to matching
+func longRunningRecorderTestActivity(ctx context.Context, input string) (string, error) {
+	info := activity.GetInfo(ctx)
+	attempt := info.Attempt
+
+	activity.GetLogger(ctx).Info("Activity started", "input", input, "attempt", attempt)
+
+	// Fail the first 2 attempts to trigger retries that standby will need to push to matching
+	if attempt < 3 {
+		activity.GetLogger(ctx).Info("Activity failing intentionally to trigger retry", "attempt", attempt)
+		time.Sleep(2 * time.Second) // Small delay before failing
+		return "", fmt.Errorf("intentional failure on attempt %d", attempt)
+	}
+
+	// Sleep for 5 seconds on successful attempt to give standby time to process
+	time.Sleep(5 * time.Second)
+	activity.GetLogger(ctx).Info("Activity completed successfully", "input", input, "attempt", attempt)
+	return "result: " + input, nil
 }
