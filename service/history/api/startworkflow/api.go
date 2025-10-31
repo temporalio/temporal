@@ -255,7 +255,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 	if s.requestEagerStart() && workflowTaskInfo == nil {
 		return nil, softassert.UnexpectedInternalErr(
 			s.shardContext.GetLogger(),
-			"mutable state did not have a started workflow task",
+			"unexpected error: mutable state did not have a started workflow task",
 			nil,
 		)
 	}
