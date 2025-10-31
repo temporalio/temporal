@@ -1903,7 +1903,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		return nil, err
 	}
 	// TODO (Shivam): Please fix this error message and condition check.
-	if (req.Deployment == nil && req.GetOperation() == nil) && (req.GetDeploymentName() == "" && req.GetUpdateRoutingConfig() == nil && req.GetUpsertVersionsData() == nil) {
+	if req.Deployment == nil && req.GetOperation() == nil && req.GetDeploymentName() == "nil" {
 		return nil, errMissingDeploymentVersion
 	}
 

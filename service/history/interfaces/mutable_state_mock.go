@@ -2424,20 +2424,6 @@ func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(arg0 any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), arg0)
 }
 
-// GetRevisionNumber mocks base method.
-func (m *MockMutableState) GetRevisionNumber() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRevisionNumber")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetRevisionNumber indicates an expected call of GetRevisionNumber.
-func (mr *MockMutableStateMockRecorder) GetRevisionNumber() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).GetRevisionNumber))
-}
-
 // GetSignalExternalInitiatedEvent mocks base method.
 func (m *MockMutableState) GetSignalExternalInitiatedEvent(arg0 context.Context, arg1 int64) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -2584,6 +2570,20 @@ func (m *MockMutableState) GetUserTimerInfoByEventID(arg0 int64) (*persistence.T
 func (mr *MockMutableStateMockRecorder) GetUserTimerInfoByEventID(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserTimerInfoByEventID", reflect.TypeOf((*MockMutableState)(nil).GetUserTimerInfoByEventID), arg0)
+}
+
+// GetVersioningRevisionNumber mocks base method.
+func (m *MockMutableState) GetVersioningRevisionNumber() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVersioningRevisionNumber")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetVersioningRevisionNumber indicates an expected call of GetVersioningRevisionNumber.
+func (mr *MockMutableStateMockRecorder) GetVersioningRevisionNumber() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersioningRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).GetVersioningRevisionNumber))
 }
 
 // GetWorkflowCloseTime mocks base method.
@@ -3238,18 +3238,6 @@ func (mr *MockMutableStateMockRecorder) SetHistoryTree(executionTimeout, runTime
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), executionTimeout, runTimeout, treeID)
 }
 
-// SetRevisionNumber mocks base method.
-func (m *MockMutableState) SetRevisionNumber(revisionNumber int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetRevisionNumber", revisionNumber)
-}
-
-// SetRevisionNumber indicates an expected call of SetRevisionNumber.
-func (mr *MockMutableStateMockRecorder) SetRevisionNumber(revisionNumber any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).SetRevisionNumber), revisionNumber)
-}
-
 // SetSpeculativeWorkflowTaskTimeoutTask mocks base method.
 func (m *MockMutableState) SetSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error {
 	m.ctrl.T.Helper()
@@ -3298,6 +3286,18 @@ func (m *MockMutableState) SetUpdateCondition(arg0, arg1 int64) {
 func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).SetUpdateCondition), arg0, arg1)
+}
+
+// SetVersioningRevisionNumber mocks base method.
+func (m *MockMutableState) SetVersioningRevisionNumber(revisionNumber int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetVersioningRevisionNumber", revisionNumber)
+}
+
+// SetVersioningRevisionNumber indicates an expected call of SetVersioningRevisionNumber.
+func (mr *MockMutableStateMockRecorder) SetVersioningRevisionNumber(revisionNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVersioningRevisionNumber", reflect.TypeOf((*MockMutableState)(nil).SetVersioningRevisionNumber), revisionNumber)
 }
 
 // SetWorkflowTaskScheduleToStartTimeoutTask mocks base method.

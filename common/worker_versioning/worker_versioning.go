@@ -320,11 +320,10 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 	}
 
 	// Check for the presence of the version in the new DeploymentData format.
-	for _, d := range deployments.GetDeploymentsData() {
-		if d.GetVersions() != nil && d.GetVersions()[v.GetBuildId()] != nil {
-			return true
-		}
+	if deploymentData, ok := deployments.GetDeploymentsData()[v.GetDeploymentName()]; ok {
+		return deploymentData.GetVersions()[v.GetBuildId()] != nil
 	}
+
 	return false
 }
 
@@ -704,9 +703,6 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 			}
 		}
 	}
-
-	fmt.Println("routingConfigLatestCurrentVersion", routingConfigLatestCurrentVersion)
-	fmt.Println("routingConfigLatestRampingVersion", routingConfigLatestRampingVersion)
 
 	// Pick the final current and ramping version amongst the old and new deployment data formats.
 	return PickFinalCurrentAndRamping(

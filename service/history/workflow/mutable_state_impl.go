@@ -8393,16 +8393,16 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		),
 	).Record(1)
 
-	ms.SetRevisionNumber(revisionNumber)
+	ms.SetVersioningRevisionNumber(revisionNumber)
 
 	return nil
 }
 
-func (ms *MutableStateImpl) GetRevisionNumber() int64 {
+func (ms *MutableStateImpl) GetVersioningRevisionNumber() int64 {
 	return ms.GetExecutionInfo().GetVersioningInfo().GetRevisionNumber()
 }
 
-func (ms *MutableStateImpl) SetRevisionNumber(revisionNumber int64) {
+func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
 }
 
