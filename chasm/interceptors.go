@@ -29,9 +29,9 @@ func (i *ChasmRequestInterceptor) Intercept(
 ) (resp interface{}, retError error) {
 	if strings.HasPrefix(info.FullMethod, chasmRequestPrefix) {
 		defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
-
-		ctx = NewEngineContext(ctx, i.engine)
 	}
+
+	ctx = NewEngineContext(ctx, i.engine)
 
 	return handler(ctx, req)
 }

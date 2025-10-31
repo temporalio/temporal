@@ -11,10 +11,14 @@ var (
 	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
 )
 
+// EntityKey uniquely identifies a CHASM execution in the system.
+// TODO: Rename to ExecutionKey.
 type EntityKey struct {
 	NamespaceID string
-	BusinessID  string
-	EntityID    string
+	// TODO: Rename to EntityID.
+	BusinessID string
+	// TODO: Rename to RunID.
+	EntityID string
 }
 
 type ComponentRef struct {

@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.scheduler.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
+
+import "temporal/api/workflowservice/v1/request_response.proto";
+
+message CreateScheduleRequest {
+    // Internal namespace ID (UUID).
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.CreateScheduleRequest frontend_request = 2;
+}
+
+message CreateScheduleResponse {
+    temporal.api.workflowservice.v1.CreateScheduleResponse frontend_response = 1;
+}
+
+message UpdateScheduleRequest {
+    // Internal namespace ID (UUID).
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.UpdateScheduleRequest frontend_request = 2;
+}
+
+message UpdateScheduleResponse {
+    temporal.api.workflowservice.v1.UpdateScheduleResponse frontend_response = 1;
+}
+
+message PatchScheduleRequest {
+    // Internal namespace ID (UUID).
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PatchScheduleRequest frontend_request = 2;
+}
+
+message PatchScheduleResponse {
+    temporal.api.workflowservice.v1.PatchScheduleResponse frontend_response = 1;
+}
+
+message DeleteScheduleRequest {
+    // Internal namespace ID (UUID).
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.DeleteScheduleRequest frontend_request = 2;
+}
+
+message DeleteScheduleResponse {
+    temporal.api.workflowservice.v1.DeleteScheduleResponse frontend_response = 1;
+}
+
+message DescribeScheduleRequest {
+    // Internal namespace ID (UUID).
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.DescribeScheduleRequest frontend_request = 2;
+}
+
+message DescribeScheduleResponse {
+    temporal.api.workflowservice.v1.DescribeScheduleResponse frontend_response = 1;
+}

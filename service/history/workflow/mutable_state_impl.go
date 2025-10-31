@@ -120,14 +120,6 @@ var (
 var emptyTasks = []tasks.Task{}
 
 type (
-	// activityTimeoutTasks holds references to all timeout tasks for a single activity.
-	activityTimeoutTasks struct {
-		ScheduleToStartTimeoutTask *tasks.ActivityTimeoutTask
-		ScheduleToCloseTimeoutTask *tasks.ActivityTimeoutTask
-		StartToCloseTimeoutTask    *tasks.ActivityTimeoutTask
-		HeartbeatTimeoutTask       *tasks.ActivityTimeoutTask
-	}
-
 	MutableStateImpl struct {
 		pendingActivityTimerHeartbeats map[int64]time.Time                    // Scheduled Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
 		pendingActivityInfoIDs         map[int64]*persistencespb.ActivityInfo // Scheduled Event ID -> Activity Info.
@@ -235,10 +227,6 @@ type (
 		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
-		// In-memory storage for activity timeout tasks. These are set when timeout tasks are generated and used to
-		// delete them when the activity completes/fails. Map key is the activity's scheduled event ID.
-		activityTimeoutTasks map[int64]*activityTimeoutTasks
-
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
@@ -288,7 +276,6 @@ func NewMutableState(
 		pendingActivityIDToEventID:     make(map[string]int64),
 		deleteActivityInfos:            make(map[int64]struct{}),
 		syncActivityTasks:              make(map[int64]struct{}),
-		activityTimeoutTasks:           make(map[int64]*activityTimeoutTasks),
 
 		pendingTimerInfoIDs:     make(map[string]*persistencespb.TimerInfo),
 		pendingTimerEventIDToID: make(map[int64]string),
@@ -1864,9 +1851,6 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 			metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope),
 			metrics.NamespaceTag(ms.namespaceEntry.Name().String()))
 	}
-
-	// Delete Heartbeat timeout task since heartbeat has been received
-	ms.deleteActivityTimeoutTask(ai.ScheduledEventId, enumspb.TIMEOUT_TYPE_HEARTBEAT, ai)
 }
 
 // UpdateActivityInfo applies the necessary activity information
@@ -1973,7 +1957,6 @@ func (ms *MutableStateImpl) DeleteActivity(
 			// log data inconsistency instead of returning an error
 			ms.logDataInconsistency()
 		}
-		ms.recordActivityTimeoutTasksForDeletion(scheduledEventID, activityInfo)
 	} else {
 		ms.logError(
 			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduledEventID),
@@ -3076,18 +3059,10 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 	// cluster and events applied by WF rebuilder.
 	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
 
-	// Re-scheduling pending WF and activity tasks which are not started yet.
-	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
-		ms.GetPendingWorkflowTask().ScheduledEventID != startingTaskScheduledEventId &&
-		// TODO: something special may need to be done for speculative tasks as GenerateScheduleWorkflowTaskTasks
-		// does not support them.
-		ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// sticky queue should be cleared by UpdateBuildIdAssignment already, so the following call only generates
-		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
-		err = ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
-		if err != nil {
-			return err
-		}
+	// Re-scheduling pending workflow and activity tasks.
+	err = ms.reschedulePendingWorkflowTask(false)
+	if err != nil {
+		return err
 	}
 
 	for _, ai := range ms.GetPendingActivityInfos() {
@@ -3652,8 +3627,6 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		if err := ms.ApplyActivityTaskStartedEvent(event); err != nil {
 			return nil, err
 		}
-		// Delete ScheduleToStart timeout task since activity has now started
-		ms.deleteActivityTimeoutTask(scheduledEventID, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, ai)
 		return event, nil
 	}
 
@@ -3677,8 +3650,6 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
-	// Delete ScheduleToStart timeout task since activity has now started
-	ms.deleteActivityTimeoutTask(scheduledEventID, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, ai)
 	return nil, nil
 }
 
@@ -4959,18 +4930,25 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
 	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+
+	// Update versioning.
 	var err error
+	var requestReschedulePendingWorkflowTask bool
 	if attributes.GetUnsetVersioningOverride() {
-		err = ms.updateVersioningOverride(nil)
+		requestReschedulePendingWorkflowTask, err = ms.updateVersioningOverride(nil)
 	} else if attributes.GetVersioningOverride() != nil {
-		err = ms.updateVersioningOverride(attributes.GetVersioningOverride())
+		requestReschedulePendingWorkflowTask, err = ms.updateVersioningOverride(attributes.GetVersioningOverride())
 	}
 	if err != nil {
 		return err
 	}
+
+	// Update attached request ID.
 	if attributes.GetAttachedRequestId() != "" {
 		ms.AttachRequestID(attributes.GetAttachedRequestId(), event.EventType, event.EventId)
 	}
+
+	// Update completion callbacks.
 	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
 		if err := ms.addCompletionCallbacks(
 			event,
@@ -4981,14 +4959,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		}
 	}
 
+	// Finally, reschedule the pending workflow task if so requested.
+	if requestReschedulePendingWorkflowTask {
+		return ms.reschedulePendingWorkflowTask(true)
+	}
 	return nil
 }
 
 func (ms *MutableStateImpl) updateVersioningOverride(
 	override *workflowpb.VersioningOverride,
-) error {
-	previousEffectiveDeployment := ms.GetEffectiveDeployment()
-	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
+) (bool, error) {
+	var requestReschedulePendingWorkflowTask bool
+
 	if override != nil {
 		if ms.GetExecutionInfo().GetVersioningInfo() == nil {
 			ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
@@ -5043,7 +5025,6 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		if o := ms.GetExecutionInfo().VersioningInfo.VersioningOverride; worker_versioning.OverrideIsPinned(o) {
 			ms.GetExecutionInfo().WorkerDeploymentName = o.GetPinned().GetVersion().GetDeploymentName()
 		}
-
 	} else if vi := ms.GetExecutionInfo().GetVersioningInfo(); vi != nil {
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil
 		ms.GetExecutionInfo().WorkerDeploymentName = vi.GetDeploymentVersion().GetDeploymentName()
@@ -5051,6 +5032,8 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		ms.GetExecutionInfo().WorkerDeploymentName = ""
 	}
 
+	previousEffectiveDeployment := ms.GetEffectiveDeployment()
+	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
@@ -5087,27 +5070,18 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		// Current Deployment changes between now and when the task is started.
 		//
 		// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
+		requestReschedulePendingWorkflowTask = true
 		ms.ClearStickyTaskQueue()
-		if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
-			// Speculative WFT is directly (without transfer task) added to matching when scheduled.
-			// It is protected by timeout on both normal and sticky task queues.
-			// If there is no poller for previous deployment, it will time out,
-			// and will be rescheduled as normal WFT.
-			ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			// Sticky queue was just cleared, so the following call only generates a WorkflowTask, not a WorkflowTaskTimeoutTask.
-			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
-			if err != nil {
-				return err
-			}
-		}
+
 		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
 		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
 		limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
 		if err := ms.updateBuildIdsAndDeploymentSearchAttributes(nil, limit); err != nil {
-			return err
+			return requestReschedulePendingWorkflowTask, err
 		}
 	}
-	return ms.reschedulePendingActivities()
+
+	return requestReschedulePendingWorkflowTask, ms.reschedulePendingActivities()
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
@@ -6207,118 +6181,6 @@ func (ms *MutableStateImpl) GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.W
 
 func (ms *MutableStateImpl) GetWorkflowTaskStartToCloseTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
 	return ms.wftStartToCloseTimeoutTask
-}
-
-// StoreActivityTimeoutTask stores an activity timeout task reference in memory.
-func (ms *MutableStateImpl) StoreActivityTimeoutTask(
-	task *tasks.ActivityTimeoutTask,
-) {
-	timeoutTasks, exists := ms.activityTimeoutTasks[task.EventID]
-	if !exists {
-		timeoutTasks = &activityTimeoutTasks{}
-		ms.activityTimeoutTasks[task.EventID] = timeoutTasks
-	}
-
-	switch task.TimeoutType {
-	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		timeoutTasks.ScheduleToStartTimeoutTask = task
-	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-		timeoutTasks.ScheduleToCloseTimeoutTask = task
-	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-		timeoutTasks.StartToCloseTimeoutTask = task
-	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-		timeoutTasks.HeartbeatTimeoutTask = task
-	default:
-		// No-op for unhandled timeout types
-	}
-}
-
-// deleteActivityTimeoutTask marks a specific activity timeout task to be deleted.
-// This is used to delete timeout tasks at specific lifecycle points (e.g., when activity starts, when heartbeat is received).
-// The task will be regenerated with updated deadline on the next transaction close if still needed.
-func (ms *MutableStateImpl) deleteActivityTimeoutTask(
-	scheduledEventID int64,
-	timeoutType enumspb.TimeoutType,
-	activityInfo *persistencespb.ActivityInfo,
-) {
-	if activityInfo == nil {
-		return
-	}
-
-	timeoutTasks, exists := ms.activityTimeoutTasks[scheduledEventID]
-	if !exists {
-		return
-	}
-
-	var task *tasks.ActivityTimeoutTask
-
-	switch timeoutType {
-	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		task = timeoutTasks.ScheduleToStartTimeoutTask
-		timeoutTasks.ScheduleToStartTimeoutTask = nil
-	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-		task = timeoutTasks.HeartbeatTimeoutTask
-		timeoutTasks.HeartbeatTimeoutTask = nil
-	default:
-		return
-	}
-
-	if task == nil {
-		return
-	}
-
-	key := task.GetKey()
-	ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-		key,
-	)
-}
-
-// recordActivityTimeoutTasksForDeletion records activity timeout tasks for deletion. This is called when an activity
-// completes or fails. It deletes all remaining timeout tasks for the activity.
-func (ms *MutableStateImpl) recordActivityTimeoutTasksForDeletion(
-	scheduledEventID int64,
-	activityInfo *persistencespb.ActivityInfo,
-) {
-	if activityInfo == nil {
-		return
-	}
-
-	timeoutTasks, exists := ms.activityTimeoutTasks[scheduledEventID]
-	if !exists {
-		return
-	}
-
-	// Delete all timeout tasks for this activity
-	if task := timeoutTasks.ScheduleToStartTimeoutTask; task != nil {
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-			task.GetKey(),
-		)
-	}
-
-	if task := timeoutTasks.ScheduleToCloseTimeoutTask; task != nil {
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-			task.GetKey(),
-		)
-	}
-
-	if task := timeoutTasks.StartToCloseTimeoutTask; task != nil {
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-			task.GetKey(),
-		)
-	}
-
-	if task := timeoutTasks.HeartbeatTimeoutTask; task != nil {
-		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
-			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
-			task.GetKey(),
-		)
-	}
-
-	delete(ms.activityTimeoutTasks, scheduledEventID)
 }
 
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
@@ -8199,6 +8061,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			RequestID:           incoming.WorkflowTaskRequestId,
 			WorkflowTaskTimeout: incoming.WorkflowTaskTimeout.AsDuration(),
 			Attempt:             incoming.WorkflowTaskAttempt,
+			Stamp:               incoming.WorkflowTaskStamp,
 			StartedTime:         incoming.WorkflowTaskStartedTime.AsTime(),
 			ScheduledTime:       incoming.WorkflowTaskScheduledTime.AsTime(),
 
@@ -8511,30 +8374,14 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		DeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
 	}
 
-	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not
-	// go to the old deployment.
+	// Because deployment has changed we:
+	// - clear sticky queue to make sure the next WFT does not go to the old deployment
+	// - reschedule the pending WFT so the old one is invalided
 	ms.ClearStickyTaskQueue()
 
-	// If there is a pending (unstarted) WFT, we need to reschedule it, so it goes to Matching with
-	// the right directive deployment. The current scheduled WFT will be rejected when attempted to
-	// start because its directive deployment no longer matches workflows effective deployment.
-	// If the WFT is started but not finished, we let it run its course, once it's completed, failed
-	// or timed out a new one will be scheduled.
-	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() {
-		// Speculative WFT is directly (without transfer task) added to matching when scheduled.
-		// It is protected by timeout on both normal and sticky task queues.
-		// If there is no poller for previous deployment, it will time out,
-		// and will be rescheduled as normal WFT.
-		if ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			// sticky queue was just cleared, so the following call only generates
-			// a WorkflowTask, not a WorkflowTaskTimeoutTask.
-			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
-			if err != nil {
-				return err
-			}
-		} else {
-			ms.logInfo("start transition did not reschedule pending speculative task")
-		}
+	err := ms.reschedulePendingWorkflowTask(false)
+	if err != nil {
+		return err
 	}
 
 	// DeploymentTransition has taken place, so we increment the DeploymentTransition metric
@@ -8566,6 +8413,36 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 	}
 
 	return nil
+}
+
+// reschedulePendingWorkflowTask reschedules the pending WFT if it is not started yet.
+// The currently scheduled WFT will be rejected when attempting to start because its stamp changed.
+func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks bool) error {
+	// If the WFT is started but not finished, we let it run its course
+	// - once it's completed, failed or timed out a new one will be scheduled.
+	if !ms.HasPendingWorkflowTask() || ms.HasStartedWorkflowTask() {
+		return nil
+	}
+
+	// A speculative WFT cannot be rescheduled since it is added directly (without transfer task)
+	// to Matching when being scheduled. It is protected by a timeout on both normal and sticky task queues.
+	// If there is no poller for previous deployment, it will time out, and rescheduled as normal WFT.
+	pendingTask := ms.GetPendingWorkflowTask()
+	if pendingTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		ms.logInfo("start transition did not reschedule pending speculative task")
+		return nil
+	}
+
+	if invalidatePendingTasks {
+		// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
+		// We don't invalidate speculative WFTs because they are very latency sensitive.
+		ms.executionInfo.WorkflowTaskStamp += 1
+
+		// Reset the attempt; forcing a non-transient workflow task to be scheduled.
+		ms.executionInfo.Attempt = 1
+	}
+
+	return ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(pendingTask.ScheduledEventID)
 }
 
 func (ms *MutableStateImpl) AddReapplyCandidateEvent(event *historypb.HistoryEvent) {
