@@ -2859,7 +2859,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionPausedEvent(
 
 // applyWorkflowExecutionPausedEvent applies the paused event to the mutable state. It updates the workflow execution status to paused and sets the pause info.
 func (ms *MutableStateImpl) applyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error {
-	ms.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+	ms.UpdateWorkflowStateStatus(ms.executionState.GetState(), enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED)
 	ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
 		PauseTime: timestamppb.New(event.GetEventTime().AsTime()),
 		Identity:  event.GetWorkflowExecutionPausedEventAttributes().GetIdentity(),
