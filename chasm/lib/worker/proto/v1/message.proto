@@ -5,6 +5,7 @@ package temporal.server.chasm.lib.worker.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
 
 import "google/protobuf/timestamp.proto";
+import "temporal/api/worker/v1/message.proto";
 
 // Metadata about the worker.
 message WorkerState {
@@ -13,6 +14,9 @@ message WorkerState {
     
     // Current status of the worker.
     WorkerStatus status = 2;
+
+    // Worker heartbeat information including metadata and capabilities.
+    temporal.api.worker.v1.WorkerHeartbeat worker_heartbeat = 3;
 }
 
 // Status of a worker.
