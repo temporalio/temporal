@@ -1897,6 +1897,8 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	req *matchingservice.SyncDeploymentUserDataRequest,
 ) (*matchingservice.SyncDeploymentUserDataResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(req.NamespaceId, req.GetTaskQueue())
+	applyUpdatesToRoutingConfig := false
+
 	if err != nil {
 		return nil, err
 	}
@@ -2001,28 +2003,23 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				rc := req.GetUpdateRoutingConfig()
 				tqWorkerDeploymentData := deploymentData.GetDeploymentsData()[req.GetDeploymentName()]
 
-				applyUpdatesToDeploymentData := rc == nil
-				if rc != nil {
-					if rc.GetRevisionNumber() >= tqWorkerDeploymentData.GetRoutingConfig().GetRevisionNumber() {
-						changed = true
-						// Update routing config when newer or equal revision is provided
-						tqWorkerDeploymentData.RoutingConfig = rc
-						applyUpdatesToDeploymentData = true
-					}
+				if rc.GetRevisionNumber() > tqWorkerDeploymentData.GetRoutingConfig().GetRevisionNumber() {
+					changed = true
+					// Update routing config when newer or equal revision is provided
+					tqWorkerDeploymentData.RoutingConfig = rc
+					applyUpdatesToRoutingConfig = true
 				}
 
-				if applyUpdatesToDeploymentData {
-					if tqWorkerDeploymentData.Versions == nil {
-						tqWorkerDeploymentData.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionData)
-					}
-					for buildID, versionData := range req.GetUpsertVersionsData() {
-						tqWorkerDeploymentData.Versions[buildID] = versionData
-						changed = true
-					}
-					for _, buildID := range req.GetForgetVersions() {
-						delete(tqWorkerDeploymentData.Versions, buildID)
-						changed = true
-					}
+				if tqWorkerDeploymentData.Versions == nil {
+					tqWorkerDeploymentData.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionData)
+				}
+				for buildID, versionData := range req.GetUpsertVersionsData() {
+					tqWorkerDeploymentData.Versions[buildID] = versionData
+					changed = true
+				}
+				for _, buildID := range req.GetForgetVersions() {
+					delete(tqWorkerDeploymentData.Versions, buildID)
+					changed = true
 				}
 			}
 		}
@@ -2036,7 +2033,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.SyncDeploymentUserDataResponse{Version: version}, nil
+	return &matchingservice.SyncDeploymentUserDataResponse{Version: version, RoutingConfigChanged: applyUpdatesToRoutingConfig}, nil
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(

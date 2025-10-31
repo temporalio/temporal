@@ -213,8 +213,7 @@ func recordActivityTaskStarted(
 
 		// We start a transition if one of the following conditions are met:
 		// 1. The workflow will be dispatching to the same deployment as the activity but has not yet.
-		// 2. The workflow TQ is lagging behind the activity TQ, with respect to the current version of a deployment. Note: The check to see if the activity task
-		//    belongs to the same deployment as the workflow is done in matching itself.
+		// 2. The workflow TQ is lagging behind the activity TQ, with respect to the current version of a deployment.
 
 		// Note: We use > instead of >= because a non-backlogged activity task could have the same revision number as the MS and that should not commence a transition.
 		// Note: Revision number mechanics are only involved if the dynamic config is enabled.
@@ -304,8 +303,8 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 		return nil, 0, nil
 	}
 
-	current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, ramping, currentVersionRoutingConfig, rampingVersionRoutingConfig, workflowId)
+	current, currentRevisionNumber, _, ramping, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
 

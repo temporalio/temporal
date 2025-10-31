@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/temporalio/sqlparser"
@@ -317,6 +318,13 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 			return true
 		}
 	}
+
+	// Check for the presence of the version in the new DeploymentData format.
+	for _, d := range deployments.GetDeploymentsData() {
+		if d.GetVersions() != nil && d.GetVersions()[v.GetBuildId()] != nil {
+			return true
+		}
+	}
 	return false
 }
 
@@ -529,69 +537,89 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 // FindTargetDeploymentVersionAndRevisionNumberForWorkflowID returns the deployment version and revision number (if applicable) for
 // the particular workflow ID based on the versioning info of the task queue. Nil means unversioned.
 func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
+	current *deploymentspb.WorkerDeploymentVersion,
+	currentRevisionNumber int64,
+	ramping *deploymentspb.WorkerDeploymentVersion,
+	rampingPercentage float32,
+	rampingRevisionNumber int64,
+	workflowId string,
+) (*deploymentspb.WorkerDeploymentVersion, int64) {
+
+	// Apply ramp logic using final values
+	if rampingPercentage <= 0 {
+		// No ramp
+		return current, currentRevisionNumber
+	} else if rampingPercentage == 100 {
+		return ramping, rampingRevisionNumber
+	}
+	// Partial ramp. Decide based on workflow ID
+	wfRampThreshold := calcRampThreshold(workflowId)
+	if wfRampThreshold <= float64(rampingPercentage) {
+		return ramping, rampingRevisionNumber
+	}
+	return current, currentRevisionNumber
+}
+
+// PickFinalCurrentAndRamping determines the effective "current" and "ramping" deployment versions
+// by comparing timestamps from the legacy deployment data (old format) and the RoutingConfig (new format).
+// It returns:
+// - final current deployment version and its revision number (0 for old format)
+// - final ramping deployment version, its revision number (0 for old format), and ramp percentage
+func PickFinalCurrentAndRamping(
 	current *deploymentspb.DeploymentVersionData,
 	ramping *deploymentspb.DeploymentVersionData,
 	currentVersionRoutingConfig *deploymentpb.RoutingConfig,
 	rampingVersionRoutingConfig *deploymentpb.RoutingConfig,
-	workflowId string,
-) (*deploymentspb.WorkerDeploymentVersion, int64) {
-	// Find most recent currentDeploymentVersion by comparing old vs new format timestamps
+) (
+	*deploymentspb.WorkerDeploymentVersion, // final current version
+	int64, // final current revision number
+	time.Time, // final current update time
+	*deploymentspb.WorkerDeploymentVersion,
+	float32, // final ramp percentage
+	int64, // final ramping revision number
+	time.Time, // final ramping update time
+) {
+	// current: choose newer of old vs new format
 	var finalCurrentDep *deploymentspb.WorkerDeploymentVersion
 	var finalCurrentRev int64
+	var finalCurrentUpdateTime time.Time
 
 	oldCurrentTime := current.GetRoutingUpdateTime().AsTime()
 	newCurrentTime := currentVersionRoutingConfig.GetCurrentVersionChangedTime().AsTime()
 
+	// Break ties by choosing the newer format
 	if newCurrentTime.After(oldCurrentTime) || newCurrentTime.Equal(oldCurrentTime) {
-		// New format current is more recent
 		finalCurrentDep = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(currentVersionRoutingConfig.GetCurrentDeploymentVersion()))
 		finalCurrentRev = currentVersionRoutingConfig.GetRevisionNumber()
+		finalCurrentUpdateTime = newCurrentTime
 	} else {
-		// Old format current is more recent
 		finalCurrentDep = current.GetVersion()
 		finalCurrentRev = 0
+		finalCurrentUpdateTime = oldCurrentTime
 	}
 
-	// Find most recent rampingDeploymentVersion by comparing old vs new format timestamps
+	// ramping: choose newer of old vs new format; new format can change either version or percentage
 	var finalRampingDep *deploymentspb.WorkerDeploymentVersion
 	var finalRampingRev int64
 	var finalRampPercentage float32
+	var finalRampingUpdateTime time.Time
 
 	oldRampingTime := ramping.GetRoutingUpdateTime().AsTime()
-	newRampingTimeFromVersion := rampingVersionRoutingConfig.GetRampingVersionChangedTime().AsTime()
-	newRampingTimeFromPercentage := rampingVersionRoutingConfig.GetRampingVersionPercentageChangedTime().AsTime()
+	newRampingTime := rampingVersionRoutingConfig.GetRampingVersionPercentageChangedTime().AsTime()
 
-	// Choose the most recent timestamp between the two fields
-	newRampingTime := newRampingTimeFromVersion
-	if newRampingTimeFromPercentage.After(newRampingTimeFromVersion) {
-		newRampingTime = newRampingTimeFromPercentage
-	}
-
+	// Break ties by choosing the newer format
 	if newRampingTime.After(oldRampingTime) || newRampingTime.Equal(oldRampingTime) {
-		// New format ramping is more recent
 		finalRampingDep = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(rampingVersionRoutingConfig.GetRampingDeploymentVersion()))
 		finalRampingRev = rampingVersionRoutingConfig.GetRevisionNumber()
 		finalRampPercentage = rampingVersionRoutingConfig.GetRampingVersionPercentage()
+		finalRampingUpdateTime = newRampingTime
 	} else {
-		// Old format ramping is more recent
 		finalRampingDep = ramping.GetVersion()
 		finalRampingRev = 0
 		finalRampPercentage = ramping.GetRampPercentage()
+		finalRampingUpdateTime = oldRampingTime
 	}
-
-	// Apply ramp logic using final values
-	if finalRampPercentage <= 0 {
-		// No ramp
-		return finalCurrentDep, finalCurrentRev
-	} else if finalRampPercentage == 100 {
-		return finalRampingDep, finalRampingRev
-	}
-	// Partial ramp. Decide based on workflow ID
-	wfRampThreshold := calcRampThreshold(workflowId)
-	if wfRampThreshold <= float64(finalRampPercentage) {
-		return finalRampingDep, finalRampingRev
-	}
-	return finalCurrentDep, finalCurrentRev
+	return finalCurrentDep, finalCurrentRev, finalCurrentUpdateTime, finalRampingDep, finalRampPercentage, finalRampingRev, finalRampingUpdateTime
 }
 
 // calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the
@@ -604,10 +632,20 @@ func calcRampThreshold(id string) float64 {
 	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
 }
 
+// CalculateTaskQueueVersioningInfo calculates the current and ramping versioning info for a task queue.
+//
 //revive:disable-next-line:cognitive-complexity,confusing-results
-func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) (*deploymentspb.DeploymentVersionData, *deploymentspb.DeploymentVersionData, *deploymentpb.RoutingConfig, *deploymentpb.RoutingConfig) {
+func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) (
+	*deploymentspb.WorkerDeploymentVersion, // current version
+	int64, // current revision number
+	time.Time, // current update time
+	*deploymentspb.WorkerDeploymentVersion, // ramping version
+	float32, // ramp percentage
+	int64, // ramping revision number
+	time.Time, // ramping update time
+) {
 	if deployments == nil {
-		return nil, nil, nil, nil
+		return nil, 0, time.Time{}, nil, 0, 0, time.Time{}
 	}
 
 	var current *deploymentspb.DeploymentVersionData
@@ -655,17 +693,28 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 			}
 
 			// Choose current/ramping based on the deployment having the most recent routingConfig update time.
-			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) {
+			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) &&
+				HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetCurrentDeploymentVersion()))) {
 				routingConfigLatestCurrentVersion = routingConfig
 			}
 
-			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
+			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) &&
+				HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetRampingDeploymentVersion()))) {
 				routingConfigLatestRampingVersion = routingConfig
 			}
 		}
 	}
 
-	return current, ramping, routingConfigLatestCurrentVersion, routingConfigLatestRampingVersion
+	fmt.Println("routingConfigLatestCurrentVersion", routingConfigLatestCurrentVersion)
+	fmt.Println("routingConfigLatestRampingVersion", routingConfigLatestRampingVersion)
+
+	// Pick the final current and ramping version amongst the old and new deployment data formats.
+	return PickFinalCurrentAndRamping(
+		current,
+		ramping,
+		routingConfigLatestCurrentVersion,
+		routingConfigLatestRampingVersion,
+	)
 }
 
 func ValidateTaskVersionDirective(
