@@ -19,7 +19,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
@@ -110,16 +109,6 @@ func (s *TaskQueueStatsSuite) TestSingleTask_SinglePartition_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	s.publishConsumeWorkflowTasksValidateStats(1, true)
-}
-
-func (s *TaskQueueStatsSuite) TestSingleTask_SinglePartition_ValidateStats_NewDeploymentData() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
-
-	s.useNewDeploymentData = true
 	s.publishConsumeWorkflowTasksValidateStats(1, true)
 }
 
@@ -306,24 +295,6 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 }
 
 func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
-	// If using the new DeploymentData format, use the matching API to place version in the DeploymentData.
-	// TODO (Shivam/Shahab): This can be removed once versioning entity workflows are upgraded to use the new DeploymentData format.
-	if s.useNewDeploymentData {
-		_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(testcore.NewContext(), &matchingservice.SyncDeploymentUserDataRequest{
-			NamespaceId:    s.NamespaceID().String(),
-			TaskQueue:      tqName,
-			DeploymentName: s.deploymentOptions(tqName).DeploymentName,
-			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY},
-			UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
-				s.deploymentOptions(tqName).BuildId: {
-					Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-				},
-			},
-		})
-		s.NoError(err)
-		return
-	}
-
 	// Using old DeploymentData format
 	var wg sync.WaitGroup
 	wg.Add(2)

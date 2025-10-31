@@ -1075,10 +1075,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
 	var targetDeploymentQueue physicalTaskQueueManager
-
 	if directive.GetAssignedBuildId() == "" && targetDeployment != nil {
-		// TODO (Shivam): Move this to the top of the function since we need to clear the sticky queue if the deployment moves to unversioned.
-		// Still keep this under v3.
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			if !deployment.Equal(targetDeployment) {
 				// Current deployment has changed, so the workflow should move to a normal queue to
@@ -1214,17 +1211,17 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 // TODO (Shivam): This function can be simplified to literally one if check.
 func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 	ctx context.Context,
-	deployment *deploymentpb.Deployment, // TODO (Shivam): Change this to directiveDeployment/taskDeployment
+	taskDeployment *deploymentpb.Deployment,
 	targetDeployment *deploymentpb.Deployment,
 	targetDeploymentRevisionNumber int64,
 	taskDirectiveRevisionNumber int64,
 ) (physicalTaskQueueManager, int64, error) {
 	if pm.engine != nil && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
-		if targetDeployment.GetSeriesName() != deployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
+		if targetDeployment.GetSeriesName() != taskDeployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
 			return q, targetDeploymentRevisionNumber, err
 		}
-		q, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
+		q, err := pm.getVersionedQueue(ctx, "", "", taskDeployment, true)
 		return q, taskDirectiveRevisionNumber, err
 	}
 
