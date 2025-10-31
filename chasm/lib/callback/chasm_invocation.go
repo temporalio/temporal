@@ -1,4 +1,4 @@
-package callbacks
+package callback
 
 import (
 	"context"
@@ -11,18 +11,22 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/queues"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type chasmInvocation struct {
-	nexus      *persistencespb.Callback_Nexus
+	nexus      *callbackspb.Callback_Nexus
 	attempt    int32
 	completion nexusrpc.OperationCompletion
 	requestID  string
@@ -45,7 +49,13 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
-func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
+func (c chasmInvocation) Invoke(
+	ctx context.Context,
+	ns *namespace.Namespace,
+	e InvocationTaskExecutor,
+	task *callbackspb.InvocationTask,
+	taskAttr chasm.TaskAttributes,
+) invocationResult {
 	// Get back the base64-encoded ComponentRef from the header.
 	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
 	if !ok {
@@ -57,6 +67,13 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
+	// Validate that the bytes are a valid ChasmComponentRef
+	ref := &persistencespb.ChasmComponentRef{}
+	err = proto.Unmarshal(decodedRef, ref)
+	if err != nil {
+		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef", err)}
+	}
+
 	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
 		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
@@ -66,8 +83,8 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
 		msg := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
-		if isRetryableRpcResponse(err) {
-			return invocationResultRetry{msg}
+		if isRetryableRPCResponse(err) {
+			return invocationResultRetry{err: msg, retryPolicy: e.Config.RetryPolicy()}
 		}
 		return invocationResultFail{msg}
 	}
@@ -75,13 +92,40 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	return invocationResultOK{}
 }
 
+func isRetryableRPCResponse(err error) bool {
+	var st *status.Status
+	stGetter, ok := err.(interface{ Status() *status.Status })
+	if ok {
+		st = stGetter.Status()
+	} else {
+		st, ok = status.FromError(err)
+		if !ok {
+			// Not a gRPC induced error
+			return false
+		}
+	}
+	// nolint:exhaustive
+	switch st.Code() {
+	case codes.Canceled,
+		codes.Unknown,
+		codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Internal:
+		return true
+	default:
+		return false
+	}
+}
+
 func (c chasmInvocation) getHistoryRequest(
-	ref []byte,
+	refBytes []byte,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
 	completion := &tokenspb.NexusOperationCompletion{
-		ComponentRef: ref,
+		ComponentRef: refBytes,
 		RequestId:    c.requestID,
 	}
 
