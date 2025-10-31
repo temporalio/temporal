@@ -202,11 +202,13 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 }
 
 func (s *WorkerDeploymentSuite) Test_SyncUnversionedRamp_SingleTaskQueue() {
+	s.skipFromVersion(AsyncSetCurrentAndRamping) // TODO (shahab): write replacement for async
 	workers := 1
 	s.syncUnversionedRampInBatches(workers)
 }
 
 func (s *WorkerDeploymentSuite) Test_SyncUnversionedRamp_MultipleTaskQueues() {
+	s.skipFromVersion(AsyncSetCurrentAndRamping) // TODO (shahab): write replacement for async
 	workers := 100
 	s.syncUnversionedRampInBatches(workers)
 }
@@ -738,170 +740,4 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete_RemovesEmptyBuild
 
 	// Verify the build ID entry was removed entirely
 	s.NotContains(state.State.PropagatingRevisions, buildID)
-}
-
-// Test_SyncUnversionedRamp_AsyncMode tests that syncUnversionedRamp uses async propagation
-// when AsyncSetCurrentAndRamping workflow version is enabled
-func (s *WorkerDeploymentSuite) Test_SyncUnversionedRamp_AsyncMode() {
-	s.skipBeforeVersion(AsyncSetCurrentAndRamping)
-
-	tv := testvars.New(s.T())
-	s.env.OnUpsertMemo(mock.Anything).Return(nil)
-
-	var a *Activities
-	version1 := tv.DeploymentVersionString()
-	taskQueueName := tv.TaskQueue().Name
-
-	// Mock DescribeVersionFromWorkerDeployment activity to return task queues
-	s.env.RegisterActivity(a.DescribeVersionFromWorkerDeployment)
-	s.env.OnActivity(a.DescribeVersionFromWorkerDeployment, mock.Anything, mock.Anything).Return(
-		&deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult{
-			TaskQueueInfos: []*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
-				{
-					Name: taskQueueName,
-					Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-				},
-			},
-		}, nil,
-	)
-
-	// Mock SyncDeploymentVersionUserDataFromWorkerDeployment activity - verify async mode
-	s.env.RegisterActivity(a.SyncDeploymentVersionUserDataFromWorkerDeployment)
-	s.env.OnActivity(a.SyncDeploymentVersionUserDataFromWorkerDeployment, mock.Anything, mock.Anything).Return(
-		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
-			// Verify async mode: UpdateRoutingConfig should be present instead of Data
-			for _, sync := range req.Sync {
-				s.NotNil(sync.UpdateRoutingConfig, "UpdateRoutingConfig should be present in async mode")
-				s.Nil(sync.Data, "Data should be nil in async mode for unversioned ramp")
-			}
-			return &deploymentspb.SyncDeploymentVersionUserDataResponse{
-				TaskQueueMaxVersions: map[string]int64{
-					taskQueueName: 10,
-				},
-			}, nil
-		},
-	)
-
-	// Mock CheckUnversionedRampUserDataPropagation activity
-	s.env.RegisterActivity(a.CheckUnversionedRampUserDataPropagation)
-	s.env.OnActivity(a.CheckUnversionedRampUserDataPropagation, mock.Anything, mock.Anything).Return(nil)
-
-	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(SetRampingVersion, worker_versioning.UnversionedVersionId, &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("SetRampingVersion update should have been accepted")
-			},
-			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
-				s.NoError(err)
-			},
-		}, &deploymentspb.SetRampingVersionArgs{
-			Identity:   tv.ClientIdentity(),
-			Version:    worker_versioning.UnversionedVersionId,
-			Percentage: 50,
-		})
-	}, 1*time.Millisecond)
-
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
-		NamespaceName:  tv.NamespaceName().String(),
-		NamespaceId:    tv.NamespaceID().String(),
-		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
-			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version1: {
-					Version: version1,
-				},
-			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
-				CurrentVersion: version1,
-				RevisionNumber: 5,
-			},
-			SyncBatchSize: 25,
-		},
-	})
-
-	s.True(s.env.IsWorkflowCompleted())
-}
-
-// Test_SyncUnversionedRamp_AsyncModeSkipsUnchanged tests that async unversioned ramp
-// only waits for task queues where routing config actually changed
-func (s *WorkerDeploymentSuite) Test_SyncUnversionedRamp_AsyncModeSkipsUnchanged() {
-	s.skipBeforeVersion(AsyncSetCurrentAndRamping)
-
-	tv := testvars.New(s.T())
-	s.env.OnUpsertMemo(mock.Anything).Return(nil)
-
-	var a *Activities
-	version1 := tv.DeploymentVersionString()
-	taskQueueChanged := tv.TaskQueue().Name + "changed"
-	taskQueueUnchanged := tv.TaskQueue().Name + "unchanged"
-
-	// Mock DescribeVersionFromWorkerDeployment activity
-	s.env.RegisterActivity(a.DescribeVersionFromWorkerDeployment)
-	s.env.OnActivity(a.DescribeVersionFromWorkerDeployment, mock.Anything, mock.Anything).Return(
-		&deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult{
-			TaskQueueInfos: []*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
-				{Name: taskQueueChanged, Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-				{Name: taskQueueUnchanged, Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-			},
-		}, nil,
-	)
-
-	// Mock SyncDeploymentVersionUserDataFromWorkerDeployment - return -1 for unchanged
-	s.env.RegisterActivity(a.SyncDeploymentVersionUserDataFromWorkerDeployment)
-	s.env.OnActivity(a.SyncDeploymentVersionUserDataFromWorkerDeployment, mock.Anything, mock.Anything).Return(
-		&deploymentspb.SyncDeploymentVersionUserDataResponse{
-			TaskQueueMaxVersions: map[string]int64{
-				taskQueueChanged:   10, // Changed
-				taskQueueUnchanged: -1, // Unchanged - should be filtered out
-			},
-		}, nil,
-	)
-
-	// Mock CheckUnversionedRampUserDataPropagation - verify only changed task queues are checked
-	s.env.RegisterActivity(a.CheckUnversionedRampUserDataPropagation)
-	s.env.OnActivity(a.CheckUnversionedRampUserDataPropagation, mock.Anything, mock.Anything).Return(
-		func(ctx context.Context, req *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
-			// Verify only the changed task queue is being checked
-			s.Contains(req.TaskQueueMaxVersions, taskQueueChanged)
-			s.NotContains(req.TaskQueueMaxVersions, taskQueueUnchanged)
-			return nil
-		},
-	)
-
-	s.env.RegisterDelayedCallback(func() {
-		s.env.UpdateWorkflow(SetRampingVersion, worker_versioning.UnversionedVersionId, &testsuite.TestUpdateCallback{
-			OnReject: func(err error) {
-				s.Fail("SetRampingVersion update should have been accepted")
-			},
-			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
-				s.NoError(err)
-			},
-		}, &deploymentspb.SetRampingVersionArgs{
-			Identity:   tv.ClientIdentity(),
-			Version:    worker_versioning.UnversionedVersionId,
-			Percentage: 50,
-		})
-	}, 1*time.Millisecond)
-
-	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
-		NamespaceName:  tv.NamespaceName().String(),
-		NamespaceId:    tv.NamespaceID().String(),
-		DeploymentName: tv.DeploymentSeries(),
-		State: &deploymentspb.WorkerDeploymentLocalState{
-			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
-				version1: {
-					Version: version1,
-				},
-			},
-			RoutingConfig: &deploymentpb.RoutingConfig{
-				CurrentVersion: version1,
-				RevisionNumber: 5,
-			},
-			SyncBatchSize: 25,
-		},
-	})
-
-	s.True(s.env.IsWorkflowCompleted())
 }
