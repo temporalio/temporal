@@ -48,7 +48,20 @@ var (
 	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 
-	SearchAttributeTemporalScheduledByID = newSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
+	SearchAttributeTemporalChangeVersion              = newSearchAttributeKeywordListByField(searchattribute.TemporalChangeVersion)
+	SearchAttributeBinaryChecksums                    = newSearchAttributeKeywordListByField(searchattribute.BinaryChecksums)
+	SearchAttributeBuildIds                           = newSearchAttributeKeywordListByField(searchattribute.BuildIds)
+	SearchAttributeBatcherNamespace                   = newSearchAttributeKeywordByField(searchattribute.BatcherNamespace)
+	SearchAttributeBatcherUser                        = newSearchAttributeKeywordByField(searchattribute.BatcherUser)
+	SearchAttributeTemporalScheduledStartTime         = newSearchAttributeDateTimeByField(searchattribute.TemporalScheduledStartTime)
+	SearchAttributeTemporalScheduledByID              = newSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
+	SearchAttributeTemporalSchedulePaused             = newSearchAttributeBoolByField(searchattribute.TemporalSchedulePaused)
+	SearchAttributeTemporalNamespaceDivision          = newSearchAttributeKeywordByField(searchattribute.TemporalNamespaceDivision)
+	SearchAttributeTemporalPauseInfo                  = newSearchAttributeKeywordListByField(searchattribute.TemporalPauseInfo)
+	SearchAttributeTemporalReportedProblems           = newSearchAttributeKeywordListByField(searchattribute.TemporalReportedProblems)
+	SearchAttributeTemporalWorkerDeploymentVersion    = newSearchAttributeKeywordByField(searchattribute.TemporalWorkerDeploymentVersion)
+	SearchAttributeTemporalWorkflowVersioningBehavior = newSearchAttributeKeywordByField(searchattribute.TemporalWorkflowVersioningBehavior)
+	SearchAttributeTemporalWorkerDeployment           = newSearchAttributeKeywordByField(searchattribute.TemporalWorkerDeployment)
 )
 
 var (
