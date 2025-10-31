@@ -633,7 +633,7 @@ func calcRampThreshold(id string) float64 {
 
 // CalculateTaskQueueVersioningInfo calculates the current and ramping versioning info for a task queue.
 //
-//revive:disable-next-line:cognitive-complexity,confusing-results
+//revive:disable-next-line:cognitive-complexity,confusing-results,function-result-limit
 func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) (
 	*deploymentspb.WorkerDeploymentVersion, // current version
 	int64, // current revision number

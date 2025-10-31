@@ -1342,8 +1342,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					if v.GetVersions() == nil {
 						continue
 					}
-					for buildId := range v.GetVersions() {
-						deploymentVersion := worker_versioning.BuildIDToStringV32(deploymentName, buildId)
+					for buildID := range v.GetVersions() {
+						deploymentVersion := worker_versioning.BuildIDToStringV32(deploymentName, buildID)
 						buildIds = append(buildIds, deploymentVersion)
 					}
 				}

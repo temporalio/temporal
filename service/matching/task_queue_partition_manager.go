@@ -654,8 +654,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 
 		current, _, currentUpdateTime, ramping, rampingPercentage, _, rampingUpdateTime := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 
-		var info *taskqueuepb.TaskQueueVersioningInfo
-		info = &taskqueuepb.TaskQueueVersioningInfo{
+		info := &taskqueuepb.TaskQueueVersioningInfo{
 			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 			CurrentVersion:           worker_versioning.WorkerDeploymentVersionToStringV31(current),
 			CurrentDeploymentVersion: worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current),
