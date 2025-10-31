@@ -909,7 +909,8 @@ func (d *VersionWorkflowRunner) trackAsyncPropagation(
 
 		// Only check propagation for task queues where routing config actually changed
 		// Task queues with max_version = -1 indicate no routing change, skip those
-		for tqName, maxVersion := range syncRes.TaskQueueMaxVersions {
+		for _, tqName := range workflow.DeterministicKeys(syncRes.TaskQueueMaxVersions) {
+			maxVersion := syncRes.TaskQueueMaxVersions[tqName]
 			if maxVersion != -1 {
 				taskQueueMaxVersionsToCheck[tqName] = maxVersion
 			}
