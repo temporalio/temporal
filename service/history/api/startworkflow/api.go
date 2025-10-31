@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -252,7 +253,11 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
-		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
+		return nil, softassert.UnexpectedInternalErr(
+			s.shardContext.GetLogger(),
+			"unexpected error: mutable state did not have a started workflow task",
+			nil,
+		)
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
 		historyi.TransactionPolicyActive,
@@ -261,7 +266,11 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		return nil, err
 	}
 	if len(eventBatches) != 1 {
-		return nil, serviceerror.NewInternal("unable to create 1st event batch")
+		return nil, softassert.UnexpectedInternalErr(
+			s.shardContext.GetLogger(),
+			"unable to create 1st event batch",
+			nil,
+		)
 	}
 
 	return &creationParams{
