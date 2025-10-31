@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -235,38 +236,44 @@ func Invoke(
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
 	}
 
-	cbColl := callbacks.MachineCollection(mutableState.HSM())
-	cbs := cbColl.List()
-	result.Callbacks = make([]*workflowpb.CallbackInfo, 0, len(cbs))
-	for _, node := range cbs {
-		callback, err := cbColl.Data(node.Key.ID)
-		if err != nil {
-			shard.GetLogger().Error(
-				"failed to load callback data while building describe response",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
-				tag.Error(err),
-			)
-			return nil, serviceerror.NewInternal("failed to construct describe response")
+	// Check if using CHASM callbacks
+	var callbackInfos []*workflowpb.CallbackInfo
+	useChasmCallbacks := false
+	chasmTree := mutableState.ChasmTree()
+	if chasmTree != nil {
+		// Check if CHASM tree is enabled (not a noop)
+		if chasmTree.Archetype() != "" {
+			// CHASM tree is enabled, check if callback creation flag is on
+			if shard.GetConfig().EnableCHASMCallbackCreation(mutableState.GetNamespaceEntry().Name().String()) {
+				useChasmCallbacks = true
+			}
 		}
-
-		callbackInfo, err := buildCallbackInfo(namespaceID, callback, outboundQueueCBPool)
-		if err != nil {
-			shard.GetLogger().Error(
-				"failed to build callback info while building describe response",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
-				tag.Error(err),
-			)
-			return nil, serviceerror.NewInternal("failed to construct describe response")
-		}
-		if callbackInfo == nil {
-			continue
-		}
-		result.Callbacks = append(result.Callbacks, callbackInfo)
 	}
+
+	if useChasmCallbacks {
+		callbackInfos, err = buildCallbackInfosFromChasm(
+			ctx,
+			namespaceID,
+			mutableState,
+			executionInfo,
+			executionState,
+			outboundQueueCBPool,
+			shard.GetLogger(),
+		)
+	} else {
+		callbackInfos, err = buildCallbackInfosFromHSM(
+			namespaceID,
+			mutableState,
+			executionInfo,
+			executionState,
+			outboundQueueCBPool,
+			shard.GetLogger(),
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+	result.Callbacks = callbackInfos
 
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
@@ -366,6 +373,65 @@ func buildCallbackInfo(
 		NextAttemptScheduleTime: callback.NextAttemptScheduleTime,
 		BlockedReason:           blockedReason,
 	}, nil
+}
+
+// buildCallbackInfosFromHSM reads callbacks from HSM and converts them to API format.
+func buildCallbackInfosFromHSM(
+	namespaceID namespace.ID,
+	mutableState historyi.MutableState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	logger log.Logger,
+) ([]*workflowpb.CallbackInfo, error) {
+	cbColl := callbacks.MachineCollection(mutableState.HSM())
+	cbs := cbColl.List()
+	result := make([]*workflowpb.CallbackInfo, 0, len(cbs))
+
+	for _, node := range cbs {
+		callback, err := cbColl.Data(node.Key.ID)
+		if err != nil {
+			logger.Error(
+				"failed to load callback data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+
+		callbackInfo, err := buildCallbackInfo(namespaceID, callback, outboundQueueCBPool)
+		if err != nil {
+			logger.Error(
+				"failed to build callback info while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		if callbackInfo == nil {
+			continue
+		}
+		result = append(result, callbackInfo)
+	}
+
+	return result, nil
+}
+
+// buildCallbackInfosFromChasm reads callbacks from the CHASM tree and converts them to API format.
+func buildCallbackInfosFromChasm(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	mutableState historyi.MutableState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	logger log.Logger,
+) ([]*workflowpb.CallbackInfo, error) {
+	return nil, serviceerror.NewUnimplemented("CHASM callback describe not yet implemented")
 }
 
 func buildPendingNexusOperationInfo(
