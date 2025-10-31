@@ -1155,7 +1155,7 @@ func (s *DeploymentVersionSuite) checkWorkflowUpdateOptionsEventIdentity(
 		}
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-				a.Equal(event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetIdentity(), expectedIdentity)
+				a.Equal(expectedIdentity, event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetIdentity())
 			}
 		}
 	}, 10*time.Second, 50*time.Millisecond)
