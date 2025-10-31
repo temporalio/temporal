@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
@@ -440,6 +441,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 	if errors.As(err, &resourceExhaustedErr) {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
+			softassert.Sometimes(e.logger).Debug("task throttled due to busy workflow", tag.TaskType(e.GetType()))
 			err = consts.ErrResourceExhaustedBusyWorkflow
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
 			err = consts.ErrResourceExhaustedAPSLimit
@@ -482,7 +484,14 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	var terr MaybeTerminalTaskError
 	if errors.As(err, &terr) {
-		return terr.IsTerminalTaskError()
+		isTerminal := terr.IsTerminalTaskError()
+		if isTerminal {
+			softassert.Sometimes(e.logger).Error("terminal task error detected",
+				tag.TaskType(e.GetType()),
+				tag.Error(err),
+			)
+		}
+		return isTerminal
 	}
 
 	if _, isDataLoss := err.(*serviceerror.DataLoss); isDataLoss {
@@ -493,7 +502,14 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	if isInternalError {
 		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1)
 		// Only DQL/drop when configured to
-		return e.dlqInternalErrors()
+		shouldDLQ := e.dlqInternalErrors()
+		if shouldDLQ {
+			softassert.Sometimes(e.logger).Error("internal error with DLQ enabled",
+				tag.TaskType(e.GetType()),
+				tag.Error(err),
+			)
+		}
+		return shouldDLQ
 	}
 
 	return false
@@ -540,7 +556,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		tag.LifeCycleProcessingFailed,
 	)
 	if attempt > taskCriticalLogMetricAttempts {
-		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
+		softassert.Sometimes(e.logger).Error("Critical error processing task, retrying.",
+			tag.TaskType(e.GetType()),
+			tag.Error(err),
+			tag.ErrorType(err),
+			tag.Attempt(int32(attempt)),
+			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
+			tag.LifeCycleProcessingFailed,
+			tag.NewInt32("attempt", int32(attempt)),
+			tag.NewStringTag("task-category", e.GetCategory().Name()),
+			tag.OperationCritical,
+		)
 	} else {
 		logger.Warn("Fail to process task")
 	}
@@ -745,6 +771,10 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is useful for errors like workflow busy, which doesn't have to wait for
 	// the longer rescheduling backoff.
 	if attempt > resubmitMaxAttempts {
+		softassert.Sometimes(e.logger).Debug("task acked multiple times",
+			tag.TaskType(e.GetType()),
+			tag.NewInt32("ack-attempt", int32(attempt)),
+		)
 		return false
 	}
 
