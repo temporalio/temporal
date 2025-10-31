@@ -21,9 +21,16 @@ import (
 type HTTPCaller func(*http.Request) (*http.Response, error)
 type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
-func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTaskExecutor {
+func newInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTaskExecutor {
 	return &InvocationTaskExecutor{
-		InvocationTaskExecutorOptions: opts,
+		config:             opts.Config,
+		namespaceRegistry:  opts.NamespaceRegistry,
+		metricsHandler:     opts.MetricsHandler,
+		logger:             opts.Logger,
+		httpCallerProvider: opts.HTTPCallerProvider,
+		httpTraceProvider:  opts.HTTPTraceProvider,
+		historyClient:      opts.HistoryClient,
+		chasmEngine:        opts.ChasmEngine,
 	}
 }
 
@@ -41,14 +48,21 @@ type InvocationTaskExecutorOptions struct {
 }
 
 type InvocationTaskExecutor struct {
-	InvocationTaskExecutorOptions
+	config             *Config
+	namespaceRegistry  namespace.Registry
+	metricsHandler     metrics.Handler
+	logger             log.Logger
+	httpCallerProvider HTTPCallerProvider
+	httpTraceProvider  commonnexus.HTTPClientTraceProvider
+	historyClient      resource.HistoryClient
+	chasmEngine        chasm.Engine
 }
 
 func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
 	return e.Invoke(ctx, ref, attrs, task)
 }
 
-func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
+func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
 	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
@@ -106,7 +120,7 @@ func (e InvocationTaskExecutor) Invoke(
 	taskAttr chasm.TaskAttributes,
 	task *callbackspb.InvocationTask,
 ) error {
-	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
@@ -123,7 +137,7 @@ func (e InvocationTaskExecutor) Invoke(
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.Config.RequestTimeout(ns.Name().String(), taskAttr.Destination),
+		e.config.RequestTimeout(ns.Name().String(), taskAttr.Destination),
 	)
 	defer cancel()
 
@@ -138,7 +152,9 @@ func (e InvocationTaskExecutor) Invoke(
 }
 
 type BackoffTaskExecutor struct {
-	BackoffTaskExecutorOptions
+	config         *Config
+	metricsHandler metrics.Handler
+	logger         log.Logger
 }
 
 type BackoffTaskExecutorOptions struct {
@@ -149,9 +165,11 @@ type BackoffTaskExecutorOptions struct {
 	Logger         log.Logger
 }
 
-func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecutor {
+func newBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecutor {
 	return &BackoffTaskExecutor{
-		BackoffTaskExecutorOptions: opts,
+		config:         opts.Config,
+		metricsHandler: opts.MetricsHandler,
+		logger:         opts.Logger,
 	}
 }
 
