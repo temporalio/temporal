@@ -15,9 +15,10 @@ type Library struct {
 
 func NewLibrary(
 	logger log.Logger,
+	config *Config,
 ) *Library {
 	return &Library{
-		leaseExpiryTaskExecutor:   NewLeaseExpiryTaskExecutor(logger),
+		leaseExpiryTaskExecutor:   NewLeaseExpiryTaskExecutor(logger, config),
 		workerCleanupTaskExecutor: NewWorkerCleanupTaskExecutor(logger),
 	}
 }

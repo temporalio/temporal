@@ -29,9 +29,9 @@
 package worker
 
 import (
-	apipb "go.temporal.io/api/worker/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
-	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
 
 const (
@@ -42,14 +42,14 @@ type Worker struct {
 	chasm.UnimplementedComponent
 
 	// Persisted state.
-	*workerpb.WorkerState
+	*workerstatepb.WorkerState
 }
 
 // NewWorker creates a new Worker component with the given heartbeat information.
-func NewWorker(heartbeat *apipb.WorkerHeartbeat) *Worker {
+func NewWorker(heartbeat *workerpb.WorkerHeartbeat) *Worker {
 	return &Worker{
-		WorkerState: &workerpb.WorkerState{
-			Status:          workerpb.WORKER_STATUS_ACTIVE,
+		WorkerState: &workerstatepb.WorkerState{
+			Status:          workerstatepb.WORKER_STATUS_ACTIVE,
 			WorkerHeartbeat: heartbeat,
 		},
 	}
@@ -58,7 +58,7 @@ func NewWorker(heartbeat *apipb.WorkerHeartbeat) *Worker {
 // LifecycleState returns the current lifecycle state of the worker.
 func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch w.Status {
-	case workerpb.WORKER_STATUS_CLEANED_UP:
+	case workerstatepb.WORKER_STATUS_CLEANED_UP:
 		return chasm.LifecycleStateCompleted
 	default:
 		// Active workers and inactive workers awaiting cleanup are still running.
@@ -67,17 +67,17 @@ func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 // StateMachineState returns the current status.
-func (w *Worker) StateMachineState() workerpb.WorkerStatus {
+func (w *Worker) StateMachineState() workerstatepb.WorkerStatus {
 	return w.Status
 }
 
 // SetStateMachineState sets the status.
-func (w *Worker) SetStateMachineState(status workerpb.WorkerStatus) {
+func (w *Worker) SetStateMachineState(status workerstatepb.WorkerStatus) {
 	w.Status = status
 }
 
-// WorkerId returns the unique identifier for this worker.
-func (w *Worker) WorkerId() string {
+// WorkerID returns the unique identifier for this worker.
+func (w *Worker) WorkerID() string {
 	if w.WorkerHeartbeat == nil {
 		return ""
 	}
