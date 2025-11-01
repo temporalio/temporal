@@ -3,6 +3,7 @@ package nexusrpc
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -44,6 +45,8 @@ type OperationCompletionSuccessful struct {
 	// [NewOperationCompletionSuccessful].
 	// Automatically closed when the completion is delivered.
 	Reader *nexus.Reader
+	// CallbackToken is the callback token provided by the caller in the start request.
+	CallbackToken string
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
 	// started response.
 	OperationToken string
@@ -60,6 +63,8 @@ type OperationCompletionSuccessfulOptions struct {
 	// Optional serializer for the result. Defaults to the SDK's default Serializer, which handles JSONables, byte
 	// slices and nils.
 	Serializer nexus.Serializer
+	// CallbackToken is the callback token provided by the caller in the start request.
+	CallbackToken string
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
 	// started response.
 	OperationToken string
@@ -102,6 +107,7 @@ func NewOperationCompletionSuccessful(result any, options OperationCompletionSuc
 	return &OperationCompletionSuccessful{
 		Header:         make(nexus.Header),
 		Reader:         reader,
+		CallbackToken:  options.CallbackToken,
 		OperationToken: options.OperationToken,
 		StartTime:      options.StartTime,
 		CloseTime:      options.CloseTime,
@@ -121,6 +127,10 @@ func (c *OperationCompletionSuccessful) applyToHTTPRequest(request *http.Request
 	}
 	request.Header.Set(headerOperationState, string(nexus.OperationStateSucceeded))
 
+	if c.CallbackToken != "" {
+		encodedToken := base64.StdEncoding.EncodeToString([]byte(c.CallbackToken))
+		request.Header.Set("Nexus-Callback-Token", encodedToken)
+	}
 	if c.Header.Get(nexus.HeaderOperationToken) == "" && c.OperationToken != "" {
 		request.Header.Set(nexus.HeaderOperationToken, c.OperationToken)
 	}
