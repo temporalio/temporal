@@ -392,7 +392,7 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	}
 
 	// Make sure we have something to start.
-	executionInfo := scheduler.Schedule.Action.GetStartWorkflow()
+	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
 	if executionInfo == nil {
 		return serviceerror.NewInvalidArgument("schedules must have an Action set")
 	}
@@ -553,7 +553,6 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
-	// TODO - set last completion result/continued failure (watcher)
 	// TODO - set search attributes
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		CompletionCallbacks:      []*commonpb.Callback{callback},

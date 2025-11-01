@@ -11,7 +11,7 @@ import (
 
 const (
 	// Base URL for Nexus->CHASM callbacks.
-	NexusCompletionHandlerURL = "temporal://internal"
+	NexusCompletionHandlerURL = "temporal://system"
 )
 
 // NexusCompletionHandler is implemented by CHASM components that want to handle
