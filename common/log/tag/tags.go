@@ -306,9 +306,9 @@ func WorkerBuildId(buildId string) ZapTag {
 	return NewStringTag("worker-build-id", buildId)
 }
 
-// WorkerId returns tag for worker instance key
-func WorkerId(workerId string) ZapTag {
-	return NewStringTag("worker-id", workerId)
+// WorkerID returns tag for a worker
+func WorkerID(workerID string) ZapTag {
+	return NewStringTag("worker-id", workerID)
 }
 
 // ReachabilityExitPointTag returns tag for reachabilityExitPoint

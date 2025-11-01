@@ -1,13 +1,16 @@
 package worker
 
-// Config holds minimal configuration for Worker.
+import (
+	"go.temporal.io/server/common/dynamicconfig"
+)
+
 type Config struct {
-	// Reserved for future configuration options.
+	// Delay for cleaning up inactive workers after their lease has expired.
+	InactiveWorkerCleanupDelay dynamicconfig.DurationPropertyFnWithNamespaceFilter
 }
 
-// NewDefaultConfig returns a Config with default values.
-func NewDefaultConfig() *Config {
+func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		// Empty for now.
+		InactiveWorkerCleanupDelay: dynamicconfig.InactiveWorkerCleanupDelay.Get(dc),
 	}
 }
