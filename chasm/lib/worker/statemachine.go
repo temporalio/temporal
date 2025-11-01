@@ -1,3 +1,4 @@
+// State transition logic for Worker.
 package worker
 
 import (
@@ -62,7 +63,7 @@ type EventHeartbeatReceived struct {
 var TransitionActiveHeartbeat = chasm.NewTransition(
 	[]workerpb.WorkerStatus{workerpb.WORKER_STATUS_ACTIVE},
 	workerpb.WORKER_STATUS_ACTIVE,
-	func(ctx chasm.MutableContext, w *Worker, event EventHeartbeatReceived) error {
+	func(w *Worker, ctx chasm.MutableContext, event EventHeartbeatReceived) error {
 		updateWorkerLease(ctx, w, event.LeaseDeadline)
 		return nil
 	},
@@ -77,7 +78,7 @@ type EventLeaseExpired struct {
 var TransitionLeaseExpired = chasm.NewTransition(
 	[]workerpb.WorkerStatus{workerpb.WORKER_STATUS_ACTIVE},
 	workerpb.WORKER_STATUS_INACTIVE,
-	func(ctx chasm.MutableContext, w *Worker, event EventLeaseExpired) error {
+	func(w *Worker, ctx chasm.MutableContext, event EventLeaseExpired) error {
 		// Schedule cleanup task.
 		cleanupTask := &workerpb.WorkerCleanupTask{}
 		taskAttrs := chasm.TaskAttributes{
@@ -97,18 +98,18 @@ type EventCleanupCompleted struct {
 var TransitionCleanupCompleted = chasm.NewTransition(
 	[]workerpb.WorkerStatus{workerpb.WORKER_STATUS_INACTIVE},
 	workerpb.WORKER_STATUS_CLEANED_UP,
-	func(ctx chasm.MutableContext, w *Worker, event EventCleanupCompleted) error {
+	func(w *Worker, ctx chasm.MutableContext, event EventCleanupCompleted) error {
 		return nil
 	},
 )
 
 // TransitionWorkerResurrection handles worker reconnection when in INACTIVE state.
 // This is a special case for when the same worker process reconnects after network partition.
-// Note: Any activities associated with this worker have already been cancelled and rescheduled.
+// Note: Any activities associated with this worker may have already been rescheduled.
 var TransitionWorkerResurrection = chasm.NewTransition(
 	[]workerpb.WorkerStatus{workerpb.WORKER_STATUS_INACTIVE},
 	workerpb.WORKER_STATUS_ACTIVE,
-	func(ctx chasm.MutableContext, w *Worker, event EventHeartbeatReceived) error {
+	func(w *Worker, ctx chasm.MutableContext, event EventHeartbeatReceived) error {
 		updateWorkerLease(ctx, w, event.LeaseDeadline)
 		return nil
 	},
