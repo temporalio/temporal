@@ -309,6 +309,11 @@ func WorkerVersion(version string) ZapTag {
 	return NewStringTag("worker-version", version)
 }
 
+// WorkerId returns tag for worker instance key
+func WorkerId(workerId string) ZapTag {
+	return NewStringTag("worker-id", workerId)
+}
+
 // ReachabilityExitPointTag returns tag for reachabilityExitPoint
 func ReachabilityExitPointTag(reachabilityExitPoint string) ZapTag {
 	return NewStringTag("reachability-exit-point", reachabilityExitPoint)

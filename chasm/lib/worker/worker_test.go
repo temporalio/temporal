@@ -4,21 +4,30 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	apipb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
 
 func TestNewWorker(t *testing.T) {
-	worker := NewWorker()
+	heartbeat := &apipb.WorkerHeartbeat{
+		WorkerInstanceKey: "test-worker-1",
+	}
+	worker := NewWorker(heartbeat)
 
 	// Verify basic initialization
 	require.NotNil(t, worker)
 	require.Equal(t, workerpb.WORKER_STATUS_ACTIVE, worker.Status)
 	require.Nil(t, worker.LeaseExpirationTime)
+	require.Equal(t, heartbeat, worker.WorkerHeartbeat)
+	require.Equal(t, "test-worker-1", worker.WorkerId())
 }
 
 func TestWorkerLifecycleState(t *testing.T) {
-	worker := NewWorker()
+	heartbeat := &apipb.WorkerHeartbeat{
+		WorkerInstanceKey: "test-worker-2",
+	}
+	worker := NewWorker(heartbeat)
 	var ctx chasm.Context
 
 	// Test ACTIVE -> Running
