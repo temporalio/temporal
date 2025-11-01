@@ -107,6 +107,17 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		config,
 	)
 
+	// Set up expectations on the SearchAttributesMapper mocks created by NewTestContext
+	mockMapper := searchattribute.NewMockMapper(s.controller)
+	mockMapper.EXPECT().GetFieldName(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(alias string, _ string) (string, error) {
+			return alias, nil
+		},
+	).AnyTimes()
+
+	mockMapperProvider := s.mockShard.Resource.SearchAttributesMapperProvider
+	mockMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(mockMapper, nil).AnyTimes()
+
 	reg := hsm.NewRegistry()
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
