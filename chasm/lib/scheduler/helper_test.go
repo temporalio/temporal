@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -41,7 +42,8 @@ func defaultSchedule() *schedulepb.Schedule {
 		Action: &schedulepb.ScheduleAction{
 			Action: &schedulepb.ScheduleAction_StartWorkflow{
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId: "scheduled-wf",
+					WorkflowId:   "scheduled-wf",
+					WorkflowType: &commonpb.WorkflowType{Name: "scheduled-wf-type"},
 				},
 			},
 		},
@@ -76,7 +78,11 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 	nodePathEncoder := chasm.DefaultPathEncoder
 
 	registry := chasm.NewRegistry(logger)
-	err := registry.Register(&scheduler.Library{})
+	err := registry.Register(&chasm.CoreLibrary{})
+	if err != nil {
+		t.Fatalf("failed to register core library: %v", err)
+	}
+	err = registry.Register(&scheduler.Library{})
 	if err != nil {
 		t.Fatalf("failed to register scheduler library: %v", err)
 	}

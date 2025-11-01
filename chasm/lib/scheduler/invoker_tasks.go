@@ -34,6 +34,7 @@ type (
 		Config         *Config
 		MetricsHandler metrics.Handler
 		BaseLogger     log.Logger
+		SpecProcessor  SpecProcessor
 
 		HistoryClient resource.HistoryClient
 
