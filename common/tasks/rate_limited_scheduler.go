@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"errors"
 	"time"
 
 	"go.temporal.io/server/common/clock"
@@ -30,6 +31,11 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 	}
+)
+
+var (
+	// ErrSchedulerThrottle is returned by rate limited scheduler when a task is throttled
+	ErrSchedulerThrottle = errors.New("task was throttled by scheduler rate limiter")
 )
 
 func NewRateLimitedScheduler[T Task](
@@ -98,6 +104,8 @@ func (s *RateLimitedScheduler[T]) wait(task T) {
 	}
 
 	metrics.TaskSchedulerThrottled.With(s.metricsHandler).Record(1, s.metricTagsFn(task)...)
+	_ = task.HandleErr(ErrSchedulerThrottle)
+
 	if s.options.EnableShadowMode {
 		// in shadow mode, only emit metrics, but don't actually throttle
 		return
@@ -115,6 +123,7 @@ func (s *RateLimitedScheduler[T]) allow(task T) bool {
 	}
 
 	metrics.TaskSchedulerThrottled.With(s.metricsHandler).Record(1, s.metricTagsFn(task)...)
+	_ = task.HandleErr(ErrSchedulerThrottle)
 
 	// in shadow mode, only emit metrics, but don't actually throttle
 	return s.options.EnableShadowMode
