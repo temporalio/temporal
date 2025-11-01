@@ -29,6 +29,7 @@
 package worker
 
 import (
+	apipb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
@@ -40,15 +41,16 @@ const (
 type Worker struct {
 	chasm.UnimplementedComponent
 
-	// Persisted state for heartbeat tracking.
+	// Persisted state.
 	*workerpb.WorkerState
 }
 
-// NewWorker creates a new Worker component.
-func NewWorker() *Worker {
+// NewWorker creates a new Worker component with the given heartbeat information.
+func NewWorker(heartbeat *apipb.WorkerHeartbeat) *Worker {
 	return &Worker{
 		WorkerState: &workerpb.WorkerState{
-			Status: workerpb.WORKER_STATUS_ACTIVE,
+			Status:          workerpb.WORKER_STATUS_ACTIVE,
+			WorkerHeartbeat: heartbeat,
 		},
 	}
 }
@@ -64,12 +66,20 @@ func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
-// State returns the current status (implements StateMachine interface).
+// StateMachineState returns the current status.
 func (w *Worker) StateMachineState() workerpb.WorkerStatus {
 	return w.Status
 }
 
-// SetState sets the status (implements StateMachine interface).
+// SetStateMachineState sets the status.
 func (w *Worker) SetStateMachineState(status workerpb.WorkerStatus) {
 	w.Status = status
+}
+
+// WorkerId returns the unique identifier for this worker.
+func (w *Worker) WorkerId() string {
+	if w.WorkerHeartbeat == nil {
+		return ""
+	}
+	return w.WorkerHeartbeat.WorkerInstanceKey
 }

@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/chasm"
 	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // LeaseExpiryTaskExecutor handles lease expiry events.
@@ -29,7 +30,7 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 ) error {
 	// Validate that this lease expiry is still relevant.
 	if !e.isLeaseExpiryTaskValid(worker, attrs) {
-		e.logger.Debug("Lease expiry task is no longer valid, ignoring")
+		e.logger.Debug("Lease expiry task is no longer valid, ignoring", tag.WorkerId(worker.WorkerId()))
 		return nil
 	}
 
@@ -93,7 +94,7 @@ func (e *WorkerCleanupTaskExecutor) Execute(
 		return nil // Not inactive, nothing to clean up.
 	}
 
-	e.logger.Info("Cleaning up inactive worker")
+	e.logger.Info("Cleaning up inactive worker", tag.WorkerId(worker.WorkerId()))
 
 	// Apply the cleanup completed transition.
 	return TransitionCleanupCompleted.Apply(ctx, worker, EventCleanupCompleted{

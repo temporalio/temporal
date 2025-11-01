@@ -5,12 +5,20 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	apipb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
 
+// newTestWorker creates a worker for testing with a default heartbeat
+func newTestWorker() *Worker {
+	return NewWorker(&apipb.WorkerHeartbeat{
+		WorkerInstanceKey: "test-worker",
+	})
+}
+
 func TestRecordHeartbeat(t *testing.T) {
-	worker := NewWorker()
+	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
 	leaseDeadline := time.Now().Add(30 * time.Second)
 
@@ -31,7 +39,7 @@ func TestRecordHeartbeat(t *testing.T) {
 }
 
 func TestUpdateWorkerLease(t *testing.T) {
-	worker := NewWorker()
+	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
 	leaseDeadline := time.Now().Add(30 * time.Second)
 
@@ -47,7 +55,7 @@ func TestUpdateWorkerLease(t *testing.T) {
 }
 
 func TestTransitionActiveHeartbeat(t *testing.T) {
-	worker := NewWorker()
+	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
 
 	heartbeatTime := time.Now()
@@ -73,7 +81,7 @@ func TestTransitionActiveHeartbeat(t *testing.T) {
 }
 
 func TestTransitionLeaseExpired(t *testing.T) {
-	worker := NewWorker()
+	worker := newTestWorker()
 	worker.Status = workerpb.WORKER_STATUS_ACTIVE
 	ctx := &chasm.MockMutableContext{}
 
@@ -102,7 +110,7 @@ func TestTransitionLeaseExpired(t *testing.T) {
 }
 
 func TestTransitionCleanupCompleted(t *testing.T) {
-	worker := NewWorker()
+	worker := newTestWorker()
 	worker.Status = workerpb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
 
@@ -123,7 +131,7 @@ func TestTransitionCleanupCompleted(t *testing.T) {
 }
 
 func TestScheduleLeaseExpiry(t *testing.T) {
-	worker := NewWorker()
+	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
 	leaseDeadline := time.Now().Add(1 * time.Minute)
 
@@ -141,7 +149,7 @@ func TestScheduleLeaseExpiry(t *testing.T) {
 }
 
 func TestMultipleHeartbeats(t *testing.T) {
-	worker := NewWorker()
+	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
 
 	// First heartbeat
@@ -164,7 +172,7 @@ func TestWorkerResurrection(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 
 	t.Run("ResurrectionFromInactive", func(t *testing.T) {
-		worker := NewWorker()
+		worker := newTestWorker()
 		worker.Status = workerpb.WORKER_STATUS_INACTIVE
 
 		leaseDeadline := time.Now().Add(30 * time.Second)
@@ -183,7 +191,7 @@ func TestWorkerResurrection(t *testing.T) {
 }
 
 func TestTransitionWorkerResurrection(t *testing.T) {
-	worker := NewWorker()
+	worker := newTestWorker()
 	worker.Status = workerpb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
 
@@ -215,7 +223,7 @@ func TestInvalidTransitions(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 
 	t.Run("HeartbeatOnCleanedUpWorker", func(t *testing.T) {
-		worker := NewWorker()
+		worker := newTestWorker()
 		worker.Status = workerpb.WORKER_STATUS_CLEANED_UP
 
 		leaseDeadline := time.Now().Add(30 * time.Second)
@@ -227,7 +235,7 @@ func TestInvalidTransitions(t *testing.T) {
 	})
 
 	t.Run("LeaseExpiryOnCleanedUpWorker", func(t *testing.T) {
-		worker := NewWorker()
+		worker := newTestWorker()
 		worker.Status = workerpb.WORKER_STATUS_CLEANED_UP
 
 		event := EventLeaseExpired{Time: time.Now()}
@@ -238,7 +246,7 @@ func TestInvalidTransitions(t *testing.T) {
 	})
 
 	t.Run("CleanupOnActiveWorker", func(t *testing.T) {
-		worker := NewWorker()
+		worker := newTestWorker()
 		worker.Status = workerpb.WORKER_STATUS_ACTIVE
 
 		event := EventCleanupCompleted{Time: time.Now()}

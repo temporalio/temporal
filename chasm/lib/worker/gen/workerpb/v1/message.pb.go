@@ -32,7 +32,7 @@ const (
 	WORKER_STATUS_UNSPECIFIED WorkerStatus = 0
 	WORKER_STATUS_ACTIVE      WorkerStatus = 1 // Worker is actively sending heartbeats
 	WORKER_STATUS_INACTIVE    WorkerStatus = 2 // Worker lease has expired, awaiting cleanup
-	WORKER_STATUS_CLEANED_UP  WorkerStatus = 3 // Worker has been cleaned up and removed
+	WORKER_STATUS_CLEANED_UP  WorkerStatus = 3 // Worker has been cleaned up. Terminal state.
 )
 
 // Enum value maps for WorkerStatus.
