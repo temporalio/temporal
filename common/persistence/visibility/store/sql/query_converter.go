@@ -565,7 +565,7 @@ func (c *QueryConverter) parseSQLVal(
 			tm = time.Unix(0, v)
 		case string:
 			var err error
-			tm, err = time.Parse(time.RFC3339Nano, v)
+			tm, err = query.ParseRelativeOrAbsoluteTime(v)
 			if err != nil {
 				return nil, query.NewConverterError(
 					"%s: unable to parse datetime '%s'",
