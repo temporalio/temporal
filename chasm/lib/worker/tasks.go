@@ -1,3 +1,4 @@
+// Tasks that are scheduled for Workers and the corresponding executors.
 package worker
 
 import (
@@ -22,18 +23,18 @@ func NewLeaseExpiryTaskExecutor(logger log.Logger) *LeaseExpiryTaskExecutor {
 // Execute is called when a lease expiry timer fires.
 func (e *LeaseExpiryTaskExecutor) Execute(
 	ctx chasm.MutableContext,
-	component *Worker,
+	worker *Worker,
 	attrs chasm.TaskAttributes,
 	task *workerpb.LeaseExpiryTask,
 ) error {
 	// Validate that this lease expiry is still relevant.
-	if !e.isLeaseExpiryStillValid(component, attrs) {
+	if !e.isLeaseExpiryTaskValid(worker, attrs) {
 		e.logger.Debug("Lease expiry task is no longer valid, ignoring")
 		return nil
 	}
 
 	// Apply the lease expiry transition.
-	return TransitionLeaseExpired.Apply(ctx, component, EventLeaseExpired{
+	return TransitionLeaseExpired.Apply(ctx, worker, EventLeaseExpired{
 		Time: time.Now(),
 	})
 }
@@ -41,33 +42,32 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 // Validate checks if the lease expiry task is still valid (implements TaskValidator interface).
 func (e *LeaseExpiryTaskExecutor) Validate(
 	ctx chasm.Context,
-	component *Worker,
+	worker *Worker,
 	attrs chasm.TaskAttributes,
 	task *workerpb.LeaseExpiryTask,
 ) (bool, error) {
-	return e.isLeaseExpiryStillValid(component, attrs), nil
+	return e.isLeaseExpiryTaskValid(worker, attrs), nil
 }
 
-// isLeaseExpiryStillValid checks if this lease expiry is still the latest lease deadline.
-func (e *LeaseExpiryTaskExecutor) isLeaseExpiryStillValid(
-	component *Worker,
+// isLeaseExpiryTaskValid checks if this lease expiry task is valid or if the lease has been renewed.
+func (e *LeaseExpiryTaskExecutor) isLeaseExpiryTaskValid(
+	worker *Worker,
 	attrs chasm.TaskAttributes,
 ) bool {
-	// If worker is not active, lease expiry is not valid.
-	if component.Status != workerpb.WORKER_STATUS_ACTIVE {
+	// If worker is not active, no point in processing the least expiry task.
+	// A previous lease expiry must have already transitioned it to inactive.
+	if worker.Status != workerpb.WORKER_STATUS_ACTIVE {
 		return false
 	}
 
-	// If no lease deadline set, lease expiry is not valid.
-	if component.LeaseExpirationTime == nil {
+	if worker.LeaseExpirationTime == nil {
 		return false
 	}
 
-	// Timer is valid if its deadline is >= the current lease deadline.
-	// (i.e., it hasn't been superseded by a newer heartbeat).
-	taskDeadline := attrs.ScheduledTime
-	componentDeadline := component.LeaseExpirationTime.AsTime()
-	return !taskDeadline.Before(componentDeadline)
+	scheduledLeaseExpirationTime := attrs.ScheduledTime
+	workerLeaseExpirationTime := worker.LeaseExpirationTime.AsTime()
+	// If the lease has been renewed past the scheduled expiry time, this task is no longer valid.
+	return !workerLeaseExpirationTime.After(scheduledLeaseExpirationTime)
 }
 
 // WorkerCleanupTaskExecutor handles cleanup of inactive workers.
@@ -84,19 +84,19 @@ func NewWorkerCleanupTaskExecutor(logger log.Logger) *WorkerCleanupTaskExecutor 
 // Execute is called to clean up inactive workers.
 func (e *WorkerCleanupTaskExecutor) Execute(
 	ctx chasm.MutableContext,
-	component *Worker,
+	worker *Worker,
 	attrs chasm.TaskAttributes,
 	task *workerpb.WorkerCleanupTask,
 ) error {
 	// Only clean up if worker is inactive.
-	if component.Status != workerpb.WORKER_STATUS_INACTIVE {
+	if worker.Status != workerpb.WORKER_STATUS_INACTIVE {
 		return nil // Not inactive, nothing to clean up.
 	}
 
 	e.logger.Info("Cleaning up inactive worker")
 
 	// Apply the cleanup completed transition.
-	return TransitionCleanupCompleted.Apply(ctx, component, EventCleanupCompleted{
+	return TransitionCleanupCompleted.Apply(ctx, worker, EventCleanupCompleted{
 		Time: time.Now(),
 	})
 }
@@ -104,10 +104,10 @@ func (e *WorkerCleanupTaskExecutor) Execute(
 // Validate checks if cleanup is still needed.
 func (e *WorkerCleanupTaskExecutor) Validate(
 	ctx chasm.Context,
-	component *Worker,
+	worker *Worker,
 	attrs chasm.TaskAttributes,
 	task *workerpb.WorkerCleanupTask,
 ) (bool, error) {
 	// Only valid if worker is inactive.
-	return component.Status == workerpb.WORKER_STATUS_INACTIVE, nil
+	return worker.Status == workerpb.WORKER_STATUS_INACTIVE, nil
 }

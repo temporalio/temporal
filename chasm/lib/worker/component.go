@@ -37,7 +37,6 @@ const (
 	Archetype chasm.Archetype = "Worker"
 )
 
-// Worker is a Chasm component that tracks worker heartbeats and manages worker lifecycle.
 type Worker struct {
 	chasm.UnimplementedComponent
 
@@ -66,11 +65,11 @@ func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 }
 
 // State returns the current status (implements StateMachine interface).
-func (w *Worker) State() workerpb.WorkerStatus {
+func (w *Worker) StateMachineState() workerpb.WorkerStatus {
 	return w.Status
 }
 
 // SetState sets the status (implements StateMachine interface).
-func (w *Worker) SetState(status workerpb.WorkerStatus) {
+func (w *Worker) SetStateMachineState(status workerpb.WorkerStatus) {
 	w.Status = status
 }
