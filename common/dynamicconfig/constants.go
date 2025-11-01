@@ -2611,6 +2611,20 @@ instead of the existing (V1) implementation.`,
 to the CHASM (V2) implementation on active scheduler workflows.`,
 	)
 
+	EnableCHASMCallbackCreation = NewNamespaceBoolSetting(
+		"history.enableCHASMCallbackCreation",
+		false,
+		`EnableCHASMCallbackCreation controls whether new callbacks are created using the CHASM (V2) implementation
+instead of the existing (V1) implementation.`,
+	)
+
+	EnableCHASMCallbackMigration = NewNamespaceBoolSetting(
+		"history.enableCHASMCallbackMigration",
+		false,
+		`EnableCHASMCallbackMigration controls whether existing V1 callbacks are automatically migrated
+to the CHASM (V2) implementation on active callback workflows.`,
+	)
+
 	// keys for worker
 
 	WorkerPersistenceMaxQPS = NewGlobalIntSetting(

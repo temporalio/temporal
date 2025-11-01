@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -20,8 +21,8 @@ type Workflow struct {
 	// MSPointer is a special in-memory field for getting mutable state access.
 	MSPointer chasm.MSPointer
 
-	// TODO: populate with actual callback component type
-	// Callbacks chasm.Map[string, *CallbackComponent]
+	// Callbacks map is used to store the callbacks for the workflow.
+	Callbacks chasm.Map[string, *callback.Callback]
 }
 
 func NewWorkflow(

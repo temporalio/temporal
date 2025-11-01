@@ -66,6 +66,8 @@ type Config struct {
 	EnableChasm                           dynamicconfig.BoolPropertyFn
 	EnableCHASMSchedulerCreation          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMCallbackCreation           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMCallbackMigration          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -447,6 +449,9 @@ func NewConfig(
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerMigration: dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
+
+		EnableCHASMCallbackCreation:  dynamicconfig.EnableCHASMCallbackCreation.Get(dc),
+		EnableCHASMCallbackMigration: dynamicconfig.EnableCHASMCallbackMigration.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
