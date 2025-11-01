@@ -42,28 +42,33 @@ func buildCLI() *cli.App {
 			Name:    "root",
 			Aliases: []string{"r"},
 			Value:   ".",
-			Usage:   "root directory of execution environment",
+			Usage:   "root directory of execution environment (deprecated)",
 			EnvVars: []string{config.EnvKeyRoot},
 		},
 		&cli.StringFlag{
 			Name:    "config",
 			Aliases: []string{"c"},
 			Value:   "config",
-			Usage:   "config dir path relative to root",
+			Usage:   "config dir path relative to root (deprecated)",
 			EnvVars: []string{config.EnvKeyConfigDir},
 		},
 		&cli.StringFlag{
 			Name:    "env",
 			Aliases: []string{"e"},
 			Value:   "development",
-			Usage:   "runtime environment",
+			Usage:   "runtime environment (deprecated)",
 			EnvVars: []string{config.EnvKeyEnvironment},
 		},
 		&cli.StringFlag{
 			Name:    "zone",
 			Aliases: []string{"az"},
-			Usage:   "availability zone",
+			Usage:   "availability zone (deprecated)",
 			EnvVars: []string{config.EnvKeyAvailabilityZone, config.EnvKeyAvailabilityZoneTypo},
+		},
+		&cli.StringFlag{
+			Name:    "config-file",
+			Usage:   "path to config file (absolute or relative to current working directory)",
+			EnvVars: []string{config.EnvKeyConfigFile},
 		},
 		&cli.BoolFlag{
 			Name:    "allow-no-auth",
@@ -139,12 +144,13 @@ func buildCLI() *cli.App {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
+
+				if c.IsSet("config-file") && (c.IsSet("config") || c.IsSet("env") || c.IsSet("zone")) {
+					return cli.Exit("ERROR: can not use --config, --env, or --zone with --config-file", 1)
+				}
 				return nil
 			},
 			Action: func(c *cli.Context) error {
-				env := c.String("env")
-				zone := c.String("zone")
-				configDir := path.Join(c.String("root"), c.String("config"))
 				services := c.StringSlice("service")
 				allowNoAuth := c.Bool("allow-no-auth")
 
@@ -154,7 +160,22 @@ func buildCLI() *cli.App {
 					services = strings.Split(c.String("services"), ",")
 				}
 
-				cfg, err := config.LoadConfig(env, configDir, zone)
+				var cfg *config.Config
+				var err error
+
+				switch {
+				case c.IsSet("config-file"):
+					cfg, err = config.Load(config.WithConfigFile(c.String("config-file")))
+				case c.IsSet("config") || c.IsSet("env") || c.IsSet("zone"):
+					cfg, err = config.Load(
+						config.WithEnv(c.String("env")),
+						config.WithConfigDir(path.Join(c.String("root"), c.String("config"))),
+						config.WithZone(c.String("zone")),
+					)
+				default:
+					cfg, err = config.Load(config.WithEmbedded())
+				}
+
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
