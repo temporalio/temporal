@@ -63,6 +63,86 @@ func (s *ChasmTestSuite) TestNewPayloadStore() {
 	s.NoError(err)
 }
 
+func (s *ChasmTestSuite) TestPayloadStore_UpdateComponent() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	_, err = tests.AddPayloadHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "key1",
+			Payload:     payload.EncodeString("value1"),
+		},
+	)
+	s.NoError(err)
+
+	descResp, err := tests.DescribePayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(1), descResp.State.TotalCount)
+	s.Positive(descResp.State.TotalSize)
+}
+
+func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	_, err = tests.AddPayloadHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "key1",
+			Payload:     payload.EncodeString("value1"),
+			TTL:         1 * time.Second,
+		},
+	)
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		descResp, err := tests.DescribePayloadStoreHandler(
+			chasm.NewEngineContext(ctx, s.chasmEngine),
+			tests.DescribePayloadStoreRequest{
+				NamespaceID: s.NamespaceID(),
+				StoreID:     storeID,
+			},
+		)
+		s.NoError(err)
+		return descResp.State.TotalCount == 0
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	tv := testvars.New(s.T())
 
