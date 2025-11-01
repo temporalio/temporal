@@ -469,6 +469,16 @@ func (c *clientImpl) PauseActivity(
 	return c.client.PauseActivity(ctx, request, opts...)
 }
 
+func (c *clientImpl) PauseWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.PauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PauseWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PauseWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,
@@ -847,6 +857,16 @@ func (c *clientImpl) UnpauseActivity(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UnpauseActivity(ctx, request, opts...)
+}
+
+func (c *clientImpl) UnpauseWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.UnpauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UnpauseWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateActivityOptions(

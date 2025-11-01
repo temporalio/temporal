@@ -1405,6 +1405,271 @@ func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.False(s.mutableState.shouldInvalidateCheckum())
 }
 
+func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
+	s.SetupSubTest()
+	cases := []struct {
+		name          string
+		currentState  enumsspb.WorkflowExecutionState
+		currentStatus enumspb.WorkflowExecutionStatus
+		toState       enumsspb.WorkflowExecutionState
+		toStatus      enumspb.WorkflowExecutionStatus
+		wantErr       bool
+	}{
+		{
+			name:         "created-> {running, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {running, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {running, completed}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr:      true,
+		},
+		// CREATED -> CREATED (allowed for RUNNING/PAUSED)
+		{
+			name:         "created-> {created, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {created, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {created, completed} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr:      true,
+		},
+		// CREATED -> COMPLETED (allowed only for TERMINATED/TIMED_OUT/CONTINUED_AS_NEW)
+		{
+			name:         "created-> {completed, terminated}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {completed, timed_out}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {completed, continued_as_new}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+			wantErr:      false,
+		},
+		// CREATED -> ZOMBIE (allowed for RUNNING/PAUSED)
+		{
+			name:         "created-> {zombie, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {zombie, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		// RUNNING state transitions
+		{
+			name:         "running-> {created, running} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      true,
+		},
+		{
+			name:         "running-> {running, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "running-> {running, terminated} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      true,
+		},
+		{
+			name:         "running-> {completed, completed}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr:      false,
+		},
+		{
+			name:         "running-> {completed, paused} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      true,
+		},
+		{
+			name:         "running-> {zombie, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "running-> {zombie, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "running-> {zombie, terminated} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      true,
+		},
+		// COMPLETED state transitions
+		{
+			name:          "completed-> {completed, sameStatus} (no-op)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr:       false,
+		},
+		{
+			name:          "completed-> {created, running} (invalid)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:       true,
+		},
+		{
+			name:          "completed-> {running, running} (invalid)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:       true,
+		},
+		{
+			name:          "completed-> {zombie, running} (invalid)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:       true,
+		},
+		{
+			name:          "completed-> {completed, differentStatus} (invalid)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			wantErr:       true,
+		},
+		// ZOMBIE state transitions
+		{
+			name:         "zombie-> {created, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "zombie-> {running, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "zombie-> {completed, terminated}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      false,
+		},
+		{
+			name:         "zombie-> {completed, paused} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      true,
+		},
+		{
+			name:         "zombie-> {zombie, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "zombie-> {zombie, terminated} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      true,
+		},
+		// VOID state (no validation)
+		{
+			name:         "void-> {running, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+	}
+
+	for _, c := range cases {
+		s.T().Run(c.name, func(t *testing.T) {
+			s.SetupSubTest()
+			s.mutableState.executionState.State = c.currentState
+			// default current status to RUNNING unless specified
+			curStatus := c.currentStatus
+			if curStatus == 0 {
+				curStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+			}
+			s.mutableState.executionState.Status = curStatus
+			_, err := s.mutableState.UpdateWorkflowStateStatus(c.toState, c.toStatus)
+			if c.wantErr {
+				s.Error(err)
+			} else {
+				s.NoError(err)
+			}
+			if !c.wantErr { // if the transition was successful, verify the state and status are updated.
+				s.Equal(c.toState, s.mutableState.executionState.State)
+				s.Equal(c.toStatus, s.mutableState.executionState.Status)
+			}
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	// set ContinueAsNew min interval to 5s
 	s.mockConfig.WorkflowIdReuseMinimalInterval = func(namespace string) time.Duration {

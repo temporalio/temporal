@@ -3022,6 +3022,20 @@ func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionRunning() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionRunning", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowExecutionRunning))
 }
 
+// IsWorkflowExecutionStatusPaused mocks base method.
+func (m *MockMutableState) IsWorkflowExecutionStatusPaused() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWorkflowExecutionStatusPaused")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsWorkflowExecutionStatusPaused indicates an expected call of IsWorkflowExecutionStatusPaused.
+func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionStatusPaused() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionStatusPaused", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowExecutionStatusPaused))
+}
+
 // IsWorkflowPendingOnWorkflowTaskBackoff mocks base method.
 func (m *MockMutableState) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 	m.ctrl.T.Helper()
@@ -3063,6 +3077,20 @@ func (m *MockMutableState) NextTransitionCount() int64 {
 func (mr *MockMutableStateMockRecorder) NextTransitionCount() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockMutableState)(nil).NextTransitionCount))
+}
+
+// PauseWorkflowExecution mocks base method.
+func (m *MockMutableState) PauseWorkflowExecution(identity, reason, requestId string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseWorkflowExecution", identity, reason, requestId)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PauseWorkflowExecution indicates an expected call of PauseWorkflowExecution.
+func (mr *MockMutableStateMockRecorder) PauseWorkflowExecution(identity, reason, requestId any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseWorkflowExecution", reflect.TypeOf((*MockMutableState)(nil).PauseWorkflowExecution), identity, reason, requestId)
 }
 
 // PopTasks mocks base method.
