@@ -462,11 +462,20 @@ type DeploymentData struct {
 	// `ramp_percentage`. If there is no Ramping Version, all the unversioned/unpinned tasks are
 	// routed to the Current Version. If there is no Current Version, any poller with UNVERSIONED
 	// (or unspecified) WorkflowVersioningMode will receive the tasks.
+	// Remove after `AsyncSetCurrentAndRamping` workflow version is irreversibly enabled.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
 	Versions []*v12.DeploymentVersionData `protobuf:"bytes,2,rep,name=versions,proto3" json:"versions,omitempty"`
 	// Present if the task queue's ramping version is unversioned.
+	// Remove after `AsyncSetCurrentAndRamping` workflow version is irreversibly enabled.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
 	UnversionedRampData *v12.DeploymentVersionData `protobuf:"bytes,3,opt,name=unversioned_ramp_data,json=unversionedRampData,proto3" json:"unversioned_ramp_data,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Routing and version membership data for all worker deployments that this task queue belongs to.
+	// Key is the deployment name.
+	DeploymentsData map[string]*WorkerDeploymentData `protobuf:"bytes,4,rep,name=deployments_data,json=deploymentsData,proto3" json:"deployments_data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeploymentData) Reset() {
@@ -507,6 +516,7 @@ func (x *DeploymentData) GetDeployments() []*DeploymentData_DeploymentDataItem {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
 func (x *DeploymentData) GetVersions() []*v12.DeploymentVersionData {
 	if x != nil {
 		return x.Versions
@@ -514,9 +524,73 @@ func (x *DeploymentData) GetVersions() []*v12.DeploymentVersionData {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
 func (x *DeploymentData) GetUnversionedRampData() *v12.DeploymentVersionData {
 	if x != nil {
 		return x.UnversionedRampData
+	}
+	return nil
+}
+
+func (x *DeploymentData) GetDeploymentsData() map[string]*WorkerDeploymentData {
+	if x != nil {
+		return x.DeploymentsData
+	}
+	return nil
+}
+
+// Routing config and version membership data for a given worker deployment that a TQ should know.
+type WorkerDeploymentData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoutingConfig *v13.RoutingConfig     `protobuf:"bytes,1,opt,name=routing_config,json=routingConfig,proto3" json:"routing_config,omitempty"`
+	// This map tracks the membership of the task queue in the deployment versions. A version is
+	// present here iff the task queue has ever been polled from the version.
+	// Key is the build id.
+	Versions      map[string]*v12.WorkerDeploymentVersionData `protobuf:"bytes,2,rep,name=versions,proto3" json:"versions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerDeploymentData) Reset() {
+	*x = WorkerDeploymentData{}
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerDeploymentData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerDeploymentData) ProtoMessage() {}
+
+func (x *WorkerDeploymentData) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerDeploymentData.ProtoReflect.Descriptor instead.
+func (*WorkerDeploymentData) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *WorkerDeploymentData) GetRoutingConfig() *v13.RoutingConfig {
+	if x != nil {
+		return x.RoutingConfig
+	}
+	return nil
+}
+
+func (x *WorkerDeploymentData) GetVersions() map[string]*v12.WorkerDeploymentVersionData {
+	if x != nil {
+		return x.Versions
 	}
 	return nil
 }
@@ -532,7 +606,7 @@ type TaskQueueTypeUserData struct {
 
 func (x *TaskQueueTypeUserData) Reset() {
 	*x = TaskQueueTypeUserData{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[6]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -544,7 +618,7 @@ func (x *TaskQueueTypeUserData) String() string {
 func (*TaskQueueTypeUserData) ProtoMessage() {}
 
 func (x *TaskQueueTypeUserData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[6]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -557,7 +631,7 @@ func (x *TaskQueueTypeUserData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskQueueTypeUserData.ProtoReflect.Descriptor instead.
 func (*TaskQueueTypeUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{6}
+	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *TaskQueueTypeUserData) GetDeploymentData() *DeploymentData {
@@ -595,7 +669,7 @@ type TaskQueueUserData struct {
 
 func (x *TaskQueueUserData) Reset() {
 	*x = TaskQueueUserData{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[7]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -607,7 +681,7 @@ func (x *TaskQueueUserData) String() string {
 func (*TaskQueueUserData) ProtoMessage() {}
 
 func (x *TaskQueueUserData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[7]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -620,7 +694,7 @@ func (x *TaskQueueUserData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskQueueUserData.ProtoReflect.Descriptor instead.
 func (*TaskQueueUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{7}
+	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TaskQueueUserData) GetClock() *v1.HybridLogicalClock {
@@ -655,7 +729,7 @@ type VersionedTaskQueueUserData struct {
 
 func (x *VersionedTaskQueueUserData) Reset() {
 	*x = VersionedTaskQueueUserData{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[8]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -667,7 +741,7 @@ func (x *VersionedTaskQueueUserData) String() string {
 func (*VersionedTaskQueueUserData) ProtoMessage() {}
 
 func (x *VersionedTaskQueueUserData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[8]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -680,7 +754,7 @@ func (x *VersionedTaskQueueUserData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionedTaskQueueUserData.ProtoReflect.Descriptor instead.
 func (*VersionedTaskQueueUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{8}
+	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *VersionedTaskQueueUserData) GetData() *TaskQueueUserData {
@@ -708,7 +782,7 @@ type DeploymentData_DeploymentDataItem struct {
 
 func (x *DeploymentData_DeploymentDataItem) Reset() {
 	*x = DeploymentData_DeploymentDataItem{}
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[9]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -720,7 +794,7 @@ func (x *DeploymentData_DeploymentDataItem) String() string {
 func (*DeploymentData_DeploymentDataItem) ProtoMessage() {}
 
 func (x *DeploymentData_DeploymentDataItem) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[9]
+	mi := &file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -733,7 +807,7 @@ func (x *DeploymentData_DeploymentDataItem) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use DeploymentData_DeploymentDataItem.ProtoReflect.Descriptor instead.
 func (*DeploymentData_DeploymentDataItem) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{5, 0}
+	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{5, 1}
 }
 
 func (x *DeploymentData_DeploymentDataItem) GetDeployment() *v13.Deployment {
@@ -779,16 +853,26 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\x0eVersioningData\x12[\n" +
 	"\fversion_sets\x18\x01 \x03(\v28.temporal.server.api.persistence.v1.CompatibleVersionSetR\vversionSets\x12]\n" +
 	"\x10assignment_rules\x18\x02 \x03(\v22.temporal.server.api.persistence.v1.AssignmentRuleR\x0fassignmentRules\x12W\n" +
-	"\x0eredirect_rules\x18\x03 \x03(\v20.temporal.server.api.persistence.v1.RedirectRuleR\rredirectRules\"\xe6\x03\n" +
+	"\x0eredirect_rules\x18\x03 \x03(\v20.temporal.server.api.persistence.v1.RedirectRuleR\rredirectRules\"\xe0\x05\n" +
 	"\x0eDeploymentData\x12k\n" +
-	"\vdeployments\x18\x01 \x03(\v2E.temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItemB\x02\x18\x01R\vdeployments\x12T\n" +
-	"\bversions\x18\x02 \x03(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataR\bversions\x12l\n" +
-	"\x15unversioned_ramp_data\x18\x03 \x01(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataR\x13unversionedRampData\x1a\xa2\x01\n" +
+	"\vdeployments\x18\x01 \x03(\v2E.temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItemB\x02\x18\x01R\vdeployments\x12X\n" +
+	"\bversions\x18\x02 \x03(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataB\x02\x18\x01R\bversions\x12p\n" +
+	"\x15unversioned_ramp_data\x18\x03 \x01(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataB\x02\x18\x01R\x13unversionedRampData\x12r\n" +
+	"\x10deployments_data\x18\x04 \x03(\v2G.temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntryR\x0fdeploymentsData\x1a|\n" +
+	"\x14DeploymentsDataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12N\n" +
+	"\x05value\x18\x02 \x01(\v28.temporal.server.api.persistence.v1.WorkerDeploymentDataR\x05value:\x028\x01\x1a\xa2\x01\n" +
 	"\x12DeploymentDataItem\x12F\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2&.temporal.api.deployment.v1.DeploymentR\n" +
 	"deployment\x12D\n" +
-	"\x04data\x18\x02 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\"\xb8\x01\n" +
+	"\x04data\x18\x02 \x01(\v20.temporal.server.api.deployment.v1.TaskQueueDataR\x04data\"\xc9\x02\n" +
+	"\x14WorkerDeploymentData\x12P\n" +
+	"\x0erouting_config\x18\x01 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\x12b\n" +
+	"\bversions\x18\x02 \x03(\v2F.temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntryR\bversions\x1a{\n" +
+	"\rVersionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12T\n" +
+	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01\"\xb8\x01\n" +
 	"\x15TaskQueueTypeUserData\x12[\n" +
 	"\x0fdeployment_data\x18\x01 \x01(\v22.temporal.server.api.persistence.v1.DeploymentDataR\x0edeploymentData\x12B\n" +
 	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\"\x8e\x03\n" +
@@ -816,7 +900,7 @@ func file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP() []b
 }
 
 var file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
 	(BuildId_State)(0),                        // 0: temporal.server.api.persistence.v1.BuildId.State
 	(*BuildId)(nil),                           // 1: temporal.server.api.persistence.v1.BuildId
@@ -825,51 +909,61 @@ var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
 	(*RedirectRule)(nil),                      // 4: temporal.server.api.persistence.v1.RedirectRule
 	(*VersioningData)(nil),                    // 5: temporal.server.api.persistence.v1.VersioningData
 	(*DeploymentData)(nil),                    // 6: temporal.server.api.persistence.v1.DeploymentData
-	(*TaskQueueTypeUserData)(nil),             // 7: temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	(*TaskQueueUserData)(nil),                 // 8: temporal.server.api.persistence.v1.TaskQueueUserData
-	(*VersionedTaskQueueUserData)(nil),        // 9: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	(*DeploymentData_DeploymentDataItem)(nil), // 10: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
-	nil,                               // 11: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
-	(*v1.HybridLogicalClock)(nil),     // 12: temporal.server.api.clock.v1.HybridLogicalClock
-	(*v11.BuildIdAssignmentRule)(nil), // 13: temporal.api.taskqueue.v1.BuildIdAssignmentRule
-	(*v11.CompatibleBuildIdRedirectRule)(nil), // 14: temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
-	(*v12.DeploymentVersionData)(nil),         // 15: temporal.server.api.deployment.v1.DeploymentVersionData
-	(*v11.TaskQueueConfig)(nil),               // 16: temporal.api.taskqueue.v1.TaskQueueConfig
-	(*v13.Deployment)(nil),                    // 17: temporal.api.deployment.v1.Deployment
-	(*v12.TaskQueueData)(nil),                 // 18: temporal.server.api.deployment.v1.TaskQueueData
+	(*WorkerDeploymentData)(nil),              // 7: temporal.server.api.persistence.v1.WorkerDeploymentData
+	(*TaskQueueTypeUserData)(nil),             // 8: temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	(*TaskQueueUserData)(nil),                 // 9: temporal.server.api.persistence.v1.TaskQueueUserData
+	(*VersionedTaskQueueUserData)(nil),        // 10: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	nil,                                       // 11: temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry
+	(*DeploymentData_DeploymentDataItem)(nil), // 12: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
+	nil,                               // 13: temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
+	nil,                               // 14: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
+	(*v1.HybridLogicalClock)(nil),     // 15: temporal.server.api.clock.v1.HybridLogicalClock
+	(*v11.BuildIdAssignmentRule)(nil), // 16: temporal.api.taskqueue.v1.BuildIdAssignmentRule
+	(*v11.CompatibleBuildIdRedirectRule)(nil), // 17: temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
+	(*v12.DeploymentVersionData)(nil),         // 18: temporal.server.api.deployment.v1.DeploymentVersionData
+	(*v13.RoutingConfig)(nil),                 // 19: temporal.api.deployment.v1.RoutingConfig
+	(*v11.TaskQueueConfig)(nil),               // 20: temporal.api.taskqueue.v1.TaskQueueConfig
+	(*v13.Deployment)(nil),                    // 21: temporal.api.deployment.v1.Deployment
+	(*v12.TaskQueueData)(nil),                 // 22: temporal.server.api.deployment.v1.TaskQueueData
+	(*v12.WorkerDeploymentVersionData)(nil),   // 23: temporal.server.api.deployment.v1.WorkerDeploymentVersionData
 }
 var file_temporal_server_api_persistence_v1_task_queues_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.persistence.v1.BuildId.state:type_name -> temporal.server.api.persistence.v1.BuildId.State
-	12, // 1: temporal.server.api.persistence.v1.BuildId.state_update_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	12, // 2: temporal.server.api.persistence.v1.BuildId.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	15, // 1: temporal.server.api.persistence.v1.BuildId.state_update_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	15, // 2: temporal.server.api.persistence.v1.BuildId.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	1,  // 3: temporal.server.api.persistence.v1.CompatibleVersionSet.build_ids:type_name -> temporal.server.api.persistence.v1.BuildId
-	12, // 4: temporal.server.api.persistence.v1.CompatibleVersionSet.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	13, // 5: temporal.server.api.persistence.v1.AssignmentRule.rule:type_name -> temporal.api.taskqueue.v1.BuildIdAssignmentRule
-	12, // 6: temporal.server.api.persistence.v1.AssignmentRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	12, // 7: temporal.server.api.persistence.v1.AssignmentRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	14, // 8: temporal.server.api.persistence.v1.RedirectRule.rule:type_name -> temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
-	12, // 9: temporal.server.api.persistence.v1.RedirectRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	12, // 10: temporal.server.api.persistence.v1.RedirectRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	15, // 4: temporal.server.api.persistence.v1.CompatibleVersionSet.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	16, // 5: temporal.server.api.persistence.v1.AssignmentRule.rule:type_name -> temporal.api.taskqueue.v1.BuildIdAssignmentRule
+	15, // 6: temporal.server.api.persistence.v1.AssignmentRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	15, // 7: temporal.server.api.persistence.v1.AssignmentRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	17, // 8: temporal.server.api.persistence.v1.RedirectRule.rule:type_name -> temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
+	15, // 9: temporal.server.api.persistence.v1.RedirectRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	15, // 10: temporal.server.api.persistence.v1.RedirectRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	2,  // 11: temporal.server.api.persistence.v1.VersioningData.version_sets:type_name -> temporal.server.api.persistence.v1.CompatibleVersionSet
 	3,  // 12: temporal.server.api.persistence.v1.VersioningData.assignment_rules:type_name -> temporal.server.api.persistence.v1.AssignmentRule
 	4,  // 13: temporal.server.api.persistence.v1.VersioningData.redirect_rules:type_name -> temporal.server.api.persistence.v1.RedirectRule
-	10, // 14: temporal.server.api.persistence.v1.DeploymentData.deployments:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
-	15, // 15: temporal.server.api.persistence.v1.DeploymentData.versions:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	15, // 16: temporal.server.api.persistence.v1.DeploymentData.unversioned_ramp_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	6,  // 17: temporal.server.api.persistence.v1.TaskQueueTypeUserData.deployment_data:type_name -> temporal.server.api.persistence.v1.DeploymentData
-	16, // 18: temporal.server.api.persistence.v1.TaskQueueTypeUserData.config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
-	12, // 19: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	5,  // 20: temporal.server.api.persistence.v1.TaskQueueUserData.versioning_data:type_name -> temporal.server.api.persistence.v1.VersioningData
-	11, // 21: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
-	8,  // 22: temporal.server.api.persistence.v1.VersionedTaskQueueUserData.data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	17, // 23: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	18, // 24: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
-	7,  // 25: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	12, // 14: temporal.server.api.persistence.v1.DeploymentData.deployments:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
+	18, // 15: temporal.server.api.persistence.v1.DeploymentData.versions:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	18, // 16: temporal.server.api.persistence.v1.DeploymentData.unversioned_ramp_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	11, // 17: temporal.server.api.persistence.v1.DeploymentData.deployments_data:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry
+	19, // 18: temporal.server.api.persistence.v1.WorkerDeploymentData.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	13, // 19: temporal.server.api.persistence.v1.WorkerDeploymentData.versions:type_name -> temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
+	6,  // 20: temporal.server.api.persistence.v1.TaskQueueTypeUserData.deployment_data:type_name -> temporal.server.api.persistence.v1.DeploymentData
+	20, // 21: temporal.server.api.persistence.v1.TaskQueueTypeUserData.config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
+	15, // 22: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	5,  // 23: temporal.server.api.persistence.v1.TaskQueueUserData.versioning_data:type_name -> temporal.server.api.persistence.v1.VersioningData
+	14, // 24: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
+	9,  // 25: temporal.server.api.persistence.v1.VersionedTaskQueueUserData.data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
+	7,  // 26: temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry.value:type_name -> temporal.server.api.persistence.v1.WorkerDeploymentData
+	21, // 27: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	22, // 28: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
+	23, // 29: temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionData
+	8,  // 30: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_task_queues_proto_init() }
@@ -883,7 +977,7 @@ func file_temporal_server_api_persistence_v1_task_queues_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc), len(file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
