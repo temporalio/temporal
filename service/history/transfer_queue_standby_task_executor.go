@@ -564,10 +564,11 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
+	activityTask := task.(*tasks.ActivityTask)
 	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
-		task.(*tasks.ActivityTask),
+		activityTask,
 		pushActivityInfo.activityTaskScheduleToStartTimeout,
 		pushActivityInfo.versionDirective,
 		pushActivityInfo.priority,

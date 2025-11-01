@@ -116,6 +116,7 @@ type (
 		chasmRegistry             *chasm.Registry
 		grpcClientInterceptor     *grpcinject.Interceptor
 		replicationStreamRecorder *ReplicationStreamRecorder
+		matchingStreamRecorder    *MatchingStreamRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
@@ -217,6 +218,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		hostsByProtocolByService:  params.HostsByProtocolByService,
 		grpcClientInterceptor:     grpcinject.NewInterceptor(),
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
+		matchingStreamRecorder:    NewMatchingStreamRecorder(),
 		spanExporters:             params.SpanExporters,
 	}
 
@@ -224,6 +226,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	clusterName := params.ClusterMetadataConfig.CurrentClusterName
 	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
 	impl.replicationStreamRecorder.SetOutputFile(outputFile)
+
+	matchingOutputFile := fmt.Sprintf("/tmp/matching_stream_messages_%s.txt", clusterName)
+	impl.matchingStreamRecorder.SetOutputFile(matchingOutputFile)
 
 	for k, v := range dynamicConfigOverrides {
 		impl.overrideDynamicConfig(t, k, v)
@@ -762,6 +767,13 @@ func (c *TemporalImpl) newRPCFactory(
 		options = append(options,
 			grpc.WithChainUnaryInterceptor(c.replicationStreamRecorder.UnaryInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
 			grpc.WithChainStreamInterceptor(c.replicationStreamRecorder.StreamInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
+		)
+	}
+	// Add matching stream recorder interceptor
+	if c.matchingStreamRecorder != nil {
+		options = append(options,
+			grpc.WithChainUnaryInterceptor(c.matchingStreamRecorder.UnaryInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
+			grpc.WithChainStreamInterceptor(c.matchingStreamRecorder.StreamInterceptor(c.clusterMetadataConfig.CurrentClusterName)),
 		)
 	}
 	rpcConfig := config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)}

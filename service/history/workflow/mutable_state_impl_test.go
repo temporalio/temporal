@@ -2432,14 +2432,60 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	}
 	s.Greater(activityFailure.Size(), failureSizeErrorLimit)
 
+	prevStamp := activityInfo.Stamp
+
 	retryState, err := s.mutableState.RetryActivity(activityInfo, activityFailure)
 	s.NoError(err)
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
 
 	activityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
+	s.Greater(activityInfo.Stamp, prevStamp)
+	s.Equal(int32(2), activityInfo.Attempt)
 	s.LessOrEqual(activityInfo.RetryLastFailure.Size(), failureSizeErrorLimit)
 	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
+}
+
+func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	workflowTaskCompletedEventID := int64(4)
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "6",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: timestamp.DurationFromSeconds(1),
+			},
+		},
+		false,
+	)
+	s.NoError(err)
+
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		activityInfo,
+		activityInfo.ScheduledEventId,
+		uuid.New(),
+		"worker-identity",
+		nil,
+		nil,
+		nil,
+	)
+	s.NoError(err)
+
+	activityInfo.Paused = true
+	prevStamp := activityInfo.Stamp
+
+	retryState, err := s.mutableState.RetryActivity(activityInfo, &failurepb.Failure{Message: "activity failure"})
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+
+	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+	s.True(ok)
+	s.Greater(updatedActivityInfo.Stamp, prevStamp)
+	s.Equal(int32(2), updatedActivityInfo.Attempt)
 }
 
 func (s *mutableStateSuite) TestupdateBuildIdsAndDeploymentSearchAttributes() {
