@@ -316,13 +316,13 @@ func TestProcessBackoffTask(t *testing.T) {
 	}
 
 	executor := BackoffTaskExecutor{
-			config: &Config{
-				RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-				RetryPolicy: func() backoff.RetryPolicy {
-					return backoff.NewExponentialRetryPolicy(time.Second)
-				},
+		config: &Config{
+			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+			RetryPolicy: func() backoff.RetryPolicy {
+				return backoff.NewExponentialRetryPolicy(time.Second)
 			},
-			logger: logger,
+		},
+		logger: logger,
 	}
 
 	// Execute the backoff task
@@ -640,17 +640,17 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			})
 
 			executor := InvocationTaskExecutor{
-					config: &Config{
-						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-						RetryPolicy: func() backoff.RetryPolicy {
-							return backoff.NewExponentialRetryPolicy(time.Second)
-						},
+				config: &Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
-					namespaceRegistry: nsRegistry,
-					metricsHandler:    metrics.NoopMetricsHandler,
-					logger:            logger,
-					historyClient:     historyClient,
-					chasmEngine:       mockEngine,
+				},
+				namespaceRegistry: nsRegistry,
+				metricsHandler:    metrics.NoopMetricsHandler,
+				logger:            logger,
+				historyClient:     historyClient,
+				chasmEngine:       mockEngine,
 			}
 
 			// Create ComponentRef
