@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -80,6 +81,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		metrics.NoopMetricsHandler,
 		s.Logger,
+		serialization.NewSerializer(),
 	)
 
 	if err != nil {

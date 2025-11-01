@@ -41,6 +41,9 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
+	func(serializer serialization.Serializer) serialization.ReplicationTaskSerializer {
+		return serialization.NewTaskSerializer(serializer)
+	},
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{
@@ -88,6 +91,7 @@ func eagerNamespaceRefresherProvider(
 
 func replicationTaskConverterFactoryProvider(
 	config *configs.Config,
+	replicationTaskSerializer serialization.ReplicationTaskSerializer,
 ) SourceTaskConverterProvider {
 	return func(
 		historyEngine historyi.Engine,
@@ -99,6 +103,7 @@ func replicationTaskConverterFactoryProvider(
 			historyEngine,
 			shardContext.GetNamespaceRegistry(),
 			serializer,
+			replicationTaskSerializer,
 			config)
 	}
 }
@@ -358,10 +363,10 @@ func eventImporterProvider(
 
 func dlqWriterAdapterProvider(
 	dlqWriter *queues.DLQWriter,
-	taskSerializer serialization.Serializer,
+	replicationTaskSerializer serialization.ReplicationTaskSerializer,
 	clusterMetadata cluster.Metadata,
 ) *DLQWriterAdapter {
-	return NewDLQWriterAdapter(dlqWriter, taskSerializer, clusterMetadata.GetCurrentClusterName())
+	return NewDLQWriterAdapter(dlqWriter, replicationTaskSerializer, clusterMetadata.GetCurrentClusterName())
 }
 
 func historyEventsHandlerProvider(

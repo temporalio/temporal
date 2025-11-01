@@ -14,16 +14,28 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+var _ TaskSerializer = (*taskSerializer)(nil)
+
 type (
-	TaskSerializer struct {
+	TaskSerializer interface {
+		ReplicationTaskSerializer
+		SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
+		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
+	}
+	ReplicationTaskSerializer interface {
+		SeralizeReplicationTask(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error)
+		DeserializeReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
+	}
+	taskSerializer struct {
+		serializer Serializer
 	}
 )
 
-func NewTaskSerializer() *TaskSerializer {
-	return &TaskSerializer{}
+func NewTaskSerializer(serializer Serializer) TaskSerializer {
+	return &taskSerializer{serializer: serializer}
 }
 
-func (s *TaskSerializer) SerializeTask(
+func (s *taskSerializer) SerializeTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	category := task.GetCategory()
@@ -45,21 +57,21 @@ func (s *TaskSerializer) SerializeTask(
 	}
 }
 
-func (s *TaskSerializer) DeserializeTask(
+func (s *taskSerializer) DeserializeTask(
 	category tasks.Category,
 	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	switch category.ID() {
 	case tasks.CategoryIDTransfer:
-		return s.deserializeTransferTasks(blob)
+		return s.deserializeTransferTask(blob)
 	case tasks.CategoryIDTimer:
-		return s.deserializeTimerTasks(blob)
+		return s.deserializeTimerTask(blob)
 	case tasks.CategoryIDVisibility:
-		return s.deserializeVisibilityTasks(blob)
+		return s.deserializeVisibilityTask(blob)
 	case tasks.CategoryIDReplication:
-		return s.deserializeReplicationTasks(blob)
+		return s.deserializeReplicationTask(blob)
 	case tasks.CategoryIDArchival:
-		return s.deserializeArchivalTasks(blob)
+		return s.deserializeArchivalTask(blob)
 	case tasks.CategoryIDOutbound:
 		return s.deserializeOutboundTask(blob)
 	default:
@@ -67,7 +79,7 @@ func (s *TaskSerializer) DeserializeTask(
 	}
 }
 
-func (s *TaskSerializer) serializeTransferTask(
+func (s *taskSerializer) serializeTransferTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	var transferTask *persistencespb.TransferTaskInfo
@@ -93,11 +105,10 @@ func (s *TaskSerializer) serializeTransferTask(
 	default:
 		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", task)
 	}
-
-	return TransferTaskInfoToBlob(transferTask)
+	return s.serializer.TransferTaskInfoToBlob(transferTask)
 }
 
-func (s *TaskSerializer) transferChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.TransferTaskInfo {
+func (s *taskSerializer) transferChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
 		NamespaceId:    task.WorkflowKey.NamespaceID,
 		WorkflowId:     task.WorkflowKey.WorkflowID,
@@ -111,14 +122,13 @@ func (s *TaskSerializer) transferChasmTaskToProto(task *tasks.ChasmTask) *persis
 	}
 }
 
-func (s *TaskSerializer) deserializeTransferTasks(
+func (s *taskSerializer) deserializeTransferTask(
 	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
-	transferTask, err := TransferTaskInfoFromBlob(blob)
+	transferTask, err := s.serializer.TransferTaskInfoFromBlob(blob)
 	if err != nil {
 		return nil, err
 	}
-
 	var task tasks.Task
 	switch transferTask.TaskType {
 	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
@@ -145,7 +155,7 @@ func (s *TaskSerializer) deserializeTransferTasks(
 	return task, nil
 }
 
-func (s *TaskSerializer) transferChasmTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Task {
+func (s *taskSerializer) transferChasmTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Task {
 	return &tasks.ChasmTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			task.NamespaceId,
@@ -159,7 +169,7 @@ func (s *TaskSerializer) transferChasmTaskFromProto(task *persistencespb.Transfe
 	}
 }
 
-func (s *TaskSerializer) serializeTimerTask(
+func (s *taskSerializer) serializeTimerTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	var timerTask *persistencespb.TimerTaskInfo
@@ -189,10 +199,10 @@ func (s *TaskSerializer) serializeTimerTask(
 	default:
 		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", task)
 	}
-	return TimerTaskInfoToBlob(timerTask)
+	return s.serializer.TimerTaskInfoToBlob(timerTask)
 }
 
-func (s *TaskSerializer) timerChasmPureTaskToProto(task *tasks.ChasmTaskPure) *persistencespb.TimerTaskInfo {
+func (s *taskSerializer) timerChasmPureTaskToProto(task *tasks.ChasmTaskPure) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
 		NamespaceId:    task.NamespaceID,
 		WorkflowId:     task.WorkflowID,
@@ -203,7 +213,7 @@ func (s *TaskSerializer) timerChasmPureTaskToProto(task *tasks.ChasmTaskPure) *p
 	}
 }
 
-func (s *TaskSerializer) timerChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.TimerTaskInfo {
+func (s *taskSerializer) timerChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
 		NamespaceId:    task.NamespaceID,
 		WorkflowId:     task.WorkflowID,
@@ -217,14 +227,13 @@ func (s *TaskSerializer) timerChasmTaskToProto(task *tasks.ChasmTask) *persisten
 	}
 }
 
-func (s *TaskSerializer) deserializeTimerTasks(
+func (s *taskSerializer) deserializeTimerTask(
 	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
-	timerTask, err := TimerTaskInfoFromBlob(blob)
+	timerTask, err := s.serializer.TimerTaskInfoFromBlob(blob)
 	if err != nil {
 		return nil, err
 	}
-
 	var timer tasks.Task
 	switch timerTask.TaskType {
 	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
@@ -255,7 +264,7 @@ func (s *TaskSerializer) deserializeTimerTasks(
 	return timer, nil
 }
 
-func (s *TaskSerializer) timerChasmTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
+func (s *taskSerializer) timerChasmTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
 	return &tasks.ChasmTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			info.NamespaceId,
@@ -269,7 +278,7 @@ func (s *TaskSerializer) timerChasmTaskFromProto(info *persistencespb.TimerTaskI
 	}
 }
 
-func (s *TaskSerializer) timerChasmPureTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
+func (s *taskSerializer) timerChasmPureTaskFromProto(info *persistencespb.TimerTaskInfo) tasks.Task {
 	return &tasks.ChasmTaskPure{
 		WorkflowKey: definition.NewWorkflowKey(
 			info.NamespaceId,
@@ -282,7 +291,7 @@ func (s *TaskSerializer) timerChasmPureTaskFromProto(info *persistencespb.TimerT
 	}
 }
 
-func (s *TaskSerializer) serializeVisibilityTask(
+func (s *taskSerializer) serializeVisibilityTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	var visibilityTask *persistencespb.VisibilityTaskInfo
@@ -300,18 +309,16 @@ func (s *TaskSerializer) serializeVisibilityTask(
 	default:
 		return nil, serviceerror.NewInternalf("Unknown visibility task type: %v", task)
 	}
-
-	return VisibilityTaskInfoToBlob(visibilityTask)
+	return s.serializer.VisibilityTaskInfoToBlob(visibilityTask)
 }
 
-func (s *TaskSerializer) deserializeVisibilityTasks(
+func (s *taskSerializer) deserializeVisibilityTask(
 	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
-	visibilityTask, err := VisibilityTaskInfoFromBlob(blob)
+	visibilityTask, err := s.serializer.VisibilityTaskInfoFromBlob(blob)
 	if err != nil {
 		return nil, err
 	}
-
 	var visibility tasks.Task
 	switch visibilityTask.TaskType {
 	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
@@ -330,28 +337,28 @@ func (s *TaskSerializer) deserializeVisibilityTasks(
 	return visibility, nil
 }
 
-func (s *TaskSerializer) serializeReplicationTask(
+func (s *taskSerializer) serializeReplicationTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
-	replicationTask, err := s.ParseReplicationTaskInfo(task)
+	replicationTask, err := s.SeralizeReplicationTask(task)
 	if err != nil {
 		return nil, err
 	}
 
-	return ReplicationTaskInfoToBlob(replicationTask)
+	return s.serializer.ReplicationTaskInfoToBlob(replicationTask)
 }
 
-func (s *TaskSerializer) deserializeReplicationTasks(
+func (s *taskSerializer) deserializeReplicationTask(
 	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
-	replicationTask, err := ReplicationTaskInfoFromBlob(blob)
+	replicationTask, err := s.serializer.ReplicationTaskInfoFromBlob(blob)
 	if err != nil {
 		return nil, err
 	}
-	return s.ParseReplicationTask(replicationTask)
+	return s.DeserializeReplicationTask(replicationTask)
 }
 
-func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error) {
+func (s *taskSerializer) DeserializeReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error) {
 	switch replicationTask.TaskType {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 		return s.replicationActivityTaskFromProto(replicationTask), nil
@@ -368,7 +375,7 @@ func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.Re
 	}
 }
 
-func (s *TaskSerializer) ParseReplicationTaskInfo(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error) {
+func (s *taskSerializer) SeralizeReplicationTask(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error) {
 	switch task := task.(type) {
 	case *tasks.SyncActivityTask:
 		return s.replicationActivityTaskToProto(task), nil
@@ -385,7 +392,7 @@ func (s *TaskSerializer) ParseReplicationTaskInfo(task tasks.Task) (*persistence
 	}
 }
 
-func (s *TaskSerializer) serializeArchivalTask(
+func (s *taskSerializer) serializeArchivalTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	var archivalTaskInfo *persistencespb.ArchivalTaskInfo
@@ -397,13 +404,13 @@ func (s *TaskSerializer) serializeArchivalTask(
 			"Unknown archival task type while serializing: %v", task)
 	}
 
-	return ArchivalTaskInfoToBlob(archivalTaskInfo)
+	return s.serializer.ArchivalTaskInfoToBlob(archivalTaskInfo)
 }
 
-func (s *TaskSerializer) deserializeArchivalTasks(
+func (s *taskSerializer) deserializeArchivalTask(
 	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
-	archivalTask, err := ArchivalTaskInfoFromBlob(blob)
+	archivalTask, err := s.serializer.ArchivalTaskInfoFromBlob(blob)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +424,7 @@ func (s *TaskSerializer) deserializeArchivalTasks(
 	return task, nil
 }
 
-func (s *TaskSerializer) transferActivityTaskToProto(
+func (s *taskSerializer) transferActivityTaskToProto(
 	activityTask *tasks.ActivityTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -438,7 +445,7 @@ func (s *TaskSerializer) transferActivityTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) transferActivityTaskFromProto(
+func (s *taskSerializer) transferActivityTaskFromProto(
 	activityTask *persistencespb.TransferTaskInfo,
 ) *tasks.ActivityTask {
 	return &tasks.ActivityTask{
@@ -456,7 +463,7 @@ func (s *TaskSerializer) transferActivityTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferWorkflowTaskToProto(
+func (s *taskSerializer) transferWorkflowTaskToProto(
 	workflowTask *tasks.WorkflowTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -477,7 +484,7 @@ func (s *TaskSerializer) transferWorkflowTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) transferWorkflowTaskFromProto(
+func (s *taskSerializer) transferWorkflowTaskFromProto(
 	workflowTask *persistencespb.TransferTaskInfo,
 ) *tasks.WorkflowTask {
 	return &tasks.WorkflowTask{
@@ -495,7 +502,7 @@ func (s *TaskSerializer) transferWorkflowTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferRequestCancelTaskToProto(
+func (s *taskSerializer) transferRequestCancelTaskToProto(
 	requestCancelTask *tasks.CancelExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -515,7 +522,7 @@ func (s *TaskSerializer) transferRequestCancelTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) transferRequestCancelTaskFromProto(
+func (s *taskSerializer) transferRequestCancelTaskFromProto(
 	requestCancelTask *persistencespb.TransferTaskInfo,
 ) *tasks.CancelExecutionTask {
 	return &tasks.CancelExecutionTask{
@@ -535,7 +542,7 @@ func (s *TaskSerializer) transferRequestCancelTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferSignalTaskToProto(
+func (s *taskSerializer) transferSignalTaskToProto(
 	signalTask *tasks.SignalExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -555,7 +562,7 @@ func (s *TaskSerializer) transferSignalTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) transferSignalTaskFromProto(
+func (s *taskSerializer) transferSignalTaskFromProto(
 	signalTask *persistencespb.TransferTaskInfo,
 ) *tasks.SignalExecutionTask {
 	return &tasks.SignalExecutionTask{
@@ -575,7 +582,7 @@ func (s *TaskSerializer) transferSignalTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferChildWorkflowTaskToProto(
+func (s *taskSerializer) transferChildWorkflowTaskToProto(
 	childWorkflowTask *tasks.StartChildExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -595,7 +602,7 @@ func (s *TaskSerializer) transferChildWorkflowTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) transferChildWorkflowTaskFromProto(
+func (s *taskSerializer) transferChildWorkflowTaskFromProto(
 	signalTask *persistencespb.TransferTaskInfo,
 ) *tasks.StartChildExecutionTask {
 	return &tasks.StartChildExecutionTask{
@@ -613,7 +620,7 @@ func (s *TaskSerializer) transferChildWorkflowTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferCloseTaskToProto(
+func (s *taskSerializer) transferCloseTaskToProto(
 	closeTask *tasks.CloseExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -641,7 +648,7 @@ func (s *TaskSerializer) transferCloseTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) transferCloseTaskFromProto(
+func (s *taskSerializer) transferCloseTaskFromProto(
 	closeTask *persistencespb.TransferTaskInfo,
 ) *tasks.CloseExecutionTask {
 	return &tasks.CloseExecutionTask{
@@ -659,7 +666,7 @@ func (s *TaskSerializer) transferCloseTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferResetTaskToProto(
+func (s *taskSerializer) transferResetTaskToProto(
 	resetTask *tasks.ResetWorkflowTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -679,7 +686,7 @@ func (s *TaskSerializer) transferResetTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) transferResetTaskFromProto(
+func (s *taskSerializer) transferResetTaskFromProto(
 	resetTask *persistencespb.TransferTaskInfo,
 ) *tasks.ResetWorkflowTask {
 	return &tasks.ResetWorkflowTask{
@@ -694,7 +701,7 @@ func (s *TaskSerializer) transferResetTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferDeleteExecutionTaskToProto(
+func (s *taskSerializer) transferDeleteExecutionTaskToProto(
 	deleteExecutionTask *tasks.DeleteExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -707,7 +714,7 @@ func (s *TaskSerializer) transferDeleteExecutionTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
+func (s *taskSerializer) transferDeleteExecutionTaskFromProto(
 	deleteExecutionTask *persistencespb.TransferTaskInfo,
 ) *tasks.DeleteExecutionTask {
 	return &tasks.DeleteExecutionTask{
@@ -723,7 +730,7 @@ func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowTaskToProto(
+func (s *taskSerializer) timerWorkflowTaskToProto(
 	workflowTimer *tasks.WorkflowTaskTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -742,7 +749,7 @@ func (s *TaskSerializer) timerWorkflowTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowTaskFromProto(
+func (s *taskSerializer) timerWorkflowTaskFromProto(
 	workflowTimer *persistencespb.TimerTaskInfo,
 ) *tasks.WorkflowTaskTimeoutTask {
 	return &tasks.WorkflowTaskTimeoutTask{
@@ -761,7 +768,7 @@ func (s *TaskSerializer) timerWorkflowTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowDelayTaskToProto(
+func (s *taskSerializer) timerWorkflowDelayTaskToProto(
 	workflowDelayTimer *tasks.WorkflowBackoffTimerTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -779,7 +786,7 @@ func (s *TaskSerializer) timerWorkflowDelayTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowDelayTaskFromProto(
+func (s *taskSerializer) timerWorkflowDelayTaskFromProto(
 	workflowDelayTimer *persistencespb.TimerTaskInfo,
 ) *tasks.WorkflowBackoffTimerTask {
 	return &tasks.WorkflowBackoffTimerTask{
@@ -795,7 +802,7 @@ func (s *TaskSerializer) timerWorkflowDelayTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerActivityTaskToProto(
+func (s *taskSerializer) timerActivityTaskToProto(
 	activityTimer *tasks.ActivityTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -813,7 +820,7 @@ func (s *TaskSerializer) timerActivityTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) timerActivityTaskFromProto(
+func (s *taskSerializer) timerActivityTaskFromProto(
 	activityTimer *persistencespb.TimerTaskInfo,
 ) *tasks.ActivityTimeoutTask {
 	return &tasks.ActivityTimeoutTask{
@@ -831,7 +838,7 @@ func (s *TaskSerializer) timerActivityTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerActivityRetryTaskToProto(
+func (s *taskSerializer) timerActivityRetryTaskToProto(
 	activityRetryTimer *tasks.ActivityRetryTimerTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -850,7 +857,7 @@ func (s *TaskSerializer) timerActivityRetryTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) timerActivityRetryTaskFromProto(
+func (s *taskSerializer) timerActivityRetryTaskFromProto(
 	activityRetryTimer *persistencespb.TimerTaskInfo,
 ) *tasks.ActivityRetryTimerTask {
 	return &tasks.ActivityRetryTimerTask{
@@ -868,7 +875,7 @@ func (s *TaskSerializer) timerActivityRetryTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerUserTaskToProto(
+func (s *taskSerializer) timerUserTaskToProto(
 	userTimer *tasks.UserTimerTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -885,7 +892,7 @@ func (s *TaskSerializer) timerUserTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) timerUserTaskFromProto(
+func (s *taskSerializer) timerUserTaskFromProto(
 	userTimer *persistencespb.TimerTaskInfo,
 ) *tasks.UserTimerTask {
 	return &tasks.UserTimerTask{
@@ -900,7 +907,7 @@ func (s *TaskSerializer) timerUserTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowRunToProto(
+func (s *taskSerializer) timerWorkflowRunToProto(
 	workflowRunTimer *tasks.WorkflowRunTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -918,7 +925,7 @@ func (s *TaskSerializer) timerWorkflowRunToProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowExecutionToProto(
+func (s *taskSerializer) timerWorkflowExecutionToProto(
 	workflowExecutionTimer *tasks.WorkflowExecutionTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -937,7 +944,7 @@ func (s *TaskSerializer) timerWorkflowExecutionToProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowRunFromProto(
+func (s *taskSerializer) timerWorkflowRunFromProto(
 	workflowRunTimer *persistencespb.TimerTaskInfo,
 ) *tasks.WorkflowRunTimeoutTask {
 	return &tasks.WorkflowRunTimeoutTask{
@@ -952,7 +959,7 @@ func (s *TaskSerializer) timerWorkflowRunFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowExecutionFromProto(
+func (s *taskSerializer) timerWorkflowExecutionFromProto(
 	workflowExecutionTimer *persistencespb.TimerTaskInfo,
 ) *tasks.WorkflowExecutionTimeoutTask {
 	return &tasks.WorkflowExecutionTimeoutTask{
@@ -964,7 +971,7 @@ func (s *TaskSerializer) timerWorkflowExecutionFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
+func (s *taskSerializer) timerWorkflowCleanupTaskToProto(
 	workflowCleanupTimer *tasks.DeleteHistoryEventTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -986,7 +993,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) stateMachineTimerTaskToProto(task *tasks.StateMachineTimerTask) *persistencespb.TimerTaskInfo {
+func (s *taskSerializer) stateMachineTimerTaskToProto(task *tasks.StateMachineTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
 		NamespaceId:    task.NamespaceID,
 		WorkflowId:     task.WorkflowID,
@@ -998,7 +1005,7 @@ func (s *TaskSerializer) stateMachineTimerTaskToProto(task *tasks.StateMachineTi
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowCleanupTaskFromProto(
+func (s *taskSerializer) timerWorkflowCleanupTaskFromProto(
 	workflowCleanupTimer *persistencespb.TimerTaskInfo,
 ) *tasks.DeleteHistoryEventTask {
 	return &tasks.DeleteHistoryEventTask{
@@ -1016,7 +1023,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) stateMachineTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.StateMachineTimerTask {
+func (s *taskSerializer) stateMachineTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.StateMachineTimerTask {
 	return &tasks.StateMachineTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			info.NamespaceId,
@@ -1029,7 +1036,7 @@ func (s *TaskSerializer) stateMachineTimerTaskFromProto(info *persistencespb.Tim
 	}
 }
 
-func (s *TaskSerializer) visibilityStartTaskToProto(
+func (s *taskSerializer) visibilityStartTaskToProto(
 	startVisibilityTask *tasks.StartExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
@@ -1043,7 +1050,7 @@ func (s *TaskSerializer) visibilityStartTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityStartTaskFromProto(
+func (s *taskSerializer) visibilityStartTaskFromProto(
 	startVisibilityTask *persistencespb.VisibilityTaskInfo,
 ) *tasks.StartExecutionVisibilityTask {
 	return &tasks.StartExecutionVisibilityTask{
@@ -1058,7 +1065,7 @@ func (s *TaskSerializer) visibilityStartTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityUpsertTaskToProto(
+func (s *taskSerializer) visibilityUpsertTaskToProto(
 	upsertVisibilityTask *tasks.UpsertExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
@@ -1071,7 +1078,7 @@ func (s *TaskSerializer) visibilityUpsertTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityUpsertTaskFromProto(
+func (s *taskSerializer) visibilityUpsertTaskFromProto(
 	upsertVisibilityTask *persistencespb.VisibilityTaskInfo,
 ) *tasks.UpsertExecutionVisibilityTask {
 	return &tasks.UpsertExecutionVisibilityTask{
@@ -1085,7 +1092,7 @@ func (s *TaskSerializer) visibilityUpsertTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityCloseTaskToProto(
+func (s *taskSerializer) visibilityCloseTaskToProto(
 	closetVisibilityTask *tasks.CloseExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
@@ -1099,7 +1106,7 @@ func (s *TaskSerializer) visibilityCloseTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityCloseTaskFromProto(
+func (s *taskSerializer) visibilityCloseTaskFromProto(
 	closeVisibilityTask *persistencespb.VisibilityTaskInfo,
 ) *tasks.CloseExecutionVisibilityTask {
 	return &tasks.CloseExecutionVisibilityTask{
@@ -1114,7 +1121,7 @@ func (s *TaskSerializer) visibilityCloseTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityDeleteTaskToProto(
+func (s *taskSerializer) visibilityDeleteTaskToProto(
 	deleteVisibilityTask *tasks.DeleteExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
@@ -1129,7 +1136,7 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityDeleteTaskFromProto(
+func (s *taskSerializer) visibilityDeleteTaskFromProto(
 	deleteVisibilityTask *persistencespb.VisibilityTaskInfo,
 ) *tasks.DeleteExecutionVisibilityTask {
 	return &tasks.DeleteExecutionVisibilityTask{
@@ -1145,7 +1152,7 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.VisibilityTaskInfo {
+func (s *taskSerializer) visibilityChasmTaskToProto(task *tasks.ChasmTask) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
 		NamespaceId:    task.WorkflowKey.NamespaceID,
 		WorkflowId:     task.WorkflowKey.WorkflowID,
@@ -1159,7 +1166,7 @@ func (s *TaskSerializer) visibilityChasmTaskToProto(task *tasks.ChasmTask) *pers
 	}
 }
 
-func (s *TaskSerializer) visibilityChasmTaskFromProto(task *persistencespb.VisibilityTaskInfo) tasks.Task {
+func (s *taskSerializer) visibilityChasmTaskFromProto(task *persistencespb.VisibilityTaskInfo) tasks.Task {
 	return &tasks.ChasmTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			task.NamespaceId,
@@ -1173,7 +1180,7 @@ func (s *TaskSerializer) visibilityChasmTaskFromProto(task *persistencespb.Visib
 	}
 }
 
-func (s *TaskSerializer) replicationActivityTaskToProto(
+func (s *taskSerializer) replicationActivityTaskToProto(
 	activityTask *tasks.SyncActivityTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
@@ -1193,7 +1200,7 @@ func (s *TaskSerializer) replicationActivityTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) replicationActivityTaskFromProto(
+func (s *taskSerializer) replicationActivityTaskFromProto(
 	activityTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncActivityTask {
 	visibilityTimestamp := time.Unix(0, 0)
@@ -1214,7 +1221,7 @@ func (s *TaskSerializer) replicationActivityTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) replicationHistoryTaskToProto(
+func (s *taskSerializer) replicationHistoryTaskToProto(
 	historyTask *tasks.HistoryReplicationTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
@@ -1235,7 +1242,7 @@ func (s *TaskSerializer) replicationHistoryTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) replicationHistoryTaskFromProto(
+func (s *taskSerializer) replicationHistoryTaskFromProto(
 	historyTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.HistoryReplicationTask {
 	visibilityTimestamp := time.Unix(0, 0)
@@ -1260,7 +1267,7 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) archiveExecutionTaskToProto(
+func (s *taskSerializer) archiveExecutionTaskToProto(
 	archiveExecutionTask *tasks.ArchiveExecutionTask,
 ) *persistencespb.ArchivalTaskInfo {
 	return &persistencespb.ArchivalTaskInfo{
@@ -1274,7 +1281,7 @@ func (s *TaskSerializer) archiveExecutionTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) archiveExecutionTaskFromProto(
+func (s *taskSerializer) archiveExecutionTaskFromProto(
 	archivalTaskInfo *persistencespb.ArchivalTaskInfo,
 ) *tasks.ArchiveExecutionTask {
 	visibilityTimestamp := time.Unix(0, 0)
@@ -1293,7 +1300,7 @@ func (s *TaskSerializer) archiveExecutionTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
+func (s *taskSerializer) replicationSyncWorkflowStateTaskToProto(
 	syncWorkflowStateTask *tasks.SyncWorkflowStateTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
@@ -1310,7 +1317,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
+func (s *taskSerializer) replicationSyncWorkflowStateTaskFromProto(
 	syncWorkflowStateTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncWorkflowStateTask {
 	visibilityTimestamp := time.Unix(0, 0)
@@ -1332,7 +1339,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) replicationSyncHSMTaskToProto(
+func (s *taskSerializer) replicationSyncHSMTaskToProto(
 	syncHSMTask *tasks.SyncHSMTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
@@ -1346,7 +1353,7 @@ func (s *TaskSerializer) replicationSyncHSMTaskToProto(
 	}
 }
 
-func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
+func (s *taskSerializer) replicationSyncHSMTaskFromProto(
 	syncHSMTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncHSMTask {
 	visibilityTimestamp := time.Unix(0, 0)
@@ -1365,12 +1372,12 @@ func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
+func (s *taskSerializer) replicationSyncVersionedTransitionTaskToProto(
 	syncVersionedTransitionTask *tasks.SyncVersionedTransitionTask,
 ) (*persistencespb.ReplicationTaskInfo, error) {
 	taskInfoEquivalents := make([]*persistencespb.ReplicationTaskInfo, 0, len(syncVersionedTransitionTask.TaskEquivalents))
 	for _, task := range syncVersionedTransitionTask.TaskEquivalents {
-		taskInfoEquivalent, err := s.ParseReplicationTaskInfo(task)
+		taskInfoEquivalent, err := s.SeralizeReplicationTask(task)
 		if err != nil {
 			return nil, err
 		}
@@ -1397,13 +1404,13 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 	}, nil
 }
 
-func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
+func (s *taskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 	syncVersionedTransitionTask *persistencespb.ReplicationTaskInfo,
 ) (*tasks.SyncVersionedTransitionTask, error) {
 
 	taskEquivalents := make([]tasks.Task, 0, len(syncVersionedTransitionTask.TaskEquivalents))
 	for _, taskInfoEquivalent := range syncVersionedTransitionTask.TaskEquivalents {
-		taskEquivalent, err := s.ParseReplicationTask(taskInfoEquivalent)
+		taskEquivalent, err := s.DeserializeReplicationTask(taskInfoEquivalent)
 		if err != nil {
 			return nil, err
 		}
@@ -1435,10 +1442,13 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 	}, nil
 }
 
-func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataBlob, error) {
+func (s *taskSerializer) serializeOutboundTask(
+	task tasks.Task,
+) (*commonpb.DataBlob, error) {
+	var outboundTaskInfo *persistencespb.OutboundTaskInfo
 	switch task := task.(type) {
 	case *tasks.StateMachineOutboundTask:
-		return ProtoEncode(&persistencespb.OutboundTaskInfo{
+		outboundTaskInfo = &persistencespb.OutboundTaskInfo{
 			NamespaceId:    task.NamespaceID,
 			WorkflowId:     task.WorkflowID,
 			RunId:          task.RunID,
@@ -1449,9 +1459,9 @@ func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataB
 			TaskDetails: &persistencespb.OutboundTaskInfo_StateMachineInfo{
 				StateMachineInfo: task.Info,
 			},
-		})
+		}
 	case *tasks.ChasmTask:
-		return ProtoEncode(&persistencespb.OutboundTaskInfo{
+		outboundTaskInfo = &persistencespb.OutboundTaskInfo{
 			NamespaceId:    task.NamespaceID,
 			WorkflowId:     task.WorkflowID,
 			RunId:          task.RunID,
@@ -1461,18 +1471,21 @@ func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataB
 			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 			TaskDetails: &persistencespb.OutboundTaskInfo_ChasmTaskInfo{
 				ChasmTaskInfo: task.Info,
-			}})
+			},
+		}
 	default:
 		return nil, serviceerror.NewInternalf("unknown outbound task type while serializing: %v", task)
 	}
+	return s.serializer.OutboundTaskInfoToBlob(outboundTaskInfo)
 }
 
-func (s *TaskSerializer) deserializeOutboundTask(blob *commonpb.DataBlob) (tasks.Task, error) {
-	info := &persistencespb.OutboundTaskInfo{}
-	if err := Decode(blob, info); err != nil {
+func (s *taskSerializer) deserializeOutboundTask(
+	blob *commonpb.DataBlob,
+) (tasks.Task, error) {
+	info, err := s.serializer.OutboundTaskInfoFromBlob(blob)
+	if err != nil {
 		return nil, err
 	}
-
 	switch info.TaskType {
 	case enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND:
 		return &tasks.StateMachineOutboundTask{
