@@ -1,46 +1,46 @@
-package sql
+package sqlplugin
 
 import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSerializePageToken(t *testing.T) {
-	s := assert.New(t)
+func TestSerializeVisibilityPageToken(t *testing.T) {
+	r := require.New(t)
 
-	token := pageToken{
+	token := VisibilityPageToken{
 		CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
 		StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
 		RunID:     "test-run-id",
 	}
-	data, err := serializePageToken(&token)
-	s.NoError(err)
-	s.Equal(
+	data, err := SerializeVisibilityPageToken(&token)
+	r.NoError(err)
+	r.Equal(
 		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
 		data,
 	)
 }
 
-func TestDeserializePageToken(t *testing.T) {
-	s := assert.New(t)
+func TestDeserializeVisibilityPageToken(t *testing.T) {
+	r := require.New(t)
 
-	token, err := deserializePageToken(nil)
-	s.NoError(err)
-	s.Nil(token)
+	token, err := DeserializeVisibilityPageToken(nil)
+	r.NoError(err)
+	r.Nil(token)
 
-	token, err = deserializePageToken([]byte{})
-	s.NoError(err)
-	s.Nil(token)
+	token, err = DeserializeVisibilityPageToken([]byte{})
+	r.NoError(err)
+	r.Nil(token)
 
-	token, err = deserializePageToken(
+	token, err = DeserializeVisibilityPageToken(
 		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
 	)
-	s.NoError(err)
-	s.NotNil(token)
-	s.Equal(
-		pageToken{
+	r.NoError(err)
+	r.NotNil(token)
+	r.Equal(
+		VisibilityPageToken{
 			CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
 			StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
 			RunID:     "test-run-id",

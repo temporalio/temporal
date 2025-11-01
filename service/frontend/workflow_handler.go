@@ -4067,8 +4067,10 @@ func (wh *WorkflowHandler) ListSchedules(
 		}
 		if err := scheduler.ValidateVisibilityQuery(
 			namespaceName,
+			namespaceID,
 			saNameType,
 			wh.saMapperProvider,
+			wh.config.VisibilityEnableUnifiedQueryConverter,
 			request.Query,
 		); err != nil {
 			return nil, err
