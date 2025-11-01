@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/chasm"
-	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -13,11 +13,13 @@ import (
 // LeaseExpiryTaskExecutor handles lease expiry events.
 type LeaseExpiryTaskExecutor struct {
 	logger log.Logger
+	config *Config
 }
 
-func NewLeaseExpiryTaskExecutor(logger log.Logger) *LeaseExpiryTaskExecutor {
+func NewLeaseExpiryTaskExecutor(logger log.Logger, config *Config) *LeaseExpiryTaskExecutor {
 	return &LeaseExpiryTaskExecutor{
 		logger: logger,
+		config: config,
 	}
 }
 
@@ -26,17 +28,22 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	worker *Worker,
 	attrs chasm.TaskAttributes,
-	task *workerpb.LeaseExpiryTask,
+	task *workerstatepb.LeaseExpiryTask,
 ) error {
 	// Validate that this lease expiry is still relevant.
 	if !e.isLeaseExpiryTaskValid(worker, attrs) {
-		e.logger.Debug("Lease expiry task is no longer valid, ignoring", tag.WorkerId(worker.WorkerId()))
+		e.logger.Debug("Lease expiry task is no longer valid, ignoring", tag.WorkerID(worker.WorkerID()))
 		return nil
 	}
 
-	// Apply the lease expiry transition.
+	// Calculate cleanup delay from dynamic config.
+	namespaceID := ctx.ExecutionKey().NamespaceID
+	cleanupDelay := e.config.InactiveWorkerCleanupDelay(namespaceID)
+
+	// Apply the lease expiry transition with cleanup delay.
 	return TransitionLeaseExpired.Apply(ctx, worker, EventLeaseExpired{
-		Time: time.Now(),
+		Time:         time.Now(),
+		CleanupDelay: cleanupDelay,
 	})
 }
 
@@ -45,7 +52,7 @@ func (e *LeaseExpiryTaskExecutor) Validate(
 	ctx chasm.Context,
 	worker *Worker,
 	attrs chasm.TaskAttributes,
-	task *workerpb.LeaseExpiryTask,
+	task *workerstatepb.LeaseExpiryTask,
 ) (bool, error) {
 	return e.isLeaseExpiryTaskValid(worker, attrs), nil
 }
@@ -57,7 +64,7 @@ func (e *LeaseExpiryTaskExecutor) isLeaseExpiryTaskValid(
 ) bool {
 	// If worker is not active, no point in processing the least expiry task.
 	// A previous lease expiry must have already transitioned it to inactive.
-	if worker.Status != workerpb.WORKER_STATUS_ACTIVE {
+	if worker.Status != workerstatepb.WORKER_STATUS_ACTIVE {
 		return false
 	}
 
@@ -87,14 +94,14 @@ func (e *WorkerCleanupTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	worker *Worker,
 	attrs chasm.TaskAttributes,
-	task *workerpb.WorkerCleanupTask,
+	task *workerstatepb.WorkerCleanupTask,
 ) error {
 	// Only clean up if worker is inactive.
-	if worker.Status != workerpb.WORKER_STATUS_INACTIVE {
+	if worker.Status != workerstatepb.WORKER_STATUS_INACTIVE {
 		return nil // Not inactive, nothing to clean up.
 	}
 
-	e.logger.Info("Cleaning up inactive worker", tag.WorkerId(worker.WorkerId()))
+	e.logger.Info("Cleaning up inactive worker", tag.WorkerID(worker.WorkerID()))
 
 	// Apply the cleanup completed transition.
 	return TransitionCleanupCompleted.Apply(ctx, worker, EventCleanupCompleted{
@@ -107,8 +114,8 @@ func (e *WorkerCleanupTaskExecutor) Validate(
 	ctx chasm.Context,
 	worker *Worker,
 	attrs chasm.TaskAttributes,
-	task *workerpb.WorkerCleanupTask,
+	task *workerstatepb.WorkerCleanupTask,
 ) (bool, error) {
 	// Only valid if worker is inactive.
-	return worker.Status == workerpb.WORKER_STATUS_INACTIVE, nil
+	return worker.Status == workerstatepb.WORKER_STATUS_INACTIVE, nil
 }

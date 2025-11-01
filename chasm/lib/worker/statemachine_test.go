@@ -5,14 +5,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	apipb "go.temporal.io/api/worker/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
-	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
 
 // newTestWorker creates a worker for testing with a default heartbeat
 func newTestWorker() *Worker {
-	return NewWorker(&apipb.WorkerHeartbeat{
+	return NewWorker(&workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "test-worker",
 	})
 }
@@ -31,7 +31,7 @@ func TestRecordHeartbeat(t *testing.T) {
 	require.Equal(t, leaseDeadline.Unix(), worker.LeaseExpirationTime.AsTime().Unix())
 
 	// Verify worker is still active
-	require.Equal(t, workerpb.WORKER_STATUS_ACTIVE, worker.Status)
+	require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 
 	// Verify a task was scheduled with correct deadline
 	require.Len(t, ctx.Tasks, 1)
@@ -73,7 +73,7 @@ func TestTransitionActiveHeartbeat(t *testing.T) {
 	// Verify state was updated
 	require.NotNil(t, worker.LeaseExpirationTime)
 	require.Equal(t, leaseDeadline.Unix(), worker.LeaseExpirationTime.AsTime().Unix())
-	require.Equal(t, workerpb.WORKER_STATUS_ACTIVE, worker.Status)
+	require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 
 	// Verify task was scheduled
 	require.Len(t, ctx.Tasks, 1)
@@ -82,12 +82,13 @@ func TestTransitionActiveHeartbeat(t *testing.T) {
 
 func TestTransitionLeaseExpired(t *testing.T) {
 	worker := newTestWorker()
-	worker.Status = workerpb.WORKER_STATUS_ACTIVE
+	worker.Status = workerstatepb.WORKER_STATUS_ACTIVE
 	ctx := &chasm.MockMutableContext{}
 
 	expiryTime := time.Now()
 	event := EventLeaseExpired{
-		Time: expiryTime,
+		Time:         expiryTime,
+		CleanupDelay: 60 * time.Second,
 	}
 
 	// Apply the transition
@@ -95,23 +96,23 @@ func TestTransitionLeaseExpired(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify status changed to inactive
-	require.Equal(t, workerpb.WORKER_STATUS_INACTIVE, worker.Status)
+	require.Equal(t, workerstatepb.WORKER_STATUS_INACTIVE, worker.Status)
 
 	// Verify cleanup task was scheduled
 	require.Len(t, ctx.Tasks, 1)
 
 	// Verify cleanup task is scheduled for the right time
-	expectedCleanupTime := expiryTime.Add(inactiveWorkerCleanupDelay)
+	expectedCleanupTime := expiryTime.Add(event.CleanupDelay)
 	require.Equal(t, expectedCleanupTime, ctx.Tasks[0].Attributes.ScheduledTime)
 
 	// Verify it's a WorkerCleanupTask
-	_, ok := ctx.Tasks[0].Payload.(*workerpb.WorkerCleanupTask)
+	_, ok := ctx.Tasks[0].Payload.(*workerstatepb.WorkerCleanupTask)
 	require.True(t, ok)
 }
 
 func TestTransitionCleanupCompleted(t *testing.T) {
 	worker := newTestWorker()
-	worker.Status = workerpb.WORKER_STATUS_INACTIVE
+	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
 
 	cleanupTime := time.Now()
@@ -124,7 +125,7 @@ func TestTransitionCleanupCompleted(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify status changed to cleaned up
-	require.Equal(t, workerpb.WORKER_STATUS_CLEANED_UP, worker.Status)
+	require.Equal(t, workerstatepb.WORKER_STATUS_CLEANED_UP, worker.Status)
 
 	// Verify no additional tasks were scheduled
 	require.Empty(t, ctx.Tasks)
@@ -142,7 +143,7 @@ func TestScheduleLeaseExpiry(t *testing.T) {
 	require.Len(t, ctx.Tasks, 1)
 
 	// Verify task details
-	_, ok := ctx.Tasks[0].Payload.(*workerpb.LeaseExpiryTask)
+	_, ok := ctx.Tasks[0].Payload.(*workerstatepb.LeaseExpiryTask)
 	require.True(t, ok)
 	require.Equal(t, leaseDeadline, ctx.Tasks[0].Attributes.ScheduledTime)
 	require.Empty(t, ctx.Tasks[0].Attributes.Destination) // Local execution
@@ -173,14 +174,14 @@ func TestWorkerResurrection(t *testing.T) {
 
 	t.Run("ResurrectionFromInactive", func(t *testing.T) {
 		worker := newTestWorker()
-		worker.Status = workerpb.WORKER_STATUS_INACTIVE
+		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 
 		leaseDeadline := time.Now().Add(30 * time.Second)
 		err := RecordHeartbeat(ctx, worker, leaseDeadline)
 
 		// Should succeed - worker resurrection handles same identity reconnection
 		require.NoError(t, err)
-		require.Equal(t, workerpb.WORKER_STATUS_ACTIVE, worker.Status)
+		require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 		require.NotNil(t, worker.LeaseExpirationTime)
 		require.Equal(t, leaseDeadline.Unix(), worker.LeaseExpirationTime.AsTime().Unix())
 
@@ -192,7 +193,7 @@ func TestWorkerResurrection(t *testing.T) {
 
 func TestTransitionWorkerResurrection(t *testing.T) {
 	worker := newTestWorker()
-	worker.Status = workerpb.WORKER_STATUS_INACTIVE
+	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
 
 	heartbeatTime := time.Now()
@@ -208,7 +209,7 @@ func TestTransitionWorkerResurrection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify state changed to active
-	require.Equal(t, workerpb.WORKER_STATUS_ACTIVE, worker.Status)
+	require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 
 	// Verify lease was updated
 	require.NotNil(t, worker.LeaseExpirationTime)
@@ -224,7 +225,7 @@ func TestInvalidTransitions(t *testing.T) {
 
 	t.Run("HeartbeatOnCleanedUpWorker", func(t *testing.T) {
 		worker := newTestWorker()
-		worker.Status = workerpb.WORKER_STATUS_CLEANED_UP
+		worker.Status = workerstatepb.WORKER_STATUS_CLEANED_UP
 
 		leaseDeadline := time.Now().Add(30 * time.Second)
 		err := RecordHeartbeat(ctx, worker, leaseDeadline)
@@ -236,7 +237,7 @@ func TestInvalidTransitions(t *testing.T) {
 
 	t.Run("LeaseExpiryOnCleanedUpWorker", func(t *testing.T) {
 		worker := newTestWorker()
-		worker.Status = workerpb.WORKER_STATUS_CLEANED_UP
+		worker.Status = workerstatepb.WORKER_STATUS_CLEANED_UP
 
 		event := EventLeaseExpired{Time: time.Now()}
 		err := TransitionLeaseExpired.Apply(ctx, worker, event)
@@ -247,7 +248,7 @@ func TestInvalidTransitions(t *testing.T) {
 
 	t.Run("CleanupOnActiveWorker", func(t *testing.T) {
 		worker := newTestWorker()
-		worker.Status = workerpb.WORKER_STATUS_ACTIVE
+		worker.Status = workerstatepb.WORKER_STATUS_ACTIVE
 
 		event := EventCleanupCompleted{Time: time.Now()}
 		err := TransitionCleanupCompleted.Apply(ctx, worker, event)

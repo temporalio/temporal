@@ -4,27 +4,27 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	apipb "go.temporal.io/api/worker/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
-	workerpb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
 
 func TestNewWorker(t *testing.T) {
-	heartbeat := &apipb.WorkerHeartbeat{
+	heartbeat := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "test-worker-1",
 	}
 	worker := NewWorker(heartbeat)
 
 	// Verify basic initialization
 	require.NotNil(t, worker)
-	require.Equal(t, workerpb.WORKER_STATUS_ACTIVE, worker.Status)
+	require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 	require.Nil(t, worker.LeaseExpirationTime)
 	require.Equal(t, heartbeat, worker.WorkerHeartbeat)
-	require.Equal(t, "test-worker-1", worker.WorkerId())
+	require.Equal(t, "test-worker-1", worker.WorkerID())
 }
 
 func TestWorkerLifecycleState(t *testing.T) {
-	heartbeat := &apipb.WorkerHeartbeat{
+	heartbeat := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "test-worker-2",
 	}
 	worker := NewWorker(heartbeat)
@@ -35,12 +35,12 @@ func TestWorkerLifecycleState(t *testing.T) {
 	require.Equal(t, chasm.LifecycleStateRunning, state)
 
 	// Test INACTIVE -> Running (still running until cleanup)
-	worker.Status = workerpb.WORKER_STATUS_INACTIVE
+	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	state = worker.LifecycleState(ctx)
 	require.Equal(t, chasm.LifecycleStateRunning, state)
 
 	// Test CLEANED_UP -> Completed
-	worker.Status = workerpb.WORKER_STATUS_CLEANED_UP
+	worker.Status = workerstatepb.WORKER_STATUS_CLEANED_UP
 	state = worker.LifecycleState(ctx)
 	require.Equal(t, chasm.LifecycleStateCompleted, state)
 }
