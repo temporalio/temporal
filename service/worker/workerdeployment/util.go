@@ -38,10 +38,11 @@ const (
 	SetManagerIdentity                = "set-manager-identity"             // for WorkerDeployment wfs
 
 	// Signals
-	ForceCANSignalName       = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
-	SyncDrainageSignalName   = "sync-drainage-status"
-	TerminateDrainageSignal  = "terminate-drainage"
-	SyncVersionSummarySignal = "sync-version-summary"
+	ForceCANSignalName        = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
+	SyncDrainageSignalName    = "sync-drainage-status"
+	TerminateDrainageSignal   = "terminate-drainage"
+	SyncVersionSummarySignal  = "sync-version-summary"
+	PropagationCompleteSignal = "propagation-complete"
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
@@ -96,6 +97,13 @@ var (
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 100 * time.Millisecond,
 			MaximumAttempts: 5,
+		},
+	}
+	propagationActivityOptions = workflow.ActivityOptions{
+		StartToCloseTimeout: 1 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 100 * time.Millisecond,
+			// unlimited attempts
 		},
 	}
 )

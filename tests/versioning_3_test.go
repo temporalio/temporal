@@ -1528,15 +1528,23 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
 }
 
-func (s *Versioning3Suite) TestIndependentActivity_Pinned() {
-	s.testIndependentActivity(vbPinned)
+func (s *Versioning3Suite) TestIndependentVersionedActivity_Pinned() {
+	s.testIndependentActivity(vbPinned, false)
 }
 
-func (s *Versioning3Suite) TestIndependentActivity_Unpinned() {
-	s.testIndependentActivity(vbUnpinned)
+func (s *Versioning3Suite) TestIndependentVersionedActivity_Unpinned() {
+	s.testIndependentActivity(vbUnpinned, false)
 }
 
-func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBehavior) {
+func (s *Versioning3Suite) TestIndependentUnversionedActivity_Pinned() {
+	s.testIndependentActivity(vbPinned, true)
+}
+
+func (s *Versioning3Suite) TestIndependentUnversionedActivity_Unpinned() {
+	s.testIndependentActivity(vbUnpinned, true)
+}
+
+func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBehavior, unversionedActivity bool) {
 	// This test starts a wf on wf-series. The workflow runs an activity that is sent to act-tq with
 	// workers on a different deployment series, act-series. We make sure that the activity is
 	// dispatched and processed properly without affecting versioning of the workflow. Note that it
@@ -1548,7 +1556,9 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 
 	// Set current deployment for each TQ
 	s.updateTaskQueueDeploymentData(tvWf, true, 0, false, 0, tqTypeWf)
-	s.updateTaskQueueDeploymentData(tvAct, true, 0, false, 0, tqTypeAct)
+	if !unversionedActivity {
+		s.updateTaskQueueDeploymentData(tvAct, true, 0, false, 0, tqTypeAct)
+	}
 
 	s.startWorkflow(tvWf, nil)
 
@@ -1561,12 +1571,21 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 		})
 	s.verifyWorkflowVersioning(tvWf, behavior, tvWf.Deployment(), nil, nil)
 
-	s.pollActivityAndHandle(tvAct, nil,
-		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			s.NotNil(task)
-			s.Logger.Info("Activity completed")
-			return respondActivity(), nil
-		})
+	if unversionedActivity {
+		s.unversionedPollActivityAndHandle(tvAct, nil,
+			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.Logger.Info("Activity completed")
+				return respondActivity(), nil
+			})
+	} else {
+		s.pollActivityAndHandle(tvAct, nil,
+			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.Logger.Info("Activity completed")
+				return respondActivity(), nil
+			})
+	}
 	s.verifyWorkflowVersioning(tvWf, behavior, tvWf.Deployment(), nil, nil)
 
 	s.pollWftAndHandle(tvWf, false, nil,

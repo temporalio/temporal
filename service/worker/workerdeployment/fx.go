@@ -16,6 +16,18 @@ import (
 	"go.uber.org/fx"
 )
 
+type DeploymentWorkflowVersion int64
+
+const (
+	// Versions of workflow logic. When introducing a new version, consider generating a new
+	// history for TestReplays using generate_history.sh.
+
+	// Represents the state before DeploymentWorkflowVersion is introduced
+	InitialVersion DeploymentWorkflowVersion = 0
+	// SetCurrent and SetRamping APIs are async
+	AsyncSetCurrentAndRamping = 1
+)
+
 type (
 	workerComponent struct {
 		activityDeps  activityDeps
@@ -97,7 +109,10 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		maxVersionsGetter := func() int {
 			return dynamicconfig.MatchingMaxVersionsInDeployment.Get(s.dynamicConfig)(ns.Name().String())
 		}
-		return Workflow(ctx, maxVersionsGetter, args)
+		workflowVersionGetter := func() DeploymentWorkflowVersion {
+			return DeploymentWorkflowVersion(dynamicconfig.MatchingDeploymentWorkflowVersion.Get(s.dynamicConfig)(ns.Name().String()))
+		}
+		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
 	}
 	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 

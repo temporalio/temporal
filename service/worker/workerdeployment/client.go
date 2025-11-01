@@ -518,16 +518,12 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	}
 
 	if res.GetResponse().GetQueryResult() == nil {
-		return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+		return nil, nil, serviceerror.NewInternal("Did not receive deployment info")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
-		}
 		return nil, nil, err
 	}
 
@@ -1636,6 +1632,11 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
 	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
 	workerDeploymentInfo.ManagerIdentity = state.ManagerIdentity
+	if len(state.PropagatingRevisions) > 0 {
+		workerDeploymentInfo.RoutingConfigUpdateState = enumspb.ROUTING_CONFIG_UPDATE_STATE_IN_PROGRESS
+	} else {
+		workerDeploymentInfo.RoutingConfigUpdateState = enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+	}
 
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
