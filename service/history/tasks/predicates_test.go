@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -36,7 +36,7 @@ func (s *predicatesSuite) SetupTest() {
 }
 
 func (s *predicatesSuite) TestNamespacePredicate_Test() {
-	namespaceIDs := []string{uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString()}
 
 	p := NewNamespacePredicate(namespaceIDs)
 	for _, id := range namespaceIDs {
@@ -46,12 +46,12 @@ func (s *predicatesSuite) TestNamespacePredicate_Test() {
 	}
 
 	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).Times(1)
 	s.False(p.Test(mockTask))
 }
 
 func (s *predicatesSuite) TestNamespacePredicate_Equals() {
-	namespaceIDs := []string{uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString()}
 
 	p := NewNamespacePredicate(namespaceIDs)
 
@@ -65,13 +65,13 @@ func (s *predicatesSuite) TestNamespacePredicate_Equals() {
 	)
 	s.True(p.Equals(NewNamespacePredicate(namespaceIDs)))
 
-	s.False(p.Equals(NewNamespacePredicate([]string{uuid.New(), uuid.New()})))
+	s.False(p.Equals(NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()})))
 	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
 func (s *predicatesSuite) TestNamespacePredicate_Size() {
-	namespaceIDs := []string{uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString()}
 
 	p := NewNamespacePredicate(namespaceIDs)
 
@@ -131,7 +131,7 @@ func (s *predicatesSuite) TestTypePredicate_Equals() {
 		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 		enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 	})))
-	s.False(p.Equals(NewNamespacePredicate([]string{uuid.New(), uuid.New()})))
+	s.False(p.Equals(NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
@@ -147,7 +147,7 @@ func (s *predicatesSuite) TestTypePredicate_Size() {
 }
 
 func (s *predicatesSuite) TestDestinationPredicate_Test() {
-	destinations := []string{uuid.New(), uuid.New()}
+	destinations := []string{uuid.NewString(), uuid.NewString()}
 
 	p := NewDestinationPredicate(destinations)
 	for _, dest := range destinations {
@@ -155,12 +155,12 @@ func (s *predicatesSuite) TestDestinationPredicate_Test() {
 		s.True(p.Test(mockTask))
 	}
 
-	mockTask := &StateMachineOutboundTask{Destination: uuid.New()}
+	mockTask := &StateMachineOutboundTask{Destination: uuid.NewString()}
 	s.False(p.Test(mockTask))
 }
 
 func (s *predicatesSuite) TestDestinationPredicate_Equals() {
-	destinations := []string{uuid.New(), uuid.New()}
+	destinations := []string{uuid.NewString(), uuid.NewString()}
 
 	p := NewDestinationPredicate(destinations)
 
@@ -174,13 +174,13 @@ func (s *predicatesSuite) TestDestinationPredicate_Equals() {
 	)
 	s.True(p.Equals(NewDestinationPredicate(destinations)))
 
-	s.False(p.Equals(NewDestinationPredicate([]string{uuid.New(), uuid.New()})))
+	s.False(p.Equals(NewDestinationPredicate([]string{uuid.NewString(), uuid.NewString()})))
 	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
 func (s *predicatesSuite) TestDestinationPredicate_Size() {
-	destinations := []string{uuid.New(), uuid.New()}
+	destinations := []string{uuid.NewString(), uuid.NewString()}
 
 	p := NewDestinationPredicate(destinations)
 
@@ -222,7 +222,7 @@ func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Equals() {
 }
 
 func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Size() {
-	groups := []string{uuid.New(), uuid.New()}
+	groups := []string{uuid.NewString(), uuid.NewString()}
 
 	p := NewOutboundTaskGroupPredicate(groups)
 

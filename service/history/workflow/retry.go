@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -263,7 +263,7 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.New(),
+		RequestId:                uuid.NewString(),
 		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
 		WorkflowId:               newExecution.WorkflowId,
 		TaskQueue:                tq,

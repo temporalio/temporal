@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -657,10 +657,10 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 			mockMutableState := historyi.NewMockMutableState(controller)
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
-			firstRunID := uuid.New()
+			firstRunID := uuid.NewString()
 			currentRunID := firstRunID
 			if !tc.isFirstRun {
-				currentRunID = uuid.New()
+				currentRunID = uuid.NewString()
 			}
 
 			workflowKey := tests.WorkflowKey

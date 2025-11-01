@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
 	"go.temporal.io/server/common/config"
@@ -71,7 +71,7 @@ func newTestCluster(
 			logger.Error("tchannel listen failed", tag.Error(err))
 			return nil
 		}
-		cluster.hostUUIDs[i] = uuid.New()
+		cluster.hostUUIDs[i] = uuid.NewString()
 		cluster.hostAddrs[i], err = buildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
 		if err != nil {
 			logger.Error("Failed to build broadcast hostport", tag.Error(err))
@@ -92,7 +92,7 @@ func newTestCluster(
 		return nil
 	}
 	seedMember := &persistence.ClusterMember{
-		HostID:        uuid.NewUUID(),
+		HostID:        uuid.New(),
 		RPCAddress:    seedAddress,
 		RPCPort:       seedPort,
 		SessionStart:  time.Now().UTC(),
@@ -109,7 +109,7 @@ func newTestCluster(
 				// All subsequent calls only return the single "good" seed member
 				// This ensures that we exercise the retry path in bootstrap properly.
 				badSeedMember := &persistence.ClusterMember{
-					HostID:        uuid.NewUUID(),
+					HostID:        uuid.New(),
 					RPCAddress:    seedAddress,
 					RPCPort:       seedPort + 1,
 					SessionStart:  time.Now().UTC(),

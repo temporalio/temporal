@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -70,9 +70,9 @@ func (s *branchMgrSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.namespaceID = uuid.New()
+	s.namespaceID = uuid.NewString()
 	s.workflowID = "some random workflow ID"
-	s.runID = uuid.New()
+	s.runID = uuid.NewString()
 	s.branchIndex = 0
 	s.nDCBranchMgr = NewBranchMgr(
 		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
