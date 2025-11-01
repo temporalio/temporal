@@ -38,6 +38,9 @@ message TaskVersionDirective {
     temporal.api.deployment.v1.Deployment deployment = 4;
     // Workflow's effective deployment version when the task is scheduled.
     temporal.server.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
+    // Counter copied from the workflow execution's WorkflowExecutionVersioningInfo
+    // during enqueue time.
+    int64 revision_number = 6;
 }
 
 message FairLevel {

@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -507,7 +508,6 @@ func (e *matchingEngineImpl) updateTaskQueue(partition tqid.Partition, mgr taskQ
 	e.partitions[partition.Key()] = mgr
 }
 
-// AddWorkflowTask either delivers task directly to waiting poller or saves it into task queue persistence.
 func (e *matchingEngineImpl) AddWorkflowTask(
 	ctx context.Context,
 	addRequest *matchingservice.AddWorkflowTaskRequest,
@@ -1327,12 +1327,25 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				typedUserData := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+
+				// Fetch buildIDs from old deploymentData format
 				for _, v := range typedUserData.GetDeploymentData().GetVersions() {
 					if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
 						continue
 					}
-					buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
-					buildIds = append(buildIds, buildId)
+					deploymentVersion := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
+					buildIds = append(buildIds, deploymentVersion)
+				}
+
+				// Fetch buildIDs from new deploymentData format
+				for deploymentName, v := range typedUserData.GetDeploymentData().GetDeploymentsData() {
+					if v.GetVersions() == nil {
+						continue
+					}
+					for buildID := range v.GetVersions() {
+						deploymentVersion := worker_versioning.BuildIDToStringV32(deploymentName, buildID)
+						buildIds = append(buildIds, deploymentVersion)
+					}
 				}
 			}
 
@@ -1884,10 +1897,13 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	req *matchingservice.SyncDeploymentUserDataRequest,
 ) (*matchingservice.SyncDeploymentUserDataResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(req.NamespaceId, req.GetTaskQueue())
+	applyUpdatesToRoutingConfig := false
+
 	if err != nil {
 		return nil, err
 	}
-	if req.Deployment == nil && req.GetOperation() == nil {
+	// TODO (Shivam): Please fix this error message and condition check.
+	if req.Deployment == nil && req.GetOperation() == nil && req.GetDeploymentName() == "" {
 		return nil, errMissingDeploymentVersion
 	}
 
@@ -1930,6 +1946,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 			// set/append the new data
 			deploymentData := data.PerType[int32(t)].DeploymentData
+
 			if d := req.Deployment; d != nil {
 				// [cleanup-old-wv]
 				//nolint:staticcheck
@@ -1944,6 +1961,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				}
 				changed = true
 			} else if vd := req.GetUpdateVersionData(); vd != nil {
+				// [cleanup-public-preview-versioning]
 				if vd.GetVersion() == nil { // unversioned ramp
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
@@ -1972,6 +1990,37 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
 				}
+			} else {
+
+				// Only initialize DeploymentsData if we're using the new format
+				if deploymentData.GetDeploymentsData() == nil {
+					deploymentData.DeploymentsData = make(map[string]*persistencespb.WorkerDeploymentData)
+				}
+				if deploymentData.GetDeploymentsData()[req.GetDeploymentName()] == nil {
+					deploymentData.GetDeploymentsData()[req.GetDeploymentName()] = &persistencespb.WorkerDeploymentData{}
+				}
+
+				rc := req.GetUpdateRoutingConfig()
+				tqWorkerDeploymentData := deploymentData.GetDeploymentsData()[req.GetDeploymentName()]
+
+				if rc.GetRevisionNumber() > tqWorkerDeploymentData.GetRoutingConfig().GetRevisionNumber() {
+					changed = true
+					// Update routing config when newer or equal revision is provided
+					tqWorkerDeploymentData.RoutingConfig = rc
+					applyUpdatesToRoutingConfig = true
+				}
+
+				if tqWorkerDeploymentData.Versions == nil {
+					tqWorkerDeploymentData.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionData)
+				}
+				for buildID, versionData := range req.GetUpsertVersionsData() {
+					tqWorkerDeploymentData.Versions[buildID] = versionData
+					changed = true
+				}
+				for _, buildID := range req.GetForgetVersions() {
+					delete(tqWorkerDeploymentData.Versions, buildID)
+					changed = true
+				}
 			}
 		}
 		if !changed {
@@ -1984,7 +2033,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.SyncDeploymentUserDataResponse{Version: version}, nil
+	return &matchingservice.SyncDeploymentUserDataResponse{Version: version, RoutingConfigChanged: applyUpdatesToRoutingConfig}, nil
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
@@ -2867,9 +2916,10 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
-		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
-		VersionDirective:    task.event.Data.VersionDirective,
-		Stamp:               task.event.Data.GetStamp(),
+		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
+		VersionDirective:           task.event.Data.VersionDirective,
+		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		Stamp:                      task.event.Data.GetStamp(),
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -2926,8 +2976,9 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
-		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
-		VersionDirective:    task.event.Data.VersionDirective,
+		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
+		VersionDirective:           task.event.Data.VersionDirective,
+		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)

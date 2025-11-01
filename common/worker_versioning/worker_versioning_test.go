@@ -117,7 +117,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			current, ramping := CalculateTaskQueueVersioningInfo(tt.data)
+			current, _, _, ramping, _, _, _ := CalculateTaskQueueVersioningInfo(tt.data)
 			if !current.Equal(tt.wantCurrent) {
 				t.Errorf("got current = %v, want %v", current, tt.wantCurrent)
 			}
@@ -136,15 +136,15 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 		want    *deploymentspb.WorkerDeploymentVersion
 	}{
 		{name: "nil current and ramping info", want: nil},
-		{name: "with current version", current: &deploymentspb.DeploymentVersionData{Version: v1}, want: v1},
-		{name: "with full ramp", current: &deploymentspb.DeploymentVersionData{Version: v1}, ramping: &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 100}, want: v2},
-		{name: "with full ramp to unversioned", current: &deploymentspb.DeploymentVersionData{Version: v1}, ramping: &deploymentspb.DeploymentVersionData{RampPercentage: 100}, want: nil},
-		{name: "with full ramp from unversioned", ramping: &deploymentspb.DeploymentVersionData{Version: v1, RampPercentage: 100}, want: v1},
+		{name: "with current version", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},
+		{name: "with full ramp", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, ramping: &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v2},
+		{name: "with full ramp to unversioned", current: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, ramping: &deploymentspb.DeploymentVersionData{RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: nil},
+		{name: "with full ramp from unversioned", ramping: &deploymentspb.DeploymentVersionData{Version: v1, RampPercentage: 100, RoutingUpdateTime: timestamp.TimePtr(time.Now())}, want: v1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := FindDeploymentVersionForWorkflowID(tt.current, tt.ramping, "my-wf-id"); !got.Equal(tt.want) {
-				t.Errorf("FindDeploymentVersionForWorkflowID() = %v, want %v", got, tt.want)
+			if got, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(tt.current.Version, 0, tt.ramping.Version, tt.ramping.RampPercentage, 0, "my-wf-id"); !got.Equal(tt.want) {
+				t.Errorf("FindTargetDeploymentVersionAndRevisionNumberForWorkflowID() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -166,17 +166,19 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			var ramping *deploymentspb.DeploymentVersionData
 			if tt.from != nil {
 				current = &deploymentspb.DeploymentVersionData{
-					Version: tt.from,
+					Version:           tt.from,
+					RoutingUpdateTime: timestamp.TimePtr(time.Now()),
 				}
 			}
 			ramping = &deploymentspb.DeploymentVersionData{
-				Version:        tt.to,
-				RampPercentage: 30,
+				Version:           tt.to,
+				RampPercentage:    30,
+				RoutingUpdateTime: timestamp.TimePtr(time.Now()),
 			}
 			histogram := make(map[string]int)
 			runs := 1000000
 			for i := 0; i < runs; i++ {
-				v := FindDeploymentVersionForWorkflowID(current, ramping, "wf-"+strconv.Itoa(i))
+				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current.Version, 0, ramping.Version, ramping.RampPercentage, 0, "wf-"+strconv.Itoa(i))
 				histogram[v.GetBuildId()]++
 			}
 

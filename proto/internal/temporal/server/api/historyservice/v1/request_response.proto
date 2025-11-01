@@ -238,6 +238,9 @@ message RecordWorkflowTaskStartedRequest {
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     // Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
     int32 stamp = 11;
+    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues 
+    // that may arise due to stale routing configs in task queue partitions.
+    int64 task_dispatch_revision_number = 12;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -311,6 +314,9 @@ message RecordActivityTaskStartedRequest {
     reserved 11;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 12;
+    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues 
+    // that may arise due to stale routing configs in task queue partitions.
+    int64 task_dispatch_revision_number = 13;
 }
 
 message RecordActivityTaskStartedResponse {

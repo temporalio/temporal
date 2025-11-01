@@ -74,6 +74,8 @@ type (
 		// than normal priorities) to indicate the poll forwarder. In some other cases (e.g.
 		// migration) it may be adjusted from the explicit task priority.
 		effectivePriority priorityKey
+		// taskDispatchRevisionNumber represents the revision number used by the task and is max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
+		taskDispatchRevisionNumber int64
 	}
 
 	// taskResponse is used to report the result of either a match with a local poller,
@@ -104,6 +106,7 @@ func (res taskResponse) err() error {
 func newInternalTaskForSyncMatch(
 	info *persistencespb.TaskInfo,
 	forwardInfo *taskqueuespb.TaskForwardInfo,
+	taskDispatchRevisionNumber int64,
 ) *internalTask {
 	var redirectInfo *taskqueuespb.BuildIdRedirectInfo
 	// if this task is not forwarded, source can only be history
@@ -114,6 +117,7 @@ func newInternalTaskForSyncMatch(
 		redirectInfo = forwardInfo.GetRedirectInfo()
 	}
 	return &internalTask{
+		taskDispatchRevisionNumber: taskDispatchRevisionNumber,
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
 				Data:   info,

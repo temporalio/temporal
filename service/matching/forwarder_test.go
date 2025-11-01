@@ -123,7 +123,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskForSyncMatch(taskInfo.Data, nil)
+	task := newInternalTaskForSyncMatch(taskInfo.Data, nil, 0)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
