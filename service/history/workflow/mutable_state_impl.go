@@ -2240,7 +2240,7 @@ func (ms *MutableStateImpl) IsWorkflowExecutionRunning() bool {
 	}
 }
 
-func (ms *MutableStateImpl) IsWorkflowExecutionPaused() bool {
+func (ms *MutableStateImpl) IsWorkflowExecutionStatusPaused() bool {
 	return ms.executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
 }
 
