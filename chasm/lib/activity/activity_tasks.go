@@ -2,16 +2,13 @@ package activity
 
 import (
 	"context"
-	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type activityDispatchTaskExecutorOptions struct {
@@ -87,11 +84,8 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 		return false, err
 	}
 
-	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED || task.Attempt != attempt.Count {
-		return false, nil
-	}
-
-	return true, nil
+	valid := activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && task.Attempt == attempt.Count
+	return valid, nil
 }
 
 func (e *scheduleToStartTimeoutTaskExecutor) Execute(
@@ -100,7 +94,7 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToStartTimeoutTask,
 ) error {
-	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START})
+	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
 }
 
 type scheduleToCloseTimeoutTaskExecutor struct{}
@@ -120,11 +114,8 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
 		return false, err
 	}
 
-	if !TransitionTimedOut.Possible(activity) || task.Attempt != attempt.Count {
-		return false, nil
-	}
-
-	return true, nil
+	valid := TransitionTimedOut.Possible(activity) && task.Attempt == attempt.Count
+	return valid, nil
 }
 
 func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
@@ -133,7 +124,7 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) error {
-	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE})
+	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
 }
 
 type startToCloseTimeoutTaskExecutor struct{}
@@ -153,11 +144,8 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 		return false, err
 	}
 
-	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED || task.Attempt != attempt.Count {
-		return false, nil
-	}
-
-	return true, nil
+	valid := activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED && task.Attempt == attempt.Count
+	return valid, nil
 }
 
 func (e *startToCloseTimeoutTaskExecutor) Execute(
@@ -167,36 +155,31 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 	task *activitypb.StartToCloseTimeoutTask,
 ) error {
 	retryPolicy := activity.RetryPolicy
-	attempt, err := activity.Attempt.Get(ctx)
+
+	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || task.GetAttempt() < retryPolicy.GetMaximumAttempts()
+	enoughTime, err := hasEnoughTimeForRetry(ctx, activity)
 	if err != nil {
 		return err
 	}
 
-	interval := calculateRetryInterval(retryPolicy, attempt.Count)
-	isNegativeInterval := retryPolicy.GetMaximumInterval().AsDuration() == 0 && interval <= 0 // From existing workflow activity retry behavior
-
-	// Retry task if we have remaining attempts. A retry involves transitioning the activity back to scheduled state.
-	if (retryPolicy.GetMaximumAttempts() == 0 || task.GetAttempt() < retryPolicy.GetMaximumAttempts()) && (!isNegativeInterval) {
-		attempt.LastAttemptCompleteTime = timestamppb.New(ctx.Now(activity))
-		attempt.Count += 1
-
-		return TransitionScheduled.Apply(activity, ctx, scheduledEvent{TaskStartDelay: interval})
+	// Retry task if we have remaining attempts and time. A retry involves transitioning the activity back to scheduled state.
+	if enoughAttempts && enoughTime {
+		return TransitionScheduled.Apply(activity, ctx, nil)
 	}
 
 	// Reached maximum attempts, timeout the activity
-	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE})
+	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 }
 
-func calculateRetryInterval(retryPolicy *commonpb.RetryPolicy, attempt int32) time.Duration {
-	intervalCalculator := backoff.MakeBackoffAlgorithm(nil)
-	interval := intervalCalculator(retryPolicy.GetInitialInterval(), retryPolicy.GetBackoffCoefficient(), attempt)
-
-	maxInterval := retryPolicy.GetMaximumInterval()
-
-	// Cap interval to maximum if it's set
-	if maxInterval.AsDuration() != 0 && (interval <= 0 || interval > maxInterval.AsDuration()) {
-		interval = maxInterval.AsDuration()
+func hasEnoughTimeForRetry(ctx chasm.Context, activity *Activity) (bool, error) {
+	attempt, err := activity.Attempt.Get(ctx)
+	if err != nil {
+		return false, err
 	}
 
-	return interval
+	retryInterval := backoff.CalculateExponentialRetryInterval(activity.RetryPolicy, attempt.Count)
+
+	deadline := activity.ScheduledTime.AsTime().Add(activity.GetScheduleToCloseTimeout().AsDuration())
+
+	return ctx.Now(activity).Add(retryInterval).Before(deadline), nil
 }

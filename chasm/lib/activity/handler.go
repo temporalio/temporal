@@ -29,7 +29,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, nil, err
 			}
 
-			err = TransitionScheduled.Apply(newActivity, mutableContext, scheduledEvent{TaskStartDelay: 0})
+			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 			if err != nil {
 				return nil, nil, err
 			}
