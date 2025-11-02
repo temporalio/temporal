@@ -2,7 +2,6 @@
 package worker
 
 import (
-	"fmt"
 	"time"
 
 	"go.temporal.io/server/chasm"
@@ -14,26 +13,6 @@ import (
 func updateWorkerLease(ctx chasm.MutableContext, w *Worker, leaseDeadline time.Time) {
 	w.LeaseExpirationTime = timestamppb.New(leaseDeadline)
 	scheduleLeaseExpiry(ctx, w, leaseDeadline)
-}
-
-// RecordHeartbeat processes a heartbeat by applying the appropriate transition based on worker state.
-func RecordHeartbeat(ctx chasm.MutableContext, w *Worker, leaseDeadline time.Time) error {
-	switch w.Status {
-	case workerstatepb.WORKER_STATUS_ACTIVE:
-		return TransitionActiveHeartbeat.Apply(ctx, w, EventHeartbeatReceived{
-			Time:          time.Now(),
-			LeaseDeadline: leaseDeadline,
-		})
-	case workerstatepb.WORKER_STATUS_INACTIVE:
-		// Handle worker resurrection after network partition
-		return TransitionWorkerResurrection.Apply(ctx, w, EventHeartbeatReceived{
-			Time:          time.Now(),
-			LeaseDeadline: leaseDeadline,
-		})
-	default:
-		// CLEANED_UP or other states - not allowed
-		return fmt.Errorf("cannot record heartbeat for worker in state %v", w.Status)
-	}
 }
 
 // scheduleLeaseExpiry schedules a timer task that will fire when the lease expires.
