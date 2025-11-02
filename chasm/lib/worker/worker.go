@@ -29,6 +29,9 @@
 package worker
 
 import (
+	"fmt"
+	"time"
+
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
@@ -45,12 +48,11 @@ type Worker struct {
 	*workerstatepb.WorkerState
 }
 
-// NewWorker creates a new Worker component with the given heartbeat information.
-func NewWorker(heartbeat *workerpb.WorkerHeartbeat) *Worker {
+// NewWorker creates a new Worker component with ACTIVE status.
+func NewWorker() *Worker {
 	return &Worker{
 		WorkerState: &workerstatepb.WorkerState{
-			Status:          workerstatepb.WORKER_STATUS_ACTIVE,
-			WorkerHeartbeat: heartbeat,
+			Status: workerstatepb.WORKER_STATUS_ACTIVE,
 		},
 	}
 }
@@ -82,4 +84,30 @@ func (w *Worker) WorkerID() string {
 		return ""
 	}
 	return w.WorkerHeartbeat.WorkerInstanceKey
+}
+
+// RecordHeartbeat processes a heartbeat, updating worker state and extending the lease.
+func (w *Worker) RecordHeartbeat(ctx chasm.MutableContext, heartbeat *workerpb.WorkerHeartbeat, leaseDuration time.Duration) error {
+	w.WorkerHeartbeat = heartbeat
+
+	// Calculate lease deadline
+	leaseDeadline := time.Now().Add(leaseDuration)
+
+	// Apply appropriate state transition based on current status
+	switch w.Status {
+	case workerstatepb.WORKER_STATUS_ACTIVE:
+		return TransitionActiveHeartbeat.Apply(ctx, w, EventHeartbeatReceived{
+			Time:          time.Now(),
+			LeaseDeadline: leaseDeadline,
+		})
+	case workerstatepb.WORKER_STATUS_INACTIVE:
+		// Handle worker resurrection after network partition
+		return TransitionWorkerResurrection.Apply(ctx, w, EventHeartbeatReceived{
+			Time:          time.Now(),
+			LeaseDeadline: leaseDeadline,
+		})
+	default:
+		// CLEANED_UP or other states - not allowed
+		return fmt.Errorf("cannot record heartbeat for worker in state %v", w.Status)
+	}
 }
