@@ -60,9 +60,10 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 		return chasm.LifecycleStateCompleted
 	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
 		return chasm.LifecycleStateFailed
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return chasm.LifecycleStateTimedout
 	default:
 		return chasm.LifecycleStateRunning
 	}
@@ -123,11 +124,10 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
 	return &matchingservice.AddActivityTaskRequest{
-		NamespaceId:            namespaceID,
-		TaskQueue:              a.GetTaskQueue(),
-		ScheduleToStartTimeout: a.GetScheduleToStartTimeout(),
-		Priority:               a.GetPriority(),
-		ComponentRef:           componentRef,
+		NamespaceId:  namespaceID,
+		TaskQueue:    a.GetTaskQueue(),
+		Priority:     a.GetPriority(),
+		ComponentRef: componentRef,
 	}, nil
 }
 

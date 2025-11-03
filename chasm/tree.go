@@ -1428,6 +1428,9 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 	case LifecycleStateFailed:
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	case LifecycleStateTimedout:
+		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
 	default:
 		return false, softassert.UnexpectedInternalErr(
 			n.logger,

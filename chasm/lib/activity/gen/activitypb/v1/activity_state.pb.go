@@ -377,7 +377,6 @@ type ActivityAttemptState struct {
 	// Time the last attempt was started.
 	LastStartedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_started_time,json=lastStartedTime,proto3" json:"last_started_time,omitempty"`
 	// The time when the last activity attempt completed. If activity has not been completed yet, it will be null.
-	// TODO fill for success or fail
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
 	// Details about the last failure. This will only be updated when an activity attempt fails,
 	// including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
