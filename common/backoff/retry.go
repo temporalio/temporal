@@ -187,10 +187,10 @@ func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoeff
 
 // MakeBackoffAlgorithm creates a BackoffCalculatorAlgorithmFunc that returns a fixed delay if requestedDelay is non-nil,
 // otherwise falls back to exponential backoff algorithm.
-func MakeBackoffAlgorithm(requestedDelay time.Duration) BackoffCalculatorAlgorithmFunc {
+func MakeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgorithmFunc {
 	return func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration {
-		if requestedDelay != 0 {
-			return requestedDelay
+		if requestedDelay != nil {
+			return *requestedDelay
 		}
 		return ExponentialBackoffAlgorithm(duration, coefficient, currentAttempt)
 	}
