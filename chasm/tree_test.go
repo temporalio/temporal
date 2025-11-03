@@ -825,7 +825,7 @@ func (s *nodeSuite) TestApplyMutation() {
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
 
 	// Manually deserialize some tasks to populate the taskValueCache
@@ -898,10 +898,11 @@ func (s *nodeSuite) TestApplyMutation() {
 	// Validate root node got updated.
 	s.Equal(updatedRoot, root.serializedNode)
 	s.NotNil(root.value)
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
-	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+	s.Contains(root.currentSA, "TemporalDatetime01")
+	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+	s.True(root.currentMemo[TestComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
 
 	// Validate the "child" node got updated.
 	nodeSC1, ok := root.children["SubComponent1"]
@@ -1032,10 +1033,11 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Equal(expectedMutation, root.mutation)
 
 	// Validate visibility search attributes and memo are updated as well.
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
-	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.Contains(root.currentSA, "TemporalDatetime01")
+	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.True(root.currentMemo[TestComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 }
 
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
