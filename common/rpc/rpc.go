@@ -50,6 +50,10 @@ type RPCFactory struct {
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
 	interNodeGrpcConnections cache.Cache
+	// membershipListenerServices tracks which services have membership change listeners
+	// registered to prevent duplicate listener registration for the same service.
+	membershipListenerServicesLock sync.Mutex
+	membershipListenerServices     map[primitives.ServiceName]struct{}
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -88,7 +92,14 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
-	f.interNodeGrpcConnections = cache.NewSimple(nil)
+	f.interNodeGrpcConnections = cache.NewSimple(&cache.SimpleOptions{
+		RemovedFunc: func(val interface{}) {
+			if conn, ok := val.(*grpc.ClientConn); ok {
+				_ = conn.Close()
+			}
+		},
+	})
+	f.membershipListenerServices = make(map[primitives.ServiceName]struct{})
 	return f
 }
 
@@ -231,6 +242,8 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 
 // createInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName primitives.ServiceName) *grpc.ClientConn {
+	d.ensureMembershipListener(serviceName)
+
 	if c, ok := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn); ok {
 		return c
 	}
@@ -280,6 +293,88 @@ func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName
 		params = serviceConfig.RPC.ClientConnectionConfig.GetKeepAliveClientParameters()
 	}
 	return grpc.WithKeepaliveParams(params)
+}
+
+// ensureMembershipListener ensures that a membership listener is registered for the given service name.
+func (d *RPCFactory) ensureMembershipListener(serviceName primitives.ServiceName) {
+	if d.monitor == nil {
+		return
+	}
+
+	// Check if we already have a membership listener
+
+	d.membershipListenerServicesLock.Lock()
+	defer d.membershipListenerServicesLock.Unlock()
+
+	if _, ok := d.membershipListenerServices[serviceName]; ok {
+		return
+	}
+
+	// No listener yet for this service name; create one
+
+	resolver, err := d.monitor.GetResolver(serviceName)
+	if err != nil {
+		d.logger.Error("Failed to get membership resolver", tag.Error(err), tag.Service(serviceName))
+		d.clearMembershipListener(serviceName)
+		return
+	}
+
+	notifyCh := make(chan *membership.ChangedEvent, 1)
+	listenerName := fmt.Sprintf("rpc-factory-%p-%s", d, serviceName)
+	if err := resolver.AddListener(listenerName, notifyCh); err != nil {
+		d.logger.Error("Failed to add membership listener", tag.Error(err), tag.Service(serviceName))
+		d.clearMembershipListener(serviceName)
+		return
+	}
+
+	go d.consumeMembershipEvents(serviceName, listenerName, resolver, notifyCh)
+
+	d.membershipListenerServices[serviceName] = struct{}{}
+}
+
+// consumeMembershipEvents consumes membership events and removes internode connections for removed or changed hosts.
+func (d *RPCFactory) consumeMembershipEvents(
+	serviceName primitives.ServiceName,
+	listenerName string,
+	resolver membership.ServiceResolver,
+	ch <-chan *membership.ChangedEvent,
+) {
+	for event := range ch {
+		if event == nil {
+			continue
+		}
+
+		for _, host := range event.HostsRemoved {
+			d.removeInternodeConnection(serviceName, host.GetAddress(), "removed")
+		}
+		for _, host := range event.HostsChanged {
+			d.removeInternodeConnection(serviceName, host.GetAddress(), "changed")
+		}
+	}
+
+	_ = resolver.RemoveListener(listenerName)
+	d.clearMembershipListener(serviceName)
+}
+
+// removeInternodeConnection removes the internode connection for the given address.
+func (d *RPCFactory) removeInternodeConnection(serviceName primitives.ServiceName, address string, reason string) {
+	if d.interNodeGrpcConnections.Get(address) == nil {
+		return
+	}
+
+	d.logger.Info("Closing internode gRPC connection due to membership update",
+		tag.Service(serviceName),
+		tag.Address(address),
+		tag.NewStringTag("reason", reason))
+
+	d.interNodeGrpcConnections.Delete(address)
+}
+
+// clearMembershipListener removes the membership listener for the given service name.
+func (d *RPCFactory) clearMembershipListener(serviceName primitives.ServiceName) {
+	d.membershipListenerServicesLock.Lock()
+	delete(d.membershipListenerServices, serviceName)
+	d.membershipListenerServicesLock.Unlock()
 }
 
 func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {
