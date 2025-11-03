@@ -1,7 +1,10 @@
 package chasm
 
 import (
+	"fmt"
 	"reflect"
+
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type (
@@ -13,6 +16,8 @@ type (
 		ephemeral     bool
 		singleCluster bool
 		shardingFn    func(EntityKey) string
+
+		searchAttributesMapper *VisibilitySearchAttributesMapper
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -52,6 +57,40 @@ func WithShardingFn(
 	return func(rc *RegistrableComponent) {
 		if shardingFn != nil {
 			rc.shardingFn = shardingFn
+		}
+	}
+}
+
+func WithSearchAttributes(
+	searchAttributes ...SearchAttribute,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if len(searchAttributes) == 0 {
+			return
+		}
+		rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
+			aliasToField: make(map[string]string, len(searchAttributes)),
+			fieldToAlias: make(map[string]string, len(searchAttributes)),
+			saTypeMap:    make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
+		}
+
+		for _, sa := range searchAttributes {
+			alias := sa.definition().alias
+			field := sa.definition().field
+			valueType := sa.definition().valueType
+
+			if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: search attribute alias %q is already defined", alias))
+			}
+			if _, ok := rc.searchAttributesMapper.fieldToAlias[field]; ok {
+				//nolint:forbidigo
+				panic(fmt.Sprintf("registrable component validation error: search attribute field %q is already defined", field))
+			}
+
+			rc.searchAttributesMapper.aliasToField[alias] = field
+			rc.searchAttributesMapper.fieldToAlias[field] = alias
+			rc.searchAttributesMapper.saTypeMap[field] = valueType
 		}
 	}
 }

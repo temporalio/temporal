@@ -119,9 +119,15 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.True(ok)
 	s.NoError(payload.Decode(p, &intVal))
 	s.Equal(0, intVal)
-	var strVal string
-	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields[tests.TestKeywordSAFieldName], &strVal))
-	s.Equal(tests.TestKeywordSAFieldValue, strVal)
+	var totalCount int
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalInt01"], &totalCount))
+	s.Equal(0, totalCount)
+	var totalSize int
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalInt02"], &totalSize))
+	var scheduledByID string
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalScheduledById"], &scheduledByID))
+	s.Equal(tests.TestScheduleID, scheduledByID)
+	s.Equal(0, totalSize)
 
 	addPayloadResp, err := tests.AddPayloadHandler(
 		engineContext,
