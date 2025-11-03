@@ -225,7 +225,7 @@ func (a *Activity) recordActivityTimedOut(ctx chasm.MutableContext, timeoutType 
 	}
 
 	failure := &failurepb.Failure{
-		Message: fmt.Sprintf("activity %v timed out", timeoutType.String()),
+		Message: fmt.Sprintf("activity %s timed out", timeoutType.String()),
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 				TimeoutType: timeoutType,

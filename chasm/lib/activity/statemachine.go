@@ -167,7 +167,7 @@ var TransitionTimedOut = chasm.NewTransition(
 
 		return store.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
 			// Implement workflow timeout handling here, including logic to rebuild the workflow state from history if needed.
-			return status.Errorf(codes.Unimplemented, "method StartActivityExecution not implemented")
+			return status.Errorf(codes.Unimplemented, "workflow timeout handling is not implemented")
 		})
 	},
 )

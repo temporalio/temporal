@@ -182,7 +182,7 @@ type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coeffici
 // If the calculation overflows int64, it returns the maximum possible duration. A negative result will also never be returned.
 func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
 	result := float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))
-	return time.Duration(min(int64(result), math.MaxInt64))
+	return time.Duration(max(0, min(int64(result), math.MaxInt64)))
 }
 
 // MakeBackoffAlgorithm creates a BackoffCalculatorAlgorithmFunc that returns a fixed delay if requestedDelay is non-nil,
