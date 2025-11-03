@@ -57,13 +57,8 @@ func isActivityTaskValid(
 	}
 
 	ai, ok := mutableState.GetActivityInfo(scheduledEventID)
-	if !ok || ai.StartedEventId != common.EmptyEventID {
-		return false, nil
+	if ok && ai.StartedEventId == common.EmptyEventID {
+		return true, nil
 	}
-
-	if ai.GetStamp() > 0 && stamp > 0 && ai.GetStamp() != stamp {
-		return false, nil
-	}
-
-	return true, nil
+	return false, nil
 }
