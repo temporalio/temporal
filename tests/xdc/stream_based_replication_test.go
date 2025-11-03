@@ -18,6 +18,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -84,6 +88,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
+
 	s.setupSuite(
 		testcore.WithFxOptionsForService(primitives.AllServices,
 			fx.Decorate(
@@ -129,6 +134,15 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 		s.namespaceID = nsRes.NamespaceInfo.GetId()
 		s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 	})
+}
+
+// getRecorder returns the TaskQueueRecorder for the specified cluster index.
+// Returns nil if the cluster doesn't have a recorder.
+func (s *streamBasedReplicationTestSuite) getRecorder(clusterIdx int) *testcore.TaskQueueRecorder {
+	if clusterIdx < len(s.clusters) {
+		return s.clusters[clusterIdx].GetTaskQueueRecorder()
+	}
+	return nil
 }
 
 func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplicationScenario() {
@@ -999,4 +1013,206 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			s.T().Logf("Failed to write replication stream log for cluster %s: %v", cluster.ClusterName(), err)
 		}
 	}
+}
+
+// TestTaskQueueRecorder_CaptureAndDumpTasks demonstrates using the transfer queue recorder
+// to capture all tasks written to the transfer, timer, and replication queues during workflow execution,
+// and then dump them to a log file for inspection.
+func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTasks() {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+
+	// Get recorders for both clusters
+	recorder0 := s.getRecorder(0) // active cluster
+	recorder1 := s.getRecorder(1) // standby cluster
+
+	s.Require().NotNil(recorder0, "Recorder for cluster 0 (active) should be available")
+	s.Require().NotNil(recorder1, "Recorder for cluster 1 (standby) should be available")
+
+	// Clear any existing captured tasks from previous tests
+	recorder0.Clear()
+	recorder1.Clear()
+
+	s.T().Log("Starting workflow execution to capture transfer queue tasks...")
+
+	// Start a real workflow with a worker to ensure tasks are created
+	workflowID := "transfer-queue-recorder-test-" + uuid.New()
+	workflowType := "transfer-queue-test-workflow"
+	taskQueue := "transfer-queue-test-tq"
+
+	// Create an SDK client
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: s.namespaceName,
+	})
+	s.NoError(err)
+	defer sdkClient.Close()
+
+	// Define a simple workflow
+	simpleWorkflow := func(ctx workflow.Context) (string, error) {
+		// Do some activity to generate more tasks
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 10 * time.Second,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+
+		var result string
+		err := workflow.ExecuteActivity(ctx, "simple-activity").Get(ctx, &result)
+		if err != nil {
+			return "", err
+		}
+
+		return "workflow completed: " + result, nil
+	}
+
+	// Define a simple activity
+	simpleActivity := func(ctx context.Context) (string, error) {
+		return "activity result", nil
+	}
+
+	// Create and start a worker
+	sdkWorker := worker.New(sdkClient, taskQueue, worker.Options{})
+	sdkWorker.RegisterWorkflowWithOptions(simpleWorkflow, workflow.RegisterOptions{Name: workflowType})
+	sdkWorker.RegisterActivityWithOptions(simpleActivity, activity.RegisterOptions{Name: "simple-activity"})
+
+	s.T().Log("Starting worker...")
+	err = sdkWorker.Start()
+	s.NoError(err)
+	defer sdkWorker.Stop()
+
+	// Start the workflow
+	s.T().Logf("Starting workflow: workflowID=%s", workflowID)
+	workflowRun, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskQueue,
+		WorkflowRunTimeout: 30 * time.Second,
+	}, workflowType)
+	s.NoError(err)
+	runID := workflowRun.GetRunID()
+
+	s.T().Logf("Started workflow: workflowID=%s, runID=%s", workflowID, runID)
+
+	// Wait for workflow to complete
+	var workflowResult string
+	err = workflowRun.Get(ctx, &workflowResult)
+	s.NoError(err)
+	s.T().Logf("Workflow completed with result: %s", workflowResult)
+
+	// Wait a bit for async task generation and replication
+	time.Sleep(2 * time.Second)
+
+	// ========================================================================
+	// ANALYZE CLUSTER 0 (ACTIVE) TASK WRITES
+	// ========================================================================
+
+	s.T().Log("=== Analyzing Cluster 0 (Active) ===")
+
+	writes0 := recorder0.GetCapturedWrites()
+	s.T().Logf("Cluster 0 had %d total writes to the task queues", len(writes0))
+
+	// Get tasks by category
+	transferTasks0 := recorder0.GetTransferTasks()
+	timerTasks0 := recorder0.GetTimerTasks()
+	replicationTasks0 := recorder0.GetReplicationTasks()
+	visibilityTasks0 := recorder0.GetVisibilityTasks()
+
+	s.T().Logf("Cluster 0 task breakdown:")
+	s.T().Logf("  - Transfer tasks: %d", len(transferTasks0))
+	s.T().Logf("  - Timer tasks: %d", len(timerTasks0))
+	s.T().Logf("  - Replication tasks: %d", len(replicationTasks0))
+	s.T().Logf("  - Visibility tasks: %d", len(visibilityTasks0))
+
+	// Detailed breakdown of transfer tasks by type
+	if len(transferTasks0) > 0 {
+		s.T().Log("Transfer task types:")
+		taskTypeCounts := make(map[string]int)
+		for _, task := range transferTasks0 {
+			taskType := task.GetType().String()
+			taskTypeCounts[taskType]++
+		}
+		for taskType, count := range taskTypeCounts {
+			s.T().Logf("  - %s: %d", taskType, count)
+		}
+	}
+
+	// Detailed breakdown of replication tasks
+	if len(replicationTasks0) > 0 {
+		s.T().Log("Replication task details:")
+		for i, task := range replicationTasks0 {
+			version := int64(0)
+			if versionedTask, ok := task.(interface{ GetVersion() int64 }); ok {
+				version = versionedTask.GetVersion()
+			}
+			s.T().Logf("  [%d] Type=%s, TaskID=%d, Version=%d",
+				i, task.GetType().String(), task.GetTaskID(), version)
+		}
+	}
+
+	// Verify replication tasks were generated (since this is XDC)
+	s.NotEmpty(replicationTasks0, "Active cluster should generate replication tasks for cross-cluster replication")
+
+	// Verify task properties
+	for _, task := range replicationTasks0 {
+		s.NotEmpty(task.GetNamespaceID(), "Replication task should have namespace ID")
+		s.NotEmpty(task.GetWorkflowID(), "Replication task should have workflow ID")
+		s.NotEqual(int64(0), task.GetTaskID(), "Replication task should have non-zero task ID")
+	}
+
+	// ========================================================================
+	// ANALYZE CLUSTER 1 (STANDBY) TASK WRITES
+	// ========================================================================
+
+	s.T().Log("=== Analyzing Cluster 1 (Standby) ===")
+
+	writes1 := recorder1.GetCapturedWrites()
+	s.T().Logf("Cluster 1 had %d total writes to the task queues", len(writes1))
+
+	transferTasks1 := recorder1.GetTransferTasks()
+	timerTasks1 := recorder1.GetTimerTasks()
+	replicationTasks1 := recorder1.GetReplicationTasks()
+	visibilityTasks1 := recorder1.GetVisibilityTasks()
+
+	s.T().Logf("Cluster 1 task breakdown:")
+	s.T().Logf("  - Transfer tasks: %d", len(transferTasks1))
+	s.T().Logf("  - Timer tasks: %d", len(timerTasks1))
+	s.T().Logf("  - Replication tasks: %d", len(replicationTasks1))
+	s.T().Logf("  - Visibility tasks: %d", len(visibilityTasks1))
+
+	// ========================================================================
+	// EXPORT TO LOG FILES
+	// ========================================================================
+
+	s.T().Log("=== Exporting captured tasks to log files ===")
+
+	clusterName0 := s.clusters[0].ClusterName()
+	clusterName1 := s.clusters[1].ClusterName()
+
+	logFile0 := fmt.Sprintf("/tmp/task_queue_writes_%s.json", clusterName0)
+	logFile1 := fmt.Sprintf("/tmp/task_queue_writes_%s.json", clusterName1)
+
+	err = recorder0.WriteToLog(logFile0)
+	s.NoError(err, "Should be able to export cluster 0 tasks")
+	s.T().Logf("✓ Exported cluster 0 tasks to: %s", logFile0)
+
+	err = recorder1.WriteToLog(logFile1)
+	s.NoError(err, "Should be able to export cluster 1 tasks")
+	s.T().Logf("✓ Exported cluster 1 tasks to: %s", logFile1)
+
+	// ========================================================================
+	// ASSERTIONS
+	// ========================================================================
+
+	// Basic sanity checks
+	s.Greater(recorder0.GetWriteCount(), 0, "Cluster 0 should have written some tasks")
+
+	// Active cluster should have more activity than standby
+	if len(writes1) > 0 {
+		s.T().Logf("Active cluster writes (%d) vs Standby cluster writes (%d)", len(writes0), len(writes1))
+	}
+
+	s.T().Log("=== Test completed successfully ===")
+	s.T().Logf("View captured tasks at:")
+	s.T().Logf("  - %s", logFile0)
+	s.T().Logf("  - %s", logFile1)
 }

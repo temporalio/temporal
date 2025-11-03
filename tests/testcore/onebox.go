@@ -116,6 +116,7 @@ type (
 		chasmRegistry             *chasm.Registry
 		grpcClientInterceptor     *grpcinject.Interceptor
 		replicationStreamRecorder *ReplicationStreamRecorder
+		taskQueueRecorder     *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
@@ -224,6 +225,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	clusterName := params.ClusterMetadataConfig.CurrentClusterName
 	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
 	impl.replicationStreamRecorder.SetOutputFile(outputFile)
+
+	// TaskQueueRecorder will be created in fx.Decorate during history service startup
+	// Do NOT create it here - we need to wrap the FINAL ExecutionManager after all FX wrapping
 
 	for k, v := range dynamicConfigOverrides {
 		impl.overrideDynamicConfig(t, k, v)
@@ -454,6 +458,12 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			fx.Provide(c.GetGrpcClientInterceptor),
+			fx.Decorate(func(base persistence.ExecutionManager) persistence.ExecutionManager {
+				// Wrap ExecutionManager with recorder to capture task writes
+				// This wraps the FINAL ExecutionManager after all FX processing (metrics, retries, etc.)
+				c.taskQueueRecorder = NewTaskQueueRecorder(base)
+				return c.taskQueueRecorder
+			}),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
 				if c.replicationStreamRecorder != nil {
 					return append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
@@ -649,7 +659,19 @@ func (c *TemporalImpl) createSystemNamespace() error {
 }
 
 func (c *TemporalImpl) GetExecutionManager() persistence.ExecutionManager {
+	// If we have a recorder, wrap the execution manager
+	if c.taskQueueRecorder != nil {
+		return c.taskQueueRecorder
+	}
 	return c.executionManager
+}
+
+func (c *TemporalImpl) GetTaskQueueRecorder() *TaskQueueRecorder {
+	return c.taskQueueRecorder
+}
+
+func (c *TemporalImpl) SetTaskQueueRecorder(recorder *TaskQueueRecorder) {
+	c.taskQueueRecorder = recorder
 }
 
 func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
