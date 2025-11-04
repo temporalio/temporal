@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,8 +19,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -92,7 +94,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.setupSuite(
 		testcore.WithFxOptionsForService(primitives.AllServices,
 			fx.Decorate(
-				func() config.DCRedirectionPolicy {
+				func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
 					return config.DCRedirectionPolicy{Policy: "noop"}
 				},
 			),
@@ -1030,10 +1032,6 @@ func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTa
 	s.Require().NotNil(recorder0, "Recorder for cluster 0 (active) should be available")
 	s.Require().NotNil(recorder1, "Recorder for cluster 1 (standby) should be available")
 
-	// Clear any existing captured tasks from previous tests
-	recorder0.Clear()
-	recorder1.Clear()
-
 	s.T().Log("Starting workflow execution to capture transfer queue tasks...")
 
 	// Start a real workflow with a worker to ensure tasks are created
@@ -1049,11 +1047,17 @@ func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTa
 	s.NoError(err)
 	defer sdkClient.Close()
 
+	// Track activity attempts across retries using a local variable
+	var activityAttempts int32 = 0
+
 	// Define a simple workflow
 	simpleWorkflow := func(ctx workflow.Context) (string, error) {
-		// Do some activity to generate more tasks
+		// Do some activity to generate more tasks with retry policy
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: 10 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 4, // Allow up to 4 attempts
+			},
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
 
@@ -1066,8 +1070,13 @@ func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTa
 		return "workflow completed: " + result, nil
 	}
 
-	// Define a simple activity
+	// Define a simple activity that fails 3 times then succeeds on the 4th attempt
 	simpleActivity := func(ctx context.Context) (string, error) {
+		attempt := atomic.AddInt32(&activityAttempts, 1)
+		s.T().Logf("Activity attempt %d", attempt)
+		if attempt < 4 {
+			return "", fmt.Errorf("activity failed on attempt %d", attempt)
+		}
 		return "activity result", nil
 	}
 
@@ -1108,8 +1117,8 @@ func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTa
 
 	s.T().Log("=== Analyzing Cluster 0 (Active) ===")
 
-	writes0 := recorder0.GetCapturedWrites()
-	s.T().Logf("Cluster 0 had %d total writes to the task queues", len(writes0))
+	taskCount0 := recorder0.GetTaskCount()
+	s.T().Logf("Cluster 0 had %d total tasks written to the task queues", taskCount0)
 
 	// Get tasks by category
 	transferTasks0 := recorder0.GetTransferTasks()
@@ -1165,8 +1174,8 @@ func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTa
 
 	s.T().Log("=== Analyzing Cluster 1 (Standby) ===")
 
-	writes1 := recorder1.GetCapturedWrites()
-	s.T().Logf("Cluster 1 had %d total writes to the task queues", len(writes1))
+	taskCount1 := recorder1.GetTaskCount()
+	s.T().Logf("Cluster 1 had %d total tasks written to the task queues", taskCount1)
 
 	transferTasks1 := recorder1.GetTransferTasks()
 	timerTasks1 := recorder1.GetTimerTasks()
@@ -1204,11 +1213,11 @@ func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTa
 	// ========================================================================
 
 	// Basic sanity checks
-	s.Greater(recorder0.GetWriteCount(), 0, "Cluster 0 should have written some tasks")
+	s.Greater(recorder0.GetTaskCount(), 0, "Cluster 0 should have written some tasks")
 
 	// Active cluster should have more activity than standby
-	if len(writes1) > 0 {
-		s.T().Logf("Active cluster writes (%d) vs Standby cluster writes (%d)", len(writes0), len(writes1))
+	if taskCount1 > 0 {
+		s.T().Logf("Active cluster tasks (%d) vs Standby cluster tasks (%d)", taskCount0, taskCount1)
 	}
 
 	s.T().Log("=== Test completed successfully ===")

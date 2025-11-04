@@ -16,28 +16,31 @@ import (
 // to the history task queues (transfer, timer, replication, visibility, archival, etc.).
 // This is useful for integration tests where you want to assert on what tasks
 // were generated and in what order.
+// Tasks are stored flattened by category - all tasks of the same type are in a single list,
+// with each task wrapped with metadata about when/where it was written.
 type TaskQueueRecorder struct {
-	mu             sync.RWMutex
-	capturedWrites []CapturedTaskWrite
-	delegate       persistence.ExecutionManager
+	mu       sync.RWMutex
+	tasks    map[tasks.Category][]RecordedTask // All tasks by category, in order
+	delegate persistence.ExecutionManager
 }
 
-// CapturedTaskWrite represents a single task write operation with all its metadata
-type CapturedTaskWrite struct {
-	Timestamp   time.Time                       `json:"timestamp"`
-	ShardID     int32                           `json:"shardId"`
-	RangeID     int64                           `json:"rangeId"`
-	NamespaceID string                          `json:"namespaceId"`
-	WorkflowID  string                          `json:"workflowId"`
-	Tasks       map[tasks.Category][]tasks.Task `json:"tasks"` // Full task objects - they serialize to JSON fine
-	Error       error                           `json:"-"`
+// RecordedTask wraps a task with metadata about when and where it was written
+type RecordedTask struct {
+	Timestamp   time.Time  `json:"timestamp"`
+	TaskType    string     `json:"taskType"` // The specific task type (e.g., "TASK_TYPE_ACTIVITY_RETRY_TIMER")
+	ShardID     int32      `json:"shardId"`
+	RangeID     int64      `json:"rangeId,omitempty"`
+	NamespaceID string     `json:"namespaceId"`
+	WorkflowID  string     `json:"workflowId"`
+	RunID       string     `json:"runId"`
+	Task        tasks.Task `json:"task"` // The actual task object
 }
 
 // NewTaskQueueRecorder creates a recorder that wraps the given ExecutionManager
 func NewTaskQueueRecorder(delegate persistence.ExecutionManager) *TaskQueueRecorder {
 	return &TaskQueueRecorder{
-		capturedWrites: make([]CapturedTaskWrite, 0),
-		delegate:       delegate,
+		tasks:    make(map[tasks.Category][]RecordedTask),
+		delegate: delegate,
 	}
 }
 
@@ -46,11 +49,14 @@ func (r *TaskQueueRecorder) AddHistoryTasks(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
-	// Record the tasks before calling delegate
-	r.recordTasks(request.ShardID, 0, request.NamespaceID, request.WorkflowID, request.Tasks)
-
-	// Call the delegate
+	// Call the delegate first
 	err := r.delegate.AddHistoryTasks(ctx, request)
+
+	// Only record if successful
+	if err == nil {
+		r.recordTasks(request.ShardID, 0, request.NamespaceID, request.WorkflowID, request.Tasks)
+	}
+
 	return err
 }
 
@@ -58,17 +64,44 @@ func (r *TaskQueueRecorder) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
-	// Record tasks from the mutation
-	r.recordTasks(
-		request.ShardID,
-		request.RangeID,
-		request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
-		request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId,
-		request.UpdateWorkflowMutation.Tasks,
-	)
+	// Call the delegate first
+	resp, err := r.delegate.UpdateWorkflowExecution(ctx, request)
 
-	// Record tasks from new workflow snapshot if present
-	if request.NewWorkflowSnapshot != nil {
+	// Only record if successful
+	if err == nil {
+		// Record tasks from the mutation
+		r.recordTasks(
+			request.ShardID,
+			request.RangeID,
+			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
+			request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId,
+			request.UpdateWorkflowMutation.Tasks,
+		)
+
+		// Record tasks from new workflow snapshot if present
+		if request.NewWorkflowSnapshot != nil {
+			r.recordTasks(
+				request.ShardID,
+				request.RangeID,
+				request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+				request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+				request.NewWorkflowSnapshot.Tasks,
+			)
+		}
+	}
+
+	return resp, err
+}
+
+func (r *TaskQueueRecorder) CreateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.CreateWorkflowExecutionRequest,
+) (*persistence.CreateWorkflowExecutionResponse, error) {
+	// Call the delegate first
+	resp, err := r.delegate.CreateWorkflowExecution(ctx, request)
+
+	// Only record if successful
+	if err == nil {
 		r.recordTasks(
 			request.ShardID,
 			request.RangeID,
@@ -78,28 +111,10 @@ func (r *TaskQueueRecorder) UpdateWorkflowExecution(
 		)
 	}
 
-	// Call the delegate
-	return r.delegate.UpdateWorkflowExecution(ctx, request)
+	return resp, err
 }
 
-func (r *TaskQueueRecorder) CreateWorkflowExecution(
-	ctx context.Context,
-	request *persistence.CreateWorkflowExecutionRequest,
-) (*persistence.CreateWorkflowExecutionResponse, error) {
-	// Record tasks from the new workflow snapshot
-	r.recordTasks(
-		request.ShardID,
-		request.RangeID,
-		request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
-		request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
-		request.NewWorkflowSnapshot.Tasks,
-	)
-
-	// Call the delegate
-	return r.delegate.CreateWorkflowExecution(ctx, request)
-}
-
-// recordTasks is a helper to capture tasks from any source
+// recordTasks appends tasks to the flattened list by category, wrapping each with metadata
 func (r *TaskQueueRecorder) recordTasks(
 	shardID int32,
 	rangeID int64,
@@ -114,112 +129,141 @@ func (r *TaskQueueRecorder) recordTasks(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Create a deep copy of tasks to preserve their state at the time of writing
-	tasksCopy := make(map[tasks.Category][]tasks.Task)
+	timestamp := time.Now()
 
+	// Append tasks to their respective category lists, wrapped with metadata
 	for category, taskList := range tasksMap {
-		copiedTasks := make([]tasks.Task, len(taskList))
-		for i, task := range taskList {
-			copiedTasks[i] = task
+		for _, task := range taskList {
+			recorded := RecordedTask{
+				Timestamp:   timestamp,
+				ShardID:     shardID,
+				RangeID:     rangeID,
+				NamespaceID: namespaceID,
+				WorkflowID:  workflowID,
+				RunID:       task.GetRunID(),
+				TaskType:    task.GetType().String(),
+				Task:        task,
+			}
+			r.tasks[category] = append(r.tasks[category], recorded)
 		}
-		tasksCopy[category] = copiedTasks
 	}
-
-	// Record the write
-	captured := CapturedTaskWrite{
-		Timestamp:   time.Now(),
-		ShardID:     shardID,
-		RangeID:     rangeID,
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-		Tasks:       tasksCopy,
-		Error:       nil,
-	}
-
-	r.capturedWrites = append(r.capturedWrites, captured)
 }
 
-// GetCapturedWrites returns all captured task writes
-func (r *TaskQueueRecorder) GetCapturedWrites() []CapturedTaskWrite {
+// GetAllTasks returns all tasks grouped by category (unwrapped, without metadata)
+func (r *TaskQueueRecorder) GetAllTasks() map[tasks.Category][]tasks.Task {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make([]CapturedTaskWrite, len(r.capturedWrites))
-	copy(result, r.capturedWrites)
+
+	result := make(map[tasks.Category][]tasks.Task)
+	for category, recordedList := range r.tasks {
+		taskList := make([]tasks.Task, len(recordedList))
+		for i, recorded := range recordedList {
+			taskList[i] = recorded.Task
+		}
+		result[category] = taskList
+	}
 	return result
 }
 
-// GetTransferTasks returns all transfer tasks across all writes
+// GetAllRecordedTasks returns all recorded tasks WITH metadata, grouped by category
+func (r *TaskQueueRecorder) GetAllRecordedTasks() map[tasks.Category][]RecordedTask {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Return a deep copy
+	result := make(map[tasks.Category][]RecordedTask)
+	for category, recordedList := range r.tasks {
+		copiedList := make([]RecordedTask, len(recordedList))
+		copy(copiedList, recordedList)
+		result[category] = copiedList
+	}
+	return result
+}
+
+// GetTransferTasks returns all transfer tasks (unwrapped)
 func (r *TaskQueueRecorder) GetTransferTasks() []tasks.Task {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getTasksByCategory(tasks.CategoryTransfer)
 }
 
-// GetTimerTasks returns all timer tasks across all writes
+// GetTimerTasks returns all timer tasks (unwrapped)
 func (r *TaskQueueRecorder) GetTimerTasks() []tasks.Task {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getTasksByCategory(tasks.CategoryTimer)
 }
 
-// GetReplicationTasks returns all replication tasks across all writes
+// GetReplicationTasks returns all replication tasks (unwrapped)
 func (r *TaskQueueRecorder) GetReplicationTasks() []tasks.Task {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getTasksByCategory(tasks.CategoryReplication)
 }
 
-// GetVisibilityTasks returns all visibility tasks across all writes
+// GetVisibilityTasks returns all visibility tasks (unwrapped)
 func (r *TaskQueueRecorder) GetVisibilityTasks() []tasks.Task {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getTasksByCategory(tasks.CategoryVisibility)
 }
 
-// GetTasksByCategory returns all tasks of a specific category
+// GetTasksByCategory returns all tasks of a specific category (unwrapped)
 func (r *TaskQueueRecorder) GetTasksByCategory(category tasks.Category) []tasks.Task {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getTasksByCategory(category)
 }
 
-// getTasksByCategory is the internal version without locking (caller must hold lock)
-func (r *TaskQueueRecorder) getTasksByCategory(category tasks.Category) []tasks.Task {
-	var result []tasks.Task
-	for _, write := range r.capturedWrites {
-		if taskList, ok := write.Tasks[category]; ok {
-			result = append(result, taskList...)
-		}
-	}
-	return result
-}
-
-// GetWriteCount returns the total number of AddHistoryTasks calls
-func (r *TaskQueueRecorder) GetWriteCount() int {
+// GetRecordedTasksByCategory returns all recorded tasks WITH metadata for a specific category
+func (r *TaskQueueRecorder) GetRecordedTasksByCategory(category tasks.Category) []RecordedTask {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.capturedWrites)
+
+	if recordedList, ok := r.tasks[category]; ok {
+		result := make([]RecordedTask, len(recordedList))
+		copy(result, recordedList)
+		return result
+	}
+	return nil
 }
 
-// Clear removes all captured writes
-func (r *TaskQueueRecorder) Clear() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.capturedWrites = make([]CapturedTaskWrite, 0)
+// getTasksByCategory is the internal version without locking (caller must hold lock)
+// Returns unwrapped tasks only
+func (r *TaskQueueRecorder) getTasksByCategory(category tasks.Category) []tasks.Task {
+	if recordedList, ok := r.tasks[category]; ok {
+		result := make([]tasks.Task, len(recordedList))
+		for i, recorded := range recordedList {
+			result[i] = recorded.Task
+		}
+		return result
+	}
+	return nil
 }
 
-// WriteToLog writes all captured task writes to a file in JSON format
+// GetTaskCount returns the total number of tasks across all categories
+func (r *TaskQueueRecorder) GetTaskCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	count := 0
+	for _, taskList := range r.tasks {
+		count += len(taskList)
+	}
+	return count
+}
+
+// WriteToLog writes all captured tasks to a file in JSON format
 func (r *TaskQueueRecorder) WriteToLog(filePath string) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	// Marshal to pretty JSON
-	jsonBytes, err := json.MarshalIndent(r.capturedWrites, "", "  ")
+	jsonBytes, err := json.MarshalIndent(r.tasks, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal captured writes: %w", err)
+		return fmt.Errorf("failed to marshal captured tasks: %w", err)
 	}
 
-	// Write to file (using os.WriteFile would be fine here)
+	// Write to file
 	if err := writeFile(filePath, jsonBytes); err != nil {
 		return fmt.Errorf("failed to write to file %s: %w", filePath, err)
 	}
