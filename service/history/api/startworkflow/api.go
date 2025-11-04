@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
@@ -53,7 +52,6 @@ type Starter struct {
 	shardContext               historyi.ShardContext
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	tokenSerializer            *tasktoken.Serializer
-	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
@@ -84,7 +82,6 @@ func NewStarter(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
-	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
@@ -99,7 +96,6 @@ func NewStarter(
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tokenSerializer:            tokenSerializer,
-		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
@@ -737,15 +733,6 @@ func (s *Starter) generateResponse(
 			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			Link:    s.generateStartedEventRefLink(runID),
 		}, nil
-	}
-
-	if err := api.ProcessOutgoingSearchAttributes(
-		shardCtx.GetSearchAttributesProvider(),
-		shardCtx.GetSearchAttributesMapperProvider(),
-		historyEvents,
-		s.namespace.Name(),
-		s.visibilityManager); err != nil {
-		return nil, err
 	}
 
 	clock, err := shardCtx.NewVectorClock()
