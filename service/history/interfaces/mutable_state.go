@@ -214,6 +214,7 @@ type (
 
 		IsWorkflowExecutionRunning() bool
 		IsWorkflowExecutionStatusPaused() bool
+		ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)

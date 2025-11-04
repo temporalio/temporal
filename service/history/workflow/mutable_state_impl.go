@@ -2850,14 +2850,14 @@ func (ms *MutableStateImpl) addWorkflowExecutionPausedEvent(
 	})
 	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
 	event.WorkerMayIgnore = true
-	if err := ms.applyWorkflowExecutionPausedEvent(event); err != nil {
+	if err := ms.ApplyWorkflowExecutionPausedEvent(event); err != nil {
 		return err
 	}
 	return nil
 }
 
-// applyWorkflowExecutionPausedEvent applies the paused event to the mutable state. It updates the workflow execution status to paused and sets the pause info.
-func (ms *MutableStateImpl) applyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error {
+// ApplyWorkflowExecutionPausedEvent applies the paused event to the mutable state. It updates the workflow execution status to paused and sets the pause info.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error {
 	ms.UpdateWorkflowStateStatus(ms.executionState.GetState(), enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED)
 	ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
 		PauseTime: timestamppb.New(event.GetEventTime().AsTime()),
