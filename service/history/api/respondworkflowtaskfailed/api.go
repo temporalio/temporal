@@ -66,6 +66,13 @@ func Invoke(
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
+			if workflowTask.Attempt > 1 && shardContext.GetConfig().EnableDropRepeatedWorkflowTaskFailures(namespaceEntry.Name().String()) {
+				// drop repeated workflow task failed calls, as workaround to prevent busy loop
+				return &api.UpdateWorkflowAction{
+					Noop: true,
+				}, nil
+			}
+
 			if _, err := mutableState.AddWorkflowTaskFailedEvent(
 				workflowTask,
 				request.GetCause(),
