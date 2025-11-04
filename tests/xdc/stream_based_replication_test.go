@@ -1055,7 +1055,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: 10 * time.Second,
 			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval:    3 * time.Second, // 3 seconds between retries
+				InitialInterval:    3 * time.Second, // 3 seconds between retries, needed to ensure tasks can replicate w/out lag
 				MaximumInterval:    3 * time.Second,
 				BackoffCoefficient: 1.0,
 				MaximumAttempts:    3, // Fail twice, succeed on 3rd attempt
