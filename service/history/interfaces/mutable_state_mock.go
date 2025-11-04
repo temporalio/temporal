@@ -651,6 +651,21 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links)
 }
 
+// AddWorkflowExecutionPausedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionPausedEvent(identity, reason, requestID string) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionPausedEvent", identity, reason, requestID)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionPausedEvent indicates an expected call of AddWorkflowExecutionPausedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionPausedEvent(identity, reason, requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionPausedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionPausedEvent), identity, reason, requestID)
+}
+
 // AddWorkflowExecutionSignaled mocks base method.
 func (m *MockMutableState) AddWorkflowExecutionSignaled(signalName string, input *common.Payloads, identity string, header *common.Header, links []*common.Link) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -3117,20 +3132,6 @@ func (m *MockMutableState) NextTransitionCount() int64 {
 func (mr *MockMutableStateMockRecorder) NextTransitionCount() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTransitionCount", reflect.TypeOf((*MockMutableState)(nil).NextTransitionCount))
-}
-
-// PauseWorkflowExecution mocks base method.
-func (m *MockMutableState) PauseWorkflowExecution(identity, reason, requestID string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PauseWorkflowExecution", identity, reason, requestID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PauseWorkflowExecution indicates an expected call of PauseWorkflowExecution.
-func (mr *MockMutableStateMockRecorder) PauseWorkflowExecution(identity, reason, requestID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseWorkflowExecution", reflect.TypeOf((*MockMutableState)(nil).PauseWorkflowExecution), identity, reason, requestID)
 }
 
 // PopTasks mocks base method.

@@ -2817,28 +2817,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
-func (ms *MutableStateImpl) PauseWorkflowExecution(
+func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
 	identity string,
 	reason string,
 	requestID string,
-) error {
-	// Invalidate all the pending activities. Do not mark individual activities as paused.
-	for _, ai := range ms.GetPendingActivityInfos() {
-		ai.Stamp = ai.Stamp + 1
-	}
-	if ms.HasPendingWorkflowTask() {
-		pendingWorkflowTask := ms.GetPendingWorkflowTask()
-		pendingWorkflowTask.Stamp = pendingWorkflowTask.Stamp + 1
-	}
-	// Add the event to the history and apply it to the mutable state.
-	return ms.addWorkflowExecutionPausedEvent(identity, reason, requestID)
-}
-
-func (ms *MutableStateImpl) addWorkflowExecutionPausedEvent(
-	identity string,
-	reason string,
-	requestID string,
-) error {
+) (*historypb.HistoryEvent, error) {
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED, func(event *historypb.HistoryEvent) {
 		event.Attributes = &historypb.HistoryEvent_WorkflowExecutionPausedEventAttributes{
 			WorkflowExecutionPausedEventAttributes: &historypb.WorkflowExecutionPausedEventAttributes{
@@ -2850,19 +2833,35 @@ func (ms *MutableStateImpl) addWorkflowExecutionPausedEvent(
 	})
 	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
 	event.WorkerMayIgnore = true
-	return ms.ApplyWorkflowExecutionPausedEvent(event)
+	if err := ms.ApplyWorkflowExecutionPausedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
 }
 
 // ApplyWorkflowExecutionPausedEvent applies the paused event to the mutable state. It updates the workflow execution status to paused and sets the pause info.
 func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error {
+	// Update workflow status.
 	if _, err := ms.UpdateWorkflowStateStatus(ms.executionState.GetState(), enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED); err != nil {
 		return err
 	}
+	// Set pause info in mutable state.
 	ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
 		PauseTime: timestamppb.New(event.GetEventTime().AsTime()),
 		Identity:  event.GetWorkflowExecutionPausedEventAttributes().GetIdentity(),
 		Reason:    event.GetWorkflowExecutionPausedEventAttributes().GetReason(),
 		RequestId: event.GetWorkflowExecutionPausedEventAttributes().GetRequestId(),
+	}
+
+	// Invalidate all the pending activities. Do not mark individual activities as paused.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		ai.Stamp = ai.Stamp + 1
+	}
+
+	// Invalidate pending workflow task. This will cause a
+	if ms.HasPendingWorkflowTask() {
+		pendingWorkflowTask := ms.GetPendingWorkflowTask()
+		pendingWorkflowTask.Stamp = pendingWorkflowTask.Stamp + 1
 	}
 	return nil
 }
