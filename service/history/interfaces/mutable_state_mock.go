@@ -3120,17 +3120,17 @@ func (mr *MockMutableStateMockRecorder) NextTransitionCount() *gomock.Call {
 }
 
 // PauseWorkflowExecution mocks base method.
-func (m *MockMutableState) PauseWorkflowExecution(identity, reason, requestId string) error {
+func (m *MockMutableState) PauseWorkflowExecution(identity, reason, requestID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PauseWorkflowExecution", identity, reason, requestId)
+	ret := m.ctrl.Call(m, "PauseWorkflowExecution", identity, reason, requestID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PauseWorkflowExecution indicates an expected call of PauseWorkflowExecution.
-func (mr *MockMutableStateMockRecorder) PauseWorkflowExecution(identity, reason, requestId any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) PauseWorkflowExecution(identity, reason, requestID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseWorkflowExecution", reflect.TypeOf((*MockMutableState)(nil).PauseWorkflowExecution), identity, reason, requestId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseWorkflowExecution", reflect.TypeOf((*MockMutableState)(nil).PauseWorkflowExecution), identity, reason, requestID)
 }
 
 // PopTasks mocks base method.
