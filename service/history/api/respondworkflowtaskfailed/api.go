@@ -60,11 +60,17 @@ func Invoke(
 				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) ||
 				(token.StartedTime != nil && !workflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(workflowTask.StartedTime)) ||
 				workflowTask.Attempt != token.Attempt ||
-				workflowTask.Attempt > 1 /* drop workflow task failed call for repeated failures, as workaround to prevent busy loop */ ||
 				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
 				// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
 				workflowLease.GetReleaseFn()(nil)
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
+			}
+
+			if workflowTask.Attempt > 1 && shardContext.GetConfig().EnableDropRepeatedWorkflowTaskFailures(namespaceEntry.Name().String()) {
+				// drop repeated workflow task failed calls, as workaround to prevent busy loop
+				return &api.UpdateWorkflowAction{
+					Noop: true,
+				}, nil
 			}
 
 			if _, err := mutableState.AddWorkflowTaskFailedEvent(
