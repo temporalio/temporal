@@ -241,15 +241,123 @@ func (r *TaskQueueRecorder) getTasksByCategory(category tasks.Category) []tasks.
 	return nil
 }
 
-// GetTaskCount returns the total number of tasks across all categories
-func (r *TaskQueueRecorder) GetTaskCount() int {
+// TaskMatcher is a function that tests whether a RecordedTask matches some criteria
+type TaskMatcher func(RecordedTask) bool
+
+// MatchTasks returns all tasks in a category that match the given matcher function
+func (r *TaskQueueRecorder) MatchTasks(category tasks.Category, matcher TaskMatcher) []RecordedTask {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	count := 0
-	for _, taskList := range r.tasks {
-		count += len(taskList)
+
+	recordedList, ok := r.tasks[category]
+	if !ok {
+		return nil
 	}
-	return count
+
+	var matched []RecordedTask
+	for _, recorded := range recordedList {
+		if matcher(recorded) {
+			matched = append(matched, recorded)
+		}
+	}
+	return matched
+}
+
+// CountMatchingTasks returns the count of tasks in a category that match the given matcher
+func (r *TaskQueueRecorder) CountMatchingTasks(category tasks.Category, matcher TaskMatcher) int {
+	return len(r.MatchTasks(category, matcher))
+}
+
+// MatchTasksForWorkflow returns all tasks in a category for a specific workflow
+// If namespaceID is empty, it matches any namespace
+// If runID is empty, it matches any runID for the given workflowID
+func (r *TaskQueueRecorder) MatchTasksForWorkflow(
+	category tasks.Category,
+	namespaceID string,
+	workflowID string,
+	runID string,
+	matcher TaskMatcher,
+) []RecordedTask {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	recordedList, ok := r.tasks[category]
+	if !ok {
+		return nil
+	}
+
+	var matched []RecordedTask
+	for _, recorded := range recordedList {
+		// Filter by namespaceID if provided
+		if namespaceID != "" && recorded.NamespaceID != namespaceID {
+			continue
+		}
+		// Filter by workflowID
+		if recorded.WorkflowID != workflowID {
+			continue
+		}
+		// Filter by runID if provided
+		if runID != "" && recorded.RunID != runID {
+			continue
+		}
+		// Apply additional matcher if provided
+		if matcher != nil && !matcher(recorded) {
+			continue
+		}
+		matched = append(matched, recorded)
+	}
+	return matched
+}
+
+// CountTasksForWorkflow returns the count of tasks in a category for a specific workflow
+// If namespaceID is empty, it matches any namespace
+// If runID is empty, it matches any runID for the given workflowID
+func (r *TaskQueueRecorder) CountTasksForWorkflow(
+	category tasks.Category,
+	namespaceID string,
+	workflowID string,
+	runID string,
+	matcher TaskMatcher,
+) int {
+	return len(r.MatchTasksForWorkflow(category, namespaceID, workflowID, runID, matcher))
+}
+
+// MatchTasksForNamespace returns all tasks in a category for a specific namespace
+func (r *TaskQueueRecorder) MatchTasksForNamespace(
+	category tasks.Category,
+	namespaceID string,
+	matcher TaskMatcher,
+) []RecordedTask {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	recordedList, ok := r.tasks[category]
+	if !ok {
+		return nil
+	}
+
+	var matched []RecordedTask
+	for _, recorded := range recordedList {
+		// Filter by namespaceID
+		if recorded.NamespaceID != namespaceID {
+			continue
+		}
+		// Apply additional matcher if provided
+		if matcher != nil && !matcher(recorded) {
+			continue
+		}
+		matched = append(matched, recorded)
+	}
+	return matched
+}
+
+// CountTasksForNamespace returns the count of tasks in a category for a specific namespace
+func (r *TaskQueueRecorder) CountTasksForNamespace(
+	category tasks.Category,
+	namespaceID string,
+	matcher TaskMatcher,
+) int {
+	return len(r.MatchTasksForNamespace(category, namespaceID, matcher))
 }
 
 // WriteToLog writes all captured tasks to a file in JSON format

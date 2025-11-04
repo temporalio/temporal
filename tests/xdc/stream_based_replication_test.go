@@ -38,7 +38,9 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	test "go.temporal.io/server/common/testing"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/replication/eventhandler"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
@@ -1017,29 +1019,28 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	}
 }
 
-// TestTaskQueueRecorder_CaptureAndDumpTasks demonstrates using the transfer queue recorder
-// to capture all tasks written to the transfer, timer, and replication queues during workflow execution,
-// and then dump them to a log file for inspection.
-func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTasks() {
+// TestPassiveActivityRetryTimerReplication verifies that activity retry timers are correctly generated
+// on the active cluster and replicated to the passive/standby cluster during activity retries.
+func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplication() {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 
-	// Get recorders for both clusters
 	recorder0 := s.getRecorder(0) // active cluster
 	recorder1 := s.getRecorder(1) // standby cluster
+	s.Require().NotNil(recorder0)
+	s.Require().NotNil(recorder1)
 
-	s.Require().NotNil(recorder0, "Recorder for cluster 0 (active) should be available")
-	s.Require().NotNil(recorder1, "Recorder for cluster 1 (standby) should be available")
+	workflowID := "task-recorder-test-" + uuid.New()
+	taskQueue := "task-recorder-tq"
 
-	s.T().Log("Starting workflow execution to capture transfer queue tasks...")
+	// Get namespace ID for task filtering
+	namespaceResp, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: s.namespaceName,
+	})
+	s.NoError(err)
+	namespaceID := namespaceResp.NamespaceInfo.GetId()
 
-	// Start a real workflow with a worker to ensure tasks are created
-	workflowID := "transfer-queue-recorder-test-" + uuid.New()
-	workflowType := "transfer-queue-test-workflow"
-	taskQueue := "transfer-queue-test-tq"
-
-	// Create an SDK client
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
 		Namespace: s.namespaceName,
@@ -1047,181 +1048,154 @@ func (s *streamBasedReplicationTestSuite) TestTaskQueueRecorder_CaptureAndDumpTa
 	s.NoError(err)
 	defer sdkClient.Close()
 
-	// Track activity attempts across retries using a local variable
 	var activityAttempts int32 = 0
 
-	// Define a simple workflow
+	// Workflow with activity that retries with 3 second intervals
 	simpleWorkflow := func(ctx workflow.Context) (string, error) {
-		// Do some activity to generate more tasks with retry policy
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: 10 * time.Second,
 			RetryPolicy: &temporal.RetryPolicy{
-				MaximumAttempts: 4, // Allow up to 4 attempts
+				InitialInterval:    3 * time.Second, // 3 seconds between retries
+				MaximumInterval:    3 * time.Second,
+				BackoffCoefficient: 1.0,
+				MaximumAttempts:    3, // Fail twice, succeed on 3rd attempt
 			},
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
 
 		var result string
-		err := workflow.ExecuteActivity(ctx, "simple-activity").Get(ctx, &result)
+		err := workflow.ExecuteActivity(ctx, "test-activity").Get(ctx, &result)
 		if err != nil {
 			return "", err
 		}
-
-		return "workflow completed: " + result, nil
+		return "completed: " + result, nil
 	}
 
-	// Define a simple activity that fails 3 times then succeeds on the 4th attempt
+	// Activity that sleeps 3 seconds and fails twice, succeeds on 3rd attempt
 	simpleActivity := func(ctx context.Context) (string, error) {
+		time.Sleep(3 * time.Second)
 		attempt := atomic.AddInt32(&activityAttempts, 1)
-		s.T().Logf("Activity attempt %d", attempt)
-		if attempt < 4 {
-			return "", fmt.Errorf("activity failed on attempt %d", attempt)
+		if attempt < 3 {
+			return "", fmt.Errorf("failed attempt %d", attempt)
 		}
-		return "activity result", nil
+		return "success", nil
 	}
 
-	// Create and start a worker
 	sdkWorker := worker.New(sdkClient, taskQueue, worker.Options{})
-	sdkWorker.RegisterWorkflowWithOptions(simpleWorkflow, workflow.RegisterOptions{Name: workflowType})
-	sdkWorker.RegisterActivityWithOptions(simpleActivity, activity.RegisterOptions{Name: "simple-activity"})
+	sdkWorker.RegisterWorkflowWithOptions(simpleWorkflow, workflow.RegisterOptions{Name: "test-workflow"})
+	sdkWorker.RegisterActivityWithOptions(simpleActivity, activity.RegisterOptions{Name: "test-activity"})
 
-	s.T().Log("Starting worker...")
 	err = sdkWorker.Start()
 	s.NoError(err)
 	defer sdkWorker.Stop()
 
-	// Start the workflow
-	s.T().Logf("Starting workflow: workflowID=%s", workflowID)
 	workflowRun, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
 		TaskQueue:          taskQueue,
 		WorkflowRunTimeout: 30 * time.Second,
-	}, workflowType)
+	}, "test-workflow")
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 
-	s.T().Logf("Started workflow: workflowID=%s, runID=%s", workflowID, runID)
-
-	// Wait for workflow to complete
 	var workflowResult string
 	err = workflowRun.Get(ctx, &workflowResult)
 	s.NoError(err)
-	s.T().Logf("Workflow completed with result: %s", workflowResult)
 
-	// Wait a bit for async task generation and replication
+	// Wait for async task generation and replication
 	time.Sleep(2 * time.Second)
 
-	// ========================================================================
-	// ANALYZE CLUSTER 0 (ACTIVE) TASK WRITES
-	// ========================================================================
+	// Get the scheduled event ID from workflow history
+	historyIter := sdkClient.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
-	s.T().Log("=== Analyzing Cluster 0 (Active) ===")
-
-	taskCount0 := recorder0.GetTaskCount()
-	s.T().Logf("Cluster 0 had %d total tasks written to the task queues", taskCount0)
-
-	// Get tasks by category
-	transferTasks0 := recorder0.GetTransferTasks()
-	timerTasks0 := recorder0.GetTimerTasks()
-	replicationTasks0 := recorder0.GetReplicationTasks()
-	visibilityTasks0 := recorder0.GetVisibilityTasks()
-
-	s.T().Logf("Cluster 0 task breakdown:")
-	s.T().Logf("  - Transfer tasks: %d", len(transferTasks0))
-	s.T().Logf("  - Timer tasks: %d", len(timerTasks0))
-	s.T().Logf("  - Replication tasks: %d", len(replicationTasks0))
-	s.T().Logf("  - Visibility tasks: %d", len(visibilityTasks0))
-
-	// Detailed breakdown of transfer tasks by type
-	if len(transferTasks0) > 0 {
-		s.T().Log("Transfer task types:")
-		taskTypeCounts := make(map[string]int)
-		for _, task := range transferTasks0 {
-			taskType := task.GetType().String()
-			taskTypeCounts[taskType]++
-		}
-		for taskType, count := range taskTypeCounts {
-			s.T().Logf("  - %s: %d", taskType, count)
+	var scheduledEventID int64
+	var activityType string
+	for historyIter.HasNext() {
+		event, err := historyIter.Next()
+		s.NoError(err)
+		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED {
+			scheduledEventID = event.GetEventId()
+			attrs := event.GetActivityTaskScheduledEventAttributes()
+			activityType = attrs.GetActivityType().GetName()
+			// Verify this is the activity we expect
+			s.Equal("test-activity", activityType, "Should be our test activity")
+			break
 		}
 	}
+	s.Require().NotZero(scheduledEventID, "Should have found ActivityTaskScheduled event")
 
-	// Detailed breakdown of replication tasks
-	if len(replicationTasks0) > 0 {
-		s.T().Log("Replication task details:")
-		for i, task := range replicationTasks0 {
-			version := int64(0)
-			if versionedTask, ok := task.(interface{ GetVersion() int64 }); ok {
-				version = versionedTask.GetVersion()
+	// Verify active cluster generated exactly 1 TransferActivityTask with matching event ID
+	activeTransferActivityTasks := recorder0.CountTasksForWorkflow(
+		tasks.CategoryTransfer,
+		namespaceID,
+		workflowID,
+		runID,
+		func(rt testcore.RecordedTask) bool {
+			if rt.TaskType != enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK.String() {
+				return false
 			}
-			s.T().Logf("  [%d] Type=%s, TaskID=%d, Version=%d",
-				i, task.GetType().String(), task.GetTaskID(), version)
-		}
-	}
+			// Check if the task's event ID matches the activity's scheduled event ID
+			if activityTask, ok := rt.Task.(*tasks.ActivityTask); ok {
+				return activityTask.ScheduledEventID == scheduledEventID
+			}
+			return false
+		},
+	)
+	s.Equal(1, activeTransferActivityTasks, "Active cluster should have exactly 1 TransferActivityTask for this activity")
 
-	// Verify replication tasks were generated (since this is XDC)
-	s.NotEmpty(replicationTasks0, "Active cluster should generate replication tasks for cross-cluster replication")
+	// Verify active cluster generated exactly 2 ActivityRetryTimer tasks (for 2 failed attempts) with matching event ID
+	activeRetryTimers := recorder0.CountTasksForWorkflow(
+		tasks.CategoryTimer,
+		namespaceID,
+		workflowID,
+		runID,
+		func(rt testcore.RecordedTask) bool {
+			if rt.TaskType != enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER.String() {
+				return false
+			}
+			// Check if the timer's event ID matches the activity's scheduled event ID
+			if timerTask, ok := rt.Task.(*tasks.ActivityRetryTimerTask); ok {
+				return timerTask.EventID == scheduledEventID
+			}
+			return false
+		},
+	)
+	s.Equal(2, activeRetryTimers, "Active cluster should have exactly 2 ActivityRetryTimer tasks for this activity")
 
-	// Verify task properties
-	for _, task := range replicationTasks0 {
-		s.NotEmpty(task.GetNamespaceID(), "Replication task should have namespace ID")
-		s.NotEmpty(task.GetWorkflowID(), "Replication task should have workflow ID")
-		s.NotEqual(int64(0), task.GetTaskID(), "Replication task should have non-zero task ID")
-	}
+	// Verify standby cluster has exactly 1 TransferActivityTask with matching event ID (same as active)
+	standbyTransferActivityTasks := recorder1.CountTasksForWorkflow(
+		tasks.CategoryTransfer,
+		namespaceID,
+		workflowID,
+		runID,
+		func(rt testcore.RecordedTask) bool {
+			if rt.TaskType != enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK.String() {
+				return false
+			}
+			// Check if the task's event ID matches the activity's scheduled event ID
+			if activityTask, ok := rt.Task.(*tasks.ActivityTask); ok {
+				return activityTask.ScheduledEventID == scheduledEventID
+			}
+			return false
+		},
+	)
+	s.Equal(1, standbyTransferActivityTasks, "Standby cluster should have exactly 1 TransferActivityTask for this activity (same as active)")
 
-	// ========================================================================
-	// ANALYZE CLUSTER 1 (STANDBY) TASK WRITES
-	// ========================================================================
-
-	s.T().Log("=== Analyzing Cluster 1 (Standby) ===")
-
-	taskCount1 := recorder1.GetTaskCount()
-	s.T().Logf("Cluster 1 had %d total tasks written to the task queues", taskCount1)
-
-	transferTasks1 := recorder1.GetTransferTasks()
-	timerTasks1 := recorder1.GetTimerTasks()
-	replicationTasks1 := recorder1.GetReplicationTasks()
-	visibilityTasks1 := recorder1.GetVisibilityTasks()
-
-	s.T().Logf("Cluster 1 task breakdown:")
-	s.T().Logf("  - Transfer tasks: %d", len(transferTasks1))
-	s.T().Logf("  - Timer tasks: %d", len(timerTasks1))
-	s.T().Logf("  - Replication tasks: %d", len(replicationTasks1))
-	s.T().Logf("  - Visibility tasks: %d", len(visibilityTasks1))
-
-	// ========================================================================
-	// EXPORT TO LOG FILES
-	// ========================================================================
-
-	s.T().Log("=== Exporting captured tasks to log files ===")
-
-	clusterName0 := s.clusters[0].ClusterName()
-	clusterName1 := s.clusters[1].ClusterName()
-
-	logFile0 := fmt.Sprintf("/tmp/task_queue_writes_%s.json", clusterName0)
-	logFile1 := fmt.Sprintf("/tmp/task_queue_writes_%s.json", clusterName1)
-
-	err = recorder0.WriteToLog(logFile0)
-	s.NoError(err, "Should be able to export cluster 0 tasks")
-	s.T().Logf("✓ Exported cluster 0 tasks to: %s", logFile0)
-
-	err = recorder1.WriteToLog(logFile1)
-	s.NoError(err, "Should be able to export cluster 1 tasks")
-	s.T().Logf("✓ Exported cluster 1 tasks to: %s", logFile1)
-
-	// ========================================================================
-	// ASSERTIONS
-	// ========================================================================
-
-	// Basic sanity checks
-	s.Greater(recorder0.GetTaskCount(), 0, "Cluster 0 should have written some tasks")
-
-	// Active cluster should have more activity than standby
-	if taskCount1 > 0 {
-		s.T().Logf("Active cluster tasks (%d) vs Standby cluster tasks (%d)", taskCount0, taskCount1)
-	}
-
-	s.T().Log("=== Test completed successfully ===")
-	s.T().Logf("View captured tasks at:")
-	s.T().Logf("  - %s", logFile0)
-	s.T().Logf("  - %s", logFile1)
+	// Verify standby cluster has exactly 2 ActivityRetryTimer tasks with matching event ID (same as active)
+	standbyRetryTimers := recorder1.CountTasksForWorkflow(
+		tasks.CategoryTimer,
+		namespaceID,
+		workflowID,
+		runID,
+		func(rt testcore.RecordedTask) bool {
+			if rt.TaskType != enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER.String() {
+				return false
+			}
+			// Check if the timer's event ID matches the activity's scheduled event ID
+			if timerTask, ok := rt.Task.(*tasks.ActivityRetryTimerTask); ok {
+				return timerTask.EventID == scheduledEventID
+			}
+			return false
+		},
+	)
+	s.Equal(2, standbyRetryTimers, "Standby cluster should have exactly 2 ActivityRetryTimer tasks for this activity (same as active)")
 }

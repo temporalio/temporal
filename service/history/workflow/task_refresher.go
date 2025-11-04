@@ -394,7 +394,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			continue
 		}
 
-		if activityInfo.Attempt > 0 {
+		if activityInfo.Attempt > 1 {
 			if err := taskGenerator.GenerateActivityRetryTasks(activityInfo); err != nil {
 				return err
 			}
