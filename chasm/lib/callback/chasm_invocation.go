@@ -59,32 +59,32 @@ func (c chasmInvocation) Invoke(
 	// Get back the base64-encoded ComponentRef from the header.
 	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
 	if !ok {
-		return invocationResultFail{logInternalError(e.Logger, "callback missing token", nil)}
+		return invocationResultFail{logInternalError(e.logger, "callback missing token", nil)}
 	}
 
 	decodedRef, err := base64.RawURLEncoding.DecodeString(encodedRef)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
+		return invocationResultFail{logInternalError(e.logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
 	// Validate that the bytes are a valid ChasmComponentRef
 	ref := &persistencespb.ChasmComponentRef{}
 	err = proto.Unmarshal(decodedRef, ref)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef", err)}
+		return invocationResultFail{logInternalError(e.logger, "failed to unmarshal CHASM ComponentRef", err)}
 	}
 
 	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
+		return invocationResultFail{logInternalError(e.logger, "failed to build history request: %v", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
-	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
+	_, err = e.historyClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
+		msg := logInternalError(e.logger, "failed to complete Nexus operation: %v", err)
 		if isRetryableRPCResponse(err) {
-			return invocationResultRetry{err: msg, retryPolicy: e.Config.RetryPolicy()}
+			return invocationResultRetry{err: msg, retryPolicy: e.config.RetryPolicy()}
 		}
 		return invocationResultFail{msg}
 	}

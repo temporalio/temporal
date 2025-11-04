@@ -2129,14 +2129,25 @@ func (ms *MutableStateImpl) IsTransientWorkflowTask() bool {
 
 func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 	if !ms.HasStartedWorkflowTask() {
-		return serviceerror.NewInternal("cannot clear transient workflow task when task is missing")
+		return softassert.UnexpectedInternalErr(
+			ms.logger,
+			"cannot clear transient workflow task when task is missing",
+			nil,
+		)
 	}
 	if !ms.IsTransientWorkflowTask() {
-		return serviceerror.NewInternal("cannot clear transient workflow task when task is not transient")
+		return softassert.UnexpectedInternalErr(
+			ms.logger,
+			"cannot clear transient workflow task when task is not transient",
+			nil,
+		)
 	}
-	// this is transient workflow task
 	if ms.HasBufferedEvents() {
-		return serviceerror.NewInternal("cannot clear transient workflow task when there are buffered events")
+		return softassert.UnexpectedInternalErr(
+			ms.logger,
+			"cannot clear transient workflow task when there are buffered events",
+			nil,
+		)
 	}
 	// no buffered event
 	emptyWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
@@ -5753,6 +5764,7 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
+			activityInfo.Stamp++
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -6333,7 +6345,11 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 
 	if len(result.bufferEvents) > 0 {
 		// TODO do we need the functionality to generate snapshot with buffered events?
-		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with buffered events")
+		return nil, nil, softassert.UnexpectedInternalErr(
+			ms.logger,
+			"cannot generate workflow snapshot with buffered events",
+			nil,
+		)
 	}
 
 	workflowSnapshot := &persistence.WorkflowSnapshot{
@@ -7017,7 +7033,11 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 
 	if transactionPolicy == historyi.TransactionPolicyPassive &&
 		len(ms.InsertTasks[tasks.CategoryReplication]) > 0 {
-		return serviceerror.NewInternal("should not generate replication task when close transaction as passive")
+		return softassert.UnexpectedInternalErr(
+			ms.logger,
+			"should not generate replication task when close transaction as passive",
+			nil,
+		)
 	}
 
 	return nil

@@ -307,13 +307,22 @@ func newTreeInitSearchAttributesAndMemo(
 	// and currentMemo will just never be used.
 
 	if saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider); ok {
-		root.currentSA = saProvider.SearchAttributes(immutableContext)
+		saSlice := saProvider.SearchAttributes(immutableContext)
+		root.currentSA = searchAttributeKeyValuesToMap(saSlice)
 	}
 	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
 		root.currentMemo = memoProvider.Memo(immutableContext)
 	}
 
 	return nil
+}
+
+func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string]VisibilityValue {
+	result := make(map[string]VisibilityValue, len(saSlice))
+	for _, sa := range saSlice {
+		result[sa.Field] = sa.Value
+	}
+	return result
 }
 
 func (n *Node) SetRootComponent(
@@ -658,7 +667,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		return n.serializePointerNode()
 	default:
-		return serviceerror.NewInternal("unknown node type")
+		return softassert.UnexpectedInternalErr(n.logger, "unknown node type", nil)
 	}
 }
 
@@ -1452,7 +1461,8 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
-		newSA := saProvider.SearchAttributes(immutableContext)
+		saSlice := saProvider.SearchAttributes(immutableContext)
+		newSA := searchAttributeKeyValuesToMap(saSlice)
 		if !maps.EqualFunc(n.currentSA, newSA, isVisibilityValueEqual) {
 			needUpdate = true
 		}
@@ -2029,7 +2039,8 @@ func (n *Node) ApplyMutation(
 	}
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
-		n.currentSA = saProvider.SearchAttributes(immutableContext)
+		saSlice := saProvider.SearchAttributes(immutableContext)
+		n.currentSA = searchAttributeKeyValuesToMap(saSlice)
 	}
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
