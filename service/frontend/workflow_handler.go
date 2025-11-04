@@ -408,6 +408,25 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	return wh.convertToStartWorkflowExecutionResponse(resp, namespaceName)
+}
+
+func (wh *WorkflowHandler) convertToStartWorkflowExecutionResponse(
+	resp *historyservice.StartWorkflowExecutionResponse,
+	namespaceName namespace.Name,
+) (*workflowservice.StartWorkflowExecutionResponse, error) {
+	if resp.GetEagerWorkflowTask() != nil {
+		if err := api.ProcessOutgoingSearchAttributes(
+			wh.saProvider,
+			wh.saMapperProvider,
+			resp.GetEagerWorkflowTask().GetHistory().GetEvents(),
+			namespaceName,
+			wh.visibilityMgr,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	return &workflowservice.StartWorkflowExecutionResponse{
 		RunId:             resp.GetRunId(),
 		Started:           resp.Started,
@@ -571,7 +590,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, err
 	}
 
-	response, err := convertToMultiOperationResponse(historyResp)
+	response, err := wh.convertToMultiOperationResponse(historyResp, namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -680,33 +699,29 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 	return opReq, workflowId, nil
 }
 
-func convertToMultiOperationResponse(
+func (wh *WorkflowHandler) convertToMultiOperationResponse(
 	historyResp *historyservice.ExecuteMultiOperationResponse,
+	namespaceName namespace.Name,
 ) (*workflowservice.ExecuteMultiOperationResponse, error) {
 	resp := &workflowservice.ExecuteMultiOperationResponse{
 		Responses: make([]*workflowservice.ExecuteMultiOperationResponse_Response, len(historyResp.Responses)),
 	}
 	for i, op := range historyResp.Responses {
 		var opResp *workflowservice.ExecuteMultiOperationResponse_Response
-		if startResp := op.GetStartWorkflow(); startResp != nil {
+		if historyStartResp := op.GetStartWorkflow(); historyStartResp != nil {
+			startResp, err := wh.convertToStartWorkflowExecutionResponse(historyStartResp, namespaceName)
+			if err != nil {
+				return nil, err
+			}
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
 				Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
-						RunId:   startResp.RunId,
-						Started: startResp.Started,
-						Link:    startResp.Link,
-						Status:  startResp.Status,
-					},
+					StartWorkflow: startResp,
 				},
 			}
-		} else if updateResp := op.GetUpdateWorkflow(); updateResp != nil {
+		} else if histUpdateResp := op.GetUpdateWorkflow(); histUpdateResp != nil {
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
 				Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
-					UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{
-						UpdateRef: updateResp.Response.UpdateRef,
-						Outcome:   updateResp.Response.Outcome,
-						Stage:     updateResp.Response.Stage,
-					},
+					UpdateWorkflow: histUpdateResp.GetResponse(),
 				},
 			}
 		} else {
@@ -3030,7 +3045,10 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 }
 
 // Creates a new schedule.
-func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflowservice.CreateScheduleRequest) (_ *workflowservice.CreateScheduleResponse, retError error) {
+func (wh *WorkflowHandler) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+) (_ *workflowservice.CreateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
