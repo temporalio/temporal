@@ -1670,7 +1670,66 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 	}
 }
 
-func (s *mutableStateSuite) TestPauseWorkflowExecution_DoesNotBypassValidation() {
+func (s *mutableStateSuite) TestPauseWorkflowExecution() {
+	s.SetupSubTest()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	// Complete another WFT to obtain a valid completed event id for scheduling an activity.
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	// Schedule an activity (pending) using the completed WFT event id.
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		completedEvent.GetEventId(),
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "act-1",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    tq,
+		},
+		false,
+	)
+	s.NoError(err)
+	prevActivityStamp := activityInfo.Stamp
+
+	// Create a pending workflow task.
+	pendingWFT, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	prevWFTStamp := pendingWFT.Stamp
+
+	// Pause and assert stamps incremented.
+	err = s.mutableState.PauseWorkflowExecution("tester", "reason", uuid.New())
+	s.NoError(err)
+
+	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+	s.True(ok)
+	s.Greater(updatedActivityInfo.Stamp, prevActivityStamp)
+
+	wftInfo := s.mutableState.GetPendingWorkflowTask()
+	s.NotNil(wftInfo)
+	s.Greater(wftInfo.Stamp, prevWFTStamp)
+}
+
+func (s *mutableStateSuite) TestPauseWorkflowExecution_FailStateValidation() {
 	s.SetupSubTest()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
