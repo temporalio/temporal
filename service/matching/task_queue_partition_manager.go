@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -652,7 +653,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 			return nil, err
 		}
 
-		current, _, currentUpdateTime, ramping, rampingPercentage, _, rampingUpdateTime := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+		current, _, currentUpdateTime, ramping, isRamping, rampingPercentage, _, rampingUpdateTime := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
 
 		info := &taskqueuepb.TaskQueueVersioningInfo{
 			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
@@ -661,7 +662,8 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 			UpdateTime:               timestamppb.New(currentUpdateTime),
 		}
 
-		if ramping != nil {
+		if isRamping {
+			fmt.Println("We are ramping")
 			info.RampingVersionPercentage = rampingPercentage
 			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
 			//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
@@ -1069,7 +1071,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 	}
 
-	current, currentRevisionNumber, _, ramping, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
 	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 

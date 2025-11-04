@@ -1986,6 +1986,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					deploymentData.Versions = append(deploymentData.Versions, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
+				// TODO (Shivam): Remove versions from both places.
 				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
@@ -2020,6 +2021,19 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				for _, buildID := range req.GetForgetVersions() {
 					delete(tqWorkerDeploymentData.Versions, buildID)
 					changed = true
+				}
+
+				/*Remove all the versions from the old deployment if present. This shall prevent the following scenario:
+
+					t0: Current version is A with old deployment format.
+					t1: Current version is B with new deployment format.
+					t2: User unsets current version B.
+
+				The right behaviour is that after unsetting, the current version should be unversioned and not version A.
+
+				*/
+
+				if applyUpdatesToRoutingConfig {
 				}
 			}
 		}

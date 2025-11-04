@@ -308,6 +308,11 @@ func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploy
 
 //nolint:staticcheck
 func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) bool {
+	// Represents unversioned workers. Discussion: Should unversioned workers be considered to be in a worker deployment version by default?
+	if v == nil {
+		return false
+	}
+
 	for _, d := range deployments.GetDeployments() {
 		if d.Deployment.Equal(DeploymentFromDeploymentVersion(v)) {
 			return true
@@ -573,7 +578,8 @@ func PickFinalCurrentAndRamping(
 	*deploymentspb.WorkerDeploymentVersion, // final current version
 	int64, // final current revision number
 	time.Time, // final current update time
-	*deploymentspb.WorkerDeploymentVersion,
+	*deploymentspb.WorkerDeploymentVersion, // final ramping version
+	bool, // is ramping (ramping_since_time != nil)
 	float32, // final ramp percentage
 	int64, // final ramping revision number
 	time.Time, // final ramping update time
@@ -606,19 +612,40 @@ func PickFinalCurrentAndRamping(
 	oldRampingTime := ramping.GetRoutingUpdateTime().AsTime()
 	newRampingTime := rampingVersionRoutingConfig.GetRampingVersionPercentageChangedTime().AsTime()
 
+	var isRamping bool
+
 	// Break ties by choosing the newer format
+
 	if newRampingTime.After(oldRampingTime) || newRampingTime.Equal(oldRampingTime) {
 		finalRampingDep = DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(rampingVersionRoutingConfig.GetRampingDeploymentVersion()))
 		finalRampingRev = rampingVersionRoutingConfig.GetRevisionNumber()
 		finalRampPercentage = rampingVersionRoutingConfig.GetRampingVersionPercentage()
 		finalRampingUpdateTime = newRampingTime
+
+		// When using the new deployment format, we do not have access to GetRampingSinceTime. Thus, we need to understand if a version is truly ramping or not.
+		// When using the new deployment format, a version is *not ramping* if it has nil ramping version with ramping version percentage set to 0.
+
+		if finalRampingDep == nil && finalRampPercentage == 0 {
+			isRamping = false
+		} else {
+			isRamping = true
+		}
+
 	} else {
 		finalRampingDep = ramping.GetVersion()
 		finalRampingRev = 0
 		finalRampPercentage = ramping.GetRampPercentage()
 		finalRampingUpdateTime = oldRampingTime
+
+		// A version can only be ramping if it has a rampingSinceTime.
+		if ramping.GetRampingSinceTime() == nil {
+			isRamping = false
+		} else {
+			isRamping = true
+		}
 	}
-	return finalCurrentDep, finalCurrentRev, finalCurrentUpdateTime, finalRampingDep, finalRampPercentage, finalRampingRev, finalRampingUpdateTime
+
+	return finalCurrentDep, finalCurrentRev, finalCurrentUpdateTime, finalRampingDep, isRamping, finalRampPercentage, finalRampingRev, finalRampingUpdateTime
 }
 
 // calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the
@@ -639,12 +666,13 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	int64, // current revision number
 	time.Time, // current update time
 	*deploymentspb.WorkerDeploymentVersion, // ramping version
+	bool, // is ramping (ramping_since_time != nil)
 	float32, // ramp percentage
 	int64, // ramping revision number
 	time.Time, // ramping update time
 ) {
 	if deployments == nil {
-		return nil, 0, time.Time{}, nil, 0, 0, time.Time{}
+		return nil, 0, time.Time{}, nil, false, 0, 0, time.Time{}
 	}
 
 	var current *deploymentspb.DeploymentVersionData
@@ -692,17 +720,18 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 			}
 
 			// Choose current/ramping based on the deployment having the most recent routingConfig update time.
-			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) &&
-				HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetCurrentDeploymentVersion()))) {
+			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) {
 				routingConfigLatestCurrentVersion = routingConfig
 			}
 
-			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) &&
-				HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetRampingDeploymentVersion()))) {
+			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
+				// We still have to check if this version is ramping or not.
 				routingConfigLatestRampingVersion = routingConfig
 			}
 		}
 	}
+
+	// BUG: Right now, unversioned ramping returns false for HasDeploymentVersion which is not desirable.
 
 	// Pick the final current and ramping version amongst the old and new deployment data formats.
 	return PickFinalCurrentAndRamping(
