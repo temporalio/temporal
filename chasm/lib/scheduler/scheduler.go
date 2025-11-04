@@ -80,6 +80,7 @@ func NewScheduler(
 		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
 	}
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
+	sched.Schedule.State = &schedulepb.ScheduleState{}
 
 	invoker := NewInvoker(ctx, sched)
 	generator := NewGenerator(ctx, sched, invoker)
@@ -113,7 +114,7 @@ func CreateScheduler(
 	// TODO: namespace name should be resolved from namespace_id via namespace registry
 	sched := NewScheduler(
 		ctx,
-		"", // TODO: should be namespace name
+		req.FrontendRequest.Namespace,
 		req.NamespaceId,
 		req.FrontendRequest.ScheduleId,
 		req.FrontendRequest.Schedule,
@@ -182,7 +183,7 @@ func (s *Scheduler) addBackfiller(
 // decremented when an action can be taken. When decrement is false, no state
 // is mutated.
 func (s *Scheduler) useScheduledAction(decrement bool) bool {
-	scheduleState := s.Schedule.State
+	scheduleState := s.Schedule.GetState()
 
 	// If paused, don't do anything.
 	if scheduleState.Paused {
@@ -229,7 +230,7 @@ func (s *Scheduler) getCompiledSpec(specBuilder *scheduler.SpecBuilder) (*schedu
 // WorkflowID returns the Workflow ID given as part of the request spec.
 // During start generation, nominal time is suffixed to this ID.
 func (s *Scheduler) WorkflowID() string {
-	return s.Schedule.Action.GetStartWorkflow().WorkflowId
+	return s.Schedule.GetAction().GetStartWorkflow().GetWorkflowId()
 }
 
 func (s *Scheduler) jitterSeed() string {
@@ -241,7 +242,7 @@ func (s *Scheduler) identity() string {
 }
 
 func (s *Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
-	policy := s.Schedule.Policies.OverlapPolicy
+	policy := s.Schedule.GetPolicies().GetOverlapPolicy()
 	if policy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
 		policy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
 	}
@@ -282,10 +283,10 @@ func (s *Scheduler) updateConflictToken() {
 func (s *Scheduler) getLastEventTime() time.Time {
 	var lastEvent time.Time
 	if len(s.Info.RecentActions) > 0 {
-		lastEvent = s.Info.RecentActions[len(s.Info.RecentActions)-1].ActualTime.AsTime()
+		lastEvent = s.Info.RecentActions[len(s.Info.RecentActions)-1].GetActualTime().AsTime()
 	}
-	lastEvent = util.MaxTime(lastEvent, s.Info.CreateTime.AsTime())
-	lastEvent = util.MaxTime(lastEvent, s.Info.UpdateTime.AsTime())
+	lastEvent = util.MaxTime(lastEvent, s.Info.GetCreateTime().AsTime())
+	lastEvent = util.MaxTime(lastEvent, s.Info.GetUpdateTime().AsTime())
 	return lastEvent
 }
 
@@ -316,10 +317,13 @@ func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 		}
 
 		var policy enumspb.ScheduleOverlapPolicy
-		if backfiller.GetBackfillRequest() != nil {
-			policy = backfiller.GetBackfillRequest().OverlapPolicy
-		} else {
-			policy = backfiller.GetTriggerRequest().OverlapPolicy
+		switch request := backfiller.GetRequest().(type) {
+		case *schedulerpb.BackfillerState_BackfillRequest:
+			policy = request.BackfillRequest.OverlapPolicy
+		case *schedulerpb.BackfillerState_TriggerRequest:
+			policy = request.TriggerRequest.OverlapPolicy
+		default:
+			return false
 		}
 
 		if enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL == s.resolveOverlapPolicy(policy) {

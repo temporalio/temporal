@@ -145,8 +145,8 @@ func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, sched
 func (g *GeneratorTaskExecutor) Validate(
 	ctx chasm.Context,
 	generator *Generator,
-	_ chasm.TaskAttributes,
+	attrs chasm.TaskAttributes,
 	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(generator.GetLastProcessedTime(), ctx.Now(generator))
+	return validateTaskHighWaterMark(generator.GetLastProcessedTime(), attrs.ScheduledTime)
 }
