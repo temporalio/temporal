@@ -1741,7 +1741,7 @@ func (s *mutableStateSuite) TestPauseWorkflowExecution_FailStateValidation() {
 	s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	prevStatus := s.mutableState.executionState.Status
 
-	err := s.mutableState.PauseWorkflowExecution("tester", "test_reason", uuid.New())
+	_, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "test_reason", uuid.New())
 	s.Error(err)
 	// Status should remain unchanged and PauseInfo should not be set when validation fails.
 	s.Equal(prevStatus, s.mutableState.executionState.Status)
