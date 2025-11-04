@@ -1670,6 +1670,22 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 	}
 }
 
+func (s *mutableStateSuite) TestPauseWorkflowExecution_DoesNotBypassValidation() {
+	s.SetupSubTest()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Simulate a completed workflow where transitioning status to PAUSED is invalid.
+	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	prevStatus := s.mutableState.executionState.Status
+
+	err := s.mutableState.PauseWorkflowExecution("tester", "test_reason", uuid.New())
+	s.Error(err)
+	// Status should remain unchanged and PauseInfo should not be set when validation fails.
+	s.Equal(prevStatus, s.mutableState.executionState.Status)
+	s.Nil(s.mutableState.executionInfo.PauseInfo)
+}
+
 func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	// set ContinueAsNew min interval to 5s
 	s.mockConfig.WorkflowIdReuseMinimalInterval = func(namespace string) time.Duration {
