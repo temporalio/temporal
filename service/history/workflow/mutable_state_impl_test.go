@@ -1717,7 +1717,7 @@ func (s *mutableStateSuite) TestPauseWorkflowExecution() {
 	prevWFTStamp := pendingWFT.Stamp
 
 	// Pause and assert stamps incremented.
-	err = s.mutableState.PauseWorkflowExecution("tester", "reason", uuid.New())
+	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.New())
 	s.NoError(err)
 
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
@@ -1727,6 +1727,9 @@ func (s *mutableStateSuite) TestPauseWorkflowExecution() {
 	wftInfo := s.mutableState.GetPendingWorkflowTask()
 	s.NotNil(wftInfo)
 	s.Greater(wftInfo.Stamp, prevWFTStamp)
+
+	// assert the event is marked as 'worker may ignore' so that older SDKs can safely ignore it.
+	s.True(pausedEvent.GetWorkerMayIgnore())
 }
 
 func (s *mutableStateSuite) TestPauseWorkflowExecution_FailStateValidation() {
