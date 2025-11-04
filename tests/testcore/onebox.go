@@ -226,9 +226,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
 	impl.replicationStreamRecorder.SetOutputFile(outputFile)
 
-	// TaskQueueRecorder will be created in fx.Decorate during history service startup
-	// Do NOT create it here - we need to wrap the FINAL ExecutionManager after all FX wrapping
-
 	for k, v := range dynamicConfigOverrides {
 		impl.overrideDynamicConfig(t, k, v)
 	}
@@ -659,7 +656,6 @@ func (c *TemporalImpl) createSystemNamespace() error {
 }
 
 func (c *TemporalImpl) GetExecutionManager() persistence.ExecutionManager {
-	// If we have a recorder, wrap the execution manager
 	if c.taskQueueRecorder != nil {
 		return c.taskQueueRecorder
 	}
