@@ -41,9 +41,15 @@ func ValidateCreateWorkflowStateStatus(
 	}
 
 	// validate workflow state & status
-	if (state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) ||
-		(state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
-		return serviceerror.NewInternalf("Create workflow with invalid state: %v or status: %v", state, status)
+	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return serviceerror.NewInternalf("Create workflow with invalid state: %v or status: %v", state, status)
+		}
+	} else {
+		if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
+			status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+			return serviceerror.NewInternalf("Create workflow with invalid state: %v or status: %v", state, status)
+		}
 	}
 	return nil
 }
