@@ -1647,7 +1647,7 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 	}
 
 	for _, c := range cases {
-		s.T().Run(c.name, func(t *testing.T) {
+		s.Run(c.name, func() {
 			s.SetupSubTest()
 			s.mutableState.executionState.State = c.currentState
 			// default current status to RUNNING unless specified
