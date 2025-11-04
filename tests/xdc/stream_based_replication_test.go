@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -38,7 +39,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	test "go.temporal.io/server/common/testing"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
@@ -1108,16 +1108,14 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	historyIter := sdkClient.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
 	var scheduledEventID int64
-	var activityType string
 	for historyIter.HasNext() {
 		event, err := historyIter.Next()
 		s.NoError(err)
 		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED {
 			scheduledEventID = event.GetEventId()
 			attrs := event.GetActivityTaskScheduledEventAttributes()
-			activityType = attrs.GetActivityType().GetName()
 			// Verify this is the activity we expect
-			s.Equal("test-activity", activityType, "Should be our test activity")
+			s.Equal("test-activity", attrs.GetActivityType().GetName(), "Should be our test activity")
 			break
 		}
 	}
