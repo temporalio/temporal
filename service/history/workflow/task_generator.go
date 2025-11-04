@@ -552,6 +552,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 		TaskQueue:        activityInfo.TaskQueue,
 		ScheduledEventID: activityInfo.ScheduledEventId,
 		Version:          activityInfo.Version,
+		Stamp:            activityInfo.Stamp,
 	})
 
 	return nil
