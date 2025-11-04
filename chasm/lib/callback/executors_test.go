@@ -353,7 +353,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
 		EntityId:    "entity-id",
-		Archetype:   "test-archetype",
+		ArchetypeId: 1234,
 	}
 
 	serializedRef, err := dummyRef.Marshal()

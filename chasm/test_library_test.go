@@ -34,33 +34,33 @@ func newTestLibrary(
 }
 
 func (l *TestLibrary) Name() string {
-	return "TestLibrary"
+	return testLibraryName
 }
 
 func (l *TestLibrary) Components() []*RegistrableComponent {
 	return []*RegistrableComponent{
-		NewRegistrableComponent[*TestComponent]("test_component"),
-		NewRegistrableComponent[*TestSubComponent1]("test_sub_component_1"),
-		NewRegistrableComponent[*TestSubComponent11]("test_sub_component_11"),
-		NewRegistrableComponent[*TestSubComponent2]("test_sub_component_2"),
+		NewRegistrableComponent[*TestComponent](testComponentName),
+		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),
+		NewRegistrableComponent[*TestSubComponent11](testSubComponent11Name),
+		NewRegistrableComponent[*TestSubComponent2](testSubComponent2Name),
 	}
 }
 
 func (l *TestLibrary) Tasks() []*RegistrableTask {
 	return []*RegistrableTask{
 		NewRegistrableSideEffectTask(
-			"test_side_effect_task",
+			testSideEffectTaskName,
 			l.mockSideEffectTaskValidator,
 			l.mockSideEffectTaskExecutor,
 		),
 		NewRegistrableSideEffectTask(
 			// NOTE this task is registered as a struct, instead of pointer to struct.
-			"test_outbound_side_effect_task",
+			testOutboundSideEffectTaskName,
 			l.mockOutboundSideEffectTaskValidator,
 			l.mockOutboundSideEffectTaskExecutor,
 		),
 		NewRegistrablePureTask(
-			"test_pure_task",
+			testPureTaskName,
 			l.mockPureTaskValidator,
 			l.mockPureTaskExecutor,
 		),

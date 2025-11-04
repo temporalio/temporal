@@ -241,6 +241,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		shardContext.GetNamespaceRegistry(),
 		shardContext.GetClusterMetadata(),
+		f.ChasmRegistry,
 		logger,
 		metricsHandler,
 		f.TracerProvider.Tracer(telemetry.ComponentQueueOutbound),

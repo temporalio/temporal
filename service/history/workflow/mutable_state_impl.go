@@ -516,7 +516,7 @@ func NewMutableStateFromDB(
 
 	if shard.GetConfig().EnableChasm() {
 		var err error
-		mutableState.chasmTree, err = chasm.NewTree(
+		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
 			shard.ChasmRegistry(),
 			shard.GetTimeSource(),
@@ -604,8 +604,7 @@ func (ms *MutableStateImpl) mustInitHSM() {
 }
 
 func (ms *MutableStateImpl) IsWorkflow() bool {
-	archetype := ms.chasmTree.Archetype()
-	return archetype == chasmworkflow.Archetype || archetype == ""
+	return ms.chasmTree.ArchetypeID() == chasm.WorkflowArchetypeID
 }
 
 func (ms *MutableStateImpl) HSM() *hsm.Node {

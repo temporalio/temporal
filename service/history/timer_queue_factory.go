@@ -93,6 +93,7 @@ func (f *timerQueueFactory) CreateQueue(
 			f.NamespaceRegistry,
 			f.SchedulerRateLimiter,
 			f.TimeSource,
+			f.ChasmRegistry,
 			logger,
 			metricsHandler,
 		)
@@ -152,6 +153,7 @@ func (f *timerQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		shardContext.GetNamespaceRegistry(),
 		shardContext.GetClusterMetadata(),
+		f.ChasmRegistry,
 		logger,
 		metricsHandler,
 		f.Tracer,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -158,6 +159,7 @@ func (s *memoryScheduledQueueSuite) newSpeculativeWorkflowTaskTimeoutTestExecuta
 			s.mockTimeSource,
 			nil,
 			nil,
+			chasm.NewRegistry(log.NewTestLogger()),
 			nil,
 			nil,
 			telemetry.NoopTracer,

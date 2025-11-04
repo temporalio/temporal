@@ -9,8 +9,13 @@ import (
 )
 
 const (
-	visibilityComponentFqType = "core.vis"
-	visibilityTaskFqType      = "core.visTask"
+	visibilityComponentType = "core.vis"
+	visibilityTaskType      = "core.visTask"
+)
+
+var (
+	visibilityComponentTypeID = generateTypeID(visibilityComponentType)
+	visibilityTaskTypeID      = generateTypeID(visibilityTaskType)
 )
 
 // VisibilitySearchAttributesProvider if implemented by the root Component,

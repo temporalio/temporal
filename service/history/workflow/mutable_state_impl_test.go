@@ -32,7 +32,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -2750,7 +2749,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			},
 			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
-				mockChasmTree.EXPECT().Archetype().Return(chasm.Archetype("mock-archetype")).AnyTimes()
+				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
@@ -4175,7 +4174,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				}
 
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
-				mockChasmTree.EXPECT().Archetype().Return(chasm.Archetype("mock-archetype")).AnyTimes()
+				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
@@ -4328,14 +4327,14 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
 
 	// Is workflow, should not generate retention task
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
-	mockChasmTree.EXPECT().Archetype().Return(chasmworkflow.Archetype).Times(1)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).Times(1)
 	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
 
 	// Now make the mutable state non-workflow.
-	mockChasmTree.EXPECT().Archetype().Return(chasm.Archetype("test-archetype")).Times(2) // One time for each CloseTransactionAsMutation call
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).Times(2) // One time for each CloseTransactionAsMutation call
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,

@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/circuitbreaker"
@@ -140,6 +141,7 @@ type (
 		timeSource        clock.TimeSource
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
+		chasmRegistry     *chasm.Registry
 		logger            log.Logger
 		metricsHandler    metrics.Handler
 		tracer            trace.Tracer
@@ -180,6 +182,7 @@ func NewExecutable(
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	chasmRegistry *chasm.Registry,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	tracer trace.Tracer,
@@ -214,6 +217,7 @@ func NewExecutable(
 		timeSource:        timeSource,
 		namespaceRegistry: namespaceRegistry,
 		clusterMetadata:   clusterMetadata,
+		chasmRegistry:     chasmRegistry,
 		readerID:          readerID,
 		loadTime:          util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
 		logger: log.NewLazyLogger(
@@ -308,6 +312,7 @@ func (e *executableImpl) Execute() (retErr error) {
 					e.GetTask(),
 					e.namespaceRegistry,
 					e.clusterMetadata.GetCurrentClusterName(),
+					e.chasmRegistry,
 				)...)
 		}
 
@@ -834,6 +839,7 @@ func estimateTaskMetricTag(
 	task tasks.Task,
 	namespaceRegistry namespace.Registry,
 	currentClusterName string,
+	chasmRegistry *chasm.Registry,
 ) []metrics.Tag {
 	namespaceTag := metrics.NamespaceUnknownTag()
 	isActive := true
@@ -844,7 +850,7 @@ func estimateTaskMetricTag(
 		isActive = ns.ActiveInCluster(currentClusterName)
 	}
 
-	taskType := getTaskTypeTagValue(task, isActive)
+	taskType := getTaskTypeTagValue(task, isActive, chasmRegistry)
 	return []metrics.Tag{
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),

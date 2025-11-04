@@ -9,6 +9,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -63,6 +64,7 @@ func (s *readerSuite) SetupTest() {
 			clock.NewRealTimeSource(),
 			nil,
 			nil,
+			chasm.NewRegistry(log.NewTestLogger()),
 			nil,
 			metrics.NoopMetricsHandler,
 			telemetry.NoopTracer,

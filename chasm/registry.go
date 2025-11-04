@@ -20,9 +20,11 @@ type (
 	Registry struct {
 		libraries         map[string]Library                     // library name -> library
 		componentByType   map[string]*RegistrableComponent       // fully qualified type name -> component
+		componentFqnByID  map[uint32]string                      // component ID -> fully qualified type name
 		componentByGoType map[reflect.Type]*RegistrableComponent // component go type -> component
 
 		taskByType   map[string]*RegistrableTask       // fully qualified type name -> task
+		taskFqnByID  map[uint32]string                 // task type ID -> fully qualified type name
 		taskByGoType map[reflect.Type]*RegistrableTask // task go type -> task
 
 		logger log.Logger
@@ -33,8 +35,10 @@ func NewRegistry(logger log.Logger) *Registry {
 	return &Registry{
 		libraries:         make(map[string]Library),
 		componentByType:   make(map[string]*RegistrableComponent),
+		componentFqnByID:  make(map[uint32]string),
 		componentByGoType: make(map[reflect.Type]*RegistrableComponent),
 		taskByType:        make(map[string]*RegistrableTask),
+		taskFqnByID:       make(map[uint32]string),
 		taskByGoType:      make(map[reflect.Type]*RegistrableTask),
 		logger:            logger,
 	}
@@ -69,6 +73,44 @@ func (r *Registry) RegisterServices(server *grpc.Server) {
 	}
 }
 
+// ComponentFqnByID converts component type ID to fully qualified component type name.
+// This method should only be used by CHASM framework internal code,
+// NOT CHASM library developers.
+func (r *Registry) ComponentFqnByID(id uint32) (string, bool) {
+	fqn, ok := r.componentFqnByID[id]
+	return fqn, ok
+}
+
+// ComponentIDFor converts registered component instance to component type ID.
+// This method should only be used by CHASM framework internal code,
+// NOT CHASM library developers.
+func (r *Registry) ComponentIDFor(componentInstance any) (uint32, bool) {
+	rc, ok := r.componentFor(componentInstance)
+	if !ok {
+		return 0, false
+	}
+	return rc.componentID, true
+}
+
+// TaskFqnByID converts task type ID to fully qualified task type name.
+// This method should only be used by CHASM framework internal code,
+// NOT CHASM library developers.
+func (r *Registry) TaskFqnByID(id uint32) (string, bool) {
+	fqn, ok := r.taskFqnByID[id]
+	return fqn, ok
+}
+
+// TaskIDFor converts registered task instance to task type ID.
+// This method should only be used by CHASM framework internal code,
+// NOT CHASM library developers.
+func (r *Registry) TaskIDFor(taskInstance any) (uint32, bool) {
+	rt, ok := r.taskFor(taskInstance)
+	if !ok {
+		return 0, false
+	}
+	return rt.taskTypeID, true
+}
+
 func (r *Registry) component(fqn string) (*RegistrableComponent, bool) {
 	rc, ok := r.componentByType[fqn]
 	return rc, ok
@@ -80,8 +122,8 @@ func (r *Registry) task(fqn string) (*RegistrableTask, bool) {
 }
 
 func (r *Registry) componentFor(componentInstance any) (*RegistrableComponent, bool) {
-	rt, ok := r.componentByGoType[reflect.TypeOf(componentInstance)]
-	return rt, ok
+	rc, ok := r.componentByGoType[reflect.TypeOf(componentInstance)]
+	return rc, ok
 }
 
 func (r *Registry) taskFor(taskInstance any) (*RegistrableTask, bool) {
@@ -99,6 +141,22 @@ func (r *Registry) taskOf(taskGoType reflect.Type) (*RegistrableTask, bool) {
 	return rt, ok
 }
 
+func (r *Registry) componentByID(id uint32) (*RegistrableComponent, bool) {
+	fqn, ok := r.componentFqnByID[id]
+	if !ok {
+		return nil, false
+	}
+	return r.component(fqn)
+}
+
+func (r *Registry) taskByID(id uint32) (*RegistrableTask, bool) {
+	fqn, ok := r.taskFqnByID[id]
+	if !ok {
+		return nil, false
+	}
+	return r.task(fqn)
+}
+
 func (r *Registry) registerComponent(
 	lib namer,
 	rc *RegistrableComponent,
@@ -106,13 +164,20 @@ func (r *Registry) registerComponent(
 	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
-	fqn := fullyQualifiedName(lib.Name(), rc.componentType)
+
+	fqn, id, err := rc.registerToLibrary(lib)
+	if err != nil {
+		return err
+	}
+
 	if _, ok := r.componentByType[fqn]; ok {
 		return fmt.Errorf("component %s is already registered", fqn)
 	}
-	if rc.library != nil {
-		return fmt.Errorf("component %s is already registered in library %s", fqn, rc.library.Name())
+
+	if existingComponentFqn, ok := r.componentFqnByID[id]; ok {
+		return fmt.Errorf("component ID %d collision between %s and %s", id, fqn, existingComponentFqn)
 	}
+
 	// rc.goType implements Component interface; therefore, it must be a struct.
 	// This check to protect against the interface itself being registered.
 	if !(rc.goType.Kind() == reflect.Struct ||
@@ -124,8 +189,8 @@ func (r *Registry) registerComponent(
 	}
 	r.warnUnmanagedFields(fqn, rc)
 
-	rc.library = lib
 	r.componentByType[fqn] = rc
+	r.componentFqnByID[id] = fqn
 	r.componentByGoType[rc.goType] = rc
 	return nil
 }
@@ -136,13 +201,20 @@ func (r *Registry) registerTask(
 	if err := r.validateName(rt.taskType); err != nil {
 		return err
 	}
-	fqn := fullyQualifiedName(lib.Name(), rt.taskType)
+
+	fqn, id, err := rt.registerToLibrary(lib)
+	if err != nil {
+		return err
+	}
+
 	if _, ok := r.taskByType[fqn]; ok {
 		return fmt.Errorf("task %s is already registered", fqn)
 	}
-	if rt.library != nil {
-		return fmt.Errorf("task %s is already registered in library %s", fqn, rt.library.Name())
+
+	if existingTaskFqn, ok := r.taskFqnByID[id]; ok {
+		return fmt.Errorf("task type ID %d collision between %s and %s", id, fqn, existingTaskFqn)
 	}
+
 	if !(rt.goType.Kind() == reflect.Struct ||
 		(rt.goType.Kind() == reflect.Ptr && rt.goType.Elem().Kind() == reflect.Struct)) {
 		return fmt.Errorf("task type %s must be struct or pointer to struct", rt.goType.String())
@@ -157,8 +229,8 @@ func (r *Registry) registerTask(
 		return fmt.Errorf("component type %s must be and interface or struct that implements Component interface", rt.componentGoType.String())
 	}
 
-	rt.library = lib
 	r.taskByType[fqn] = rt
+	r.taskFqnByID[id] = fqn
 	r.taskByGoType[rt.goType] = rt
 	return nil
 }

@@ -567,9 +567,16 @@ func (e *ChasmEngine) getExecutionLease(
 		lockPriority = locks.PriorityLow
 	}
 
-	archetype, err := ref.Archetype(e.registry)
+	archetypeID, err := ref.ArchetypeID(e.registry)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// TODO: use archetypeID as well in execution cache and then we don't need
+	// this extra conversion.
+	archetype, ok := e.registry.ComponentFqnByID(archetypeID)
+	if !ok {
+		return nil, nil, serviceerror.NewInternalf("unknown archetype ID: %v", archetypeID)
 	}
 
 	var staleReferenceErr error
@@ -592,7 +599,7 @@ func (e *ChasmEngine) getExecutionLease(
 			ref.EntityKey.BusinessID,
 			ref.EntityKey.EntityID,
 		),
-		archetype,
+		chasm.Archetype(archetype),
 		lockPriority,
 	)
 	if err == nil && staleReferenceErr != nil {

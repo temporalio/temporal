@@ -140,7 +140,16 @@ func (s *fieldSuite) TestFieldGetComponent() {
 func (s *fieldSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
-	return NewTree(
+	if len(serializedNodes) == 0 {
+		return NewEmptyTree(
+			s.registry,
+			s.timeSource,
+			s.nodeBackend,
+			s.nodePathEncoder,
+			s.logger,
+		), nil
+	}
+	return NewTreeFromDB(
 		serializedNodes,
 		s.registry,
 		s.timeSource,

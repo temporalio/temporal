@@ -57,7 +57,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
 	)
-	taskType := queues.GetOutboundTaskTypeTagValue(task, true)
+	taskType := queues.GetOutboundTaskTypeTagValue(task, true, e.shardContext.ChasmRegistry())
 	respond := func(err error) queues.ExecuteResponse {
 		metricsTags := []metrics.Tag{
 			namespaceTag,
