@@ -1048,7 +1048,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	s.NoError(err)
 	defer sdkClient.Close()
 
-	var activityAttempts int32 = 0
+	var activityAttempts int32
 
 	// Workflow with activity that retries with 3 second intervals
 	simpleWorkflow := func(ctx workflow.Context) (string, error) {
@@ -1073,7 +1073,6 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 
 	// Activity that sleeps 3 seconds and fails twice, succeeds on 3rd attempt
 	simpleActivity := func(ctx context.Context) (string, error) {
-		time.Sleep(3 * time.Second)
 		attempt := atomic.AddInt32(&activityAttempts, 1)
 		if attempt < 3 {
 			return "", fmt.Errorf("failed attempt %d", attempt)
@@ -1101,9 +1100,6 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	err = workflowRun.Get(ctx, &workflowResult)
 	s.NoError(err)
 
-	// Wait for async task generation and replication
-	time.Sleep(2 * time.Second)
-
 	// Get the scheduled event ID from workflow history
 	historyIter := sdkClient.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
@@ -1120,6 +1116,20 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 		}
 	}
 	s.Require().NotZero(scheduledEventID, "Should have found ActivityTaskScheduled event")
+
+	// Wait for async task generation and replication to standby
+	s.Require().Eventually(func() bool {
+		standbyTasks := recorder1.CountTasksForWorkflow(
+			tasks.CategoryTimer,
+			namespaceID,
+			workflowID,
+			runID,
+			func(rt testcore.RecordedTask) bool {
+				return rt.TaskType == enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER.String()
+			},
+		)
+		return standbyTasks >= 2
+	}, 10*time.Second, 200*time.Millisecond, "Standby cluster should eventually have replicated retry timers")
 
 	// Verify active cluster generated exactly 1 TransferActivityTask with matching event ID
 	activeTransferActivityTasks := recorder0.CountTasksForWorkflow(

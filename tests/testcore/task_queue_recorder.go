@@ -385,7 +385,9 @@ func writeFile(filePath string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	_, err = file.Write(data)
 	return err

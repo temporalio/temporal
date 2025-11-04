@@ -116,7 +116,7 @@ type (
 		chasmRegistry             *chasm.Registry
 		grpcClientInterceptor     *grpcinject.Interceptor
 		replicationStreamRecorder *ReplicationStreamRecorder
-		taskQueueRecorder     *TaskQueueRecorder
+		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 
