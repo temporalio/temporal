@@ -60,7 +60,7 @@ func Invoke(
 				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) ||
 				(token.StartedTime != nil && !workflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(workflowTask.StartedTime)) ||
 				workflowTask.Attempt != token.Attempt ||
-				workflowTask.Attempt > 3 /* drop workflow task failed call for repeated failures, as workaround to prevent busy loop */ ||
+				workflowTask.Attempt > 1 /* drop workflow task failed call for repeated failures, as workaround to prevent busy loop */ ||
 				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
 				// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
 				workflowLease.GetReleaseFn()(nil)
