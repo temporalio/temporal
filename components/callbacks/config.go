@@ -1,6 +1,7 @@
 package callbacks
 
 import (
+	"go.temporal.io/server/chasm"
 	"net/url"
 	"regexp"
 	"strings"
@@ -69,7 +70,7 @@ type AddressMatchRules struct {
 
 func (a AddressMatchRules) Validate(rawURL string) error {
 	// Exact match only; no path, query, or fragment allowed for system URL
-	if rawURL == nexus.SystemCallbackURL {
+	if rawURL == nexus.SystemCallbackURL || rawURL == chasm.NexusCompletionHandlerURL {
 		return nil
 	}
 	u, err := url.Parse(rawURL)
