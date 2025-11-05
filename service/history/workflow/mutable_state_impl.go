@@ -2823,15 +2823,11 @@ func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
 	reason string,
 	requestID string,
 ) (*historypb.HistoryEvent, error) {
-	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED, func(event *historypb.HistoryEvent) {
-		event.Attributes = &historypb.HistoryEvent_WorkflowExecutionPausedEventAttributes{
-			WorkflowExecutionPausedEventAttributes: &historypb.WorkflowExecutionPausedEventAttributes{
-				Identity:  identity,
-				Reason:    reason,
-				RequestId: requestID,
-			},
-		}
-	})
+	opTag := tag.WorkflowActionWorkflowPaused
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionPausedEvent(identity, reason, requestID)
 	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
 	event.WorkerMayIgnore = true
 	if err := ms.ApplyWorkflowExecutionPausedEvent(event); err != nil {
