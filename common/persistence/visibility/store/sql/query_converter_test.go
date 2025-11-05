@@ -339,6 +339,44 @@ func (s *queryConverterSuite) TestConvertComparisonExpr() {
 			),
 		},
 		{
+			name:   "contains expression",
+			input:  "AliasForKeyword01 contains 'substring'",
+			output: `Keyword01 like '%substring%' escape '!'`,
+			err:    nil,
+		},
+		{
+			name:   "not contains expression",
+			input:  "AliasForKeyword01 not contains 'substring'",
+			output: `Keyword01 not like '%substring%' escape '!'`,
+			err:    nil,
+		},
+		{
+			name:   "contains expression with special chars",
+			input:  "AliasForKeyword01 contains 'foo_bar%'",
+			output: `Keyword01 like '%foo!_bar!%%' escape '!'`,
+			err:    nil,
+		},
+		{
+			name:   "contains expression error",
+			input:  "AliasForKeyword01 contains 123",
+			output: "",
+			err: query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: 123)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.ContainsStr,
+			),
+		},
+		{
+			name:   "not contains expression error",
+			input:  "AliasForKeyword01 not contains 123",
+			output: "",
+			err: query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: 123)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.NotContainsStr,
+			),
+		},
+		{
 			name:   "like expression",
 			input:  "AliasForKeyword01 like 'foo%'",
 			output: "",

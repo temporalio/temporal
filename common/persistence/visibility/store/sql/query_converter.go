@@ -87,6 +87,8 @@ var (
 		sqlparser.NotInStr,
 		sqlparser.StartsWithStr,
 		sqlparser.NotStartsWithStr,
+		sqlparser.ContainsStr,
+		sqlparser.NotContainsStr,
 	}
 
 	supportedKeyworkListOperators = []string{
@@ -395,6 +397,23 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 		}
 		expr.Escape = defaultLikeEscapeExpr
 		valueExpr.Val = escapeLikeValueForPrefixSearch(valueExpr.Val, defaultLikeEscapeChar)
+	case sqlparser.ContainsStr, sqlparser.NotContainsStr:
+		valueExpr, ok := expr.Right.(*unsafeSQLString)
+		if !ok {
+			return query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: %v)",
+				query.InvalidExpressionErrMessage,
+				expr.Operator,
+				sqlparser.String(expr.Right),
+			)
+		}
+		if expr.Operator == sqlparser.ContainsStr {
+			expr.Operator = sqlparser.LikeStr
+		} else {
+			expr.Operator = sqlparser.NotLikeStr
+		}
+		expr.Escape = defaultLikeEscapeExpr
+		valueExpr.Val = escapeLikeValueForSubstringSearch(valueExpr.Val, defaultLikeEscapeChar)
 	}
 
 	return nil
@@ -652,6 +671,19 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 
 func escapeLikeValueForPrefixSearch(in string, escape byte) string {
 	sb := strings.Builder{}
+	for _, c := range in {
+		if c == '%' || c == '_' || c == rune(escape) {
+			sb.WriteByte(escape)
+		}
+		sb.WriteRune(c)
+	}
+	sb.WriteByte('%')
+	return sb.String()
+}
+
+func escapeLikeValueForSubstringSearch(in string, escape byte) string {
+	sb := strings.Builder{}
+	sb.WriteByte('%')
 	for _, c := range in {
 		if c == '%' || c == '_' || c == rune(escape) {
 			sb.WriteByte(escape)

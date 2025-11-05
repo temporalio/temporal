@@ -494,6 +494,18 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
 		}
 		query = elastic.NewBoolQuery().MustNot(elastic.NewPrefixQuery(colName, v))
+	case sqlparser.ContainsStr:
+		v, ok := colValues[0].(string)
+		if !ok {
+			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
+		}
+		query = elastic.NewWildcardQuery(colName, "*"+v+"*")
+	case sqlparser.NotContainsStr:
+		v, ok := colValues[0].(string)
+		if !ok {
+			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
+		}
+		query = elastic.NewBoolQuery().MustNot(elastic.NewWildcardQuery(colName, "*"+v+"*"))
 	}
 
 	return query, nil
