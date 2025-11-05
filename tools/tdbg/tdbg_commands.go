@@ -9,7 +9,6 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/multierr"
 )
@@ -68,19 +67,6 @@ func getCommands(
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
-		},
-		{
-			Name: "health-check",
-			Action: func(c *cli.Context) error {
-				adminClient := clientFactory.AdminClient(c)
-				ctx, cancel := newContext(c)
-				defer cancel()
-				_, err := adminClient.DeepHealthCheck(ctx, &adminservice.DeepHealthCheckRequest{})
-				if err != nil {
-					return err
-				}
-				return nil
-			},
 		},
 	}
 }
