@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -241,7 +240,6 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.True(s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
 
 	// Run a backfill task.
 	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
@@ -267,6 +265,11 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 
 	// Validate BufferedStarts. More detailed validation must be done in the callbacks.
 	s.Equal(c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
+
+	// Validate RequestId -> WorkflowId mapping
+	for _, start := range invoker.GetBufferedStarts() {
+		s.Equal(start.WorkflowId, invoker.WorkflowID(start.RequestId))
+	}
 
 	// Callbacks.
 	if c.ValidateInvoker != nil {

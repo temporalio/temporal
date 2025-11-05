@@ -70,6 +70,31 @@ func (c *clientImpl) CompleteNexusOperation(
 	return response, nil
 }
 
+func (c *clientImpl) CompleteNexusOperationChasm(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationChasmRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	ref, err := c.tokenSerializer.DeserializeChasmComponentRef(request.GetCompletion().GetComponentRef())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
+	}
+	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())
+	
+	var response *historyservice.CompleteNexusOperationChasmResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.CompleteNexusOperationChasm(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,

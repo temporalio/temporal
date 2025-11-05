@@ -28,6 +28,7 @@ const (
 	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
 	PersistenceDBKindTagName    = "db_kind"
+	WorkerPluginNameTagName     = "worker_plugin_name"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -355,6 +356,8 @@ const (
 	HistorySignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
 	// HistoryCompleteNexusOperationScope tracks CompleteNexusOperation API calls received by service
 	HistoryCompleteNexusOperationScope = "CompleteNexusOperation"
+	// HistoryCompleteNexusOperationChasmScope tracks CompleteNexusOperationChasm API calls received by service
+	HistoryCompleteNexusOperationChasmScope = "CompleteNexusOperationChasm"
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope = "SyncShardStatus"
 	// HistoryShardControllerScope is the scope used by shard controller
@@ -1123,6 +1126,13 @@ var (
 	WorkerRegistryCapacityUtilizationMetric = NewGaugeDef(
 		"worker_registry_capacity_utilization",
 		WithDescription("Tracks the ratio of total entries to maxItems."),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to understand plugin adoption.
+	WorkerPluginNameMetric = NewGaugeDef(
+		"worker_plugin_name",
+		WithDescription(
+			"Set if the worker was configured with a plugin. Dimensions: namespace, plugin_name"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 

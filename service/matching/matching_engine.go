@@ -424,11 +424,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	if err != nil {
 		return nil, false, err
 	}
-	nsName := namespaceEntry.Name()
 
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
-	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(nsName, partition, tqConfig)
+	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
 	onUserDataChanged := func() { newPM.userDataChanged() }
 	userDataManager := newUserDataManager(
@@ -471,26 +470,33 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 }
 
 func (e *matchingEngineImpl) loggerAndMetricsForPartition(
-	nsName namespace.Name,
+	nsEntry *namespace.Namespace,
 	partition tqid.Partition,
 	tqConfig *taskQueueConfig,
 ) (log.Logger, log.Logger, metrics.Handler) {
+	nsName := nsEntry.Name().String()
+	var nsState string
+	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
+		nsState = metrics.ActiveNamespaceStateTagValue
+	} else {
+		nsState = metrics.PassiveNamespaceStateTagValue
+	}
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName.String()))
+		tag.WorkflowNamespace(nsName))
 	throttledLogger := log.With(e.throttledLogger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName.String()))
+		tag.WorkflowNamespace(nsName))
 	metricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
-		nsName.String(),
+		nsName,
 		partition,
 		tqConfig.BreakdownMetricsByTaskQueue(),
 		tqConfig.BreakdownMetricsByPartition(),
 		metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-	)
+	).WithTags(metrics.NamespaceStateTag(nsState))
 	return logger, throttledLogger, metricsHandler
 }
 
@@ -536,6 +542,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		ExpiryTime:       expirationTime,
 		CreateTime:       timestamppb.New(now),
 		VersionDirective: addRequest.VersionDirective,
+		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
 	}
 
@@ -2862,6 +2869,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:    task.event.Data.VersionDirective,
+		Stamp:               task.event.Data.GetStamp(),
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -3004,7 +3012,10 @@ func prepareTaskQueueUserData(
 	return data
 }
 
-func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+func (e *matchingEngineImpl) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueConfigRequest,
+) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
 	taskQueueFamily, err := tqid.NewTaskQueueFamily(request.NamespaceId, request.UpdateTaskqueueConfig.GetTaskQueue())
 	if err != nil {
 		return nil, err
@@ -3040,18 +3051,36 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(ctx context.Context, request 
 			}
 			now := hlc.Next(existingClock, e.timeSource)
 			protoTs := hlc.ProtoTimestamp(now)
+
 			// Update relevant config fields
 			cfg := data.PerType[int32(taskQueueType)].Config
 			updateTaskQueueConfig := request.GetUpdateTaskqueueConfig()
 			updateIdentity := updateTaskQueueConfig.GetIdentity()
+
 			// Queue Rate Limit
 			if qrl := updateTaskQueueConfig.GetUpdateQueueRateLimit(); qrl != nil {
 				cfg.QueueRateLimit = buildRateLimitConfig(qrl, protoTs, updateIdentity)
 			}
+
 			// Fairness Queue Rate Limit
 			if fkrl := updateTaskQueueConfig.GetUpdateFairnessKeyRateLimitDefault(); fkrl != nil {
 				cfg.FairnessKeysRateLimitDefault = buildRateLimitConfig(fkrl, protoTs, updateIdentity)
 			}
+
+			// Fairness Weight Overrides
+			if len(updateTaskQueueConfig.GetSetFairnessWeightOverrides()) > 0 ||
+				len(updateTaskQueueConfig.GetUnsetFairnessWeightOverrides()) > 0 {
+				cfg.FairnessWeightOverrides, err = mergeFairnessWeightOverrides(
+					cfg.FairnessWeightOverrides,
+					updateTaskQueueConfig.GetSetFairnessWeightOverrides(),
+					updateTaskQueueConfig.GetUnsetFairnessWeightOverrides(),
+					tqm.GetConfig().MaxFairnessKeyWeightOverrides(),
+				)
+				if err != nil {
+					return nil, false, err
+				}
+			}
+
 			// Update the clock on TaskQueueUserData to enforce LWW on config updates
 			data.Clock = now
 			return data, true, nil

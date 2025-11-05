@@ -254,8 +254,8 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				return cfg
 			}).AnyTimes()
 
-			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata)
-			err := taskGenerator.GenerateWorkflowCloseTasks(p.CloseEventTime, p.DeleteAfterClose)
+			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata, log.NewTestLogger())
+			err := taskGenerator.GenerateWorkflowCloseTasks(p.CloseEventTime, p.DeleteAfterClose, false)
 			require.NoError(t, err)
 
 			var (
@@ -388,7 +388,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		genTasks = append(genTasks, ts...)
 	}).AnyTimes()
 
-	taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata)
+	taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata, log.NewTestLogger())
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
 
@@ -689,6 +689,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 				mockMutableState,
 				mockShard.GetConfig(),
 				mockShard.GetArchivalMetadata(),
+				log.NewTestLogger(),
 			)
 
 			actualExecutionTimerTaskStatus, err := taskGenerator.GenerateWorkflowStartTasks(&historypb.HistoryEvent{
@@ -814,6 +815,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				mockMutableState,
 				mockShard.GetConfig(),
 				mockShard.GetArchivalMetadata(),
+				log.NewTestLogger(),
 			)
 			resultTasks, _, err := taskGenerator.GenerateMigrationTasks(nil)
 			require.NoError(t, err)
@@ -902,6 +904,7 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 		ms,
 		&configs.Config{},
 		archiver.NewMockArchivalMetadata(ctrl),
+		log.NewTestLogger(),
 	)
 
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
