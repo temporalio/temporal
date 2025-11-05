@@ -38,6 +38,7 @@ func newBackfiller(
 		BackfillerState: &schedulerpb.BackfillerState{
 			BackfillId:        id,
 			LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
+			Lifecycle:         schedulerpb.BACKFILLER_LIFECYCLE_OPEN,
 		},
 		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
@@ -45,10 +46,12 @@ func newBackfiller(
 }
 
 func (b *Backfiller) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
-	if b.Closed {
+	switch b.Lifecycle {
+	case schedulerpb.BACKFILLER_LIFECYCLE_CLOSED:
 		return chasm.LifecycleStateCompleted
+	default:
+		return chasm.LifecycleStateRunning
 	}
-	return chasm.LifecycleStateRunning
 }
 
 func (b *Backfiller) RequestType() BackfillRequestType {

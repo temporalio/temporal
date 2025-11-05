@@ -112,7 +112,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	if result.Complete {
 		logger.Debug("backfill complete, closing Backfiller",
 			tag.NewStringTag("backfill-id", backfiller.GetBackfillId()))
-		backfiller.Closed = true
+		backfiller.Lifecycle = schedulerpb.BACKFILLER_LIFECYCLE_CLOSED
 		return nil
 	}
 

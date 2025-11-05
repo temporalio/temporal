@@ -83,8 +83,14 @@ message BackfillerState {
     // needs to back off before retrying to fill.
     int64 attempt = 8;
 
-    // Set to true after the backfill is complete, used for lifecycle management.
-    bool closed = 9;
+    // Set to closed after the backfill is complete.
+    BackfillerLifecycle lifecycle = 9;
+}
+
+enum BackfillerLifecycle {
+    BACKFILLER_LIFECYCLE_UNSPECIFIED = 0;
+    BACKFILLER_LIFECYCLE_OPEN = 1;
+    BACKFILLER_LIFECYCLE_CLOSED = 2;
 }
 
 // CHASM scheduler retains the payload data for the last completed workflow

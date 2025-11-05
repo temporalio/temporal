@@ -2,6 +2,8 @@
 package schedulerpb
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -188,4 +190,23 @@ func (this *LastCompletionResult) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+var (
+	BackfillerLifecycle_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Open":        1,
+		"Closed":      2,
+	}
+)
+
+// BackfillerLifecycleFromString parses a BackfillerLifecycle value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to BackfillerLifecycle
+func BackfillerLifecycleFromString(s string) (BackfillerLifecycle, error) {
+	if v, ok := BackfillerLifecycle_value[s]; ok {
+		return BackfillerLifecycle(v), nil
+	} else if v, ok := BackfillerLifecycle_shorthandValue[s]; ok {
+		return BackfillerLifecycle(v), nil
+	}
+	return BackfillerLifecycle(0), fmt.Errorf("%s is not a valid BackfillerLifecycle", s)
 }

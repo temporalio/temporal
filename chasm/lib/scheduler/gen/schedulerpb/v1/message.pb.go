@@ -8,6 +8,7 @@ package schedulerpb
 
 import (
 	reflect "reflect"
+	"strconv"
 	sync "sync"
 	unsafe "unsafe"
 
@@ -26,6 +27,65 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type BackfillerLifecycle int32
+
+const (
+	BACKFILLER_LIFECYCLE_UNSPECIFIED BackfillerLifecycle = 0
+	BACKFILLER_LIFECYCLE_OPEN        BackfillerLifecycle = 1
+	BACKFILLER_LIFECYCLE_CLOSED      BackfillerLifecycle = 2
+)
+
+// Enum value maps for BackfillerLifecycle.
+var (
+	BackfillerLifecycle_name = map[int32]string{
+		0: "BACKFILLER_LIFECYCLE_UNSPECIFIED",
+		1: "BACKFILLER_LIFECYCLE_OPEN",
+		2: "BACKFILLER_LIFECYCLE_CLOSED",
+	}
+	BackfillerLifecycle_value = map[string]int32{
+		"BACKFILLER_LIFECYCLE_UNSPECIFIED": 0,
+		"BACKFILLER_LIFECYCLE_OPEN":        1,
+		"BACKFILLER_LIFECYCLE_CLOSED":      2,
+	}
+)
+
+func (x BackfillerLifecycle) Enum() *BackfillerLifecycle {
+	p := new(BackfillerLifecycle)
+	*p = x
+	return p
+}
+
+func (x BackfillerLifecycle) String() string {
+	switch x {
+	case BACKFILLER_LIFECYCLE_UNSPECIFIED:
+		return "Unspecified"
+	case BACKFILLER_LIFECYCLE_OPEN:
+		return "Open"
+	case BACKFILLER_LIFECYCLE_CLOSED:
+		return "Closed"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (BackfillerLifecycle) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_enumTypes[0].Descriptor()
+}
+
+func (BackfillerLifecycle) Type() protoreflect.EnumType {
+	return &file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_enumTypes[0]
+}
+
+func (x BackfillerLifecycle) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BackfillerLifecycle.Descriptor instead.
+func (BackfillerLifecycle) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{0}
+}
 
 // CHASM scheduler top-level state.
 type SchedulerState struct {
@@ -278,8 +338,8 @@ type BackfillerState struct {
 	// Attempt count, incremented when the buffer is full and the Backfiller
 	// needs to back off before retrying to fill.
 	Attempt int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	// Set to true after the backfill is complete, used for lifecycle management.
-	Closed        bool `protobuf:"varint,9,opt,name=closed,proto3" json:"closed,omitempty"`
+	// Set to closed after the backfill is complete.
+	Lifecycle     BackfillerLifecycle `protobuf:"varint,9,opt,name=lifecycle,proto3,enum=temporal.server.chasm.lib.scheduler.proto.v1.BackfillerLifecycle" json:"lifecycle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -360,11 +420,11 @@ func (x *BackfillerState) GetAttempt() int64 {
 	return 0
 }
 
-func (x *BackfillerState) GetClosed() bool {
+func (x *BackfillerState) GetLifecycle() BackfillerLifecycle {
 	if x != nil {
-		return x.Closed
+		return x.Lifecycle
 	}
-	return false
+	return BACKFILLER_LIFECYCLE_UNSPECIFIED
 }
 
 type isBackfillerState_Request interface {
@@ -492,20 +552,24 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\x19request_id_to_workflow_id\x18\x06 \x03(\v2U.temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.RequestIdToWorkflowIdEntryR\x15requestIdToWorkflowId\x1aH\n" +
 	"\x1aRequestIdToWorkflowIdEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf3\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbc\x03\n" +
 	"\x0fBackfillerState\x12V\n" +
 	"\x10backfill_request\x18\x01 \x01(\v2).temporal.api.schedule.v1.BackfillRequestH\x00R\x0fbackfillRequest\x12^\n" +
 	"\x0ftrigger_request\x18\x02 \x01(\v23.temporal.api.schedule.v1.TriggerImmediatelyRequestH\x00R\x0etriggerRequest\x12\x1f\n" +
 	"\vbackfill_id\x18\x06 \x01(\tR\n" +
 	"backfillId\x12J\n" +
 	"\x13last_processed_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12\x18\n" +
-	"\aattempt\x18\b \x01(\x03R\aattempt\x12\x16\n" +
-	"\x06closed\x18\t \x01(\bR\x06closedB\t\n" +
+	"\aattempt\x18\b \x01(\x03R\aattempt\x12_\n" +
+	"\tlifecycle\x18\t \x01(\x0e2A.temporal.server.chasm.lib.scheduler.proto.v1.BackfillerLifecycleR\tlifecycleB\t\n" +
 	"\arequest\"\x9c\x01\n" +
 	"\x14LastCompletionResult\x12;\n" +
 	"\asuccess\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadH\x00R\asuccess\x12<\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureH\x00R\afailureB\t\n" +
-	"\aoutcomeBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\aoutcome*{\n" +
+	"\x13BackfillerLifecycle\x12$\n" +
+	" BACKFILLER_LIFECYCLE_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19BACKFILLER_LIFECYCLE_OPEN\x10\x01\x12\x1f\n" +
+	"\x1bBACKFILLER_LIFECYCLE_CLOSED\x10\x02BGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescOnce sync.Once
@@ -519,43 +583,46 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescData
 }
 
+var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_goTypes = []any{
-	(*SchedulerState)(nil),               // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState
-	(*GeneratorState)(nil),               // 1: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorState
-	(*InvokerState)(nil),                 // 2: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState
-	(*BackfillerState)(nil),              // 3: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState
-	(*LastCompletionResult)(nil),         // 4: temporal.server.chasm.lib.scheduler.proto.v1.LastCompletionResult
-	nil,                                  // 5: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.RequestIdToWorkflowIdEntry
-	(*v1.Schedule)(nil),                  // 6: temporal.api.schedule.v1.Schedule
-	(*v1.ScheduleInfo)(nil),              // 7: temporal.api.schedule.v1.ScheduleInfo
-	(*timestamppb.Timestamp)(nil),        // 8: google.protobuf.Timestamp
-	(*v11.BufferedStart)(nil),            // 9: temporal.server.api.schedule.v1.BufferedStart
-	(*v12.WorkflowExecution)(nil),        // 10: temporal.api.common.v1.WorkflowExecution
-	(*v1.BackfillRequest)(nil),           // 11: temporal.api.schedule.v1.BackfillRequest
-	(*v1.TriggerImmediatelyRequest)(nil), // 12: temporal.api.schedule.v1.TriggerImmediatelyRequest
-	(*v12.Payload)(nil),                  // 13: temporal.api.common.v1.Payload
-	(*v13.Failure)(nil),                  // 14: temporal.api.failure.v1.Failure
+	(BackfillerLifecycle)(0),             // 0: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerLifecycle
+	(*SchedulerState)(nil),               // 1: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState
+	(*GeneratorState)(nil),               // 2: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorState
+	(*InvokerState)(nil),                 // 3: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState
+	(*BackfillerState)(nil),              // 4: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState
+	(*LastCompletionResult)(nil),         // 5: temporal.server.chasm.lib.scheduler.proto.v1.LastCompletionResult
+	nil,                                  // 6: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.RequestIdToWorkflowIdEntry
+	(*v1.Schedule)(nil),                  // 7: temporal.api.schedule.v1.Schedule
+	(*v1.ScheduleInfo)(nil),              // 8: temporal.api.schedule.v1.ScheduleInfo
+	(*timestamppb.Timestamp)(nil),        // 9: google.protobuf.Timestamp
+	(*v11.BufferedStart)(nil),            // 10: temporal.server.api.schedule.v1.BufferedStart
+	(*v12.WorkflowExecution)(nil),        // 11: temporal.api.common.v1.WorkflowExecution
+	(*v1.BackfillRequest)(nil),           // 12: temporal.api.schedule.v1.BackfillRequest
+	(*v1.TriggerImmediatelyRequest)(nil), // 13: temporal.api.schedule.v1.TriggerImmediatelyRequest
+	(*v12.Payload)(nil),                  // 14: temporal.api.common.v1.Payload
+	(*v13.Failure)(nil),                  // 15: temporal.api.failure.v1.Failure
 }
 var file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_depIdxs = []int32{
-	6,  // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	7,  // 1: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	8,  // 2: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorState.last_processed_time:type_name -> google.protobuf.Timestamp
-	9,  // 3: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
-	10, // 4: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.cancel_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
-	10, // 5: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.terminate_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
-	8,  // 6: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.last_processed_time:type_name -> google.protobuf.Timestamp
-	5,  // 7: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.request_id_to_workflow_id:type_name -> temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.RequestIdToWorkflowIdEntry
-	11, // 8: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.backfill_request:type_name -> temporal.api.schedule.v1.BackfillRequest
-	12, // 9: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.trigger_request:type_name -> temporal.api.schedule.v1.TriggerImmediatelyRequest
-	8,  // 10: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.last_processed_time:type_name -> google.protobuf.Timestamp
-	13, // 11: temporal.server.chasm.lib.scheduler.proto.v1.LastCompletionResult.success:type_name -> temporal.api.common.v1.Payload
-	14, // 12: temporal.server.chasm.lib.scheduler.proto.v1.LastCompletionResult.failure:type_name -> temporal.api.failure.v1.Failure
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	7,  // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	8,  // 1: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerState.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	9,  // 2: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorState.last_processed_time:type_name -> google.protobuf.Timestamp
+	10, // 3: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
+	11, // 4: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.cancel_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
+	11, // 5: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.terminate_workflows:type_name -> temporal.api.common.v1.WorkflowExecution
+	9,  // 6: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.last_processed_time:type_name -> google.protobuf.Timestamp
+	6,  // 7: temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.request_id_to_workflow_id:type_name -> temporal.server.chasm.lib.scheduler.proto.v1.InvokerState.RequestIdToWorkflowIdEntry
+	12, // 8: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.backfill_request:type_name -> temporal.api.schedule.v1.BackfillRequest
+	13, // 9: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.trigger_request:type_name -> temporal.api.schedule.v1.TriggerImmediatelyRequest
+	9,  // 10: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.last_processed_time:type_name -> google.protobuf.Timestamp
+	0,  // 11: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerState.lifecycle:type_name -> temporal.server.chasm.lib.scheduler.proto.v1.BackfillerLifecycle
+	14, // 12: temporal.server.chasm.lib.scheduler.proto.v1.LastCompletionResult.success:type_name -> temporal.api.common.v1.Payload
+	15, // 13: temporal.server.chasm.lib.scheduler.proto.v1.LastCompletionResult.failure:type_name -> temporal.api.failure.v1.Failure
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_init() }
@@ -576,13 +643,14 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_goTypes,
 		DependencyIndexes: file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_depIdxs,
+		EnumInfos:         file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_enumTypes,
 		MessageInfos:      file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes,
 	}.Build()
 	File_temporal_server_chasm_lib_scheduler_proto_v1_message_proto = out.File
