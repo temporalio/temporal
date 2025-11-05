@@ -2849,6 +2849,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		RequestId: event.GetWorkflowExecutionPausedEventAttributes().GetRequestId(),
 	}
 
+	// Update approximate size of the mutable state. This will be decreased when the pause info is removed (when the workflow is unpaused)
+	ms.approximateSize += ms.executionInfo.PauseInfo.Size()
+
 	// Invalidate all the pending activities. Do not mark individual activities as paused.
 	for _, ai := range ms.GetPendingActivityInfos() {
 		ai.Stamp = ai.Stamp + 1
