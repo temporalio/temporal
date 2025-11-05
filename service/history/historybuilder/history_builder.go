@@ -276,6 +276,16 @@ func (b *HistoryBuilder) AddWorkflowTaskFailedEvent(
 	return event
 }
 
+func (b *HistoryBuilder) AddWorkflowExecutionPausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) *historypb.HistoryEvent {
+	event := b.EventFactory.CreateWorkflowExecutionPausedEvent(identity, reason, requestID)
+	event, _ = b.EventStore.add(event)
+	return event
+}
+
 func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
