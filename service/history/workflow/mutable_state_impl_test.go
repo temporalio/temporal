@@ -1670,7 +1670,7 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 	}
 }
 
-func (s *mutableStateSuite) TestPauseWorkflowExecution() {
+func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.SetupSubTest()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -1685,7 +1685,7 @@ func (s *mutableStateSuite) TestPauseWorkflowExecution() {
 		"",
 		tq,
 		"",
-		nil,
+		worker_versioning.StampFromBuildId("b1"),
 		nil,
 		nil,
 		false,
