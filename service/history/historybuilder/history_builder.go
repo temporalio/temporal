@@ -281,8 +281,8 @@ func (b *HistoryBuilder) AddWorkflowExecutionPausedEvent(
 	reason string,
 	requestID string,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowExecutionPausedEvent(identity, reason, requestID)
-	event, _ = b.EventStore.add(event)
+	event := b.CreateWorkflowExecutionPausedEvent(identity, reason, requestID)
+	event, _ = b.add(event)
 	return event
 }
 
