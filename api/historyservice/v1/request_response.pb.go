@@ -10654,10 +10654,10 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12m\n" +
 	"\x0eupdate_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequestR\rupdateRequest:3\x92\xc4\x03/*-update_request.workflow_execution.workflow_id\"\x9a\x01\n" +
 	"&UpdateWorkflowExecutionOptionsResponse\x12p\n" +
-	"\x1aworkflow_execution_options\x18\x01 \x01(\v22.temporal.api.workflow.v1.WorkflowExecutionOptionsR\x18workflowExecutionOptions\"\xdb\x01\n" +
+	"\x1aworkflow_execution_options\x18\x01 \x01(\v22.temporal.api.workflow.v1.WorkflowExecutionOptionsR\x18workflowExecutionOptions\"\xc8\x01\n" +
 	"\x1dPauseWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
-	"\rpause_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.PauseWorkflowExecutionRequestR\fpauseRequest:2\x92\xc4\x03.*,pause_request.workflow_execution.workflow_id\" \n" +
+	"\rpause_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.PauseWorkflowExecutionRequestR\fpauseRequest:\x1f\x92\xc4\x03\x1b*\x19pause_request.workflow_id\" \n" +
 	"\x1ePauseWorkflowExecutionResponse:t\n" +
 	"\arouting\x12\x1f.google.protobuf.MessageOptions\x18\xc28 \x01(\v25.temporal.server.api.historyservice.v1.RoutingOptionsR\arouting\x88\x01\x01B<Z:go.temporal.io/server/api/historyservice/v1;historyserviceb\x06proto3"
 

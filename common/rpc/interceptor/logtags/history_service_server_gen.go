@@ -205,8 +205,8 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.PauseWorkflowExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetPauseRequest().GetWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetPauseRequest().GetWorkflowExecution().GetRunId()),
+			tag.WorkflowID(r.GetPauseRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetPauseRequest().GetRunId()),
 		}
 	case *historyservice.PauseWorkflowExecutionResponse:
 		return nil

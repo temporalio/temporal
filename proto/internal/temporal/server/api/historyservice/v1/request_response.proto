@@ -1324,7 +1324,7 @@ message UpdateWorkflowExecutionOptionsResponse {
 }
 
 message PauseWorkflowExecutionRequest {
-    option (routing).workflow_id = "pause_request.workflow_execution.workflow_id";
+    option (routing).workflow_id = "pause_request.workflow_id";
 
     // Namespace ID of the workflow which is being paused
     string namespace_id = 1;
