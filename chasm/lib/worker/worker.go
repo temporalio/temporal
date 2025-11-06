@@ -1,31 +1,5 @@
 // Package worker provides a CHASM component for tracking worker heartbeats and lifecycle.
-//
-// - statemachine.go defines the state transitions, runs the business logic, and schedules tasks.
-// - tasks.go defines the executors for processing the scheduled tasks.
-//
-// # Overview
-//
-// The Worker component manages the lifecycle of Temporal workers by tracking heartbeats,
-// worker metadata, and task activities handled by the worker. Each worker process is
-// identified by a unique identifier and maintains a lease through periodic heartbeats.
-//
-// # Lifecycle States
-//
-//   - ACTIVE: Worker is sending heartbeats and can receive activities
-//   - INACTIVE: Worker lease expired, activities cancelled and rescheduled
-//   - CLEANED_UP: Worker session terminated and resources cleaned up (terminal state)
-//
-// # State Transitions (defined in statemachine.go)
-//
-//   - ACTIVE → INACTIVE: Lease expires (server assumes worker is down, notifies live activities to be rescheduled)
-//   - INACTIVE → ACTIVE: Worker reconnects (network partition recovery)
-//   - INACTIVE → CLEANED_UP: Cleanup grace period expires. This is a terminal state.
-//
-// # Handling Network Partition
-//
-// When a worker loses connectivity, the server marks it INACTIVE and reschedules its activities.
-// If the same worker reconnects, it transitions back to ACTIVE and can receive new activities.
-// Previous activities remain cancelled.
+// See README.md for more details.
 package worker
 
 import (
