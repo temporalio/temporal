@@ -17,8 +17,8 @@ func TestNewWorker(t *testing.T) {
 	require.NotNil(t, worker)
 	require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 	require.Nil(t, worker.LeaseExpirationTime)
-	require.Nil(t, worker.WorkerHeartbeat)  // No heartbeat data initially
-	require.Equal(t, "", worker.WorkerID()) // Empty until first heartbeat
+	require.Nil(t, worker.WorkerHeartbeat) // No heartbeat data initially
+	require.Empty(t, worker.WorkerID())    // Empty until first heartbeat
 }
 
 func TestWorkerLifecycleState(t *testing.T) {
