@@ -6122,3 +6122,27 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 		WorkerInfo: resp.GetWorkerInfo(),
 	}, nil
 }
+
+// PauseWorkflowExecution pauses a workflow execution.
+func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *workflowservice.PauseWorkflowExecutionRequest) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, historyErr := wh.historyClient.PauseWorkflowExecution(ctx, &historyservice.PauseWorkflowExecutionRequest{
+		NamespaceId:  namespaceID.String(),
+		PauseRequest: request,
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+
+	return &workflowservice.PauseWorkflowExecutionResponse{}, nil
+}
