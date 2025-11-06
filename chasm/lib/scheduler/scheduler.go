@@ -144,7 +144,7 @@ func CreateScheduler(
 	if err != nil {
 		return nil, nil, ErrUnprocessable
 	}
-	visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
+	err = visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 	if err != nil {
 		return nil, nil, ErrUnprocessable
 	}
@@ -155,8 +155,6 @@ func CreateScheduler(
 		},
 	}, nil
 }
-
-// func (s *Scheduler) updateCustomVisibilityAttributes()
 
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	if s.Closed {
