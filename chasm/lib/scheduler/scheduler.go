@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,13 +13,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -63,7 +62,10 @@ const (
 	visibilityMemoFieldInfo = "ScheduleInfo"
 )
 
-var ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
+var (
+	ErrConflictTokenMismatch = errors.New("mismatched conflict token")
+	ErrUnprocessable         = errors.New("unprocessable schedule")
+)
 
 // NewScheduler returns an initialized CHASM scheduler root component.
 func NewScheduler(
@@ -124,7 +126,6 @@ func CreateScheduler(
 	ctx chasm.MutableContext,
 	req *schedulerpb.CreateScheduleRequest,
 ) (*Scheduler, *schedulerpb.CreateScheduleResponse, error) {
-	// TODO: namespace name should be resolved from namespace_id via namespace registry
 	sched := NewScheduler(
 		ctx,
 		req.FrontendRequest.Namespace,
@@ -134,7 +135,13 @@ func CreateScheduler(
 		req.FrontendRequest.InitialPatch,
 	)
 
-	// TODO - use visibility component to update SAs
+	// Update visibility with custom attributes.
+	visibility, err := sched.Visibility.Get(ctx)
+	if err != nil {
+		return nil, nil, ErrUnprocessable
+	}
+	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, &schedulerpb.CreateScheduleResponse{
 		FrontendResponse: &workflowservice.CreateScheduleResponse{
@@ -142,6 +149,8 @@ func CreateScheduler(
 		},
 	}, nil
 }
+
+// func (s *Scheduler) updateCustomVisibilityAttributes()
 
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	if s.Closed {
@@ -566,9 +575,17 @@ func (s *Scheduler) Update(
 		return nil, ErrConflictTokenMismatch
 	}
 
-	s.Schedule = common.CloneProto(req.FrontendRequest.Schedule)
-	// TODO - use visibility component to update SAs
+	// Update custom search attributes.
+	//
+	// TODO - we could also easily support allowing the customer to update their
+	// memo here.
+	visibility, err := s.Visibility.Get(ctx)
+	if err != nil {
+		return nil, ErrUnprocessable
+	}
+	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
 
+	s.Schedule = common.CloneProto(req.FrontendRequest.Schedule)
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
 
@@ -612,6 +629,16 @@ func (s *Scheduler) validateConflictToken(token []byte) bool {
 	current := s.generateConflictToken()
 	return bytes.Equal(current, token)
 }
+
+// SearchAttributes returns the Temporal-managed key values for visibility.
+func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
+	return []chasm.SearchAttributeKeyValue{{
+		Field: searchattribute.TemporalSchedulePaused,
+		Value: chasm.VisibilityValueBool(s.Schedule.State.Paused),
+	}}
+}
+
+// Memo returns the scheduler's info block for visibility.
 func (s *Scheduler) Memo(
 	ctx chasm.Context,
 ) map[string]chasm.VisibilityValue {
@@ -651,7 +678,7 @@ func (s *Scheduler) GetListInfo(
 
 	generator, err := s.Generator.Get(ctx)
 	if err != nil {
-		return nil, err
+		return nil, ErrUnprocessable
 	}
 
 	return &schedulepb.ScheduleListInfo{
@@ -662,24 +689,4 @@ func (s *Scheduler) GetListInfo(
 		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
 		FutureActionTimes: generator.FutureActionTimes,
 	}, nil
-}
-
-func (s *Scheduler) SetPaused(ctx chasm.MutableContext, paused bool) error {
-	s.Schedule.State.Paused = paused
-
-	vis, err := s.Visibility.Get(ctx)
-	if err != nil {
-		return err
-	}
-
-	p, err := payload.Encode(paused)
-	if err != nil {
-		return err
-	}
-
-	// "Pause" is the only Temporal-managed search attribute for schedules, so it is
-	// updated here ad-hoc, instead of via the SearchAttributesProvider interface.
-	pauseAttr := make(map[string]*commonpb.Payload)
-	pauseAttr[searchattribute.TemporalSchedulePaused] = p
-	return vis.SetSearchAttributes(ctx, pauseAttr) // merges with custom search attributes
 }

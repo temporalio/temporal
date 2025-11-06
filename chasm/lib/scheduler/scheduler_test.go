@@ -3,36 +3,29 @@ package scheduler_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type schedulerTestSuite struct {
-	schedulerSuite
-}
+func TestGetListInfo(t *testing.T) {
+	scheduler, ctx, _ := setupSchedulerForTest(t)
 
-func TestSchedulerSuite(t *testing.T) {
-	suite.Run(t, &schedulerTestSuite{})
-}
-
-func (s *schedulerTestSuite) TestGetListInfo() {
-	ctx := s.newMutableContext()
-
-	// Generator maintains the FutureActionTimes list.
-	generator, err := s.scheduler.Generator.Get(ctx)
-	s.NoError(err)
+	// Generator maintains the FutureActionTimes list, set that up first.
+	generator, err := scheduler.Generator.Get(ctx)
+	require.NoError(t, err)
 	expectedFutureTimes := []*timestamppb.Timestamp{timestamppb.Now(), timestamppb.Now()}
 	generator.FutureActionTimes = expectedFutureTimes
 
-	listInfo, err := s.scheduler.GetListInfo(ctx)
-	s.NoError(err)
+	listInfo, err := scheduler.GetListInfo(ctx)
+	require.NoError(t, err)
 
 	// Should return a populated info block.
-	s.NotNil(listInfo)
-	s.NotNil(listInfo.Spec)
-	s.NotEmpty(listInfo.Spec.Interval)
-	s.ProtoEqual(listInfo.Spec.Interval[0], s.scheduler.Schedule.Spec.Interval[0])
-	s.NotNil(listInfo.WorkflowType)
-	s.NotEmpty(listInfo.FutureActionTimes)
-	s.Equal(expectedFutureTimes, listInfo.FutureActionTimes)
+	require.NotNil(t, listInfo)
+	require.NotNil(t, listInfo.Spec)
+	require.NotEmpty(t, listInfo.Spec.Interval)
+	protorequire.ProtoEqual(t, listInfo.Spec.Interval[0], scheduler.Schedule.Spec.Interval[0])
+	require.NotNil(t, listInfo.WorkflowType)
+	require.NotEmpty(t, listInfo.FutureActionTimes)
+	require.Equal(t, expectedFutureTimes, listInfo.FutureActionTimes)
 }

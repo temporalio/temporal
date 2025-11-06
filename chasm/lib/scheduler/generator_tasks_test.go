@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -47,7 +46,7 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 	generator, err := sched.Generator.Get(ctx)
 	s.NoError(err)
 	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.True(common.IsInternalError(err))
+	s.ErrorIs(err, scheduler.ErrUnprocessable)
 }
 
 func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {

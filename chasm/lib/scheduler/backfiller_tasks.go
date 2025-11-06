@@ -1,10 +1,8 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -61,17 +59,15 @@ func (b *BackfillerTaskExecutor) Execute(
 
 	scheduler, err := backfiller.Scheduler.Get(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
+		b.baseLogger.Error("scheduler tree missing node", tag.Error(err))
+		return ErrUnprocessable
 	}
 	logger := newTaggedLogger(b.baseLogger, scheduler)
 
 	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
+		logger.Error("scheduler tree missing node", tag.Error(err))
+		return ErrUnprocessable
 	}
 
 	// If the buffer is already full, don't move the watermark at all, just back off
@@ -95,7 +91,8 @@ func (b *BackfillerTaskExecutor) Execute(
 	case RequestTypeTrigger:
 		result, err = b.processTrigger(ctx, scheduler, backfiller)
 	default:
-		return serviceerror.NewInternalf("unknown backfill type: %v", backfiller.RequestType())
+		logger.Error("unknown backfill type", tag.NewAnyTag("type", backfiller.RequestType()))
+		return ErrUnprocessable
 	}
 	if err != nil {
 		logger.Error("failed to process backfill", tag.Error(err))

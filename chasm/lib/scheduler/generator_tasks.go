@@ -1,10 +1,8 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
@@ -51,17 +49,15 @@ func (g *GeneratorTaskExecutor) Execute(
 ) error {
 	scheduler, err := generator.Scheduler.Get(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
+		g.baseLogger.Error("scheduler tree missing node", tag.Error(err))
+		return ErrUnprocessable
 	}
 	logger := newTaggedLogger(g.baseLogger, scheduler)
 
 	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
+		logger.Error("scheduler tree missing node", tag.Error(err))
+		return ErrUnprocessable
 	}
 
 	// If we have no last processed time, this is a new schedule.
@@ -94,11 +90,8 @@ func (g *GeneratorTaskExecutor) Execute(
 	)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
-		msg := "failed to process a time range"
-		logger.Error(msg, tag.Error(err))
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal(msg),
-			err)
+		logger.Error("failed to process a time range", tag.Error(err))
+		return ErrUnprocessable
 	}
 
 	// Enqueue newly-generated buffered starts.
@@ -109,11 +102,8 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 	if err := g.updateFutureActionTimes(ctx, generator, scheduler); err != nil {
-		msg := "failed to update future action times"
-		logger.Error(msg, tag.Error(err))
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal(msg),
-			err)
+		logger.Error("failed to update future action times", tag.Error(err))
+		return err
 	}
 
 	// Check if the schedule has gone idle.
