@@ -307,8 +307,13 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	if processingLatency > 30*time.Second {
-		e.Logger.Warn("replication task processing latency is too long",
+	replicationLatency := now.Sub(e.taskCreationTime)
+	if replicationLatency > time.Minute {
+		e.Logger.Warn(fmt.Sprintf(
+			"replication task latency is too long: transmission=%.2fs processing=%.2fs",
+			e.taskReceivedTime.Sub(e.taskCreationTime).Seconds(),
+			processingLatency.Seconds(),
+		),
 			tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
 			tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
 			tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
@@ -317,7 +322,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	}
 
 	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
-		now.Sub(e.taskCreationTime),
+		replicationLatency,
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 		metrics.SourceClusterTag(e.sourceClusterName),
