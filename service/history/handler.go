@@ -2626,7 +2626,7 @@ func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyse
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	workflowID := request.GetPauseRequest().GetId()
+	workflowID := request.GetPauseRequest().GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)

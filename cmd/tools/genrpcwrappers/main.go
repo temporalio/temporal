@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"reflect"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -144,6 +145,8 @@ func verifyFieldExists(t reflect.Type, path string) {
 		fieldName := codegen.SnakeCaseToPascalCase(part)
 		f, ok := t.FieldByName(fieldName)
 		if !ok {
+			fmt.Printf("\nstack trace: path: [%s]\n", path)
+			fmt.Println(string(debug.Stack()))
 			codegen.Fatalf("%s has no field named %s", pathPrefix, fieldName)
 		}
 		if i == len(parts)-1 {
