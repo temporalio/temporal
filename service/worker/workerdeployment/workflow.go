@@ -564,7 +564,20 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	asyncMode := d.hasMinVersion(AsyncSetCurrentAndRamping)
 
-	// unsetting ramp
+	// Determine timestamps based on whether we're setting or unsetting ramp
+	if newRampingVersion == "" {
+		// unsetting ramp
+		rampingVersionUpdateTime = routingUpdateTime
+	} else if prevRampingVersion == newRampingVersion {
+		// version was already ramping, user changing ramp %
+		rampingSinceTime = d.State.RoutingConfig.RampingVersionChangedTime
+		rampingVersionUpdateTime = d.State.RoutingConfig.RampingVersionChangedTime
+	} else {
+		// version ramping for the first time
+		rampingSinceTime = routingUpdateTime
+		rampingVersionUpdateTime = routingUpdateTime
+	}
+
 	// Build pending routing config with the updated ramping version
 	// Initialize for both sync and async modes to simplify state update logic
 	pendingRoutingConfig := &deploymentpb.RoutingConfig{
@@ -612,19 +625,14 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			}
 		}
 
-		rampingVersionUpdateTime = routingUpdateTime // ramp was updated to ""
-
 		// Set summary drainage status immediately to draining.
 		// We know prevRampingVersion cannot have been current, so it must now be draining
 		d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
 	} else {
 		// setting ramp
 
-		if prevRampingVersion == newRampingVersion { // the version was already ramping, user changing ramp %
-			rampingSinceTime = d.State.RoutingConfig.RampingVersionChangedTime
-			rampingVersionUpdateTime = d.State.RoutingConfig.RampingVersionChangedTime
-		} else {
-			// version ramping for the first time
+		if prevRampingVersion != newRampingVersion {
+			// version ramping for the first time - need to check for missing task queues
 
 			currentVersion := d.State.RoutingConfig.CurrentVersion
 			if !args.IgnoreMissingTaskQueues &&
@@ -639,8 +647,6 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 					return nil, serviceerror.NewFailedPrecondition(ErrRampingVersionDoesNotHaveAllTaskQueues)
 				}
 			}
-			rampingSinceTime = routingUpdateTime
-			rampingVersionUpdateTime = routingUpdateTime
 
 			// Erase summary drainage status immediately, so it is not draining/drained.
 			d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, routingUpdateTime)
