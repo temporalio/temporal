@@ -19,7 +19,7 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.PauseWorkflowExecutionResponse, retError error) {
-	shard.GetLogger().Warn(fmt.Sprintf("Pausing workflow execution %s/%s by %s", req.GetPauseRequest().GetWorkflowExecution().GetWorkflowId(), req.GetPauseRequest().GetWorkflowExecution().GetRunId(), req.GetPauseRequest().GetIdentity()))
+	shard.GetLogger().Warn(fmt.Sprintf("Pausing workflow execution %s/%s by %s", req.GetPauseRequest().GetId(), req.GetPauseRequest().GetRunId(), req.GetPauseRequest().GetIdentity()))
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -40,8 +40,8 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
-			pauseRequest.GetWorkflowExecution().GetWorkflowId(),
-			pauseRequest.GetWorkflowExecution().GetRunId(),
+			pauseRequest.GetId(),
+			pauseRequest.GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
