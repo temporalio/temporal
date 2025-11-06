@@ -56,7 +56,7 @@ func Invoke(
 			}
 
 			// Check if workflow is already paused
-			if mutableState.IsWorkflowExecutionPaused() {
+			if mutableState.IsWorkflowExecutionStatusPaused() {
 				// Already paused, nothing to do
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
@@ -65,7 +65,7 @@ func Invoke(
 			}
 
 			// Add the workflow execution paused event
-			err := mutableState.PauseWorkflowExecution(
+			_, err := mutableState.AddWorkflowExecutionPausedEvent(
 				pauseRequest.GetIdentity(),
 				pauseRequest.GetReason(),
 				pauseRequest.GetRequestId(),
