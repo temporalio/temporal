@@ -22,7 +22,7 @@ const (
 	// Versions of workflow logic. When introducing a new version, consider generating a new
 	// history for TestReplays using generate_history.sh.
 
-	// Represents the state before DeploymentWorkflowVersion is introduced
+	// Represents the state before the versioning API's received the option of becoming async in nature
 	InitialVersion DeploymentWorkflowVersion = 0
 	// SetCurrent and SetRamping APIs are async
 	AsyncSetCurrentAndRamping = 1

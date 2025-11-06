@@ -526,7 +526,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		// ASYNC MODE: propagate full routing config
 		err = d.syncRoutingConfigToTaskQueues(ctx, args.RoutingConfig, newStatus)
 		if err != nil {
-			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 			return nil, err
 		}
 	} else {
@@ -876,44 +875,42 @@ func (d *VersionWorkflowRunner) syncRoutingConfigToTaskQueues(
 			// Decrement counter when propagation completes
 			d.asyncPropagationsInProgress--
 		}()
-		d.trackAsyncPropagation(gCtx, batches, revisionNumber)
+		d.executeAndTrackAsyncPropagation(gCtx, batches, revisionNumber)
 	})
 
 	return nil
 }
 
-// trackAsyncPropagation monitors propagation and signals completion
-func (d *VersionWorkflowRunner) trackAsyncPropagation(
+// executeAndTrackAsyncPropagation monitors propagation and signals completion
+func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 	ctx workflow.Context,
 	batches [][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData,
 	revisionNumber int64,
 ) {
-	state := d.GetVersionState()
 	taskQueueMaxVersionsToCheck := make(map[string]int64)
 
-	// Execute all batches
+	// Execute all batches in parallel
+	completedBatches := 0
+	totalBatches := len(batches)
+	resultChannel := workflow.NewChannel(ctx)
+
 	for _, batch := range batches {
-		activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
-		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+		batch := batch // capture loop variable
+		workflow.Go(ctx, func(gCtx workflow.Context) {
+			result := d.executePropagationBatch(gCtx, batch)
+			resultChannel.Send(gCtx, result)
+		})
+	}
 
-		err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			Version: state.GetVersion(),
-			Sync:    batch,
-		}).Get(ctx, &syncRes)
+	// Collect results from all batches
+	for i := 0; i < totalBatches; i++ {
+		var result map[string]int64
+		resultChannel.Receive(ctx, &result)
+		completedBatches++
 
-		if err != nil {
-			d.logger.Error("async propagation batch failed", "error", err)
-			// Continue with other batches
-			continue
-		}
-
-		// Only check propagation for task queues where routing config actually changed
-		// Task queues with max_version = -1 indicate no routing change, skip those
-		for _, tqName := range workflow.DeterministicKeys(syncRes.TaskQueueMaxVersions) {
-			maxVersion := syncRes.TaskQueueMaxVersions[tqName]
-			if maxVersion != -1 {
-				taskQueueMaxVersionsToCheck[tqName] = maxVersion
-			}
+		// Merge results into taskQueueMaxVersionsToCheck
+		for tqName, maxVersion := range result {
+			taskQueueMaxVersionsToCheck[tqName] = maxVersion
 		}
 	}
 
@@ -937,6 +934,38 @@ func (d *VersionWorkflowRunner) trackAsyncPropagation(
 	d.signalPropagationComplete(ctx, revisionNumber)
 }
 
+// executePropagationBatch executes a single batch of propagation and returns task queue max versions to check
+func (d *VersionWorkflowRunner) executePropagationBatch(
+	ctx workflow.Context,
+	batch []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData,
+) map[string]int64 {
+	state := d.GetVersionState()
+	activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
+	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+
+	err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		Version: state.GetVersion(),
+		Sync:    batch,
+	}).Get(ctx, &syncRes)
+
+	if err != nil {
+		d.logger.Error("async propagation batch failed", "error", err)
+		// Return empty map on error
+		return make(map[string]int64)
+	}
+
+	// Only check propagation for task queues where routing config actually changed
+	// Task queues with max_version = -1 indicate no routing change, skip those
+	result := make(map[string]int64)
+	for _, tqName := range workflow.DeterministicKeys(syncRes.TaskQueueMaxVersions) {
+		maxVersion := syncRes.TaskQueueMaxVersions[tqName]
+		if maxVersion != -1 {
+			result[tqName] = maxVersion
+		}
+	}
+	return result
+}
+
 // signalPropagationComplete sends a signal to the deployment workflow when async propagation completes
 func (d *VersionWorkflowRunner) signalPropagationComplete(ctx workflow.Context, revisionNumber int64) {
 	err := workflow.SignalExternalWorkflow(
@@ -946,7 +975,7 @@ func (d *VersionWorkflowRunner) signalPropagationComplete(ctx workflow.Context, 
 		PropagationCompleteSignal,
 		&deploymentspb.PropagationCompletionInfo{
 			RevisionNumber: revisionNumber,
-			BuildId:        d.VersionState.Version.BuildId,
+			BuildId:        d.VersionState.GetVersion().GetBuildId(),
 		},
 	).Get(ctx, nil)
 

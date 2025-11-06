@@ -47,7 +47,7 @@ type (
 		stateChanged  bool
 		signalHandler *SignalHandler
 		forceCAN      bool
-		// Tracks the version of the deployment manger when a particular run of a workflow starts base on the dynamic config of the
+		// Tracks the version of the deployment workflow when a particular run of a workflow starts base on the dynamic config of the
 		// worker who completes the first task of the workflow. `workflowVersion` remains the same until the workflow CaNs when it
 		// will get another chance to pick the latest manager version.
 		workflowVersion DeploymentWorkflowVersion
@@ -600,7 +600,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 				return nil, err
 			}
 		} else if asyncMode {
-			// Updates to unversioned ramp should go through the current version
+			// In async mode, updates for unversioned ramps are propagated through the current version
+			// because we send the full routing config (not just version-specific data)
 			if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, unsetRampUpdateArgs, false); err != nil {
 				return nil, err
 			}
@@ -656,7 +657,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 				return nil, err
 			}
 		} else if asyncMode {
-			// Updates to unversioned ramp should go through the current version
+			// In async mode, updates for unversioned ramps are propagated through the current version
+			// because we send the full routing config (not just version-specific data)
 			if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, setRampUpdateArgs, true); err != nil {
 				return nil, err
 			}
@@ -680,7 +682,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 					return nil, err
 				}
 			} else if asyncMode {
-				// Updates to unversioned ramp should go through the current version
+				// In async mode, updates for unversioned ramps are propagated through the current version
+				// because we send the full routing config (not just version-specific data)
 				if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, unsetRampUpdateArgs, true); err != nil {
 					return nil, err
 				}
@@ -965,6 +968,9 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			CurrentSinceTime:  updateTime,
 			RampingSinceTime:  nil, // remove ramp for that version if it was ramping
 			RampPercentage:    0,   // remove ramp for that version if it was ramping
+		}
+		if asyncMode {
+			currUpdateArgs.RoutingConfig = pendingRoutingConfig
 		}
 		if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs, true); err != nil {
 			return nil, err
