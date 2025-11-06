@@ -2586,8 +2586,15 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
-		mutableContext := chasm.NewMutableContext(context.Background(), ms.chasmTree.(*chasm.Node))
-		ms.chasmTree.(*chasm.Node).SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
+		root, ok := ms.chasmTree.(*chasm.Node)
+		softassert.That(ms.logger, ok, "chasmTree cast failed")
+
+		validationContext := chasm.NewContext(context.Background(), root)
+		_, err := root.Component(validationContext, chasm.ComponentRef{})
+		if common.IsNotFoundError(err) {
+			mutableContext := chasm.NewMutableContext(context.Background(), root)
+			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
+		}
 	}
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
