@@ -5358,3 +5358,82 @@ func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
 	}
 }
+
+func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
+	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(5)
+	totalTasks := 2 * s.mockConfig.ChasmMaxInMemoryPureTasks()
+
+	visTimestamp := s.mockShard.GetTimeSource().Now()
+	for i := 0; i < totalTasks; i++ {
+		task := &tasks.ChasmTaskPure{
+			VisibilityTimestamp: visTimestamp,
+			Category:            tasks.CategoryTimer,
+		}
+		s.mutableState.AddTasks(task)
+		s.LessOrEqual(len(s.mutableState.chasmPureTasks), s.mockConfig.ChasmMaxInMemoryPureTasks())
+
+		visTimestamp = visTimestamp.Add(-time.Minute)
+	}
+
+	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(2)
+	s.mutableState.AddTasks(&tasks.ChasmTaskPure{
+		VisibilityTimestamp: visTimestamp,
+		Category:            tasks.CategoryTimer,
+	})
+	s.Len(s.mutableState.chasmPureTasks, 2)
+}
+
+func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
+	now := s.mockShard.GetTimeSource().Now()
+
+	testCases := []struct {
+		name              string
+		maxScheduledTime  time.Time
+		expectedRemaining int
+	}{
+		{
+			name:              "none",
+			maxScheduledTime:  now,
+			expectedRemaining: 3,
+		},
+		{
+			name:              "paritial",
+			maxScheduledTime:  now.Add(2 * time.Minute),
+			expectedRemaining: 2,
+		},
+		{
+			name:              "all",
+			maxScheduledTime:  now.Add(5 * time.Minute),
+			expectedRemaining: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mutableState.chasmPureTasks = []*tasks.ChasmTaskPure{
+				{
+					VisibilityTimestamp: now.Add(3 * time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+				{
+					VisibilityTimestamp: now.Add(2 * time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+				{
+					VisibilityTimestamp: now.Add(time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+			}
+			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
+
+			s.mutableState.DeleteCHASMPureTasks(tc.maxScheduledTime)
+
+			s.Len(s.mutableState.chasmPureTasks, tc.expectedRemaining)
+			for _, task := range s.mutableState.chasmPureTasks {
+				s.False(task.VisibilityTimestamp.Before(tc.maxScheduledTime))
+			}
+
+			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
+		})
+	}
+}
