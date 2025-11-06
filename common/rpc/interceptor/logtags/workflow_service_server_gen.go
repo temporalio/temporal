@@ -210,6 +210,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.PauseWorkflowExecutionRequest:
 		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.PauseWorkflowExecutionResponse:
@@ -429,6 +430,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.UnpauseWorkflowExecutionRequest:
 		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.UnpauseWorkflowExecutionResponse:
