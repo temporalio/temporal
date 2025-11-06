@@ -5427,7 +5427,12 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
 
 			s.mutableState.DeleteCHASMPureTasks(tc.maxScheduledTime)
+
 			s.Len(s.mutableState.chasmPureTasks, tc.expectedRemaining)
+			for _, task := range s.mutableState.chasmPureTasks {
+				s.False(task.VisibilityTimestamp.Before(tc.maxScheduledTime))
+			}
+
 			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
 		})
 	}

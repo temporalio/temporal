@@ -2164,10 +2164,10 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		TestOutboundSideEffectTask{},
 	)
 
-	// TODO: delete task
-	// s.nodeBackend.EXPECT().DeleteCHASMPureTasks(s.timeSource.Now().UTC()).Times(1)
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
+
+	s.Equal(s.timeSource.Now().UTC(), s.nodeBackend.LastDeletePureTaskCall())
 
 	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.SideEffectTasks, 1) // Only one valid side effect task.
@@ -2389,11 +2389,10 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 	err = root.ApplyMutation(incomingMutation)
 	s.NoError(err)
 
-	// TODO: delete task
-	// s.nodeBackend.EXPECT().DeleteCHASMPureTasks(now.Add(time.Minute)).Times(1)
-
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
+
+	s.Equal(now.Add(time.Minute), s.nodeBackend.LastDeletePureTaskCall())
 
 	// Although only root is mutated in ApplyMutation, we generated a pure task for the child node,
 	// and need to persist that as well.
