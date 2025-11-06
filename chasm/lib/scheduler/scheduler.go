@@ -148,7 +148,7 @@ func (s *Scheduler) NewRangeBackfiller(
 	backfiller.Request = &schedulerpb.BackfillerState_BackfillRequest{
 		BackfillRequest: request,
 	}
-	s.addBackfiller(ctx, backfiller)
+	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
@@ -162,18 +162,8 @@ func (s *Scheduler) NewImmediateBackfiller(
 	backfiller.Request = &schedulerpb.BackfillerState_TriggerRequest{
 		TriggerRequest: request,
 	}
-	s.addBackfiller(ctx, backfiller)
-	return backfiller
-}
-
-// addBackfiller adds the backfiller to the scheduler tree, and adds a task to
-// kick off backfill processing.
-func (s *Scheduler) addBackfiller(
-	ctx chasm.MutableContext,
-	backfiller *Backfiller,
-) {
 	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
-	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+	return backfiller
 }
 
 // useScheduledAction returns true when the Scheduler should allow scheduled
