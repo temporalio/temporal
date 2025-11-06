@@ -140,8 +140,14 @@ func CreateScheduler(
 	if err != nil {
 		return nil, nil, ErrUnprocessable
 	}
-	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	err = visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	if err != nil {
+		return nil, nil, ErrUnprocessable
+	}
 	visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
+	if err != nil {
+		return nil, nil, ErrUnprocessable
+	}
 
 	return sched, &schedulerpb.CreateScheduleResponse{
 		FrontendResponse: &workflowservice.CreateScheduleResponse{
@@ -583,7 +589,10 @@ func (s *Scheduler) Update(
 	if err != nil {
 		return nil, ErrUnprocessable
 	}
-	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	err = visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	if err != nil {
+		return nil, ErrUnprocessable
+	}
 
 	s.Schedule = common.CloneProto(req.FrontendRequest.Schedule)
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
