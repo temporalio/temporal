@@ -172,4 +172,5 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace go.temporal.io/api => github.com/temporalio/api-go v1.55.1-0.20251027184220-2f19f202d89f
+// TODO: (Chetan) Remove this once https://github.com/temporalio/api/pull/653 is merged.
+replace go.temporal.io/api => github.com/temporalio/api-go v1.57.1-0.20251106212653-02fa5e8a303c
