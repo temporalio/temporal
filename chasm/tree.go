@@ -343,20 +343,8 @@ func (n *Node) Component(
 	chasmContext Context,
 	ref ComponentRef,
 ) (Component, error) {
-	// TODO: reserve archetype ID 0 or make ref.archetypeID *uint32 to differentiate
-	// between "skip the archetype ID check" and "check archetype ID 0".
-	if ref.entityGoType != nil && ref.archetypeID == 0 {
-		rootRC, ok := n.registry.componentOf(ref.entityGoType)
-		if !ok {
-			return nil, errComponentNotFound
-		}
-		ref.archetypeID = rootRC.componentID
-
-	}
-	if ref.archetypeID != 0 &&
-		n.root().serializedNode.GetMetadata().GetComponentAttributes().TypeId != ref.archetypeID {
-		return nil, errComponentNotFound
-	}
+	// Archetype is already validated before this method is called.
+	// (when the mutable state is loaded, in chasm engine implementation)
 
 	node, ok := n.findNode(ref.componentPath)
 	if !ok {

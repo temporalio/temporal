@@ -1507,22 +1507,6 @@ func (s *nodeSuite) TestGetComponent() {
 			expectedErr: errComponentNotFound,
 		},
 		{
-			name:         "archetype mismatch",
-			chasmContext: NewContext(context.Background(), root),
-			ref: ComponentRef{
-				archetypeID: testSubComponent1TypeID,
-			},
-			expectedErr: errComponentNotFound,
-		},
-		{
-			name:         "entityGoType mismatch",
-			chasmContext: NewContext(context.Background(), root),
-			ref: ComponentRef{
-				entityGoType: reflect.TypeFor[*TestSubComponent2](),
-			},
-			expectedErr: errComponentNotFound,
-		},
-		{
 			name:         "initialVT mismatch",
 			chasmContext: NewContext(context.Background(), root),
 			ref: ComponentRef{
