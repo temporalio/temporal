@@ -825,7 +825,7 @@ func (s *nodeSuite) TestApplyMutation() {
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
 
 	// Manually deserialize some tasks to populate the taskValueCache
@@ -898,10 +898,11 @@ func (s *nodeSuite) TestApplyMutation() {
 	// Validate root node got updated.
 	s.Equal(updatedRoot, root.serializedNode)
 	s.NotNil(root.value)
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
-	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+	s.Contains(root.currentSA, "TemporalDatetime01")
+	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+	s.True(root.currentMemo[TestComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
 
 	// Validate the "child" node got updated.
 	nodeSC1, ok := root.children["SubComponent1"]
@@ -1032,10 +1033,11 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Equal(expectedMutation, root.mutation)
 
 	// Validate visibility search attributes and memo are updated as well.
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
-	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.Contains(root.currentSA, "TemporalDatetime01")
+	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.True(root.currentMemo[TestComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 }
 
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
@@ -1475,10 +1477,8 @@ func (s *nodeSuite) TestValidateAccess() {
 }
 
 func (s *nodeSuite) TestGetComponent() {
-	root, err := s.newTestTree(testComponentSerializedNodes())
-	s.NoError(err)
-
 	errValidation := errors.New("some random validation error")
+
 	expectedTestComponent := &TestComponent{}
 	setTestComponentFields(expectedTestComponent, s.nodeBackend)
 	assertTestComponent := func(component Component) {
@@ -1492,39 +1492,47 @@ func (s *nodeSuite) TestGetComponent() {
 
 	testCases := []struct {
 		name            string
-		chasmContext    Context
+		chasmContextFn  func(root *Node) Context
 		ref             ComponentRef
 		expectedErr     error
-		valueState      valueState
+		nodeDirty       bool
 		assertComponent func(Component)
 	}{
 		{
-			name:         "path not found",
-			chasmContext: NewContext(context.Background(), root),
+			name: "path not found",
+			chasmContextFn: func(root *Node) Context {
+				return NewContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{"unknownComponent"},
 			},
 			expectedErr: errComponentNotFound,
 		},
 		{
-			name:         "archetype mismatch",
-			chasmContext: NewContext(context.Background(), root),
+			name: "archetype mismatch",
+			chasmContextFn: func(root *Node) Context {
+				return NewContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				archetype: "TestLibrary.test_sub_component_1",
 			},
 			expectedErr: errComponentNotFound,
 		},
 		{
-			name:         "entityGoType mismatch",
-			chasmContext: NewContext(context.Background(), root),
+			name: "entityGoType mismatch",
+			chasmContextFn: func(root *Node) Context {
+				return NewContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				entityGoType: reflect.TypeFor[*TestSubComponent2](),
 			},
 			expectedErr: errComponentNotFound,
 		},
 		{
-			name:         "initialVT mismatch",
-			chasmContext: NewContext(context.Background(), root),
+			name: "initialVT mismatch",
+			chasmContextFn: func(root *Node) Context {
+				return NewMutableContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{"SubComponent1", "SubComponent11"},
 				// should be (1, 1) but we set it to (2, 2)
@@ -1536,8 +1544,10 @@ func (s *nodeSuite) TestGetComponent() {
 			expectedErr: errComponentNotFound,
 		},
 		{
-			name:         "validation failure",
-			chasmContext: NewContext(context.Background(), root),
+			name: "validation failure",
+			chasmContextFn: func(root *Node) Context {
+				return NewMutableContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{"SubComponent1"},
 				componentInitialVT: &persistencespb.VersionedTransition{
@@ -1551,8 +1561,10 @@ func (s *nodeSuite) TestGetComponent() {
 			expectedErr: errValidation,
 		},
 		{
-			name:         "success readonly access",
-			chasmContext: NewContext(context.Background(), root),
+			name: "success readonly access",
+			chasmContextFn: func(root *Node) Context {
+				return NewContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{}, // root
 				componentInitialVT: &persistencespb.VersionedTransition{
@@ -1564,32 +1576,42 @@ func (s *nodeSuite) TestGetComponent() {
 				},
 			},
 			expectedErr:     nil,
-			valueState:      valueStateSynced,
 			assertComponent: assertTestComponent,
 		},
 		{
-			name:         "success mutable access",
-			chasmContext: NewMutableContext(context.Background(), root),
+			name: "success mutable access",
+			chasmContextFn: func(root *Node) Context {
+				return NewMutableContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{}, // root
 			},
 			expectedErr:     nil,
-			valueState:      valueStateNeedSyncStructure,
+			nodeDirty:       true,
 			assertComponent: assertTestComponent,
 		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			component, err := root.Component(tc.chasmContext, tc.ref)
-			s.Equal(tc.expectedErr, err)
-			if tc.expectedErr == nil {
-				// s.Equal(tc.expectedComponent, component)
+			root, err := s.newTestTree(testComponentSerializedNodes())
+			s.NoError(err)
 
-				node, ok := root.findNode(tc.ref.componentPath)
+			component, err := root.Component(tc.chasmContextFn(root), tc.ref)
+			s.Equal(tc.expectedErr, err)
+
+			node, ok := root.findNode(tc.ref.componentPath)
+			if tc.expectedErr == nil {
 				s.True(ok)
-				s.Equal(component, node.value)
-				s.Equal(tc.valueState, node.valueState)
+				tc.assertComponent(component)
+			}
+
+			if ok {
+				if tc.nodeDirty {
+					s.Greater(node.valueState, valueStateSynced)
+				} else {
+					s.LessOrEqual(node.valueState, valueStateSynced)
+				}
 			}
 		})
 	}
@@ -2737,30 +2759,38 @@ func (s *nodeSuite) TestExecutePureTask() {
 	}
 
 	// Succeed task execution and validation (happy case).
+	root.setValueState(valueStateSynced)
 	expectExecute(nil)
 	expectValidate(true, nil)
 	executed, err := root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.True(executed)
+	s.Equal(valueStateNeedSyncStructure, root.valueState)
 
 	expectedErr := errors.New("dummy")
 
 	// Succeed validation, fail execution.
+	root.setValueState(valueStateSynced)
 	expectExecute(expectedErr)
 	expectValidate(true, nil)
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
+	s.Equal(valueStateNeedSyncStructure, root.valueState)
 
 	// Fail task validation (no execution occurs).
+	root.setValueState(valueStateSynced)
 	expectValidate(false, nil)
 	executed, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.False(executed)
+	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
 
 	// Error during task validation (no execution occurs).
+	root.setValueState(valueStateSynced)
 	expectValidate(false, expectedErr)
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
+	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {

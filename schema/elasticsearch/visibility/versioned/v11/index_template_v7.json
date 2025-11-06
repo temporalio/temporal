@@ -1,0 +1,158 @@
+{
+  "order": 0,
+  "index_patterns": ["temporal_visibility_v1*"],
+  "settings": {
+    "index": {
+      "number_of_shards": "1",
+      "number_of_replicas": "0",
+      "auto_expand_replicas": "0-2",
+      "search.idle.after": "365d",
+      "sort.field": ["CloseTime", "StartTime", "RunId"],
+      "sort.order": ["desc", "desc", "desc"],
+      "sort.missing": ["_first", "_first", "_first"]
+    }
+  },
+  "mappings": {
+    "dynamic": "false",
+    "properties": {
+      "NamespaceId": {
+        "type": "keyword"
+      },
+      "TemporalNamespaceDivision": {
+        "type": "keyword"
+      },
+      "WorkflowId": {
+        "type": "keyword"
+      },
+      "RunId": {
+        "type": "keyword"
+      },
+      "WorkflowType": {
+        "type": "keyword"
+      },
+      "StartTime": {
+        "type": "date_nanos"
+      },
+      "ExecutionTime": {
+        "type": "date_nanos"
+      },
+      "CloseTime": {
+        "type": "date_nanos"
+      },
+      "ExecutionDuration": {
+        "type": "long"
+      },
+      "ExecutionStatus": {
+        "type": "keyword"
+      },
+      "TaskQueue": {
+        "type": "keyword"
+      },
+      "TemporalChangeVersion": {
+        "type": "keyword"
+      },
+      "BatcherNamespace": {
+        "type": "keyword"
+      },
+      "BatcherUser": {
+        "type": "keyword"
+      },
+      "BinaryChecksums": {
+        "type": "keyword"
+      },
+      "HistoryLength": {
+        "type": "long"
+      },
+      "StateTransitionCount": {
+        "type": "long"
+      },
+      "TemporalScheduledStartTime": {
+        "type": "date_nanos"
+      },
+      "TemporalScheduledById": {
+        "type": "keyword"
+      },
+      "TemporalSchedulePaused": {
+        "type": "boolean"
+      },
+      "HistorySizeBytes": {
+        "type": "long"
+      },
+      "BuildIds": {
+        "type": "keyword"
+      },
+      "ParentWorkflowId": {
+        "type": "keyword"
+      },
+      "ParentRunId": {
+        "type": "keyword"
+      },
+      "RootWorkflowId": {
+        "type": "keyword"
+      },
+      "RootRunId": {
+        "type": "keyword"
+      },
+      "TemporalPauseInfo": {
+        "type": "keyword"
+      },
+      "TemporalWorkerDeploymentVersion": {
+        "type": "keyword"
+      },
+      "TemporalWorkflowVersioningBehavior": {
+        "type": "keyword"
+      },
+      "TemporalWorkerDeployment": {
+        "type": "keyword"
+      },
+			"TemporalReportedProblems": {
+					"type": "keyword"
+			},
+      "TemporalBool01": {
+        "type": "boolean"
+      },
+      "TemporalBool02": {
+        "type": "boolean"
+      },
+      "TemporalDatetime01": {
+        "type": "date_nanos"
+      },
+      "TemporalDatetime02": {
+        "type": "date_nanos"
+      },
+      "TemporalDouble01": {
+        "type": "scaled_float",
+        "scaling_factor": 10000
+      },
+      "TemporalDouble02": {
+        "type": "scaled_float",
+        "scaling_factor": 10000
+      },
+      "TemporalInt01": {
+        "type": "long"
+      },
+      "TemporalInt02": {
+        "type": "long"
+      },
+      "TemporalKeyword01": {
+        "type": "keyword"
+      },
+      "TemporalKeyword02": {
+        "type": "keyword"
+      },
+      "TemporalKeyword03": {
+        "type": "keyword"
+      },
+      "TemporalKeyword04": {
+        "type": "keyword"
+      },
+      "TemporalKeywordList01": {
+        "type": "keyword"
+      },
+      "TemporalKeywordList02": {
+        "type": "keyword"
+      }
+    }
+  },
+  "aliases": {}
+}

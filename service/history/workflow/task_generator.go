@@ -413,10 +413,7 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
 ) error {
-
-	workflowTask := r.mutableState.GetWorkflowTaskByID(
-		workflowTaskScheduledEventID,
-	)
+	workflowTask := r.mutableState.GetWorkflowTaskByID(workflowTaskScheduledEventID)
 	if workflowTask == nil {
 		return serviceerror.NewInternalf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID)
 	}
@@ -434,6 +431,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 			EventID:             workflowTask.ScheduledEventID,
 			ScheduleAttempt:     workflowTask.Attempt,
 			Version:             workflowTask.Version,
+			Stamp:               workflowTask.Stamp,
 		}
 		r.mutableState.AddTasks(wttt)
 		r.mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(wttt)
@@ -450,6 +448,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		TaskQueue:        workflowTask.TaskQueue.GetName(),
 		ScheduledEventID: workflowTask.ScheduledEventID,
 		Version:          workflowTask.Version,
+		Stamp:            workflowTask.Stamp,
 	})
 
 	return nil
@@ -486,6 +485,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
+		Stamp:               workflowTask.Stamp,
 		InMemory:            isSpeculative,
 	}
 
@@ -524,6 +524,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
+		Stamp:               workflowTask.Stamp,
 		InMemory:            isSpeculative,
 	}
 
@@ -551,6 +552,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 		TaskQueue:        activityInfo.TaskQueue,
 		ScheduledEventID: activityInfo.ScheduledEventId,
 		Version:          activityInfo.Version,
+		Stamp:            activityInfo.Stamp,
 	})
 
 	return nil
