@@ -2848,13 +2848,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 
 	// Invalidate all the pending activities. Do not mark individual activities as paused.
 	for _, ai := range ms.GetPendingActivityInfos() {
-		ai.Stamp = ai.Stamp + 1
+		ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.Stamp = activityInfo.Stamp + 1
+			return nil
+		})
 	}
 
 	// Invalidate pending workflow task by incrementing the persisted stamp.
 	// This ensures subsequent task dispatch detects the change.
 	if ms.HasPendingWorkflowTask() {
-		ms.executionInfo.WorkflowTaskStamp += 1
+		workflowTask := ms.GetPendingWorkflowTask()
+		workflowTask.Stamp = workflowTask.Stamp + 1
+		ms.workflowTaskManager.UpdateWorkflowTask(workflowTask)
 	}
 	return nil
 }
