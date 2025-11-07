@@ -570,7 +570,7 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 // - final current deployment version and its revision number (0 for old format)
 // - final ramping deployment version, its revision number (0 for old format), and ramp percentage
 //
-//nolint:revive:function-result-limit
+//revive:disable-next-line:function-result-limit
 func PickFinalCurrentAndRamping(
 	current *deploymentspb.DeploymentVersionData,
 	ramping *deploymentspb.DeploymentVersionData,
