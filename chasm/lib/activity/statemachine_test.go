@@ -99,7 +99,7 @@ func TestTransitionScheduled(t *testing.T) {
 				case *activitypb.ActivityDispatchTask:
 					_, ok := actualTask.Payload.(*activitypb.ActivityDispatchTask)
 					require.True(t, ok, "expected ActivityDispatchTask at index %d", i)
-					require.Empty(t, 0, actualTask.Attributes.ScheduledTime)
+					require.Empty(t, actualTask.Attributes.ScheduledTime)
 				case *activitypb.ScheduleToStartTimeoutTask:
 					_, ok := actualTask.Payload.(*activitypb.ScheduleToStartTimeoutTask)
 					require.True(t, ok, "expected ScheduleToStartTimeoutTask at index %d", i)

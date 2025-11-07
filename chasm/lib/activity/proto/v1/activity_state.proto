@@ -138,7 +138,7 @@ message ActivityAttemptState {
     // will not reset it.
     LastFailureDetails last_failure_details = 5;
 
-    string last_worker_identity =7;
+    string last_worker_identity = 7;
 
     // The Worker Deployment Version this activity was dispatched to most recently.
     // If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
