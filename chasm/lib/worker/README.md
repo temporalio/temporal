@@ -111,7 +111,7 @@ Worker Process ──► Frontened Service ──► History Service ──► C
 
 ## Configuration
 
-- `matching.InactiveWorkerCleanupDelay`: Dynamic config. Time to wait before cleaning up inactive workers. Default: 60 minutes.
+- `chasm.worker.inactiveWorkerCleanupDelay`: Time to wait before cleaning up inactive workers (default: 60 minutes)
 
 - `Lease duration`: Configurable per heartbeat request. Default: 1 minute if not specified in the request.
 

@@ -29,7 +29,6 @@ func scheduleLeaseExpiry(ctx chasm.MutableContext, w *Worker, leaseDeadline time
 
 // EventHeartbeatReceived is triggered when a heartbeat is received from the worker.
 type EventHeartbeatReceived struct {
-	Time          time.Time
 	LeaseDeadline time.Time
 }
 
@@ -45,7 +44,6 @@ var TransitionActiveHeartbeat = chasm.NewTransition(
 
 // EventLeaseExpired is triggered when the worker lease expires.
 type EventLeaseExpired struct {
-	Time         time.Time
 	CleanupDelay time.Duration
 }
 
@@ -57,7 +55,7 @@ var TransitionLeaseExpired = chasm.NewTransition(
 		// Schedule cleanup task with provided delay.
 		cleanupTask := &workerstatepb.WorkerCleanupTask{}
 		taskAttrs := chasm.TaskAttributes{
-			ScheduledTime: event.Time.Add(event.CleanupDelay),
+			ScheduledTime: time.Now().Add(event.CleanupDelay),
 		}
 		ctx.AddTask(w, taskAttrs, cleanupTask)
 		return nil
@@ -65,9 +63,7 @@ var TransitionLeaseExpired = chasm.NewTransition(
 )
 
 // EventCleanupCompleted is triggered when cleanup is finished.
-type EventCleanupCompleted struct {
-	Time time.Time
-}
+type EventCleanupCompleted struct{}
 
 // TransitionCleanupCompleted handles cleanup completion, marking worker as cleaned up.
 var TransitionCleanupCompleted = chasm.NewTransition(

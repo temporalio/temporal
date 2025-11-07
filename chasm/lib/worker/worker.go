@@ -71,13 +71,11 @@ func (w *Worker) RecordHeartbeat(ctx chasm.MutableContext, heartbeat *workerpb.W
 	switch w.Status {
 	case workerstatepb.WORKER_STATUS_ACTIVE:
 		return TransitionActiveHeartbeat.Apply(ctx, w, EventHeartbeatReceived{
-			Time:          time.Now(),
 			LeaseDeadline: leaseDeadline,
 		})
 	case workerstatepb.WORKER_STATUS_INACTIVE:
 		// Handle worker resurrection after network partition
 		return TransitionWorkerResurrection.Apply(ctx, w, EventHeartbeatReceived{
-			Time:          time.Now(),
 			LeaseDeadline: leaseDeadline,
 		})
 	default:
