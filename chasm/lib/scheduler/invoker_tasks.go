@@ -20,7 +20,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
@@ -525,6 +527,26 @@ func (e *InvokerProcessBufferTaskExecutor) startWorkflowDeadline(
 	return start.ActualTime.AsTime().Add(timeout)
 }
 
+// startWorkflowSearchAttributes returns the search attributes to be applied to
+// workflows kicked off. Includes custom search attributes and Temporal-managed.
+func startWorkflowSearchAttributes(
+	scheduler *Scheduler,
+	nominal time.Time,
+) *commonpb.SearchAttributes {
+	attributes := scheduler.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
+
+	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
+	if p, err := payload.Encode(nominal); err == nil {
+		fields[searchattribute.TemporalScheduledStartTime] = p
+	}
+	if p, err := payload.Encode(scheduler.ScheduleId); err == nil {
+		fields[searchattribute.TemporalScheduledById] = p
+	}
+	return &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
+}
+
 func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	ctx context.Context,
 	scheduler *Scheduler,
@@ -554,7 +576,6 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
-	// TODO - set search attributes
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		CompletionCallbacks:      []*commonpb.Callback{callback},
 		Header:                   requestSpec.Header,
@@ -564,7 +585,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		Namespace:                scheduler.Namespace,
 		RequestId:                start.RequestId,
 		RetryPolicy:              requestSpec.RetryPolicy,
-		SearchAttributes:         nil,
+		SearchAttributes:         startWorkflowSearchAttributes(scheduler, start.NominalTime.AsTime()),
 		TaskQueue:                requestSpec.TaskQueue,
 		UserMetadata:             requestSpec.UserMetadata,
 		WorkflowExecutionTimeout: requestSpec.WorkflowExecutionTimeout,
