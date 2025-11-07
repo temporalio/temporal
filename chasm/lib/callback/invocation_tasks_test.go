@@ -159,7 +159,7 @@ func (s *invocationTasksSuite) TestInvocationTask_FailureTriggersBackoff() {
 	)
 	// For retryable errors, expect an error but not an UnprocessableTaskError
 	s.Error(err)
-	s.NotErrorIs(err, &queues.UnprocessableTaskError{})
+	s.NotErrorAs(err, &queues.UnprocessableTaskError{})
 
 	// Close transaction to commit tasks to node backend
 	_, err = s.node.CloseTransaction()
