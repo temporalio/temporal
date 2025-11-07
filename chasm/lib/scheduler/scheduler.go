@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -639,10 +638,10 @@ func (s *Scheduler) validateConflictToken(token []byte) bool {
 
 // SearchAttributes returns the Temporal-managed key values for visibility.
 func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
-	return []chasm.SearchAttributeKeyValue{{
-		Field: searchattribute.TemporalSchedulePaused,
-		Value: chasm.VisibilityValueBool(s.Schedule.State.Paused),
-	}}
+	return []chasm.SearchAttributeKeyValue{
+		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.State.Paused),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(scheduler.NamespaceDivision),
+	}
 }
 
 // Memo returns the scheduler's info block for visibility.
