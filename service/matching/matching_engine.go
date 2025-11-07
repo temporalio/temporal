@@ -1892,7 +1892,6 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	return pm.GetUserDataManager().HandleGetUserDataRequest(ctx, req)
 }
 
-//nolint:revive:max-control-nesting
 func (e *matchingEngineImpl) SyncDeploymentUserData(
 	ctx context.Context,
 	req *matchingservice.SyncDeploymentUserDataRequest,
@@ -2087,6 +2086,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 							// Move membership from old format into the per-deployment new-format map.
 							buildID := dv.GetVersion().GetBuildId()
+							//nolint:revive // max-control-nesting: control flow nesting exceeds 5
 							if _, exists := tqWorkerDeploymentData.Versions[buildID]; !exists {
 								tqWorkerDeploymentData.Versions[buildID] = &deploymentspb.WorkerDeploymentVersionData{
 									Status: dv.GetStatus(),
