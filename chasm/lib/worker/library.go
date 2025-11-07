@@ -29,19 +29,19 @@ func (l *Library) Name() string {
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Worker]("Worker"),
+		chasm.NewRegistrableComponent[*Worker]("worker"),
 	}
 }
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrablePureTask(
-			"LeaseExpiryTask",
+			"expiry",
 			l.leaseExpiryTaskExecutor,
 			l.leaseExpiryTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
-			"WorkerCleanupTask",
+			"cleanup",
 			l.workerCleanupTaskExecutor,
 			l.workerCleanupTaskExecutor,
 		),
