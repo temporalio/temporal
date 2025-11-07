@@ -1,7 +1,7 @@
 package activity
 
 import (
-	"time"
+	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
@@ -28,11 +28,10 @@ func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus
 	a.Status = state
 }
 
-// TransitionScheduled effects a transition to Scheduled status
+// TransitionScheduled effects a transition to Scheduled status. This is only called on the initial scheduling of the activity.
 var TransitionScheduled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, // On retries for start-to-close timeouts
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
@@ -41,22 +40,18 @@ var TransitionScheduled = chasm.NewTransition(
 			return err
 		}
 
-		currentTime := ctx.Now(a)
-		retryInterval := time.Duration(0)
-		isRetry := attempt.GetCount() >= 1
-		attempt.Count += 1
-
-		// If this is a retry, calculate the delay before scheduling tasks and update attempt fields
-		if isRetry {
-			retryInterval = backoff.CalculateExponentialRetryInterval(a.GetRetryPolicy(), attempt.GetCount())
-			attempt.CurrentRetryInterval = durationpb.New(retryInterval)
+		if attempt.Count != 0 {
+			return errors.New("activity attempt count must be zero on initial scheduling")
 		}
+
+		currentTime := ctx.Now(a)
+		attempt.Count += 1
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout).Add(retryInterval),
+					ScheduledTime: currentTime.Add(timeout),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Attempt: attempt.GetCount(),
@@ -67,9 +62,55 @@ var TransitionScheduled = chasm.NewTransition(
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout).Add(retryInterval),
+					ScheduledTime: currentTime.Add(timeout),
 				},
 				&activitypb.ScheduleToCloseTimeoutTask{
+					Attempt: attempt.GetCount(),
+				})
+		}
+
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{},
+			&activitypb.ActivityDispatchTask{
+				Attempt: attempt.GetCount(),
+			})
+
+		return nil
+	},
+)
+
+// TransitionRescheduled effects a transition to Scheduled from Started, which happens on retries
+var TransitionRescheduled = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, // On retries for start-to-close timeouts
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+	func(a *Activity, ctx chasm.MutableContext, _ any) error {
+		attempt, err := a.Attempt.Get(ctx)
+		if err != nil {
+			return err
+		}
+
+		currentTime := ctx.Now(a)
+		attempt.Count += 1
+
+		// If this is a retry, calculate the delay before scheduling tasks and update attempt fields
+		// TODO: for activity failures it'll go through this retry path as well; we'll need to refactor the record timeout, probably passed as an event func
+		retryInterval := backoff.CalculateExponentialRetryInterval(a.GetRetryPolicy(), attempt.GetCount())
+		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
+		err = a.recordActivityTimedOut(ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+		if err != nil {
+			return err
+		}
+
+		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{
+					ScheduledTime: currentTime.Add(timeout).Add(retryInterval),
+				},
+				&activitypb.ScheduleToStartTimeoutTask{
 					Attempt: attempt.GetCount(),
 				})
 		}

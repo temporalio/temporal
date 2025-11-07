@@ -14,6 +14,8 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -124,10 +126,11 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
 	return &matchingservice.AddActivityTaskRequest{
-		NamespaceId:  namespaceID,
-		TaskQueue:    a.GetTaskQueue(),
-		Priority:     a.GetPriority(),
-		ComponentRef: componentRef,
+		NamespaceId:            namespaceID,
+		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
+		TaskQueue:              a.GetTaskQueue(),
+		Priority:               a.GetPriority(),
+		ComponentRef:           componentRef,
 	}, nil
 }
 
@@ -225,7 +228,7 @@ func (a *Activity) recordActivityTimedOut(ctx chasm.MutableContext, timeoutType 
 	}
 
 	failure := &failurepb.Failure{
-		Message: fmt.Sprintf("activity %s timed out", timeoutType.String()),
+		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 				TimeoutType: timeoutType,
@@ -259,13 +262,31 @@ func (a *Activity) recordActivityTimedOut(ctx chasm.MutableContext, timeoutType 
 			LastFailureTime: currentTime,
 		}
 		attempt.LastAttemptCompleteTime = currentTime
-		outcome.Variant = &activitypb.ActivityOutcome_Failed_{}
+
+		// If the activity has exhausted retries, mark the outcome failure as well but don't store duplicate failure info.
+		maxAttempts := a.GetRetryPolicy().GetMaximumAttempts()
+		if maxAttempts != 0 && attempt.GetCount() >= maxAttempts {
+			outcome.Variant = &activitypb.ActivityOutcome_Failed_{}
+		}
 
 	default:
 		return fmt.Errorf("unhandled activity timeout: %v", timeoutType)
 	}
 
 	return nil
+}
+
+func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context) (bool, error) {
+	attempt, err := a.Attempt.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	retryInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.Count)
+
+	deadline := a.ScheduledTime.AsTime().Add(a.GetScheduleToCloseTimeout().AsDuration())
+
+	return ctx.Now(a).Add(retryInterval).Before(deadline), nil
 }
 
 func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (chasm.NoValue, error) {

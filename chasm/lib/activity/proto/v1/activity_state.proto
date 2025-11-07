@@ -168,7 +168,7 @@ message ActivityOutcome {
 
     message Failed {
         // Only filled on schedule-to-start timeouts, schedule-to-close timeouts or terminations. All other attempt
-        // failures will be recorded in ActivityAttemptState.last_failure_details
+        // failures will be recorded in ActivityAttemptState.last_failure_details.
         temporal.api.failure.v1.Failure failure = 1;
     }
 

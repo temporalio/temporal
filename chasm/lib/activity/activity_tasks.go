@@ -6,7 +6,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
 )
@@ -157,29 +156,16 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 	retryPolicy := activity.RetryPolicy
 
 	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || task.GetAttempt() < retryPolicy.GetMaximumAttempts()
-	enoughTime, err := hasEnoughTimeForRetry(ctx, activity)
+	enoughTime, err := activity.hasEnoughTimeForRetry(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Retry task if we have remaining attempts and time. A retry involves transitioning the activity back to scheduled state.
 	if enoughAttempts && enoughTime {
-		return TransitionScheduled.Apply(activity, ctx, nil)
+		return TransitionRescheduled.Apply(activity, ctx, nil)
 	}
 
 	// Reached maximum attempts, timeout the activity
 	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
-}
-
-func hasEnoughTimeForRetry(ctx chasm.Context, activity *Activity) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	retryInterval := backoff.CalculateExponentialRetryInterval(activity.RetryPolicy, attempt.Count)
-
-	deadline := activity.ScheduledTime.AsTime().Add(activity.GetScheduleToCloseTimeout().AsDuration())
-
-	return ctx.Now(activity).Add(retryInterval).Before(deadline), nil
 }

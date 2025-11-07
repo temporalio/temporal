@@ -768,7 +768,7 @@ func (x *ActivityOutcome_Successful) GetOutput() *v1.Payloads {
 type ActivityOutcome_Failed struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Only filled on schedule-to-start timeouts, schedule-to-close timeouts or terminations. All other attempt
-	// failures will be recorded in ActivityAttemptState.last_failure_details
+	// failures will be recorded in ActivityAttemptState.last_failure_details.
 	Failure       *v14.Failure `protobuf:"bytes,1,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
