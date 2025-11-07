@@ -470,11 +470,6 @@ Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this
 		`PollerHistoryTTL is the time to live for poller histories in the pollerHistory cache of a physical task queue. Poller histories are fetched when
 		requiring a list of pollers that polled a given task queue.`,
 	)
-	InactiveWorkerCleanupDelay = NewNamespaceDurationSetting(
-		"matching.InactiveWorkerCleanupDelay",
-		60*time.Minute,
-		`InactiveWorkerCleanupDelay is the time to wait before cleaning up inactive workers after their lease expires.`,
-	)
 	ReachabilityBuildIdVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
 		3*time.Minute,

@@ -62,11 +62,9 @@ func TestTransitionActiveHeartbeat(t *testing.T) {
 	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
 
-	heartbeatTime := time.Now()
-	leaseDeadline := heartbeatTime.Add(30 * time.Second)
+	leaseDeadline := time.Now().Add(30 * time.Second)
 
 	event := EventHeartbeatReceived{
-		Time:          heartbeatTime,
 		LeaseDeadline: leaseDeadline,
 	}
 
@@ -89,9 +87,7 @@ func TestTransitionLeaseExpired(t *testing.T) {
 	worker.Status = workerstatepb.WORKER_STATUS_ACTIVE
 	ctx := &chasm.MockMutableContext{}
 
-	expiryTime := time.Now()
 	event := EventLeaseExpired{
-		Time:         expiryTime,
 		CleanupDelay: 60 * time.Second,
 	}
 
@@ -105,9 +101,8 @@ func TestTransitionLeaseExpired(t *testing.T) {
 	// Verify cleanup task was scheduled
 	require.Len(t, ctx.Tasks, 1)
 
-	// Verify cleanup task is scheduled for the right time
-	expectedCleanupTime := expiryTime.Add(event.CleanupDelay)
-	require.Equal(t, expectedCleanupTime, ctx.Tasks[0].Attributes.ScheduledTime)
+	// Verify cleanup task is scheduled for the right time (approximately)
+	require.WithinDuration(t, time.Now().Add(event.CleanupDelay), ctx.Tasks[0].Attributes.ScheduledTime, time.Second)
 
 	// Verify it's a WorkerCleanupTask
 	_, ok := ctx.Tasks[0].Payload.(*workerstatepb.WorkerCleanupTask)
@@ -119,10 +114,7 @@ func TestTransitionCleanupCompleted(t *testing.T) {
 	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
 
-	cleanupTime := time.Now()
-	event := EventCleanupCompleted{
-		Time: cleanupTime,
-	}
+	event := EventCleanupCompleted{}
 
 	// Apply the transition
 	err := TransitionCleanupCompleted.Apply(ctx, worker, event)
@@ -196,11 +188,9 @@ func TestTransitionWorkerResurrection(t *testing.T) {
 	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
 
-	heartbeatTime := time.Now()
-	leaseDeadline := heartbeatTime.Add(30 * time.Second)
+	leaseDeadline := time.Now().Add(30 * time.Second)
 
 	event := EventHeartbeatReceived{
-		Time:          heartbeatTime,
 		LeaseDeadline: leaseDeadline,
 	}
 
@@ -239,7 +229,7 @@ func TestInvalidTransitions(t *testing.T) {
 		worker := newTestWorker()
 		worker.Status = workerstatepb.WORKER_STATUS_CLEANED_UP
 
-		event := EventLeaseExpired{Time: time.Now()}
+		event := EventLeaseExpired{}
 		err := TransitionLeaseExpired.Apply(ctx, worker, event)
 
 		// Should fail because worker is not active
@@ -250,7 +240,7 @@ func TestInvalidTransitions(t *testing.T) {
 		worker := newTestWorker()
 		worker.Status = workerstatepb.WORKER_STATUS_ACTIVE
 
-		event := EventCleanupCompleted{Time: time.Now()}
+		event := EventCleanupCompleted{}
 		err := TransitionCleanupCompleted.Apply(ctx, worker, event)
 
 		// Should fail because worker is not inactive
