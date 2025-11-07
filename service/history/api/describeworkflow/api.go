@@ -543,6 +543,8 @@ func buildCallbackInfoFromChasm(
 		state = enumspb.CALLBACK_STATE_FAILED
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		state = enumspb.CALLBACK_STATE_SUCCEEDED
+	default:
+		return nil, fmt.Errorf("unknown callback state: %v", callback.Status)
 	}
 
 	blockedReason := ""
