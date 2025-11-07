@@ -3855,13 +3855,14 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertAndForgetVersions
 	s.Len(versions, 2)
 }
 
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
 func (s *matchingEngineSuite) TestSyncDeploymentUserData_UnsetOldFormatRamp_ClearsNewFormatRamp() {
 	tv := testvars.New(s.T())
 	namespaceID := tv.NamespaceID().String()
 	tq := tv.TaskQueue().GetName()
 	deploymentName := "foo"
 
-	// Seed new-format ramp for deployment "foo"
+	// New-format ramp for deployment "foo"
 	rc := &deploymentpb.RoutingConfig{
 		RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "b1"},
 		RampingVersionPercentage:            25,
@@ -3874,6 +3875,11 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UnsetOldFormatRamp_Clea
 		DeploymentName:      deploymentName,
 		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 		UpdateRoutingConfig: rc,
+		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"b1": {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
+			},
+		},
 	})
 	s.NoError(err)
 	s.True(resp.GetRoutingConfigChanged())
@@ -3889,7 +3895,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UnsetOldFormatRamp_Clea
 	rcGot := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetRoutingConfig()
 	s.NotNil(rcGot.GetRampingDeploymentVersion())
 	s.Equal("b1", rcGot.GetRampingDeploymentVersion().GetBuildId())
-	s.Equal(float32(25), rcGot.GetRampingVersionPercentage())
+	s.InDelta(float32(25), rcGot.GetRampingVersionPercentage(), 0.0000)
 
 	// Now unset ramp via old-format unversioned ramp (Version=nil, RampingSinceTime=nil)
 	unsetVD := &deploymentspb.DeploymentVersionData{
@@ -3926,6 +3932,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UnsetOldFormatRamp_Clea
 	s.Nil(rcGot.GetRampingVersionChangedTime())
 }
 
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
 func (s *matchingEngineSuite) TestSyncDeploymentUserData_OldFormatSetSameCurrent_ClearsNewFormatCurrent() {
 	tv := testvars.New(s.T())
 	namespaceID := tv.NamespaceID().String()
@@ -4002,6 +4009,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_OldFormatSetSameCurrent
 	s.Nil(rcGot.GetCurrentDeploymentVersion())
 }
 
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
 func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetNewFormat_RemovesOldFormatMembership() {
 	tv := testvars.New(s.T())
 	namespaceID := tv.NamespaceID().String()
@@ -4063,8 +4071,12 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetNewFormat_Removes
 	for _, dv := range depData.GetVersions() {
 		s.NotEqual(buildID, dv.GetVersion().GetBuildId())
 	}
+	// and the deployment entry should be removed from DeploymentsData as versions map is now empty
+	_, deploymentExists := depData.GetDeploymentsData()[deploymentName]
+	s.False(deploymentExists)
 }
 
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
 func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetOldFormat_RemovesNewFormatMembership() {
 	tv := testvars.New(s.T())
 	namespaceID := tv.NamespaceID().String()
@@ -4127,7 +4139,11 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetOldFormat_Removes
 	for _, dv := range depData.GetVersions() {
 		s.NotEqual(buildID, dv.GetVersion().GetBuildId())
 	}
+	// the deployment entry should be removed from DeploymentsData as versions map is now empty
+	_, deploymentExists := depData.GetDeploymentsData()[deploymentName]
+	s.False(deploymentExists)
 }
+
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"

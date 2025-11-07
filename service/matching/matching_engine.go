@@ -1972,10 +1972,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 						deploymentData.UnversionedRampData = nil
 
 						// Also have to unset the ramp, if present, from the new deployment data format.
-						workerDeploymentData.RoutingConfig.RampingDeploymentVersion = nil
-						workerDeploymentData.RoutingConfig.RampingVersionPercentage = 0
-						workerDeploymentData.RoutingConfig.RampingVersionPercentageChangedTime = nil
-						workerDeploymentData.RoutingConfig.RampingVersionChangedTime = nil
+						unsetRampingFromRoutingConfig(workerDeploymentData)
 
 					} else { // set or update
 						deploymentData.UnversionedRampData = vd
@@ -2009,7 +2006,13 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 					// Go through the new deployment data format for this deployment and remove the version if present.
 					workerDeploymentData := deploymentData.GetDeploymentsData()[v.GetDeploymentName()]
-					delete(workerDeploymentData.GetVersions(), v.GetBuildId())
+					_ = removeDeploymentVersions(
+						deploymentData,
+						v.GetDeploymentName(),
+						workerDeploymentData,
+						[]string{v.GetBuildId()},
+						/* removeOldFormat */ false,
+					)
 				}
 			} else {
 
@@ -2038,17 +2041,14 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					tqWorkerDeploymentData.Versions[buildID] = versionData
 					changed = true
 				}
-				for _, buildID := range req.GetForgetVersions() {
-					delete(tqWorkerDeploymentData.Versions, buildID)
 
-					// Remove the version from the old deployment data format if present.
-					for idx, oldVersions := range deploymentData.GetVersions() {
-						if oldVersions.GetVersion().GetDeploymentName() == req.GetDeploymentName() &&
-							oldVersions.GetVersion().GetBuildId() == buildID {
-							deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
-							break
-						}
-					}
+				if removed := removeDeploymentVersions(
+					deploymentData,
+					req.GetDeploymentName(),
+					tqWorkerDeploymentData,
+					req.GetForgetVersions(),
+					/* removeOldFormat */ true,
+				); removed {
 					changed = true
 				}
 
@@ -2077,6 +2077,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				old deployment data format under the same deployment.
 				*/
 
+				//nolint:max-control-nestng
 				if applyUpdatesToRoutingConfig {
 					//nolint:staticcheck // SA1019 deprecated versions will clean up later
 					oldVersions := deploymentData.GetVersions()
@@ -3227,6 +3228,49 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	}, nil
 }
 
+// removeDeploymentVersions removes provided build IDs from the new-format per-deployment map and,
+// when requested, the corresponding entries from the deprecated old-format slice for the same deployment.
+// It returns true if any change was made (either format).
+func removeDeploymentVersions(
+	deploymentData *persistencespb.DeploymentData,
+	deploymentName string,
+	workerDeploymentData *persistencespb.WorkerDeploymentData,
+	buildIDs []string,
+	removeOldFormat bool,
+) bool {
+	if workerDeploymentData == nil {
+		return false
+	}
+	changed := false
+	deletedInNew := false
+
+	for _, buildID := range buildIDs {
+		if _, exists := workerDeploymentData.Versions[buildID]; exists {
+			delete(workerDeploymentData.Versions, buildID)
+			deletedInNew = true
+			changed = true
+		}
+		if removeOldFormat {
+			// Remove the version from the old deployment data format if present.
+			for idx, oldVersions := range deploymentData.GetVersions() {
+				if oldVersions.GetVersion().GetDeploymentName() == deploymentName &&
+					oldVersions.GetVersion().GetBuildId() == buildID {
+					//nolint:staticcheck // SA1019 deprecated versions will clean up later
+					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+					changed = true
+					break
+				}
+			}
+		}
+	}
+
+	// Only remove the deployment entry if versions were actually deleted from the new-format map.
+	if deletedInNew && len(workerDeploymentData.Versions) == 0 {
+		delete(deploymentData.GetDeploymentsData(), deploymentName)
+	}
+	return changed
+}
+
 // clearVersionFromRoutingConfig clears current/ramping fields in new-format routing config
 // when an old-format DeploymentVersionData's roles change.
 func clearVersionFromRoutingConfig(
@@ -3255,4 +3299,18 @@ func clearVersionFromRoutingConfig(
 		rc.CurrentDeploymentVersion = nil
 		rc.CurrentVersionChangedTime = nil
 	}
+}
+
+func unsetRampingFromRoutingConfig(
+	workerDeploymentData *persistencespb.WorkerDeploymentData,
+) {
+	if workerDeploymentData == nil || workerDeploymentData.RoutingConfig == nil {
+		return
+	}
+
+	rc := workerDeploymentData.GetRoutingConfig()
+	rc.RampingDeploymentVersion = nil
+	rc.RampingVersionPercentage = 0
+	rc.RampingVersionPercentageChangedTime = nil
+	rc.RampingVersionChangedTime = nil
 }
