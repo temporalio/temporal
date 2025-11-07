@@ -2025,15 +2025,38 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 				/*Remove all the versions from the old deployment if present. This shall prevent the following scenario:
 
+				Assume all of this is in the same deployment "foo":
+
 					t0: Current version is A with old deployment format.
 					t1: Current version is B with new deployment format.
 					t2: User unsets current version B.
 
 				The right behaviour is that after unsetting, the current version should be unversioned and not version A.
 
+				However, if the following were present the behaviour would be different:
+
+				Assume all of this is are in different deployments "foo" and "bar":
+
+					t0: Current version is foo.A with old deployment format.
+					t1: Current version is bar.B with new deployment format.
+					t2: User unsets current version bar.B.
+
+				The right behaviour is that after unsetting, the current version should be foo.A and not unversioned as the task-queue
+				does belong to a versioned deployment.
+
+				So, the idea is that if there are updates to the routing config of a worker-deployment, remove versions present in the
+				old deployment data format under the same deployment.
 				*/
 
 				if applyUpdatesToRoutingConfig {
+					oldVersions := deploymentData.GetVersions()
+					dst := make([]*deploymentspb.DeploymentVersionData, 0, len(oldVersions))
+					for _, dv := range oldVersions {
+						if dv.GetVersion().GetDeploymentName() != req.GetDeploymentName() {
+							dst = append(dst, dv)
+						}
+					}
+					deploymentData.Versions = dst
 				}
 			}
 		}
