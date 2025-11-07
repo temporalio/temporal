@@ -503,8 +503,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
-			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
 		},
 	}
 
@@ -512,9 +511,18 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
+		}
+		var queryFailed *serviceerror.QueryFailed
+		if errors.As(err, &queryFailed) && queryFailed.Error() == errDeploymentDeleted {
+			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 		}
 		return nil, nil, err
+	}
+
+	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
+		// This should not happen
+		return nil, nil, serviceerror.NewInternalf("describe deployment query rejected with status %s", rej.GetStatus())
 	}
 
 	if res.GetResponse().GetQueryResult() == nil {

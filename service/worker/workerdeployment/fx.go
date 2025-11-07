@@ -110,7 +110,8 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 			return dynamicconfig.MatchingMaxVersionsInDeployment.Get(s.dynamicConfig)(ns.Name().String())
 		}
 		workflowVersionGetter := func() DeploymentWorkflowVersion {
-			return DeploymentWorkflowVersion(dynamicconfig.MatchingDeploymentWorkflowVersion.Get(s.dynamicConfig)(ns.Name().String()))
+			val := DeploymentWorkflowVersion(dynamicconfig.MatchingDeploymentWorkflowVersion.Get(s.dynamicConfig)(ns.Name().String()))
+			return val
 		}
 		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
 	}

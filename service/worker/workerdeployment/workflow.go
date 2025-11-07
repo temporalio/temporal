@@ -233,6 +233,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		"ramping_version", d.State.GetRoutingConfig().GetRampingVersion())
 
 	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
+		if d.deleteDeployment {
+			return nil, errors.New(errDeploymentDeleted)
+		}
 		return &deploymentspb.QueryDescribeWorkerDeploymentResponse{
 			State: d.State,
 		}, nil

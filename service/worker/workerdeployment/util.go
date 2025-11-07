@@ -65,6 +65,7 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionNotFound            = "Version not found in deployment"
+	errDeploymentDeleted          = "worker deployment deleted" // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
 
 	errConflictTokenMismatchType = "errConflictTokenMismatch"
 	errFailedPrecondition        = "FailedPrecondition"
