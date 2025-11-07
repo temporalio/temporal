@@ -1207,3 +1207,159 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	)
 	s.Equal(2, standbyRetryTimers, "Standby cluster should have exactly 2 ActivityRetryTimer tasks for this activity (same as active)")
 }
+
+func (s *streamBasedReplicationTestSuite) TestWorkflowTaskFailureStampReplication() {
+	// This test validates stamp increments on standby cluster via replication.
+	// Skip when transition history is disabled because standby cluster doesn't create
+	// all workflow task retry attempts in that mode.
+	if !s.enableTransitionHistory {
+		s.T().Skip("Skipping test - requires transition history to be enabled for standby cluster stamp validation")
+	}
+
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+
+	recorder0 := s.getRecorder(0) // active cluster
+	recorder1 := s.getRecorder(1) // standby cluster
+	s.Require().NotNil(recorder0)
+	s.Require().NotNil(recorder1)
+
+	workflowID := "workflow-task-failure-test-" + uuid.New()
+	taskQueue := "workflow-task-failure-tq"
+
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: s.namespaceName,
+	})
+	s.NoError(err)
+	defer sdkClient.Close()
+
+	// Counter for workflow task attempts
+	var attemptCount atomic.Int32
+
+	// Workflow that fails 3 times then succeeds on 4th attempt
+	failingWorkflow := func(ctx workflow.Context) (string, error) {
+		attempt := attemptCount.Add(1)
+		if attempt <= 3 {
+			// Fail the first 3 attempts
+			panic(fmt.Sprintf("intentional workflow task failure on attempt %d", attempt))
+		}
+		// Succeed on 4th attempt
+		return "completed", nil
+	}
+
+	s.T().Logf("Starting worker...")
+	sdkWorker := worker.New(sdkClient, taskQueue, worker.Options{})
+	sdkWorker.RegisterWorkflowWithOptions(failingWorkflow, workflow.RegisterOptions{Name: "simple-workflow"})
+
+	err = sdkWorker.Start()
+	s.NoError(err)
+	defer sdkWorker.Stop()
+
+	// Start the workflow - it will fail 3 times then succeed on 4th attempt
+	s.T().Logf("Starting workflow that will fail 3 times...")
+	workflowRun, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                       workflowID,
+		TaskQueue:                taskQueue,
+		WorkflowRunTimeout:       60 * time.Second,
+		WorkflowTaskTimeout:      10 * time.Second,
+		WorkflowExecutionTimeout: 60 * time.Second,
+	}, "simple-workflow")
+	s.NoError(err)
+	s.T().Logf("Started workflow (RunID: %s)", workflowRun.GetRunID())
+
+	// Wait for workflow to complete (after 3 failures + 1 success)
+	var workflowResult string
+	err = workflowRun.Get(ctx, &workflowResult)
+	s.NoError(err)
+	s.Equal("completed", workflowResult)
+	s.T().Logf("Workflow completed successfully after 3 failures: %s (RunID: %s)", workflowResult, workflowRun.GetRunID())
+
+	// Wait a bit for replication to complete to the standby cluster
+	time.Sleep(2 * time.Second)
+
+	// Verify stamp increments on ACTIVE cluster
+	s.T().Logf("Verifying stamp increments on active cluster...")
+	s.verifyWorkflowTaskStamps(recorder0, "active", workflowID, workflowRun.GetRunID(), s.namespaceID)
+
+	// Verify stamp increments on STANDBY cluster (passive side)
+	s.T().Logf("Verifying stamp increments on standby cluster...")
+	s.verifyWorkflowTaskStamps(recorder1, "standby", workflowID, workflowRun.GetRunID(), s.namespaceID)
+
+	s.T().Logf("✓ All stamp assertions passed! Stamps are correctly incremented on both active and standby clusters.")
+}
+
+// verifyWorkflowTaskStamps verifies that workflow task stamps increment correctly
+func (s *streamBasedReplicationTestSuite) verifyWorkflowTaskStamps(
+	recorder *testcore.TaskQueueRecorder,
+	clusterName string,
+	workflowID string,
+	runID string,
+	namespaceID string,
+) {
+	// Ensure namespace is not empty - this is required for filtering
+	s.Require().NotEmpty(namespaceID, "NamespaceID must not be empty")
+	s.Require().NotEmpty(workflowID, "WorkflowID must not be empty")
+	s.Require().NotEmpty(runID, "RunID must not be empty")
+
+	type taskWithStamp struct {
+		attempt int32
+		stamp   int32
+	}
+
+	var transferTasks []taskWithStamp
+	var timeoutTasks []taskWithStamp
+
+	// Create filter for this specific workflow
+	filter := testcore.TaskFilter{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+
+	// Get transfer tasks for this specific workflow using filtered API
+	transferRecorded := recorder.GetRecordedTasksByCategoryFiltered(tasks.CategoryTransfer, filter)
+	for _, recorded := range transferRecorded {
+		if wfTask, ok := recorded.Task.(*tasks.WorkflowTask); ok {
+			transferTasks = append(transferTasks, taskWithStamp{
+				stamp: wfTask.Stamp,
+			})
+		}
+	}
+
+	// Get timer tasks for this specific workflow using filtered API
+	timerRecorded := recorder.GetRecordedTasksByCategoryFiltered(tasks.CategoryTimer, filter)
+	for _, recorded := range timerRecorded {
+		if timeoutTask, ok := recorded.Task.(*tasks.WorkflowTaskTimeoutTask); ok {
+			timeoutTasks = append(timeoutTasks, taskWithStamp{
+				attempt: timeoutTask.ScheduleAttempt,
+				stamp:   timeoutTask.Stamp,
+			})
+		}
+	}
+
+	// Verify we have the expected number of tasks
+	s.Require().Len(transferTasks, 4, "Expected 4 TransferWorkflowTask tasks on %s cluster", clusterName)
+	s.Require().Len(timeoutTasks, 4, "Expected 4 WorkflowTaskTimeout tasks on %s cluster", clusterName)
+
+	// Verify TransferWorkflowTask stamps increment: 0, 1, 2, 3
+	for i, task := range transferTasks {
+		expectedStamp := int32(i)
+		s.Equal(expectedStamp, task.stamp,
+			"TransferWorkflowTask #%d on %s cluster: expected stamp=%d, got stamp=%d",
+			i+1, clusterName, expectedStamp, task.stamp)
+	}
+	s.T().Logf("✓ %s cluster: All %d TransferWorkflowTask stamps are correct (0→1→2→3)",
+		clusterName, len(transferTasks))
+
+	// Verify WorkflowTaskTimeout stamps increment with attempts: attempt 1→stamp 0, attempt 2→stamp 1, etc.
+	for _, task := range timeoutTasks {
+		expectedStamp := task.attempt - 1
+		s.Equal(expectedStamp, task.stamp,
+			"WorkflowTaskTimeout attempt %d on %s cluster: expected stamp=%d, got stamp=%d",
+			task.attempt, clusterName, expectedStamp, task.stamp)
+	}
+	s.T().Logf("✓ %s cluster: All %d WorkflowTaskTimeout stamps are correct (attempts 1-4 → stamps 0-3)",
+		clusterName, len(timeoutTasks))
+}
