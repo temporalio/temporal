@@ -1875,7 +1875,28 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	defer w1.Stop()
 
 	// v1 is current for both parent and child
-	s.setCurrentDeployment(tv1)
+	// TODO (Shivam): Once #8570 goes in, we can replace this with a simple setCurrentDeployment call.
+	if s.useNewDeploymentData {
+		s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
+			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+			RevisionNumber:            1,
+		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+		}}, []string{}, tqTypeWf)
+
+		if crossTq {
+			s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1Child, &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1Child.DeploymentVersionString()),
+				CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+				RevisionNumber:            1,
+			}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1Child.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			}}, []string{}, tqTypeWf)
+		}
+	} else {
+		s.setCurrentDeployment(tv1)
+	}
 
 	startOpts := sdkclient.StartWorkflowOptions{
 		ID:                  tv1.WorkflowID(),
