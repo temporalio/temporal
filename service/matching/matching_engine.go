@@ -302,24 +302,17 @@ func (e *matchingEngineImpl) listenerKey() string {
 
 func (e *matchingEngineImpl) watchMembership() {
 	self := e.hostInfoProvider.HostInfo().Identity()
+	rc := e.matchingRawClient.(matching.RoutingMatchingClient)
+	ownedByOther := func(p tqid.Partition) bool {
+		addr, err := rc.Route(p)
+		// don't take action on lookup error
+		return err == nil && addr != self
+	}
 
 	for range e.membershipChangedCh {
 		delay := e.config.MembershipUnloadDelay()
 		if delay == 0 {
 			continue
-		}
-
-		spreadRoutingBatchSize := e.config.SpreadRoutingBatchSize()
-		ownedByOther := func(p tqid.Partition) bool {
-			key, n := p.RoutingKey(spreadRoutingBatchSize)
-			hosts := e.serviceResolver.LookupN(key, n+1)
-			if len(hosts) == 0 {
-				return false // don't unload on lookup error
-			}
-			if n >= len(hosts) {
-				n %= len(hosts)
-			}
-			return hosts[n].Identity() != self
 		}
 
 		e.notifyNexusEndpointsOwnershipChange()

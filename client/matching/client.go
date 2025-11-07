@@ -213,10 +213,22 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
+func (c *clientImpl) Route(p tqid.Partition) (string, error) {
+	nsName := p.NamespaceId() // FIXME: convert id to name
+	spread := c.spreadRouting(nsName, p.TaskQueue().Name(), p.TaskQueue().TaskType())
+	key, n := p.RoutingKey(spread)
+	addr, err := c.clients.Lookup(key, n)
+	if err != nil {
+		return "", err
+	}
+	return addr, nil
+}
+
 func (c *clientImpl) getClientForTaskQueuePartition(
 	partition tqid.Partition,
 ) (matchingservice.MatchingServiceClient, error) {
-	client, err := c.clients.GetClientForKey(partition.RoutingKey(c.spreadRouting()))
+	addr, err := c.Route(partition)
+	client, err := c.clients.GetClientForClientKey(addr)
 	if err != nil {
 		return nil, err
 	}
