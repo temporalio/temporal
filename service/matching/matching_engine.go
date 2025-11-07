@@ -1902,7 +1902,6 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	// TODO (Shivam): Please fix this error message and condition check.
 	if req.Deployment == nil && req.GetOperation() == nil && req.GetDeploymentName() == "" {
 		return nil, errMissingDeploymentVersion
 	}
@@ -2023,7 +2022,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					changed = true
 				}
 
-				/*Remove all the versions from the old deployment if present. This shall prevent the following scenario:
+				/* Remove all the versions from the old deployment if present. This shall prevent the following scenario:
 
 				Assume all of this is in the same deployment "foo":
 
@@ -2042,13 +2041,14 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					t2: User unsets current version bar.B.
 
 				The right behaviour is that after unsetting, the current version should be foo.A and not unversioned as the task-queue
-				does belong to a versioned deployment.
+				still belongs to a versioned deployment.
 
 				So, the idea is that if there are updates to the routing config of a worker-deployment, remove versions present in the
 				old deployment data format under the same deployment.
 				*/
 
 				if applyUpdatesToRoutingConfig {
+					//nolint:staticcheck // SA1019 deprecated versions will clean up later
 					oldVersions := deploymentData.GetVersions()
 					dst := make([]*deploymentspb.DeploymentVersionData, 0, len(oldVersions))
 					for _, dv := range oldVersions {
@@ -2056,6 +2056,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 							dst = append(dst, dv)
 						}
 					}
+					//nolint:staticcheck // SA1019 deprecated versions will clean up later
 					deploymentData.Versions = dst
 				}
 			}

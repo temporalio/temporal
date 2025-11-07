@@ -719,37 +719,27 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 				continue
 			}
 
-			// We need to have the HasDeploymentVersion check due to the following example case:
+			// Only chose those RoutingConfigs which pass the HasDeploymentVersion check due to the following example case:
 			// t0: TQ "foo" is in current version A with other TQ's
 			// t1: All other TQ's are moved to new version B except for "foo".
 			// t2: New version B is set as the current version.
 			//
-			// When this happens, we sync to "foo" that A is no longer the current version by passing in the new routing config.
-			// Since this routing config has the current version set to B, "foo" (right now) will choose B even though it is not in that
-			// version.
-			//
-			// Unversioned: If the task-queue now gets synced to unversioned routingConfig, we should:
-			// - Return false from HasDeploymentVersion (the task-queue is not in the unversioned version specifically)
-			// - Choose routingConfigLatestCurrentVersion to be as nil over here.
-
-			// Choose current/ramping based on the deployment having the most recent routingConfig update time.
-
+			// When this happens, we sync to "foo" that A is no longer the current version by passing in the new routing config. However,
+			// version B should not be considered as the current version for "foo" because the task-queue is not part of version B.
 			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) {
-				// Check if routing config wants to set current version as unversioned. If so, assign the routingConfig to routingConfigLatestCurrentVersion and decide
-				// later if unversioned is truly the current version or not.
-				if routingConfig.GetCurrentDeploymentVersion() == nil && routingConfigLatestCurrentVersion.GetCurrentDeploymentVersion() == nil {
-					routingConfigLatestCurrentVersion = routingConfig
-				} else if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetCurrentDeploymentVersion()))) {
+				// Current version can only be unversioned if the task queue is not part of any other version.
+				// Otherwise, only consider the version as current if the task queue belongs to the version.
+				if (routingConfig.GetCurrentDeploymentVersion() == nil && routingConfigLatestCurrentVersion.GetCurrentDeploymentVersion() == nil) ||
+					HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetCurrentDeploymentVersion()))) {
 					routingConfigLatestCurrentVersion = routingConfig
 				}
 			}
 
 			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
-				// Check if routing config wants to set ramping version as unversioned. If so, assign the routingConfig to routingConfigLatestRampingVersion and decide
-				// later if unversioned is truly the ramping version or not.
-				if routingConfig.GetRampingDeploymentVersion() == nil && routingConfigLatestRampingVersion.GetRampingDeploymentVersion() == nil {
-					routingConfigLatestRampingVersion = routingConfig
-				} else if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetRampingDeploymentVersion()))) {
+				// Ramping version can only be unversioned if the task queue is not part of any other version.
+				// Otherwise, only consider the version as ramping if the task queue belongs to the version.
+				if (routingConfig.GetRampingDeploymentVersion() == nil && routingConfigLatestRampingVersion.GetRampingDeploymentVersion() == nil) ||
+					HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetRampingDeploymentVersion()))) {
 					routingConfigLatestRampingVersion = routingConfig
 				}
 			}
