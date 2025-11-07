@@ -170,6 +170,10 @@ func mergeWorkflowExecutionOptions(
 
 	// ==== VersioningOverride
 
+	if _, ok := updateFields["versioningOverride"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
 	if _, ok := updateFields["versioningOverride.deployment"]; ok {
 		if _, ok := updateFields["versioningOverride.behavior"]; !ok {
 			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
@@ -181,10 +185,6 @@ func mergeWorkflowExecutionOptions(
 		if _, ok := updateFields["versioningOverride.deployment"]; !ok {
 			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride"]; ok {
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
