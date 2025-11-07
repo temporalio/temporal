@@ -5786,7 +5786,9 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
-			activityInfo.Stamp++
+			if ms.shard.GetConfig().EnableActivityRetryStampIncrement(ms.GetNamespaceEntry().Name().String()) {
+				activityInfo.Stamp++
+			}
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -5860,12 +5862,14 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState historyi.MutableState) error {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
+			isActivityRetryStampIncrementEnabled := mutableStateImpl.shard.GetConfig().EnableActivityRetryStampIncrement(mutableStateImpl.GetNamespaceEntry().Name().String())
 			ai = UpdateActivityInfoForRetries(
 				activityInfo,
 				mutableStateImpl.GetCurrentVersion(),
 				nextAttempt,
 				mutableStateImpl.truncateRetryableActivityFailure(activityFailure),
 				timestamppb.New(nextScheduledTime),
+				isActivityRetryStampIncrementEnabled,
 			)
 		}
 		return nil
