@@ -282,6 +282,8 @@ func (b *HistoryBuilder) AddWorkflowExecutionPausedEvent(
 	requestID string,
 ) *historypb.HistoryEvent {
 	event := b.CreateWorkflowExecutionPausedEvent(identity, reason, requestID)
+	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
+	event.WorkerMayIgnore = true
 	event, _ = b.add(event)
 	return event
 }
