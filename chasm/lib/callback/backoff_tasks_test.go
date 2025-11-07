@@ -24,12 +24,11 @@ func (s *backoffTasksSuite) SetupTest() {
 	s.callbackSuite.SetupTest()
 }
 
-// ========================================
-// BackoffTask Execution Tests
-// ========================================
-
 // TestBackoffTask_ReschedulesCallback tests that BackoffTask transitions callback back to SCHEDULED.
 // Mirrors HSM test: TestProcessBackoffTask
+// TODO (seankane): This test is functionally a duplicate of TestProcessBackoffTask in executors_test.go
+// until CHASM testing infrastructure matures to support verifying task generation in integration tests.
+// Once that's available, this test will provide unique value by testing the full CHASM stack integration.
 func (s *backoffTasksSuite) TestBackoffTask_ReschedulesCallback() {
 	// Create callback in BACKING_OFF state
 	s.createCallback("cb-1", "req-1", "http://localhost", callbackspb.CALLBACK_STATUS_BACKING_OFF)
@@ -61,6 +60,9 @@ func (s *backoffTasksSuite) TestBackoffTask_ReschedulesCallback() {
 }
 
 // TestBackoffTask_GeneratesInvocationTask tests that BackoffTask generates a new InvocationTask.
+// TODO (seankane): This test is functionally a duplicate of TestProcessBackoffTask in executors_test.go
+// until CHASM testing infrastructure matures to support verifying task generation in integration tests.
+// Once that's available, this test will provide unique value by testing the full CHASM stack integration.
 func (s *backoffTasksSuite) TestBackoffTask_GeneratesInvocationTask() {
 	// Create callback in BACKING_OFF state
 	s.createCallback("cb-1", "req-1", "http://localhost", callbackspb.CALLBACK_STATUS_BACKING_OFF)
@@ -96,10 +98,6 @@ func (s *backoffTasksSuite) TestBackoffTask_GeneratesInvocationTask() {
 	// CHASM offers unit testing hooks for task generation.
 	// s.True(s.hasInvocationTask(2), "Expected InvocationTask with attempt=2 to be generated")
 }
-
-// ========================================
-// BackoffTask Validation Tests
-// ========================================
 
 // TestBackoffTask_ValidateAttemptMismatch tests that BackoffTask validation rejects mismatched attempts.
 func (s *backoffTasksSuite) TestBackoffTask_ValidateAttemptMismatch() {

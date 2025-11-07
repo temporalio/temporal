@@ -346,6 +346,8 @@ func buildCallbackInfo(
 		state = enumspb.CALLBACK_STATE_FAILED
 	case enumsspb.CALLBACK_STATE_SUCCEEDED:
 		state = enumspb.CALLBACK_STATE_SUCCEEDED
+	default:
+		return nil, fmt.Errorf("unknown callback state: %v", callback.State())
 	}
 
 	blockedReason := ""

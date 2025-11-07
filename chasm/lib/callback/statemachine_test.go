@@ -87,7 +87,7 @@ func TestValidTransitions(t *testing.T) {
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert no task is generated on success transition
-	require.Len(t, mctx.Tasks, 0)
+	require.Empty(t, mctx.Tasks)
 
 	// Reset back to scheduled
 	callback = dup
@@ -108,5 +108,5 @@ func TestValidTransitions(t *testing.T) {
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
 	// Assert task is not generated, failed is terminal
-	require.Len(t, mctx.Tasks, 0)
+	require.Empty(t, mctx.Tasks)
 }

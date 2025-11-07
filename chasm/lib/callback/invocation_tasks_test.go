@@ -30,12 +30,11 @@ func (s *invocationTasksSuite) SetupTest() {
 	s.callbackSuite.SetupTest()
 }
 
-// ========================================
-// InvocationTask Execution Tests
-// ========================================
-
 // TestInvocationTask_SuccessfulNexusCallback tests a successful HTTP callback invocation.
 // Mirrors HSM test: TestProcessInvocationTaskNexus_Outcomes/success
+// TODO (seankane): This test is functionally a duplicate of TestExecuteInvocationTaskNexus_Outcomes/success
+// in executors_test.go until CHASM testing infrastructure matures to support verifying task generation
+// in integration tests. Once that's available this test will test the full CHASM stack integration.
 func (s *invocationTasksSuite) TestInvocationTask_SuccessfulNexusCallback() {
 	// Setup HTTP caller that returns 200 OK
 	s.httpCallerProvider = func(nid queues.NamespaceIDAndDestination) callback.HTTPCaller {
@@ -90,6 +89,9 @@ func (s *invocationTasksSuite) TestInvocationTask_SuccessfulNexusCallback() {
 
 // TestInvocationTask_FailureTriggersBackoff tests that a retryable HTTP error triggers backoff.
 // Mirrors HSM test: TestProcessInvocationTaskNexus_Outcomes/retryable-error
+// TODO (seankane): This test is functionally a duplicate of TestExecuteInvocationTaskNexus_Outcomes/retryable-http-error
+// in executors_test.go until CHASM testing infrastructure matures to support verifying task generation
+// in integration tests. Once that's available this test will test the full CHASM stack integration.
 func (s *invocationTasksSuite) TestInvocationTask_FailureTriggersBackoff() {
 	// Setup default dependencies first
 	s.setupDefaultDependencies()
@@ -183,6 +185,9 @@ func (s *invocationTasksSuite) TestInvocationTask_FailureTriggersBackoff() {
 
 // TestInvocationTask_NonRetryableFailure tests that a non-retryable error causes permanent failure.
 // Mirrors HSM test: TestProcessInvocationTaskNexus_Outcomes/non-retryable-error
+// TODO (seankane): This test is functionally a duplicate of TestExecuteInvocationTaskNexus_Outcomes/non-retryable-http-error
+// in executors_test.go until CHASM testing infrastructure matures to support verifying task generation
+// in integration tests. Once that's available this test will test the full CHASM stack integration.
 func (s *invocationTasksSuite) TestInvocationTask_NonRetryableFailure() {
 	// Setup default dependencies first
 	s.setupDefaultDependencies()
@@ -259,10 +264,6 @@ func (s *invocationTasksSuite) TestInvocationTask_NonRetryableFailure() {
 	s.NotNil(cb.LastAttemptFailure)
 	s.NotNil(cb.LastAttemptCompleteTime)
 }
-
-// ========================================
-// InvocationTask Validation Tests
-// ========================================
 
 // TestInvocationTask_ValidateStaleTask tests that validation rejects tasks with old attempt numbers.
 func (s *invocationTasksSuite) TestInvocationTask_ValidateStaleTask() {
