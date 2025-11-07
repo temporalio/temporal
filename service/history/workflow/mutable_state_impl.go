@@ -2239,10 +2239,6 @@ func (ms *MutableStateImpl) IsWorkflowExecutionRunning() bool {
 	}
 }
 
-func (ms *MutableStateImpl) IsWorkflowExecutionStatusPaused() bool {
-	return ms.executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-}
-
 func (ms *MutableStateImpl) IsCancelRequested() bool {
 	return ms.executionInfo.CancelRequested
 }
@@ -2827,8 +2823,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
 		return nil, err
 	}
 	event := ms.hBuilder.AddWorkflowExecutionPausedEvent(identity, reason, requestID)
-	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
-	event.WorkerMayIgnore = true
 	if err := ms.ApplyWorkflowExecutionPausedEvent(event); err != nil {
 		return nil, err
 	}
