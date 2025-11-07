@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -122,16 +123,10 @@ func MergeAndApply(
 func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
-		override, ok := proto.Clone(versioningInfo.GetVersioningOverride()).(*workflowpb.VersioningOverride)
-		if !ok {
-			return nil
-		}
-		opts.VersioningOverride = override
+		opts.VersioningOverride = common.CloneProto(versioningInfo.GetVersioningOverride())
 	}
 	if priority := ms.GetExecutionInfo().GetPriority(); priority != nil {
-		if prio, ok := proto.Clone(priority).(*commonpb.Priority); ok {
-			opts.Priority = prio
-		}
+		opts.Priority = common.CloneProto(priority)
 	}
 	return opts
 }
