@@ -1883,7 +1883,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 			RevisionNumber:            1,
 		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf, tqTypeAct)
+		}}, []string{}, tqTypeWf)
 
 		if crossTq {
 			s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1Child, &deploymentpb.RoutingConfig{
@@ -1892,7 +1892,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 				RevisionNumber:            1,
 			}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1Child.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-			}}, []string{}, tqTypeWf, tqTypeAct)
+			}}, []string{}, tqTypeWf)
 		}
 	} else {
 		s.setCurrentDeployment(tv1)
@@ -1923,7 +1923,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 			RevisionNumber:            2,
 		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv2.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf, tqTypeAct)
+		}}, []string{}, tqTypeWf)
 	} else {
 		s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf)
 	}
@@ -1935,7 +1935,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 				RevisionNumber:            2,
 			}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv2Child.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-			}}, []string{}, tqTypeWf, tqTypeAct)
+			}}, []string{}, tqTypeWf)
 		} else {
 			s.updateTaskQueueDeploymentData(tv2Child, true, 0, false, 0, tqTypeWf)
 		}

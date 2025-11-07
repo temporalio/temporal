@@ -3927,7 +3927,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UnsetOldFormatRamp_Clea
 	// new-format ramp entries should be cleared
 	rcGot = depData.GetDeploymentsData()[deploymentName].GetRoutingConfig()
 	s.Nil(rcGot.GetRampingDeploymentVersion())
-	s.Equal(float32(0), rcGot.GetRampingVersionPercentage())
+	s.InDelta(float32(0), rcGot.GetRampingVersionPercentage(), 0.0000)
 	s.Nil(rcGot.GetRampingVersionPercentageChangedTime())
 	s.Nil(rcGot.GetRampingVersionChangedTime())
 }
@@ -4246,6 +4246,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpdateRoutingConfig_Mig
 
 	// Old-format slice check
 	var oldSliceBuilds []string
+	//nolint:staticcheck // SA1019 deprecated versions will clean up later
 	for _, dv := range depData.GetVersions() {
 		if dv.GetVersion().GetDeploymentName() == depBar {
 			oldSliceBuilds = append(oldSliceBuilds, dv.GetVersion().GetBuildId())

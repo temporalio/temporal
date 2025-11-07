@@ -1892,6 +1892,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	return pm.GetUserDataManager().HandleGetUserDataRequest(ctx, req)
 }
 
+//nolint:revive:max-control-nesting
 func (e *matchingEngineImpl) SyncDeploymentUserData(
 	ctx context.Context,
 	req *matchingservice.SyncDeploymentUserDataRequest,
@@ -2077,7 +2078,6 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				old deployment data format under the same deployment.
 				*/
 
-				//nolint:max-control-nesting
 				if applyUpdatesToRoutingConfig {
 					//nolint:staticcheck // SA1019 deprecated versions will clean up later
 					oldVersions := deploymentData.GetVersions()
@@ -3231,6 +3231,8 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 // removeDeploymentVersions removes provided build IDs from the new-format per-deployment map and,
 // when requested, the corresponding entries from the deprecated old-format slice for the same deployment.
 // It returns true if any change was made (either format).
+//
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
 func removeDeploymentVersions(
 	deploymentData *persistencespb.DeploymentData,
 	deploymentName string,
