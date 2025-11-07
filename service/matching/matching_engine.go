@@ -2077,7 +2077,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				old deployment data format under the same deployment.
 				*/
 
-				//nolint:max-control-nestng
+				//nolint:max-control-nesting
 				if applyUpdatesToRoutingConfig {
 					//nolint:staticcheck // SA1019 deprecated versions will clean up later
 					oldVersions := deploymentData.GetVersions()
