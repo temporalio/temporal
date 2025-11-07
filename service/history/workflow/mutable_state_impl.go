@@ -229,6 +229,21 @@ type (
 		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
+		// In-memory storage for CHASM pure tasks. These are set when CHASM pure tasks are generated and used to
+		// delete them when then are no longer needed. (i.e. when the task's scheduled time is after that of the
+		// earliest valid CHASM pure task's).
+		//
+		// Those pure tasks are mostly reverse ordered by their scheduled time (the VisibilityTimestamp field).
+		// Since a physical pure task is only generated when there's no other pure task with an earlier scheduled time,
+		// simply appending new pure tasks to the end of the slice maintains the order.
+		//
+		// NOTE: shard context may move those tasks' scheduled time to the future if they are earlier than the timer queue's
+		// max read level (otherwise those tasks won't be loaded), which may potentially break the reverse order.
+		// That is fine, however, as in the worst case we just delete fewer tasks than we could have, but we will never delete
+		// tasks that are still needed (all tasks deleted are those having an earlier scheduled time than what's needed).
+		// Task deletion is just a best-effort optimization after all, so not complicating the logic to account for that here.
+		chasmPureTasks []*tasks.ChasmTaskPure
+
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
@@ -2599,8 +2614,15 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
-		mutableContext := chasm.NewMutableContext(context.Background(), ms.chasmTree.(*chasm.Node))
-		ms.chasmTree.(*chasm.Node).SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
+		root, ok := ms.chasmTree.(*chasm.Node)
+		softassert.That(ms.logger, ok, "chasmTree cast failed")
+
+		validationContext := chasm.NewContext(context.Background(), root)
+		_, err := root.Component(validationContext, chasm.ComponentRef{})
+		if common.IsNotFoundError(err) {
+			mutableContext := chasm.NewMutableContext(context.Background(), root)
+			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
+		}
 	}
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -5841,6 +5863,7 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
+			activityInfo.Stamp++
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -6247,14 +6270,47 @@ func (ms *MutableStateImpl) AddTasks(
 			ms.logger.Info("Dropped long duration scheduled task.", tasks.Tags(task)...)
 			continue
 		}
+
+		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
+			ms.chasmPureTasks = append(ms.chasmPureTasks, chasmPureTask)
+			maxPureTasks := ms.config.ChasmMaxInMemoryPureTasks()
+			if len(ms.chasmPureTasks) > maxPureTasks {
+				// Since tasks are reverse ordered by their scheduled time, tasks in the beginning are those
+				// - Generated a long time ago
+				// - Scheduled time is far in the future
+				// both types of tasks are likely to already be persisted in DB and best-effort deletion won't help,
+				// so drop them from the in-memory list first.
+				ms.chasmPureTasks = ms.chasmPureTasks[len(ms.chasmPureTasks)-maxPureTasks:]
+			}
+		}
+
 		ms.InsertTasks[category] = append(ms.InsertTasks[category], task)
 	}
 }
 
 func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
-	insterTasks := ms.InsertTasks
+	insertTasks := ms.InsertTasks
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
-	return insterTasks
+	return insertTasks
+}
+
+func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+	for lastTaskIdx := len(ms.chasmPureTasks) - 1; lastTaskIdx >= 0; lastTaskIdx-- {
+		task := ms.chasmPureTasks[lastTaskIdx]
+		if !task.GetVisibilityTime().Before(maxScheduledTime) {
+			ms.chasmPureTasks = ms.chasmPureTasks[:lastTaskIdx+1]
+			return
+		}
+
+		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
+			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
+			task.GetKey(),
+		)
+	}
+
+	// If we reach here, all tasks have visibility time before maxScheduledTime
+	// and need to be deleted.
+	ms.chasmPureTasks = ms.chasmPureTasks[:0]
 }
 
 func (ms *MutableStateImpl) SetUpdateCondition(

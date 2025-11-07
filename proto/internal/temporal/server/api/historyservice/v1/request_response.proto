@@ -417,6 +417,8 @@ message IsActivityTaskValidRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.server.api.clock.v1.VectorClock clock = 3;
     int64 scheduled_event_id = 4;
+    // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+    int32 stamp = 5;
 }
 
 message IsActivityTaskValidResponse {

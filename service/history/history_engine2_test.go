@@ -1394,6 +1394,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 	})
 	s.Nil(err)
 	s.NotNil(resp.RunId)
+	s.True(resp.Started)
+	s.Nil(resp.EagerWorkflowTask)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
@@ -1435,6 +1437,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 	})
 	s.Nil(err)
 	s.NotNil(resp.RunId)
+	s.True(resp.Started)
+	s.Nil(resp.EagerWorkflowTask)
 }
 
 func makeMockStartRequest(

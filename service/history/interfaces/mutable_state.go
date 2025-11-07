@@ -286,6 +286,8 @@ type (
 
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
+		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 
