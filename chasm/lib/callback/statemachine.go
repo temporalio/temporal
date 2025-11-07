@@ -60,7 +60,11 @@ var TransitionAttemptFailed = chasm.NewTransition(
 				},
 			},
 		}
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		ctx.AddTask(
+			cb,
+			chasm.TaskAttributes{ScheduledTime: nextAttemptScheduleTime},
+			&callbackspb.BackoffTask{Attempt: cb.Attempt},
+		)
 		return nil
 	},
 )
@@ -84,7 +88,7 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		// No task generation - callback has permanently failed
 		return nil
 	},
 )
@@ -100,7 +104,7 @@ var TransitionSucceeded = chasm.NewTransition(
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = nil
-		ctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
+		// No task generation - callback has succeeded
 		return nil
 	},
 )

@@ -21,7 +21,7 @@ import (
 type HTTPCaller func(*http.Request) (*http.Response, error)
 type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
 
-func newInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTaskExecutor {
+func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTaskExecutor {
 	return &InvocationTaskExecutor{
 		config:             opts.Config,
 		namespaceRegistry:  opts.NamespaceRegistry,
@@ -62,7 +62,7 @@ func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.Component
 	return e.Invoke(ctx, ref, attrs, task)
 }
 
-func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
+func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
 	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
@@ -165,7 +165,7 @@ type BackoffTaskExecutorOptions struct {
 	Logger         log.Logger
 }
 
-func newBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecutor {
+func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecutor {
 	return &BackoffTaskExecutor{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,

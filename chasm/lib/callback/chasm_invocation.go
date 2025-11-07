@@ -33,11 +33,22 @@ type chasmInvocation struct {
 }
 
 func (c chasmInvocation) WrapError(result invocationResult, err error) error {
+	// If there was an error saving the result, return it
+	if err != nil {
+		return err
+	}
+
+	// For retry cases, return the error
+	if retry, ok := result.(invocationResultRetry); ok {
+		return retry.err
+	}
+
+	// For permanent failures, return unprocessable task error
 	if failure, ok := result.(invocationResultFail); ok {
 		return queues.NewUnprocessableTaskError(failure.err.Error())
 	}
 
-	return result.error()
+	return nil
 }
 
 // logInternalError emits a log statement for internalMsg, tagged with both
