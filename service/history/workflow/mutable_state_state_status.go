@@ -24,7 +24,7 @@ func setStateStatus(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
@@ -93,7 +93,7 @@ func setStateStatus(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 		switch state {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 

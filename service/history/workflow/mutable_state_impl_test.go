@@ -1448,7 +1448,7 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
-			wantErr:      false,
+			wantErr:      true,
 		},
 		{
 			name:         "created-> {created, completed} (invalid)",
@@ -1594,11 +1594,18 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 		},
 		// ZOMBIE state transitions
 		{
+			name:         "zombie-> {created, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
 			name:         "zombie-> {created, paused}",
 			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
-			wantErr:      false,
+			wantErr:      true,
 		},
 		{
 			name:         "zombie-> {running, paused}",
