@@ -1992,7 +1992,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 					// Go through the new deployment data format for this deployment.
 					workerDeploymentData := deploymentData.GetDeploymentsData()[vd.GetVersion().GetDeploymentName()]
-					clearVersionFromRoutingConfig(workerDeploymentData, vd)
+					clearVersionFromRoutingConfig(workerDeploymentData, old, vd)
 
 				} else {
 					changed = true
@@ -2000,7 +2000,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 					// Go through the new deployment data format for this deployment.
 					workerDeploymentData := deploymentData.GetDeploymentsData()[vd.GetVersion().GetDeploymentName()]
-					clearVersionFromRoutingConfig(workerDeploymentData, vd)
+					clearVersionFromRoutingConfig(workerDeploymentData, nil, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
 				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
@@ -3228,27 +3228,30 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 }
 
 // clearVersionFromRoutingConfig clears current/ramping fields in new-format routing config
-// when an old-format DeploymentVersionData indicates those roles were set for a specific version.
+// when an old-format DeploymentVersionData's roles change.
 func clearVersionFromRoutingConfig(
 	workerDeploymentData *persistencespb.WorkerDeploymentData,
-	vd *deploymentspb.DeploymentVersionData,
+	oldVd *deploymentspb.DeploymentVersionData,
+	newVd *deploymentspb.DeploymentVersionData,
 ) {
-	if workerDeploymentData == nil || workerDeploymentData.RoutingConfig == nil || vd == nil {
+	if workerDeploymentData == nil || workerDeploymentData.RoutingConfig == nil || newVd == nil {
 		return
 	}
 	rc := workerDeploymentData.GetRoutingConfig()
 
-	if vd.GetRampingSinceTime() != nil {
+	if newVd.GetRampingSinceTime() != nil {
 		// Ramping version is cleared from the RoutingConfig. Note: When the ramping version is being set to unversioned,
 		// the code takes a different path. See SyncDeploymentUserData for more details.
 		rc.RampingDeploymentVersion = nil
 		rc.RampingVersionPercentage = 0
 		rc.RampingVersionPercentageChangedTime = nil
 		rc.RampingVersionChangedTime = nil
-	} else {
-		// Current version is being cleared. Note: The current version could either be set to
-		// unversioned or to a versioned deployment in the old deployment data format. Nevertheless, we
-		// need to clear the information from the RoutingConfig.
+	}
+
+	// Check if current role changed. If it did, clear current from RC.
+	oldCurrent := oldVd.GetCurrentSinceTime() != nil
+	newCurrent := newVd.GetCurrentSinceTime() != nil
+	if oldCurrent != newCurrent || newCurrent {
 		rc.CurrentDeploymentVersion = nil
 		rc.CurrentVersionChangedTime = nil
 	}
