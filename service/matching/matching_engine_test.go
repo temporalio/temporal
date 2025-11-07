@@ -3706,6 +3706,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_NewDeploymentDataRemove
 		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
+	//nolint:staticcheck // SA1019 deprecated versions will clean up later
 	got := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetVersions()
 	s.Require().Len(got, 1)
 	s.Equal("bar", got[0].GetVersion().GetDeploymentName())

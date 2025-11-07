@@ -569,6 +569,8 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 // It returns:
 // - final current deployment version and its revision number (0 for old format)
 // - final ramping deployment version, its revision number (0 for old format), and ramp percentage
+//
+//nolint:revive:function-result-limit
 func PickFinalCurrentAndRamping(
 	current *deploymentspb.DeploymentVersionData,
 	ramping *deploymentspb.DeploymentVersionData,
@@ -660,7 +662,7 @@ func calcRampThreshold(id string) float64 {
 
 // CalculateTaskQueueVersioningInfo calculates the current and ramping versioning info for a task queue.
 //
-//revive:disable-next-line:cognitive-complexity,confusing-results,function-result-limit
+//revive:disable-next-line:cognitive-complexity,confusing-results,function-result-limit,cyclomatic
 func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) (
 	*deploymentspb.WorkerDeploymentVersion, // current version
 	int64, // current revision number
