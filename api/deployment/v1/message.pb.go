@@ -1520,9 +1520,10 @@ func (x *StartWorkerDeploymentVersionRequest) GetRequestId() string {
 
 // used as Worker Deployment Version workflow activity input:
 type SyncDeploymentVersionUserDataRequest struct {
-	state   protoimpl.MessageState                               `protogen:"open.v1"`
-	Version *WorkerDeploymentVersion                             `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	Sync    []*SyncDeploymentVersionUserDataRequest_SyncUserData `protobuf:"bytes,2,rep,name=sync,proto3" json:"sync,omitempty"`
+	state          protoimpl.MessageState                               `protogen:"open.v1"`
+	DeploymentName string                                               `protobuf:"bytes,4,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
+	Version        *WorkerDeploymentVersion                             `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Sync           []*SyncDeploymentVersionUserDataRequest_SyncUserData `protobuf:"bytes,2,rep,name=sync,proto3" json:"sync,omitempty"`
 	// if true, the version will be forgotten from the task queue user data.
 	ForgetVersion bool `protobuf:"varint,3,opt,name=forget_version,json=forgetVersion,proto3" json:"forget_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1557,6 +1558,13 @@ func (x *SyncDeploymentVersionUserDataRequest) ProtoReflect() protoreflect.Messa
 // Deprecated: Use SyncDeploymentVersionUserDataRequest.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentVersionUserDataRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *SyncDeploymentVersionUserDataRequest) GetDeploymentName() string {
+	if x != nil {
+		return x.DeploymentName
+	}
+	return ""
 }
 
 func (x *SyncDeploymentVersionUserDataRequest) GetVersion() *WorkerDeploymentVersion {
@@ -4498,8 +4506,9 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x03 \x01(\tR\trequestId\"\xbc\x03\n" +
-	"$SyncDeploymentVersionUserDataRequest\x12T\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId\"\xe5\x03\n" +
+	"$SyncDeploymentVersionUserDataRequest\x12'\n" +
+	"\x0fdeployment_name\x18\x04 \x01(\tR\x0edeploymentName\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12h\n" +
 	"\x04sync\x18\x02 \x03(\v2T.temporal.server.api.deployment.v1.SyncDeploymentVersionUserDataRequest.SyncUserDataR\x04sync\x12%\n" +
 	"\x0eforget_version\x18\x03 \x01(\bR\rforgetVersion\x1a\xac\x01\n" +

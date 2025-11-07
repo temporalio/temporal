@@ -1082,9 +1082,10 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 
 		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserDataFromWorkerDeployment, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			Version:       nil,
-			ForgetVersion: false,
-			Sync:          batch,
+			DeploymentName: d.DeploymentName,
+			Version:        nil,
+			ForgetVersion:  false,
+			Sync:           batch,
 		}).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.

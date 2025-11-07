@@ -308,7 +308,7 @@ func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploy
 
 //nolint:staticcheck
 func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) bool {
-	// Represents unversioned workers. Discussion: Should unversioned workers be considered to be in a worker deployment version by default?
+	// Represents unversioned workers.
 	if v == nil {
 		return false
 	}
@@ -581,7 +581,7 @@ func PickFinalCurrentAndRamping(
 	int64, // final current revision number
 	time.Time, // final current update time
 	*deploymentspb.WorkerDeploymentVersion, // final ramping version
-	bool, // is ramping (ramping_since_time != nil)
+	bool, // if the version is ramping or not
 	float32, // final ramp percentage
 	int64, // final ramping revision number
 	time.Time, // final ramping update time

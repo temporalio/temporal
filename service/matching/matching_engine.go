@@ -1965,12 +1965,21 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 						continue
 					}
+					workerDeploymentData := deploymentData.GetDeploymentsData()[req.GetDeploymentName()]
 					changed = true
 					// only update if the timestamp is more recent
 					if vd.GetRampingSinceTime() == nil { // unset
 						deploymentData.UnversionedRampData = nil
+
+						// Also have to unset the ramp, if present, from the new deployment data format.
+						workerDeploymentData.RoutingConfig.RampingDeploymentVersion = nil
+						workerDeploymentData.RoutingConfig.RampingVersionPercentage = 0
+						workerDeploymentData.RoutingConfig.RampingVersionPercentageChangedTime = nil
+						workerDeploymentData.RoutingConfig.RampingVersionChangedTime = nil
+
 					} else { // set or update
 						deploymentData.UnversionedRampData = vd
+
 					}
 				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
@@ -1980,15 +1989,27 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					changed = true
 					// only update if the timestamp is more recent
 					deploymentData.Versions[idx] = vd
+
+					// Go through the new deployment data format for this deployment.
+					workerDeploymentData := deploymentData.GetDeploymentsData()[vd.GetVersion().GetDeploymentName()]
+					clearVersionFromRoutingConfig(workerDeploymentData, vd)
+
 				} else {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions, vd)
+
+					// Go through the new deployment data format for this deployment.
+					workerDeploymentData := deploymentData.GetDeploymentsData()[vd.GetVersion().GetDeploymentName()]
+					clearVersionFromRoutingConfig(workerDeploymentData, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
-				// TODO (Shivam): Remove versions from both places.
 				if idx := worker_versioning.FindDeploymentVersion(deploymentData, v); idx >= 0 {
 					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+
+					// Go through the new deployment data format for this deployment and remove the version if present.
+					workerDeploymentData := deploymentData.GetDeploymentsData()[v.GetDeploymentName()]
+					delete(workerDeploymentData.GetVersions(), v.GetBuildId())
 				}
 			} else {
 
@@ -2019,6 +2040,15 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				}
 				for _, buildID := range req.GetForgetVersions() {
 					delete(tqWorkerDeploymentData.Versions, buildID)
+
+					// Remove the version from the old deployment data format if present.
+					for idx, oldVersions := range deploymentData.GetVersions() {
+						if oldVersions.GetVersion().GetDeploymentName() == req.GetDeploymentName() &&
+							oldVersions.GetVersion().GetBuildId() == buildID {
+							deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+							break
+						}
+					}
 					changed = true
 				}
 
@@ -2052,9 +2082,19 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					oldVersions := deploymentData.GetVersions()
 					dst := make([]*deploymentspb.DeploymentVersionData, 0, len(oldVersions))
 					for _, dv := range oldVersions {
-						if dv.GetVersion().GetDeploymentName() != req.GetDeploymentName() {
-							dst = append(dst, dv)
+						if dv.GetVersion().GetDeploymentName() == req.GetDeploymentName() {
+
+							// Move membership from old format into the per-deployment new-format map.
+							buildID := dv.GetVersion().GetBuildId()
+							if _, exists := tqWorkerDeploymentData.Versions[buildID]; !exists {
+								tqWorkerDeploymentData.Versions[buildID] = &deploymentspb.WorkerDeploymentVersionData{
+									Status: dv.GetStatus(),
+								}
+							}
+							// Do not keep this entry in old-format slice (we're migrating it).
+							continue
 						}
+						dst = append(dst, dv)
 					}
 					//nolint:staticcheck // SA1019 deprecated versions will clean up later
 					deploymentData.Versions = dst
@@ -3185,4 +3225,31 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	return &matchingservice.UpdateTaskQueueConfigResponse{
 		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
 	}, nil
+}
+
+// clearVersionFromRoutingConfig clears current/ramping fields in new-format routing config
+// when an old-format DeploymentVersionData indicates those roles were set for a specific version.
+func clearVersionFromRoutingConfig(
+	workerDeploymentData *persistencespb.WorkerDeploymentData,
+	vd *deploymentspb.DeploymentVersionData,
+) {
+	if workerDeploymentData == nil || workerDeploymentData.RoutingConfig == nil || vd == nil {
+		return
+	}
+	rc := workerDeploymentData.GetRoutingConfig()
+
+	if vd.GetRampingSinceTime() != nil {
+		// Ramping version is cleared from the RoutingConfig. Note: When the ramping version is being set to unversioned,
+		// the code takes a different path. See SyncDeploymentUserData for more details.
+		rc.RampingDeploymentVersion = nil
+		rc.RampingVersionPercentage = 0
+		rc.RampingVersionPercentageChangedTime = nil
+		rc.RampingVersionChangedTime = nil
+	} else {
+		// Current version is being cleared. Note: The current version could either be set to
+		// unversioned or to a versioned deployment in the old deployment data format. Nevertheless, we
+		// need to clear the information from the RoutingConfig.
+		rc.CurrentDeploymentVersion = nil
+		rc.CurrentVersionChangedTime = nil
+	}
 }
