@@ -155,6 +155,10 @@ func (e *ChasmEngine) UpdateWithNewEntity(
 	return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("UpdateWithNewEntity is not yet supported")
 }
 
+// UpdateComponent applies updateFn to the current state of the component identified by ref, and
+// returns the new component reference corresponding to this transition. An error is returned if the
+// state transition specified by the component reference is not interpretable as part of the entity
+// transition history.
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -207,6 +211,9 @@ func (e *ChasmEngine) UpdateComponent(
 	return newSerializedRef, nil
 }
 
+// ReadComponent evaluates readFn against the current state of the component identified by the
+// supplied component reference. An error is returned if the state transition specified by the
+// component reference is not interpretable as part of the entity transition history.
 func (e *ChasmEngine) ReadComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -547,6 +554,11 @@ func (e *ChasmEngine) getShardContext(
 	return e.shardController.GetShardByID(shardID)
 }
 
+// getExecutionLease returns shard context and mutable state for the entity identified by the
+// supplied component reference, with the lock held. If the state transition specified by the
+// component reference is consistent with mutable state being stale, then mutable state is reloaded
+// from persistence before returning. An error is returned if the state transition specified by the
+// component reference is not interpretable as part of mutable state transition history.
 func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,
 	ref chasm.ComponentRef,

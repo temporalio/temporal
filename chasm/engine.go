@@ -176,6 +176,9 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 //   - consider remove ComponentRef from the return value and allow components to get
 //     the ref in the transition function. There are some caveats there, check the
 //     comment of the NewRef method in MutableContext.
+//
+// UpdateComponent applies updateFn to the component identified by the supplied component reference.
+// It returns the result, along with the new component reference.
 func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
@@ -207,6 +210,8 @@ func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	return output, newSerializedRef, err
 }
 
+// ReadComponent returns the result of evaluating readFn against the current state of the component
+// identified by the supplied component reference.
 func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
