@@ -1,7 +1,7 @@
 package activity
 
 import (
-	"errors"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // Ensure that Activity implements chasm.StateMachine interface
@@ -38,10 +37,6 @@ var TransitionScheduled = chasm.NewTransition(
 		attempt, err := a.Attempt.Get(ctx)
 		if err != nil {
 			return err
-		}
-
-		if attempt.Count != 0 {
-			return errors.New("activity attempt count must be zero on initial scheduling")
 		}
 
 		currentTime := ctx.Now(a)
@@ -96,10 +91,9 @@ var TransitionRescheduled = chasm.NewTransition(
 		attempt.Count += 1
 
 		// If this is a retry, calculate the delay before scheduling tasks and update attempt fields
-		// TODO: for activity failures it'll go through this retry path as well; we'll need to refactor the record timeout, probably passed as an event func
+		// TODO: for activity failures it'll go through this retry path as well; we'll need to refactor the record timeout and retryInterval recording, probably passed as an event func
 		retryInterval := backoff.CalculateExponentialRetryInterval(a.GetRetryPolicy(), attempt.GetCount())
-		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
-		err = a.recordActivityTimedOut(ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+		err = a.recordStartToCloseTimedOut(ctx, retryInterval, false)
 		if err != nil {
 			return err
 		}
@@ -202,7 +196,15 @@ var TransitionTimedOut = chasm.NewTransition(
 
 		if store == nil {
 			return a.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
-				return a.recordActivityTimedOut(ctx, timeoutType)
+				switch timeoutType {
+				case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+					return a.recordFromScheduledTimeOut(ctx, timeoutType)
+				case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
+					return a.recordStartToCloseTimedOut(ctx, 0, true)
+				default:
+					return fmt.Errorf("unhandled activity timeout: %v", timeoutType)
+				}
 			})
 		}
 

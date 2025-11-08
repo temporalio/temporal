@@ -670,9 +670,9 @@ func (*ActivityOutcome_Failed_) isActivityOutcome_Variant() {}
 type ActivityAttemptState_LastFailureDetails struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The last time the activity attempt failed.
-	LastFailureTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=last_failure_time,json=lastFailureTime,proto3" json:"last_failure_time,omitempty"`
+	Time *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
 	// Failure details from the last failed attempt.
-	LastFailure   *v14.Failure `protobuf:"bytes,2,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
+	Failure       *v14.Failure `protobuf:"bytes,2,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -707,16 +707,16 @@ func (*ActivityAttemptState_LastFailureDetails) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{2, 0}
 }
 
-func (x *ActivityAttemptState_LastFailureDetails) GetLastFailureTime() *timestamppb.Timestamp {
+func (x *ActivityAttemptState_LastFailureDetails) GetTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastFailureTime
+		return x.Time
 	}
 	return nil
 }
 
-func (x *ActivityAttemptState_LastFailureDetails) GetLastFailure() *v14.Failure {
+func (x *ActivityAttemptState_LastFailureDetails) GetFailure() *v14.Failure {
 	if x != nil {
-		return x.LastFailure
+		return x.Failure
 	}
 	return nil
 }
@@ -835,7 +835,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +
 	"\frequest_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12\x1a\n" +
 	"\bidentity\x18\x03 \x01(\tR\bidentity\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xea\x05\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xc9\x05\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12F\n" +
@@ -843,10 +843,10 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x1alast_attempt_complete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12\x86\x01\n" +
 	"\x14last_failure_details\x18\x05 \x01(\v2T.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetailsR\x12lastFailureDetails\x120\n" +
 	"\x14last_worker_identity\x18\a \x01(\tR\x12lastWorkerIdentity\x12k\n" +
-	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x1a\xa1\x01\n" +
-	"\x12LastFailureDetails\x12F\n" +
-	"\x11last_failure_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastFailureTime\x12C\n" +
-	"\flast_failure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\vlastFailure\"\x95\x01\n" +
+	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x1a\x80\x01\n" +
+	"\x12LastFailureDetails\x12.\n" +
+	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
+	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\x95\x01\n" +
 	"\x16ActivityHeartbeatState\x12:\n" +
 	"\adetails\x18\x01 \x01(\v2 .temporal.api.common.v1.PayloadsR\adetails\x12?\n" +
 	"\rrecorded_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\frecordedTime\"\xcd\x01\n" +
@@ -938,8 +938,8 @@ var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdx
 	19, // 21: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
 	8,  // 22: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
 	9,  // 23: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
-	14, // 24: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.last_failure_time:type_name -> google.protobuf.Timestamp
-	20, // 25: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.last_failure:type_name -> temporal.api.failure.v1.Failure
+	14, // 24: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.time:type_name -> google.protobuf.Timestamp
+	20, // 25: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.failure:type_name -> temporal.api.failure.v1.Failure
 	17, // 26: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
 	20, // 27: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
 	28, // [28:28] is the sub-list for method output_type

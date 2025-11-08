@@ -127,10 +127,10 @@ message ActivityAttemptState {
 
     message LastFailureDetails {
       // The last time the activity attempt failed.
-      google.protobuf.Timestamp last_failure_time = 1;
+      google.protobuf.Timestamp time = 1;
 
       // Failure details from the last failed attempt.
-      temporal.api.failure.v1.Failure last_failure = 2;
+      temporal.api.failure.v1.Failure failure = 2;
     }
 
     // Details about the last failure. This will only be updated when an activity attempt fails,

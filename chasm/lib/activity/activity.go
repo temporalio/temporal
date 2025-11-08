@@ -2,6 +2,7 @@ package activity
 
 import (
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -125,6 +127,7 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 	}
 
 	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
+	// TODO: Need to fill in VersionDirective once we decide how to handle versioning for standalone activities
 	return &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            namespaceID,
 		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
@@ -221,7 +224,9 @@ func (a *Activity) RecordCompletion(ctx chasm.MutableContext, applyFn func(ctx c
 	return applyFn(ctx)
 }
 
-func (a *Activity) recordActivityTimedOut(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
+// recordFromScheduledTimeOut records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
+// set the outcome failure directly and leave the attempt failure as is.
+func (a *Activity) recordFromScheduledTimeOut(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
 	outcome, err := a.Outcome.Get(ctx)
 	if err != nil {
 		return err
@@ -236,41 +241,54 @@ func (a *Activity) recordActivityTimedOut(ctx chasm.MutableContext, timeoutType 
 		},
 	}
 
-	switch timeoutType {
-	// Schedule to start and schedule to close timeouts are not retried so we set the outcome failure directly and
-	// leave the attempt failure as is.
-	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-		outcome.Variant = &activitypb.ActivityOutcome_Failed_{
-			Failed: &activitypb.ActivityOutcome_Failed{
-				Failure: failure,
+	outcome.Variant = &activitypb.ActivityOutcome_Failed_{
+		Failed: &activitypb.ActivityOutcome_Failed{
+			Failure: failure,
+		},
+	}
+
+	return nil
+}
+
+// recordStartToCloseTimedOut records start-to-close timeouts. These come from retried attempts so we update the attempt
+// failure info but leave the outcome failure empty to avoid duplication
+func (a *Activity) recordStartToCloseTimedOut(ctx chasm.MutableContext, retryInterval time.Duration, noRetriesLeft bool) error {
+	outcome, err := a.Outcome.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	timeoutType := enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+
+	failure := &failurepb.Failure{
+		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: timeoutType,
 			},
-		}
+		},
+	}
 
-	// Start to close timeouts are retried attempts so we update the attempt failure info but leave the outcome failure
-	// empty to avoid duplication
-	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-		attempt, err := a.Attempt.Get(ctx)
-		if err != nil {
-			return err
-		}
+	attempt, err := a.Attempt.Get(ctx)
+	if err != nil {
+		return err
+	}
 
-		currentTime := timestamppb.New(ctx.Now(a))
+	currentTime := timestamppb.New(ctx.Now(a))
 
-		attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
-			LastFailure:     failure,
-			LastFailureTime: currentTime,
-		}
-		attempt.LastAttemptCompleteTime = currentTime
+	attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
+		Failure: failure,
+		Time:    currentTime,
+	}
+	attempt.LastAttemptCompleteTime = currentTime
 
-		// If the activity has exhausted retries, mark the outcome failure as well but don't store duplicate failure info.
-		maxAttempts := a.GetRetryPolicy().GetMaximumAttempts()
-		if maxAttempts != 0 && attempt.GetCount() >= maxAttempts {
-			outcome.Variant = &activitypb.ActivityOutcome_Failed_{}
-		}
-
-	default:
-		return fmt.Errorf("unhandled activity timeout: %v", timeoutType)
+	// If the activity has exhausted retries, mark the outcome failure as well but don't store duplicate failure info.
+	// Also reset the retry interval as there won't be any more retries.
+	if noRetriesLeft {
+		outcome.Variant = &activitypb.ActivityOutcome_Failed_{}
+		attempt.CurrentRetryInterval = nil
+	} else {
+		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
 	}
 
 	return nil
