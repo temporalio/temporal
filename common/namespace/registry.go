@@ -12,9 +12,11 @@ type (
 	// is no guarantee about when these are called.
 	StateChangeCallbackFn func(ns *Namespace, deletedFromDb bool)
 
-	// Registry provides access to Namespace objects by name or by ID.
+	// Registry provides access to Namespace objects by name or by ID, plus partition-aware
+	// replication state resolution for workflows.
 	Registry interface {
 		pingable.Pingable
+		PartitionStateResolver
 		GetNamespace(name Name) (*Namespace, error)
 		GetNamespaceWithOptions(name Name, opts GetNamespaceOptions) (*Namespace, error)
 		GetNamespaceByID(id ID) (*Namespace, error)
