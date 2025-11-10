@@ -59,27 +59,27 @@ func (*LeaseExpiryTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
-// Task for cleanup of expired workers.
-type WorkerCleanupTask struct {
+// Task that fires when an inactive worker is ready to be cleaned up.
+type CleanupTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *WorkerCleanupTask) Reset() {
-	*x = WorkerCleanupTask{}
+func (x *CleanupTask) Reset() {
+	*x = CleanupTask{}
 	mi := &file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *WorkerCleanupTask) String() string {
+func (x *CleanupTask) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*WorkerCleanupTask) ProtoMessage() {}
+func (*CleanupTask) ProtoMessage() {}
 
-func (x *WorkerCleanupTask) ProtoReflect() protoreflect.Message {
+func (x *CleanupTask) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -91,8 +91,8 @@ func (x *WorkerCleanupTask) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WorkerCleanupTask.ProtoReflect.Descriptor instead.
-func (*WorkerCleanupTask) Descriptor() ([]byte, []int) {
+// Deprecated: Use CleanupTask.ProtoReflect.Descriptor instead.
+func (*CleanupTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
@@ -101,8 +101,8 @@ var File_temporal_server_chasm_lib_worker_proto_v1_tasks_proto protoreflect.File
 const file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
 	"5temporal/server/chasm/lib/worker/proto/v1/tasks.proto\x12)temporal.server.chasm.lib.worker.proto.v1\"\x11\n" +
-	"\x0fLeaseExpiryTask\"\x13\n" +
-	"\x11WorkerCleanupTaskB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
+	"\x0fLeaseExpiryTask\"\r\n" +
+	"\vCleanupTaskB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -118,8 +118,8 @@ func file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescGZIP() []
 
 var file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_goTypes = []any{
-	(*LeaseExpiryTask)(nil),   // 0: temporal.server.chasm.lib.worker.proto.v1.LeaseExpiryTask
-	(*WorkerCleanupTask)(nil), // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerCleanupTask
+	(*LeaseExpiryTask)(nil), // 0: temporal.server.chasm.lib.worker.proto.v1.LeaseExpiryTask
+	(*CleanupTask)(nil),     // 1: temporal.server.chasm.lib.worker.proto.v1.CleanupTask
 }
 var file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type

@@ -1,4 +1,4 @@
-// Tasks that are scheduled for Workers and the corresponding executors.
+// Task executors.
 package worker
 
 import (
@@ -86,7 +86,7 @@ func (e *WorkerCleanupTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	worker *Worker,
 	attrs chasm.TaskAttributes,
-	task *workerstatepb.WorkerCleanupTask,
+	task *workerstatepb.CleanupTask,
 ) error {
 	e.logger.Info("Cleaning up inactive worker", tag.WorkerID(worker.workerID()))
 
@@ -99,7 +99,7 @@ func (e *WorkerCleanupTaskExecutor) Validate(
 	ctx chasm.Context,
 	worker *Worker,
 	attrs chasm.TaskAttributes,
-	task *workerstatepb.WorkerCleanupTask,
+	task *workerstatepb.CleanupTask,
 ) (bool, error) {
 	return e.isCleanupTaskValid(ctx, worker, attrs), nil
 }

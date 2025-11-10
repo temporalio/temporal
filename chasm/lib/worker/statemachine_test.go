@@ -105,8 +105,8 @@ func TestTransitionLeaseExpired(t *testing.T) {
 	// Verify cleanup task is scheduled for the right time (approximately)
 	require.WithinDuration(t, time.Now().Add(event.CleanupDelay), ctx.Tasks[0].Attributes.ScheduledTime, time.Second)
 
-	// Verify it's a WorkerCleanupTask
-	_, ok := ctx.Tasks[0].Payload.(*workerstatepb.WorkerCleanupTask)
+	// Verify it's a CleanupTask
+	_, ok := ctx.Tasks[0].Payload.(*workerstatepb.CleanupTask)
 	require.True(t, ok)
 }
 

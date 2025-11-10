@@ -52,7 +52,7 @@ func (w *Worker) SetStateMachineState(status workerstatepb.WorkerStatus) {
 	w.Status = status
 }
 
-// WorkerID returns the unique identifier for this worker.
+// workerID returns the unique identifier for this worker.
 func (w *Worker) workerID() string {
 	if w.GetWorkerHeartbeat() == nil {
 		return ""
@@ -60,7 +60,7 @@ func (w *Worker) workerID() string {
 	return w.GetWorkerHeartbeat().GetWorkerInstanceKey()
 }
 
-// RecordHeartbeat processes a heartbeat, updating worker state and extending the lease.
+// recordHeartbeat processes a heartbeat, updating worker state and extending the lease.
 func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, heartbeat *workerpb.WorkerHeartbeat, leaseDuration time.Duration) error {
 	w.WorkerHeartbeat = heartbeat
 
