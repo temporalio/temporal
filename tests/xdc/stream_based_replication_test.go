@@ -1369,7 +1369,6 @@ func (s *streamBasedReplicationTestSuite) dumpRecorders() {
 		return
 	}
 
-	// Get recorders
 	recorder0 := s.getRecorder(0)
 	recorder1 := s.getRecorder(1)
 
