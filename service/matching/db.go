@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
 	"sync"
 	"time"
 
@@ -732,11 +731,9 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 
 	var totalLag int64
 	var oldestTime time.Time
-	count := make(map[int32]int64)
+	counts := make(map[int32]int64)
 	for _, s := range db.subqueues {
-		c := count[s.Key.Priority]
-		c += s.ApproximateBacklogCount
-		count[s.Key.Priority] = c
+		counts[s.Key.Priority] += s.ApproximateBacklogCount
 		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
@@ -749,12 +746,8 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 		}
 	}
 
-	for _, v := range count {
-		priStr := ""
-		if v > 0 {
-			priStr = strconv.FormatInt(v, 10)
-		}
-		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(v), metrics.StringTag(metrics.TaskPriorityTagName, priStr))
+	for priority, count := range counts {
+		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
 	}
 	if oldestTime.IsZero() {
 		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
@@ -823,7 +816,13 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 		return
 	}
 
-	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0)
+	priorities := make(map[int32]struct{})
+	for _, s := range db.subqueues {
+		priorities[s.Key.Priority] = struct{}{}
+	}
+	for k := range priorities {
+		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+	}
 	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }
