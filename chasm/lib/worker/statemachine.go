@@ -21,7 +21,6 @@ func scheduleLeaseExpiry(ctx chasm.MutableContext, w *Worker, leaseDeadline time
 
 	taskAttrs := chasm.TaskAttributes{
 		ScheduledTime: leaseDeadline,
-		Destination:   "", // Empty means local execution.
 	}
 
 	ctx.AddTask(w, taskAttrs, expiryTask)
@@ -77,10 +76,10 @@ var TransitionCleanupCompleted = chasm.NewTransition(
 	},
 )
 
-// TransitionWorkerResurrection handles worker reconnection when in INACTIVE state.
+// TransitionResurrected handles worker reconnection when in INACTIVE state.
 // This is a special case for when the same worker process reconnects after network partition.
 // Note: Any activities associated with this worker may have already been rescheduled.
-var TransitionWorkerResurrection = chasm.NewTransition(
+var TransitionResurrected = chasm.NewTransition(
 	[]workerstatepb.WorkerStatus{workerstatepb.WORKER_STATUS_INACTIVE},
 	workerstatepb.WORKER_STATUS_ACTIVE,
 	func(w *Worker, ctx chasm.MutableContext, event EventHeartbeatReceived) error {
