@@ -388,6 +388,9 @@ type Config struct {
 	MaxLocalParentWorkflowVerificationDuration dynamicconfig.DurationPropertyFn
 
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
+
+	// Worker-Versioning related settings
+	UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -735,6 +738,9 @@ func NewConfig(
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 
 		NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute: dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Get(dc),
+
+		// Worker-Versioning related
+		UseRevisionNumberForWorkerVersioning: dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
 	}
 
 	return cfg

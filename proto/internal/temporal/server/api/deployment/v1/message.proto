@@ -22,6 +22,7 @@ message WorkerDeploymentVersion {
 
 // The source of truth for this data is in the WorkerDeployment entity workflows, which is
 // synced to all TQs whenever the source changes.
+// Deprecated.
 message DeploymentVersionData {
     // Nil means unversioned.
     WorkerDeploymentVersion version = 1;
@@ -44,6 +45,12 @@ message DeploymentVersionData {
     float ramp_percentage = 5;
 
     // Status of the Worker Deployment Version.
+    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;
+}
+
+// Information that a TQ should know about a particular Deployment Version. This info is not part of
+// RoutingConfig and hence not protected by the revision number.
+message WorkerDeploymentVersionData {
     temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;
 }
 
@@ -265,6 +272,7 @@ message StartWorkerDeploymentVersionRequest {
 
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
+    string deployment_name = 4;
     WorkerDeploymentVersion version = 1;
     repeated SyncUserData sync = 2;
     // if true, the version will be forgotten from the task queue user data.

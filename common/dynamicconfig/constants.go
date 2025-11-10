@@ -881,6 +881,11 @@ and deployment interaction in matching and history.`,
 including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
 	)
+	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
+		"system.useRevisionNumberForWorkerVersioning",
+		false,
+		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		true,

@@ -8424,7 +8424,7 @@ func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningB
 // If there is a pending workflow task that is not started yet, it'll be rescheduled after
 // transition start.
 // This method must be called with a version different from the effective version.
-func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) error {
+func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment, revisionNumber int64) error {
 	wfBehavior := ms.GetEffectiveVersioningBehavior()
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		// WF is pinned so we reject the transition.
@@ -8472,7 +8472,17 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		),
 	).Record(1)
 
+	ms.SetVersioningRevisionNumber(revisionNumber)
+
 	return nil
+}
+
+func (ms *MutableStateImpl) GetVersioningRevisionNumber() int64 {
+	return ms.GetExecutionInfo().GetVersioningInfo().GetRevisionNumber()
+}
+
+func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
+	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are
