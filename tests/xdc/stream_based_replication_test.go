@@ -105,6 +105,9 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 }
 
 func (s *streamBasedReplicationTestSuite) TearDownSuite() {
+	// Dump debug logs once at the end of all tests
+	s.dumpDebugLogs()
+
 	if s.generator != nil {
 		s.generator.Reset()
 	}
@@ -1210,12 +1213,6 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 
 func (s *streamBasedReplicationTestSuite) TestWorkflowTaskFailureStampReplication() {
 	// This test validates stamp increments on standby cluster via replication.
-	// Skip when transition history is disabled because standby cluster doesn't create
-	// all workflow task retry attempts in that mode.
-	if !s.enableTransitionHistory {
-		s.T().Skip("Skipping test - requires transition history to be enabled for standby cluster stamp validation")
-	}
-
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
@@ -1242,7 +1239,7 @@ func (s *streamBasedReplicationTestSuite) TestWorkflowTaskFailureStampReplicatio
 	failingWorkflow := func(ctx workflow.Context) (string, error) {
 		attempt := attemptCount.Add(1)
 		if attempt <= 3 {
-			// Fail the first 3 attempts
+			// Panic to cause workflow task timeout (will retry after 10 seconds)
 			panic(fmt.Sprintf("intentional workflow task failure on attempt %d", attempt))
 		}
 		// Succeed on 4th attempt
@@ -1362,4 +1359,53 @@ func (s *streamBasedReplicationTestSuite) verifyWorkflowTaskStamps(
 	}
 	s.T().Logf("✓ %s cluster: All %d WorkflowTaskTimeout stamps are correct (attempts 1-4 → stamps 0-3)",
 		clusterName, len(timeoutTasks))
+}
+
+// dumpDebugLogs writes task queues and replication streams to /tmp/xdc for debugging
+func (s *streamBasedReplicationTestSuite) dumpDebugLogs() {
+	// Get recorders
+	recorder0 := s.getRecorder(0)
+	recorder1 := s.getRecorder(1)
+
+	// Dump task queues using built-in WriteToLog with cluster names
+	if recorder0 != nil && len(s.clusters) > 0 {
+		clusterName := s.clusters[0].ClusterName()
+		activeTaskFile := fmt.Sprintf("/tmp/xdc/task_queue_%s_active.json", clusterName)
+		if err := recorder0.WriteToLog(activeTaskFile); err != nil {
+			s.T().Logf("Failed to write active cluster tasks: %v", err)
+		} else {
+			s.T().Logf("Wrote active cluster tasks to %s", activeTaskFile)
+		}
+	}
+
+	if recorder1 != nil && len(s.clusters) > 1 {
+		clusterName := s.clusters[1].ClusterName()
+		standbyTaskFile := fmt.Sprintf("/tmp/xdc/task_queue_%s_passive.json", clusterName)
+		if err := recorder1.WriteToLog(standbyTaskFile); err != nil {
+			s.T().Logf("Failed to write standby cluster tasks: %v", err)
+		} else {
+			s.T().Logf("Wrote standby cluster tasks to %s", standbyTaskFile)
+		}
+	}
+
+	// Dump replication streams using built-in WriteToLog
+	for i, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		if recorder == nil {
+			continue
+		}
+
+		// NOTE: This is a strong assumption on how we should have our test set replication direction
+		clusterRole := "active"
+		if i > 0 {
+			clusterRole = "passive"
+		}
+		replicationFile := fmt.Sprintf("/tmp/xdc/replication_stream_%s_%s.log", cluster.ClusterName(), clusterRole)
+		recorder.SetOutputFile(replicationFile)
+		if err := recorder.WriteToLog(); err != nil {
+			s.T().Logf("Failed to write cluster %d replication stream: %v", i, err)
+		} else {
+			s.T().Logf("Wrote cluster %d replication stream to %s", i, replicationFile)
+		}
+	}
 }
