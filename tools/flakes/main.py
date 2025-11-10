@@ -57,9 +57,9 @@ def process_tests(data, pattern, output_file: str, max_links: int = 3):
     lines.append(f"|{pattern}, Name with Url|Count|\n")
     lines.append("| -------- | ------- |\n")
     for item in transformed:
-        # Format: TestName: [1](url1) [2](url2) [3](url3)
+        # Format: `TestName`: [1](url1) [2](url2) [3](url3)
         links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
-        lines.append(f"|{item['name']}: {links}|{item['count']}|\n")
+        lines.append(f"|`{item['name']}`: {links}|{item['count']}|\n")
 
     with open(output_file, "w") as outfile:
         outfile.writelines(lines)
@@ -107,9 +107,9 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
     lines.append(f"|{pattern}, Name with Url|Count|\n")
     lines.append("| -------- | ------- |\n")
     for item in transformed:
-        # Format: TestName: [1](url1) [2](url2) [3](url3)
+        # Format: `TestName`: [1](url1) [2](url2) [3](url3)
         links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
-        lines.append(f"|{item['name']}: {links}|{item['count']}|\n")
+        lines.append(f"|`{item['name']}`: {links}|{item['count']}|\n")
 
     with open(output_file, "w") as outfile:
         outfile.writelines(lines)
@@ -165,9 +165,9 @@ def process_flaky(data, output_file: str, max_links: int = 3):
     lines.append("|Name with Url|Count|\n")
     lines.append("| -------- | ------- |\n")
     for item in transformed:
-        # Format: TestName: [1](url1) [2](url2) [3](url3)
+        # Format: `TestName`: [1](url1) [2](url2) [3](url3)
         links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
-        lines.append(f"|{item['name']}: {links}|{item['count']}|\n")
+        lines.append(f"|`{item['name']}`: {links}|{item['count']}|\n")
 
     with open(output_file, "w") as outfile:
         outfile.writelines(lines)
