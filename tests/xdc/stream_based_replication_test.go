@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -105,8 +106,8 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 }
 
 func (s *streamBasedReplicationTestSuite) TearDownSuite() {
-	// Dump debug logs once at the end of all tests
-	s.dumpDebugLogs()
+	// Dump recorders once at the end of all tests
+	s.dumpRecorders()
 
 	if s.generator != nil {
 		s.generator.Reset()
@@ -1359,8 +1360,15 @@ func (s *streamBasedReplicationTestSuite) verifyWorkflowTaskStamps(
 		clusterName, len(timeoutTasks))
 }
 
-// dumpDebugLogs writes task queues and replication streams to /tmp/xdc for debugging
-func (s *streamBasedReplicationTestSuite) dumpDebugLogs() {
+// dumpRecorders writes task queues and replication streams to /tmp/xdc for debugging
+func (s *streamBasedReplicationTestSuite) dumpRecorders() {
+	// Ensure output directory exists
+	outputDir := "/tmp/xdc"
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		s.T().Logf("Failed to create output directory %s: %v", outputDir, err)
+		return
+	}
+
 	// Get recorders
 	recorder0 := s.getRecorder(0)
 	recorder1 := s.getRecorder(1)
