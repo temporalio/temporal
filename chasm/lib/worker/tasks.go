@@ -63,10 +63,9 @@ func (e *LeaseExpiryTaskExecutor) isLeaseExpiryTaskValid(
 		return false
 	}
 
-	scheduledLeaseExpirationTime := attrs.ScheduledTime
-	workerLeaseExpirationTime := worker.GetLeaseExpirationTime().AsTime()
-	// The 2 values will match only if the lease was not renewed.
-	return workerLeaseExpirationTime.Equal(scheduledLeaseExpirationTime)
+	// The lease expiry task is valid only if it matches the scheduled lease expiration time.
+	// Otherwise, the lease expiry task has been rescheduled.
+	return attrs.ScheduledTime.Equal(worker.GetLeaseExpirationTime().AsTime())
 }
 
 // WorkerCleanupTaskExecutor handles cleanup of inactive workers.
@@ -100,6 +99,25 @@ func (e *WorkerCleanupTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *workerstatepb.WorkerCleanupTask,
 ) (bool, error) {
-	// Only valid if worker is inactive.
-	return worker.Status == workerstatepb.WORKER_STATUS_INACTIVE, nil
+	return e.isCleanupTaskValid(ctx, worker, attrs), nil
+}
+
+// isCleanupTaskValid checks if this cleanup task is still valid or if the worker has been resurrected.
+func (e *WorkerCleanupTaskExecutor) isCleanupTaskValid(
+	ctx chasm.Context,
+	worker *Worker,
+	attrs chasm.TaskAttributes,
+) bool {
+	// Worker must be inactive
+	if worker.Status != workerstatepb.WORKER_STATUS_INACTIVE {
+		return false
+	}
+	// Worker must have a cleanup time
+	if worker.GetCleanupTime() == nil {
+		return false
+	}
+
+	// The cleanup task is valid only if it matches the scheduled cleanup time.
+	// Otherwise, the cleanup task has been rescheduled.
+	return attrs.ScheduledTime.Equal(worker.GetCleanupTime().AsTime())
 }

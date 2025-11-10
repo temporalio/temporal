@@ -99,8 +99,10 @@ type WorkerState struct {
 	Status WorkerStatus `protobuf:"varint,2,opt,name=status,proto3,enum=temporal.server.chasm.lib.worker.proto.v1.WorkerStatus" json:"status,omitempty"`
 	// Worker heartbeat information including metadata and capabilities.
 	WorkerHeartbeat *v1.WorkerHeartbeat `protobuf:"bytes,3,opt,name=worker_heartbeat,json=workerHeartbeat,proto3" json:"worker_heartbeat,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Time when the cleanup task is scheduled to fire (used for cleanup task validation).
+	CleanupTime   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=cleanup_time,json=cleanupTime,proto3" json:"cleanup_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerState) Reset() {
@@ -154,15 +156,23 @@ func (x *WorkerState) GetWorkerHeartbeat() *v1.WorkerHeartbeat {
 	return nil
 }
 
+func (x *WorkerState) GetCleanupTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CleanupTime
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_worker_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/worker/v1/message.proto\"\x82\x02\n" +
+	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/worker/v1/message.proto\"\xc1\x02\n" +
 	"\vWorkerState\x12N\n" +
 	"\x15lease_expiration_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\x12O\n" +
 	"\x06status\x18\x02 \x01(\x0e27.temporal.server.chasm.lib.worker.proto.v1.WorkerStatusR\x06status\x12R\n" +
-	"\x10worker_heartbeat\x18\x03 \x01(\v2'.temporal.api.worker.v1.WorkerHeartbeatR\x0fworkerHeartbeat*\x81\x01\n" +
+	"\x10worker_heartbeat\x18\x03 \x01(\v2'.temporal.api.worker.v1.WorkerHeartbeatR\x0fworkerHeartbeat\x12=\n" +
+	"\fcleanup_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vcleanupTime*\x81\x01\n" +
 	"\fWorkerStatus\x12\x1d\n" +
 	"\x19WORKER_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14WORKER_STATUS_ACTIVE\x10\x01\x12\x1a\n" +
@@ -193,11 +203,12 @@ var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_depIdxs = []int
 	2, // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerState.lease_expiration_time:type_name -> google.protobuf.Timestamp
 	0, // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerState.status:type_name -> temporal.server.chasm.lib.worker.proto.v1.WorkerStatus
 	3, // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerState.worker_heartbeat:type_name -> temporal.api.worker.v1.WorkerHeartbeat
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 3: temporal.server.chasm.lib.worker.proto.v1.WorkerState.cleanup_time:type_name -> google.protobuf.Timestamp
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_worker_proto_v1_message_proto_init() }

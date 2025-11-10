@@ -8,6 +8,7 @@ import (
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // newTestWorker creates a worker for testing with a default heartbeat
@@ -170,6 +171,10 @@ func TestWorkerResurrection(t *testing.T) {
 		worker := newTestWorker()
 		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 
+		// Set cleanup time to simulate previous inactive period
+		oldCleanupTime := time.Now().Add(60 * time.Minute)
+		worker.CleanupTime = timestamppb.New(oldCleanupTime)
+
 		leaseDuration := 30 * time.Second
 		err := worker.RecordHeartbeat(ctx, worker.WorkerHeartbeat, leaseDuration)
 
@@ -177,6 +182,9 @@ func TestWorkerResurrection(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 		require.NotNil(t, worker.LeaseExpirationTime)
+
+		// Verify cleanup time was cleared during resurrection
+		require.Nil(t, worker.CleanupTime, "CleanupTime should be cleared during resurrection")
 
 		// Verify new lease expiry task was scheduled
 		require.Len(t, ctx.Tasks, 1)
@@ -187,6 +195,10 @@ func TestTransitionWorkerResurrection(t *testing.T) {
 	worker := newTestWorker()
 	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
+
+	// Set cleanup time to simulate previous inactive period
+	oldCleanupTime := time.Now().Add(60 * time.Minute)
+	worker.CleanupTime = timestamppb.New(oldCleanupTime)
 
 	leaseDeadline := time.Now().Add(30 * time.Second)
 
@@ -204,6 +216,9 @@ func TestTransitionWorkerResurrection(t *testing.T) {
 	// Verify lease was updated
 	require.NotNil(t, worker.LeaseExpirationTime)
 	require.Equal(t, leaseDeadline.Unix(), worker.LeaseExpirationTime.AsTime().Unix())
+
+	// Verify cleanup time was cleared during resurrection
+	require.Nil(t, worker.CleanupTime, "CleanupTime should be cleared during resurrection")
 
 	// Verify task was scheduled
 	require.Len(t, ctx.Tasks, 1)
@@ -245,5 +260,53 @@ func TestInvalidTransitions(t *testing.T) {
 
 		// Should fail because worker is not inactive
 		require.Error(t, err)
+	})
+}
+
+func TestCleanupTaskValidation(t *testing.T) {
+	t.Run("CleanupTaskInvalidatedAfterResurrection", func(t *testing.T) {
+		worker := newTestWorker()
+		executor := NewWorkerCleanupTaskExecutor(nil)
+
+		// 1. Worker becomes inactive and cleanup task is scheduled for future
+		cleanupTaskTime := time.Now().Add(60 * time.Minute)
+
+		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
+		worker.CleanupTime = timestamppb.New(cleanupTaskTime)
+
+		// 2. Cleanup task with matching scheduled time
+		attrs := chasm.TaskAttributes{ScheduledTime: cleanupTaskTime}
+
+		// Task should be valid initially
+		ctx := &chasm.MockMutableContext{}
+		valid := executor.isCleanupTaskValid(ctx, worker, attrs)
+		require.True(t, valid, "Cleanup task should be valid for inactive worker")
+
+		// 3. Worker resurrects - cleanup_time gets cleared
+		worker.Status = workerstatepb.WORKER_STATUS_ACTIVE
+		worker.CleanupTime = nil
+
+		// 4. Old cleanup task should now be invalid
+		valid = executor.isCleanupTaskValid(ctx, worker, attrs)
+		require.False(t, valid, "Cleanup task should be invalid after worker resurrection")
+	})
+
+	t.Run("CleanupTaskInvalidatedAfterNewCleanupTaskScheduled", func(t *testing.T) {
+		worker := newTestWorker()
+		executor := NewWorkerCleanupTaskExecutor(nil)
+
+		// 1. Worker is inactive with one cleanup time
+		cleanupTaskTime := time.Now().Add(60 * time.Minute)
+
+		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
+		worker.CleanupTime = timestamppb.New(cleanupTaskTime)
+
+		// 2. Simulate a cleanup task with earlier scheduled time. This task should be invalid.
+		earlierCleanupTaskTime := cleanupTaskTime.Add(-10 * time.Minute)
+		attrs := chasm.TaskAttributes{ScheduledTime: earlierCleanupTaskTime}
+
+		ctx := &chasm.MockMutableContext{}
+		valid := executor.isCleanupTaskValid(ctx, worker, attrs)
+		require.False(t, valid, "Cleanup task should be invalid with later scheduled time")
 	})
 }
