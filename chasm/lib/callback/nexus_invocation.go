@@ -68,8 +68,8 @@ func (n nexusInvocation) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(e.Logger,
+	if e.httpTraceProvider != nil {
+		traceLogger := log.With(e.logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
 			tag.NewStringTag("destination", taskAttr.Destination),
@@ -78,7 +78,7 @@ func (n nexusInvocation) Invoke(
 			tag.AttemptStart(time.Now().UTC()),
 			tag.Attempt(n.attempt),
 		)
-		if trace := e.HTTPTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
+		if trace := e.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
 	}
@@ -96,7 +96,7 @@ func (n nexusInvocation) Invoke(
 		request.Header.Set(k, v)
 	}
 
-	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
+	caller := e.httpCallerProvider(queues.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
 		Destination: taskAttr.Destination,
 	})
@@ -107,12 +107,12 @@ func (n nexusInvocation) Invoke(
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
 	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, response, err))
-	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
-	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+	e.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
+	e.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
 
 	if err != nil {
-		e.Logger.Error("Callback request failed with error", tag.Error(err))
-		return invocationResultRetry{err: err, retryPolicy: e.Config.RetryPolicy()}
+		e.logger.Error("Callback request failed with error", tag.Error(err))
+		return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
 	}
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
@@ -121,18 +121,18 @@ func (n nexusInvocation) Invoke(
 		// propagate errors to the machine.
 		if _, err = io.Copy(io.Discard, response.Body); err == nil {
 			if err = response.Body.Close(); err != nil {
-				e.Logger.Error("Callback request failed with error", tag.Error(err))
-				return invocationResultRetry{err: err, retryPolicy: e.Config.RetryPolicy()}
+				e.logger.Error("Callback request failed with error", tag.Error(err))
+				return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
 			}
 		}
 		return invocationResultOK{}
 	}
 
 	retryable := isRetryableHTTPResponse(response)
-	err = readHandlerErrFromResponse(response, e.Logger)
-	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
+	err = readHandlerErrFromResponse(response, e.logger)
+	e.logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
-		return invocationResultRetry{err: err, retryPolicy: e.Config.RetryPolicy()}
+		return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
 	}
 	return invocationResultFail{err}
 }

@@ -564,10 +564,14 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
+	activityTask, ok := task.(*tasks.ActivityTask)
+	if !ok {
+		return serviceerror.NewInternal("task is not an ActivityTask")
+	}
 	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
-		task.(*tasks.ActivityTask),
+		activityTask,
 		pushActivityInfo.activityTaskScheduleToStartTimeout,
 		pushActivityInfo.versionDirective,
 		pushActivityInfo.priority,

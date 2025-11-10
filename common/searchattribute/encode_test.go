@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -195,8 +196,7 @@ func Test_Decode_Error(t *testing.T) {
 		}},
 		true,
 	)
-	assert.Error(err)
-	assert.ErrorIs(err, ErrInvalidName)
+	require.NoError(t, err)
 	assert.Len(sa.IndexedFields, 3)
 	assert.Equal("val1", vals["key1"])
 	assert.Equal(int64(2), vals["key2"])

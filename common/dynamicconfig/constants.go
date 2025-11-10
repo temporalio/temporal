@@ -2255,6 +2255,11 @@ the number of children greater than or equal to this threshold`,
 		10,
 		`If speculative workflow task shipped more than DiscardSpeculativeWorkflowTaskMaximumEventsCount events, it can't be discarded`,
 	)
+	EnableDropRepeatedWorkflowTaskFailures = NewNamespaceBoolSetting(
+		"history.enableDropRepeatedWorkflowTaskFailures",
+		false,
+		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
+	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
 		primitives.DefaultWorkflowTaskTimeout,
@@ -2600,6 +2605,12 @@ that task will be sent to DLQ.`,
 		"history.enableChasm",
 		false,
 		"Use real chasm tree implementation instead of the noop one",
+	)
+
+	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
+		"history.chasmMaxInMemoryPureTasks",
+		32,
+		`ChasmMaxInMemoryPureTasks is the maximum number of physical pure tasks that can be held in memory for best effort task deletion.`,
 	)
 
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(

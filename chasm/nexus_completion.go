@@ -17,7 +17,6 @@ const (
 // NexusCompletionHandler is implemented by CHASM components that want to handle
 // Nexus operation completion callbacks.
 type NexusCompletionHandler interface {
-	Component
 	HandleNexusCompletion(ctx MutableContext, completion *persistencespb.ChasmNexusCompletion) error
 }
 

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -118,11 +119,12 @@ func (q *DLQWriter) WriteTaskToDLQ(
 	} else {
 		namespaceTag = tag.WorkflowNamespace(string(ns.Name()))
 	}
-	q.logger.Warn("Task enqueued to DLQ",
+	softassert.Sometimes(q.logger).Warn("Task enqueued to DLQ",
 		tag.DLQMessageID(resp.Metadata.ID),
 		tag.SourceCluster(sourceCluster),
 		tag.TargetCluster(targetCluster),
 		tag.TaskType(task.GetType()),
+		tag.NewStringTag("task-category", task.GetCategory().Name()),
 		namespaceTag,
 	)
 	return nil

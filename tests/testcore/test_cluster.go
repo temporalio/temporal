@@ -609,6 +609,10 @@ func (tc *TestCluster) GetReplicationStreamRecorder() *ReplicationStreamRecorder
 	return tc.host.replicationStreamRecorder
 }
 
+func (tc *TestCluster) GetTaskQueueRecorder() *TaskQueueRecorder {
+	return tc.host.GetTaskQueueRecorder()
+}
+
 func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) (cleanup func()) {
 	return tc.host.overrideDynamicConfig(t, key.Key(), value)
 }

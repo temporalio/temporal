@@ -394,10 +394,16 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			continue
 		}
 
-		if err := taskGenerator.GenerateActivityTasks(
-			activityInfo.ScheduledEventId,
-		); err != nil {
-			return err
+		if activityInfo.Attempt > 1 {
+			if err := taskGenerator.GenerateActivityRetryTasks(activityInfo); err != nil {
+				return err
+			}
+		} else {
+			if err := taskGenerator.GenerateActivityTasks(
+				activityInfo.ScheduledEventId,
+			); err != nil {
+				return err
+			}
 		}
 	}
 
