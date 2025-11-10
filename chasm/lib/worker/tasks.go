@@ -55,11 +55,13 @@ func (e *LeaseExpiryTaskExecutor) isLeaseExpiryTaskValid(
 ) bool {
 	// If worker is not active, no point in processing the least expiry task.
 	// A previous lease expiry must have already transitioned it to inactive.
-	if worker.Status != workerstatepb.WORKER_STATUS_ACTIVE {
+	if worker.GetStatus() != workerstatepb.WORKER_STATUS_ACTIVE {
 		return false
 	}
 
+	// A nil means bug in the state machine.
 	if worker.GetLeaseExpirationTime() == nil {
+		e.logger.Error("Lease expiration time is nil", tag.WorkerID(worker.workerID()))
 		return false
 	}
 
@@ -86,7 +88,7 @@ func (e *WorkerCleanupTaskExecutor) Execute(
 	attrs chasm.TaskAttributes,
 	task *workerstatepb.WorkerCleanupTask,
 ) error {
-	e.logger.Info("Cleaning up inactive worker", tag.WorkerID(worker.WorkerID()))
+	e.logger.Info("Cleaning up inactive worker", tag.WorkerID(worker.workerID()))
 
 	// Apply the cleanup completed transition.
 	return TransitionCleanupCompleted.Apply(ctx, worker, EventCleanupCompleted{})
@@ -109,7 +111,7 @@ func (e *WorkerCleanupTaskExecutor) isCleanupTaskValid(
 	attrs chasm.TaskAttributes,
 ) bool {
 	// Worker must be inactive
-	if worker.Status != workerstatepb.WORKER_STATUS_INACTIVE {
+	if worker.GetStatus() != workerstatepb.WORKER_STATUS_INACTIVE {
 		return false
 	}
 	// Worker must have a cleanup time

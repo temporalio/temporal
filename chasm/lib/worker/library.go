@@ -29,7 +29,7 @@ func (l *Library) Name() string {
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Worker]("worker"),
+		chasm.NewRegistrableComponent[*Worker](string(Archetype)),
 	}
 }
 

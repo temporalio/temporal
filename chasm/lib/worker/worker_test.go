@@ -18,7 +18,7 @@ func TestNewWorker(t *testing.T) {
 	require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 	require.Nil(t, worker.LeaseExpirationTime)
 	require.Nil(t, worker.WorkerHeartbeat) // No heartbeat data initially
-	require.Empty(t, worker.WorkerID())    // Empty until first heartbeat
+	require.Empty(t, worker.workerID())    // Empty until first heartbeat
 }
 
 func TestWorkerLifecycleState(t *testing.T) {
@@ -50,12 +50,12 @@ func TestWorkerRecordHeartbeat(t *testing.T) {
 	leaseDuration := 30 * time.Second
 
 	// Test recording heartbeat on new worker
-	err := worker.RecordHeartbeat(ctx, heartbeat, leaseDuration)
+	err := worker.recordHeartbeat(ctx, heartbeat, leaseDuration)
 	require.NoError(t, err)
 
 	// Verify heartbeat data was set
 	require.Equal(t, heartbeat, worker.WorkerHeartbeat)
-	require.Equal(t, "test-worker-3", worker.WorkerID())
+	require.Equal(t, "test-worker-3", worker.workerID())
 
 	// Verify lease expiration time was set
 	require.NotNil(t, worker.LeaseExpirationTime)

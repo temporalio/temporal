@@ -53,19 +53,19 @@ func (w *Worker) SetStateMachineState(status workerstatepb.WorkerStatus) {
 }
 
 // WorkerID returns the unique identifier for this worker.
-func (w *Worker) WorkerID() string {
-	if w.WorkerHeartbeat == nil {
+func (w *Worker) workerID() string {
+	if w.GetWorkerHeartbeat() == nil {
 		return ""
 	}
-	return w.WorkerHeartbeat.WorkerInstanceKey
+	return w.GetWorkerHeartbeat().GetWorkerInstanceKey()
 }
 
 // RecordHeartbeat processes a heartbeat, updating worker state and extending the lease.
-func (w *Worker) RecordHeartbeat(ctx chasm.MutableContext, heartbeat *workerpb.WorkerHeartbeat, leaseDuration time.Duration) error {
+func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, heartbeat *workerpb.WorkerHeartbeat, leaseDuration time.Duration) error {
 	w.WorkerHeartbeat = heartbeat
 
 	// Calculate lease deadline
-	leaseDeadline := time.Now().Add(leaseDuration)
+	leaseDeadline := ctx.Now(w).Add(leaseDuration)
 
 	// Apply appropriate state transition based on current status
 	switch w.Status {
@@ -74,8 +74,8 @@ func (w *Worker) RecordHeartbeat(ctx chasm.MutableContext, heartbeat *workerpb.W
 			LeaseDeadline: leaseDeadline,
 		})
 	case workerstatepb.WORKER_STATUS_INACTIVE:
-		// Handle worker resurrection after network partition
-		return TransitionWorkerResurrection.Apply(ctx, w, EventHeartbeatReceived{
+		// Handle worker resurrection (example network partition, overloaded worker, etc.)
+		return TransitionResurrected.Apply(ctx, w, EventHeartbeatReceived{
 			LeaseDeadline: leaseDeadline,
 		})
 	default:

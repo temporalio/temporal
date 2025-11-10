@@ -27,7 +27,7 @@ func TestRecordHeartbeat(t *testing.T) {
 	leaseDuration := 30 * time.Second
 
 	// Test successful heartbeat recording
-	err := worker.RecordHeartbeat(ctx, worker.WorkerHeartbeat, leaseDuration)
+	err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, leaseDuration)
 	require.NoError(t, err)
 
 	// Verify lease deadline was set (approximately)
@@ -152,12 +152,12 @@ func TestMultipleHeartbeats(t *testing.T) {
 
 	// First heartbeat
 	firstDuration := 30 * time.Second
-	err := worker.RecordHeartbeat(ctx, worker.WorkerHeartbeat, firstDuration)
+	err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, firstDuration)
 	require.NoError(t, err)
 
 	// Second heartbeat extends the lease
 	secondDuration := 60 * time.Second
-	err = worker.RecordHeartbeat(ctx, worker.WorkerHeartbeat, secondDuration)
+	err = worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, secondDuration)
 	require.NoError(t, err)
 
 	// Verify two tasks were scheduled (one for each heartbeat)
@@ -176,7 +176,7 @@ func TestWorkerResurrection(t *testing.T) {
 		worker.CleanupTime = timestamppb.New(oldCleanupTime)
 
 		leaseDuration := 30 * time.Second
-		err := worker.RecordHeartbeat(ctx, worker.WorkerHeartbeat, leaseDuration)
+		err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, leaseDuration)
 
 		// Should succeed - worker resurrection handles same identity reconnection
 		require.NoError(t, err)
@@ -191,7 +191,7 @@ func TestWorkerResurrection(t *testing.T) {
 	})
 }
 
-func TestTransitionWorkerResurrection(t *testing.T) {
+func TestTransitionResurrected(t *testing.T) {
 	worker := newTestWorker()
 	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
@@ -207,7 +207,7 @@ func TestTransitionWorkerResurrection(t *testing.T) {
 	}
 
 	// Apply the resurrection transition directly
-	err := TransitionWorkerResurrection.Apply(ctx, worker, event)
+	err := TransitionResurrected.Apply(ctx, worker, event)
 	require.NoError(t, err)
 
 	// Verify state changed to active
@@ -233,7 +233,7 @@ func TestInvalidTransitions(t *testing.T) {
 		worker.Status = workerstatepb.WORKER_STATUS_CLEANED_UP
 
 		leaseDuration := 30 * time.Second
-		err := worker.RecordHeartbeat(ctx, worker.WorkerHeartbeat, leaseDuration)
+		err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, leaseDuration)
 
 		// Should fail because worker is cleaned up (terminal state)
 		require.Error(t, err)
