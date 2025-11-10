@@ -65,7 +65,8 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionNotFound            = "Version not found in deployment"
-	errDeploymentDeleted          = "worker deployment deleted" // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 
 	errConflictTokenMismatchType = "errConflictTokenMismatch"
 	errFailedPrecondition        = "FailedPrecondition"
@@ -78,6 +79,7 @@ const (
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
 	ErrManagerIdentityMismatch                = "ManagerIdentity '%s' is set and does not match user identity '%s'; to proceed, set your own identity as the ManagerIdentity, remove the ManagerIdentity, or wait for the other client to do so"
 	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name %s; does your Worker Deployment have pollers?"
+	ErrWorkerDeploymentVersionNotFound        = "build ID %s not fount in Worker Deployment %s"
 )
 
 var (

@@ -148,6 +148,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		identity,
 		args.RequestId,
 		args.SkipDrainage,
+		args.AsyncPropagation,
 	)
 	if err != nil {
 		return err
@@ -197,9 +198,6 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 
-			// Check if we're in async mode (routing config present)
-			isAsyncMode := syncData.UpdateRoutingConfig != nil
-
 			if input.ForgetVersion {
 				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 					NamespaceId:    a.namespace.ID().String(),
@@ -209,19 +207,7 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 						ForgetVersion: input.Version,
 					},
 				})
-			} else if isAsyncMode {
-				// ASYNC MODE: Send routing config update
-				// For unversioned ramp, upsert_versions_data will be empty since there's no version data
-				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-					NamespaceId:         a.namespace.ID().String(),
-					TaskQueue:           syncData.Name,
-					TaskQueueTypes:      syncData.Types,
-					UpdateRoutingConfig: syncData.UpdateRoutingConfig,
-					// Note: For unversioned ramp, we don't send upsert_versions_data
-					// The routing config itself contains the unversioned ramp info
-				})
 			} else {
-				// SYNC MODE: Use old update_version_data operation
 				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 					NamespaceId:    a.namespace.ID().String(),
 					TaskQueue:      syncData.Name,
@@ -236,13 +222,7 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
 			} else {
 				lock.Lock()
-				// In async mode, only track task queues where routing config changed
-				// If routing config didn't change, set to -1 to signal skip propagation check
-				if isAsyncMode && !res.RoutingConfigChanged {
-					maxVersionByName[syncData.Name] = -1
-				} else {
-					maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
-				}
+				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
 				lock.Unlock()
 			}
 			errs <- err

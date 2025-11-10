@@ -191,6 +191,7 @@ message RegisterWorkerInVersionArgs {
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     int32 max_task_queues = 3;
     string version = 4;
+    temporal.api.deployment.v1.RoutingConfig routing_config = 5;
 }
 
 // used as Worker Deployment workflow update input:
@@ -210,7 +211,6 @@ message DescribeVersionFromWorkerDeploymentActivityResult {
     // All the Task Queues that have ever polled from this Deployment version.
     repeated temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo task_queue_infos = 1;
 }
-
 
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 message SyncVersionStateUpdateArgs {
@@ -294,15 +294,15 @@ message SyncDeploymentVersionUserDataRequest {
     repeated SyncUserData sync = 2;
     // if true, the version will be forgotten from the task queue user data.
     bool forget_version = 3;
+    // Async mode: full routing config to propagate (includes revision_number)
+    temporal.api.deployment.v1.RoutingConfig update_routing_config = 4;
+    // Async mode: version-specific data to upsert
+    WorkerDeploymentVersionData upsert_version_data = 5;
 
     message SyncUserData {
         string name = 1;
         repeated temporal.api.enums.v1.TaskQueueType types = 2;
         DeploymentVersionData data = 3;
-        // Async mode: full routing config to propagate (includes revision_number)
-        temporal.api.deployment.v1.RoutingConfig update_routing_config = 4;
-        // Async mode: version-specific data to upsert
-        WorkerDeploymentVersionData upsert_version_data = 5;
     }
 }
 
@@ -359,6 +359,8 @@ message DeleteVersionArgs {
     string identity = 1;
     string version = 2;
     bool skip_drainage = 3;
+    // version workflow does not block the update for tq propagation
+    bool async_propagation = 4;
 }
 
 // used as Worker Deployment Activity input:
@@ -368,6 +370,7 @@ message DeleteVersionActivityArgs {
     string version = 3;
     string request_id = 4;
     bool skip_drainage = 5;
+    bool async_propagation = 6;
 }
 
 // used as Worker Deployment Activity input:

@@ -741,3 +741,350 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete_RemovesEmptyBuild
 	// Verify the build ID entry was removed entirely
 	s.NotContains(state.State.PropagatingRevisions, buildID)
 }
+
+// Test_DeleteDeployment_Success tests successful deletion of a deployment with no versions
+func (s *WorkerDeploymentSuite) Test_DeleteDeployment_Success() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("delete deployment should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result interface{}, err error) {
+				s.NoError(err, "delete deployment should complete without error")
+			},
+		}, nil) // DeleteDeployment takes no arguments
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+}
+
+// Test_DeleteDeployment_FailsWithVersions tests that deletion fails when deployment has versions
+func (s *WorkerDeploymentSuite) Test_DeleteDeployment_FailsWithVersions() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	version := tv.DeploymentVersionString()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				// The validator should reject this update
+				s.ErrorContains(err, "deployment has versions, can't be deleted")
+			},
+			OnAccept: func() {
+				s.Fail("delete deployment should have been rejected by validator")
+			},
+			OnComplete: func(result interface{}, err error) {
+				s.Fail("delete deployment should not have reached completion")
+			},
+		}, nil)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version: {
+					Version:    version,
+					CreateTime: timestamppb.New(time.Now()),
+					Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+				},
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_DeleteDeployment_QueryAfterDeletion tests that querying a deleted deployment returns an error
+func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryAfterDeletion() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	// Send delete update
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("delete deployment should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result interface{}, err error) {
+				s.NoError(err, "delete deployment should complete without error")
+			},
+		}, nil)
+	}, 1*time.Millisecond)
+
+	// Query after deletion - should fail
+	s.env.RegisterDelayedCallback(func() {
+		val, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+		s.Error(err, "query should fail after deletion")
+		s.Nil(val)
+		s.Contains(err.Error(), errDeploymentDeleted)
+	}, 5*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+}
+
+// Test_DeleteDeployment_QueryBeforeDeletion tests that querying before deletion works normally
+func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryBeforeDeletion() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	// Query before deletion - should succeed
+	s.env.RegisterDelayedCallback(func() {
+		val, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+		s.NoError(err, "query should succeed before deletion")
+		s.NotNil(val)
+
+		var resp deploymentspb.QueryDescribeWorkerDeploymentResponse
+		err = val.Get(&resp)
+		s.NoError(err)
+		s.NotNil(resp.State)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_DeleteVersion_Success tests successful deletion of a version from deployment workflow
+func (s *WorkerDeploymentSuite) Test_DeleteVersion_Success() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	version := tv.DeploymentVersionString()
+
+	var a *Activities
+	s.env.RegisterActivity(a.DeleteWorkerDeploymentVersion)
+	s.env.OnActivity(a.DeleteWorkerDeploymentVersion, mock.Anything, mock.Anything).Return(nil).Once()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("delete version should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result interface{}, err error) {
+				s.NoError(err, "delete version should complete without error")
+			},
+		}, &deploymentspb.DeleteVersionArgs{
+			Identity:     tv.ClientIdentity(),
+			Version:      version,
+			SkipDrainage: false,
+		})
+	}, 1*time.Millisecond)
+
+	// Query after deletion to verify version was removed
+	s.env.RegisterDelayedCallback(func() {
+		queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+		s.NoError(err)
+		var state deploymentspb.QueryDescribeWorkerDeploymentResponse
+		s.NoError(queryResult.Get(&state))
+		s.NotContains(state.State.Versions, version, "version should be removed from state after deletion")
+	}, 50*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version: {
+					Version:    version,
+					CreateTime: timestamppb.New(time.Now()),
+					Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+				},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentVersion: worker_versioning.UnversionedVersionId,
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_DeleteVersion_FailsWhenCurrentOrRamping tests that deletion fails when version is current or ramping
+func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenCurrentOrRamping() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	version := tv.DeploymentVersionString()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				// The validator should reject this update
+				s.ErrorContains(err, ErrVersionIsCurrentOrRamping)
+			},
+			OnAccept: func() {
+				s.Fail("delete version should have been rejected by validator")
+			},
+			OnComplete: func(result interface{}, err error) {
+				s.Fail("delete version should not have reached completion")
+			},
+		}, &deploymentspb.DeleteVersionArgs{
+			Identity:     tv.ClientIdentity(),
+			Version:      version,
+			SkipDrainage: false,
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version: {
+					Version:    version,
+					CreateTime: timestamppb.New(time.Now()),
+					Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+				},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentVersion: version, // Version is current
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_DeleteVersion_FailsWhenVersionNotFound tests that deletion fails when version doesn't exist
+func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenVersionNotFound() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	nonExistentVersion := tv.DeploymentVersionString() + "-not-exists"
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				// The validator should reject this update
+				s.ErrorContains(err, errVersionNotFound)
+			},
+			OnAccept: func() {
+				s.Fail("delete version should have been rejected by validator")
+			},
+			OnComplete: func(result interface{}, err error) {
+				s.Fail("delete version should not have reached completion")
+			},
+		}, &deploymentspb.DeleteVersionArgs{
+			Identity:     tv.ClientIdentity(),
+			Version:      nonExistentVersion,
+			SkipDrainage: false,
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentVersion: worker_versioning.UnversionedVersionId,
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_DeleteVersion_ConcurrentDeletes tests that concurrent deletion attempts are handled correctly
+func (s *WorkerDeploymentSuite) Test_DeleteVersion_ConcurrentDeletes() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	version := tv.DeploymentVersionString()
+
+	var a *Activities
+	s.env.RegisterActivity(a.DeleteWorkerDeploymentVersion)
+	s.env.OnActivity(a.DeleteWorkerDeploymentVersion, mock.Anything, mock.Anything).Return(nil).Once() // Only one should succeed
+
+	deleteArgs := &deploymentspb.DeleteVersionArgs{
+		Identity:     tv.ClientIdentity(),
+		Version:      version,
+		SkipDrainage: false,
+	}
+
+	s.env.RegisterDelayedCallback(func() {
+		// Fire first delete update
+		s.env.UpdateWorkflow(DeleteVersion, "delete1", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("first delete should not have been rejected by validator", err)
+			},
+			OnAccept: func() {
+				// Fire second delete update while first is processing
+				s.env.UpdateWorkflow(DeleteVersion, "delete2", &testsuite.TestUpdateCallback{
+					OnReject: func(err error) {
+						s.Fail("second delete should have been accepted by validator")
+					},
+					OnAccept: func() {},
+					OnComplete: func(result interface{}, err error) {
+						// Second delete should fail because version is already deleted
+						s.Error(err, "second delete should fail")
+						s.ErrorContains(err, errVersionNotFound)
+					},
+				}, deleteArgs)
+			},
+			OnComplete: func(result interface{}, err error) {
+				s.NoError(err, "first delete should complete without error")
+			},
+		}, deleteArgs)
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version: {
+					Version:    version,
+					CreateTime: timestamppb.New(time.Now()),
+					Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+				},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentVersion: worker_versioning.UnversionedVersionId,
+			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}

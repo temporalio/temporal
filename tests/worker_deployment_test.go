@@ -44,12 +44,7 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 
 func (s *WorkerDeploymentSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingDeploymentWorkflowVersion.Key():          int(s.workflowVersion),
-		dynamicconfig.EnableDeploymentVersions.Key():                   true,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():        true,
+		dynamicconfig.MatchingDeploymentWorkflowVersion.Key(): int(s.workflowVersion),
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
@@ -2119,16 +2114,17 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers(
 	s.setCurrentVersionAllowNoPollersOption(ctx, tv, worker_versioning.UnversionedVersionId, true, allowNoPollers, false, expectedErr)
 
 	// let a poller arrive with that version --> triggers user data propagation
-	s.pollFromDeployment(ctx, tv)
+	go s.pollFromDeployment(ctx, tv)
 
-	// check describe worker deployment
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv.DeploymentSeries(),
-	})
-	s.NoError(err)
-	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
-		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// check describe worker deployment
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a := require.New(t)
+		a.NoError(err)
+		s.verifyWorkerDeploymentInfo(a, &deploymentpb.WorkerDeploymentInfo{
 			Name:       tv.DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
@@ -2149,13 +2145,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers(
 				},
 			},
 			LastModifierIdentity: tv.ClientIdentity(),
-		},
-	})
+		}, resp.GetWorkerDeploymentInfo())
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// that poller's task queue should have the current versioning info
-	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel2()
-	s.verifyTaskQueueVersioningInfo(ctx2, tv.TaskQueue(), tv.DeploymentVersionString(), "", 0)
+	s.verifyTaskQueueVersioningInfo(ctx, tv.TaskQueue(), tv.DeploymentVersionString(), "", 0)
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers() {
@@ -2211,14 +2205,10 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers(
 			},
 			LastModifierIdentity: tv.ClientIdentity(),
 		}, resp.GetWorkerDeploymentInfo())
-	}, 100*time.Second, 100*time.Millisecond)
-
-	cancel()
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// that poller's task queue should have the ramping version info
-	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel2()
-	s.verifyTaskQueueVersioningInfo(ctx2, tv.TaskQueue(), worker_versioning.UnversionedVersionId, tv.DeploymentVersionString(), 5)
+	s.verifyTaskQueueVersioningInfo(ctx, tv.TaskQueue(), worker_versioning.UnversionedVersionId, tv.DeploymentVersionString(), 5)
 }
 
 func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {

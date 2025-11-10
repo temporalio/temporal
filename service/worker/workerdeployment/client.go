@@ -157,6 +157,7 @@ type Client interface {
 		identity string,
 		requestID string,
 		skipDrainage bool,
+		asyncPropagation bool,
 	) error
 
 	// Used internally by the Worker Deployment Version workflow in its AddVersionToWorkerDeployment Activity
@@ -395,8 +396,7 @@ func (d *ClientImpl) DescribeVersion(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
-			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
-			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
 		},
 	}
 
@@ -406,12 +406,20 @@ func (d *ClientImpl) DescribeVersion(
 		if errors.As(err, &notFound) {
 			return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
+		var queryFailed *serviceerror.QueryFailed
+		if errors.As(err, &queryFailed) && queryFailed.Error() == errDeploymentDeleted {
+			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
+		}
 		return nil, nil, err
 	}
 
-	// on closed workflows, the response is empty.
+	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
+		// This should not happen
+		return nil, nil, serviceerror.NewInternalf("describe deployment query rejected with status %s", rej.GetStatus())
+	}
+
 	if res.GetResponse().GetQueryResult() == nil {
-		return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
+		return nil, nil, serviceerror.NewInternal("Did not receive deployment info")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeVersionResponse
@@ -1115,6 +1123,7 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	identity string,
 	requestID string,
 	skipDrainage bool,
+	asyncPropagation bool,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity, skipDrainage)()
@@ -1126,9 +1135,10 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 
 	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
-		Identity:     identity,
-		Version:      version,
-		SkipDrainage: skipDrainage,
+		Identity:         identity,
+		Version:          version,
+		SkipDrainage:     skipDrainage,
+		AsyncPropagation: asyncPropagation,
 	})
 	if err != nil {
 		return err

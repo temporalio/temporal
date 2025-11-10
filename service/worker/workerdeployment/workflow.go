@@ -406,7 +406,6 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 }
 
 func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
-
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -435,6 +434,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		TaskQueueType: args.TaskQueueType,
 		MaxTaskQueues: args.MaxTaskQueues,
 		Version:       worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
+		RoutingConfig: d.State.GetRoutingConfig(),
 	}).Get(ctx, nil)
 	if err != nil {
 		var appError *temporal.ApplicationError
@@ -761,11 +761,12 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
-		Identity:       args.Identity,
-		DeploymentName: d.DeploymentName,
-		Version:        args.Version,
-		RequestId:      uuid.New(),
-		SkipDrainage:   args.SkipDrainage,
+		Identity:         args.Identity,
+		DeploymentName:   d.DeploymentName,
+		Version:          args.Version,
+		RequestId:        uuid.New(),
+		SkipDrainage:     args.SkipDrainage,
+		AsyncPropagation: d.hasMinVersion(AsyncSetCurrentAndRamping),
 	}).Get(ctx, &res)
 	if err != nil {
 		return err
