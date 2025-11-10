@@ -180,7 +180,6 @@ func (r *TaskQueueRecorder) GetAllRecordedTasks() map[tasks.Category][]RecordedT
 	return result
 }
 
-
 // TaskMatcher is a function that tests whether a RecordedTask matches some criteria
 type TaskMatcher func(RecordedTask) bool
 
