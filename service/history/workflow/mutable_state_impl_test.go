@@ -919,7 +919,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	s.NoError(err)
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	err = s.mutableState.StartDeploymentTransition(deployment)
+	err = s.mutableState.StartDeploymentTransition(deployment, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
@@ -969,7 +969,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1008,7 +1008,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1050,7 +1050,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1201,7 +1201,7 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that transition fails
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
@@ -1226,7 +1226,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that redirect fails - should be its own test
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here -- good
@@ -2432,14 +2432,60 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	}
 	s.Greater(activityFailure.Size(), failureSizeErrorLimit)
 
+	prevStamp := activityInfo.Stamp
+
 	retryState, err := s.mutableState.RetryActivity(activityInfo, activityFailure)
 	s.NoError(err)
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
 
 	activityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
+	s.Greater(activityInfo.Stamp, prevStamp)
+	s.Equal(int32(2), activityInfo.Attempt)
 	s.LessOrEqual(activityInfo.RetryLastFailure.Size(), failureSizeErrorLimit)
 	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
+}
+
+func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	workflowTaskCompletedEventID := int64(4)
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "6",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: timestamp.DurationFromSeconds(1),
+			},
+		},
+		false,
+	)
+	s.NoError(err)
+
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		activityInfo,
+		activityInfo.ScheduledEventId,
+		uuid.New(),
+		"worker-identity",
+		nil,
+		nil,
+		nil,
+	)
+	s.NoError(err)
+
+	activityInfo.Paused = true
+	prevStamp := activityInfo.Stamp
+
+	retryState, err := s.mutableState.RetryActivity(activityInfo, &failurepb.Failure{Message: "activity failure"})
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+
+	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+	s.True(ok)
+	s.Greater(updatedActivityInfo.Stamp, prevStamp)
+	s.Equal(int32(2), updatedActivityInfo.Attempt)
 }
 
 func (s *mutableStateSuite) TestupdateBuildIdsAndDeploymentSearchAttributes() {
@@ -5310,5 +5356,84 @@ func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 
 	for _, requestID := range testRequestIDs {
 		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
+	}
+}
+
+func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
+	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(5)
+	totalTasks := 2 * s.mockConfig.ChasmMaxInMemoryPureTasks()
+
+	visTimestamp := s.mockShard.GetTimeSource().Now()
+	for i := 0; i < totalTasks; i++ {
+		task := &tasks.ChasmTaskPure{
+			VisibilityTimestamp: visTimestamp,
+			Category:            tasks.CategoryTimer,
+		}
+		s.mutableState.AddTasks(task)
+		s.LessOrEqual(len(s.mutableState.chasmPureTasks), s.mockConfig.ChasmMaxInMemoryPureTasks())
+
+		visTimestamp = visTimestamp.Add(-time.Minute)
+	}
+
+	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(2)
+	s.mutableState.AddTasks(&tasks.ChasmTaskPure{
+		VisibilityTimestamp: visTimestamp,
+		Category:            tasks.CategoryTimer,
+	})
+	s.Len(s.mutableState.chasmPureTasks, 2)
+}
+
+func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
+	now := s.mockShard.GetTimeSource().Now()
+
+	testCases := []struct {
+		name              string
+		maxScheduledTime  time.Time
+		expectedRemaining int
+	}{
+		{
+			name:              "none",
+			maxScheduledTime:  now,
+			expectedRemaining: 3,
+		},
+		{
+			name:              "paritial",
+			maxScheduledTime:  now.Add(2 * time.Minute),
+			expectedRemaining: 2,
+		},
+		{
+			name:              "all",
+			maxScheduledTime:  now.Add(5 * time.Minute),
+			expectedRemaining: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mutableState.chasmPureTasks = []*tasks.ChasmTaskPure{
+				{
+					VisibilityTimestamp: now.Add(3 * time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+				{
+					VisibilityTimestamp: now.Add(2 * time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+				{
+					VisibilityTimestamp: now.Add(time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+			}
+			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
+
+			s.mutableState.DeleteCHASMPureTasks(tc.maxScheduledTime)
+
+			s.Len(s.mutableState.chasmPureTasks, tc.expectedRemaining)
+			for _, task := range s.mutableState.chasmPureTasks {
+				s.False(task.VisibilityTimestamp.Before(tc.maxScheduledTime))
+			}
+
+			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
+		})
 	}
 }

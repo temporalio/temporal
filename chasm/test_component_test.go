@@ -63,8 +63,17 @@ type (
 )
 
 const (
-	testComponentStartTimeSAKey   = "StartTimeSAKey"
-	testComponentStartTimeMemoKey = "StartTimeMemoKey"
+	TestComponentStartTimeSAKey   = "StartTimeSAKey"
+	TestComponentRunIDSAKey       = "RunIdSAKey"
+	TestComponentStartTimeMemoKey = "StartTimeMemoKey"
+)
+
+var (
+	TestComponentStartTimeSearchAttribute = NewSearchAttributeDateTime(TestComponentStartTimeSAKey, SearchAttributeFieldDateTime01)
+	TestComponentRunIDPredefinedSA        = newSearchAttributeKeywordByField(TestComponentRunIDSAKey)
+
+	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
+	_ VisibilityMemoProvider             = (*TestComponent)(nil)
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
@@ -95,16 +104,18 @@ func (tc *TestComponent) Fail(_ MutableContext) {
 }
 
 // SearchAttributes implements VisibilitySearchAttributesProvider interface.
-func (tc *TestComponent) SearchAttributes(_ Context) map[string]VisibilityValue {
-	return map[string]VisibilityValue{
-		testComponentStartTimeSAKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+func (tc *TestComponent) SearchAttributes(_ Context) []SearchAttributeKeyValue {
+	return []SearchAttributeKeyValue{
+		TestComponentStartTimeSearchAttribute.Value(tc.ComponentData.GetStartTime().AsTime()),
+		TestComponentRunIDPredefinedSA.Value(tc.ComponentData.GetRunId()),
+		SearchAttributeTemporalScheduledByID.Value(tc.ComponentData.GetRunId()),
 	}
 }
 
 // Memo implements VisibilityMemoProvider interface.
 func (tc *TestComponent) Memo(_ Context) map[string]VisibilityValue {
 	return map[string]VisibilityValue{
-		testComponentStartTimeMemoKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+		TestComponentStartTimeMemoKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
 	}
 }
 

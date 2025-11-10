@@ -307,8 +307,13 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	if processingLatency > 30*time.Second {
-		e.Logger.Warn("replication task processing latency is too long",
+	replicationLatency := now.Sub(e.taskCreationTime)
+	if replicationLatency > time.Minute {
+		e.Logger.Warn(fmt.Sprintf(
+			"replication task latency is too long: transmission=%.2fs processing=%.2fs",
+			e.taskReceivedTime.Sub(e.taskCreationTime).Seconds(),
+			processingLatency.Seconds(),
+		),
 			tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
 			tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
 			tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
@@ -317,7 +322,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	}
 
 	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
-		now.Sub(e.taskCreationTime),
+		replicationLatency,
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 		metrics.SourceClusterTag(e.sourceClusterName),
@@ -340,7 +345,7 @@ func (e *ExecutableTaskImpl) Resend(
 ) (bool, error) {
 	remainingAttempt--
 	if remainingAttempt < 0 {
-		e.Logger.Error("resend history attempts exceeded",
+		softassert.Sometimes(e.Logger).Error("resend history attempts exceeded",
 			tag.WorkflowNamespaceID(retryErr.NamespaceId),
 			tag.WorkflowID(retryErr.WorkflowId),
 			tag.WorkflowRunID(retryErr.RunId),
@@ -768,7 +773,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	taskInfo := e.ReplicationTask().GetRawTaskInfo()
 
 	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
+		softassert.Sometimes(e.Logger).Error("MarkPoisonPill reached max attempts",
 			tag.SourceCluster(e.SourceClusterName()),
 			tag.ReplicationTask(taskInfo),
 		)

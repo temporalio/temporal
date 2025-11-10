@@ -876,6 +876,11 @@ and deployment interaction in matching and history.`,
 including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
 	)
+	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
+		"system.useRevisionNumberForWorkerVersioning",
+		false,
+		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		true,
@@ -2255,6 +2260,11 @@ the number of children greater than or equal to this threshold`,
 		10,
 		`If speculative workflow task shipped more than DiscardSpeculativeWorkflowTaskMaximumEventsCount events, it can't be discarded`,
 	)
+	EnableDropRepeatedWorkflowTaskFailures = NewNamespaceBoolSetting(
+		"history.enableDropRepeatedWorkflowTaskFailures",
+		false,
+		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
+	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
 		primitives.DefaultWorkflowTaskTimeout,
@@ -2600,6 +2610,12 @@ that task will be sent to DLQ.`,
 		"history.enableChasm",
 		false,
 		"Use real chasm tree implementation instead of the noop one",
+	)
+
+	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
+		"history.chasmMaxInMemoryPureTasks",
+		32,
+		`ChasmMaxInMemoryPureTasks is the maximum number of physical pure tasks that can be held in memory for best effort task deletion.`,
 	)
 
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(

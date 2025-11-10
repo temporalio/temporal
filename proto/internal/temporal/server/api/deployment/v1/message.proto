@@ -290,6 +290,7 @@ message StartWorkerDeploymentVersionRequest {
 
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
+    string deployment_name = 4;
     WorkerDeploymentVersion version = 1;
     repeated SyncUserData sync = 2;
     // if true, the version will be forgotten from the task queue user data.
