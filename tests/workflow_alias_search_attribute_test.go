@@ -137,9 +137,10 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
+			// Filter by WorkflowId to isolate this test's workflow from other tests
 			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned'", searchattribute.TemporalWorkflowVersioningBehavior),
+				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", searchattribute.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
 			})
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)
@@ -147,7 +148,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
-				Query:     "WorkflowVersioningBehavior = 'user-defined'",
+				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = '%s'", tv.WorkflowID()),
 			})
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)
