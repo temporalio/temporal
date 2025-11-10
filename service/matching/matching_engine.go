@@ -2052,7 +2052,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					changed = true
 				}
 
-				/* Remove all the versions from the old deployment if present. This shall prevent the following scenario:
+				/* Migrate all the versions from the old deployment if present. This shall prevent the following scenario:
 
 				Assume all of this is in the same deployment "foo":
 
@@ -2078,27 +2078,11 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				*/
 
 				if applyUpdatesToRoutingConfig {
-					//nolint:staticcheck // SA1019 deprecated versions will clean up later
-					oldVersions := deploymentData.GetVersions()
-					dst := make([]*deploymentspb.DeploymentVersionData, 0, len(oldVersions))
-					for _, dv := range oldVersions {
-						if dv.GetVersion().GetDeploymentName() == req.GetDeploymentName() {
-
-							// Move membership from old format into the per-deployment new-format map.
-							buildID := dv.GetVersion().GetBuildId()
-							//nolint:revive // max-control-nesting: control flow nesting exceeds 5
-							if _, exists := tqWorkerDeploymentData.Versions[buildID]; !exists {
-								tqWorkerDeploymentData.Versions[buildID] = &deploymentspb.WorkerDeploymentVersionData{
-									Status: dv.GetStatus(),
-								}
-							}
-							// Do not keep this entry in old-format slice (we're migrating it).
-							continue
-						}
-						dst = append(dst, dv)
-					}
-					//nolint:staticcheck // SA1019 deprecated versions will clean up later
-					deploymentData.Versions = dst
+					migrateOldFormatVersions(
+						deploymentData,
+						req.GetDeploymentName(),
+						tqWorkerDeploymentData,
+					)
 				}
 			}
 		}
@@ -3226,6 +3210,34 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	return &matchingservice.UpdateTaskQueueConfigResponse{
 		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
 	}, nil
+}
+
+// migrateOldFormatVersions moves versions present in the given deployment from the
+// deprecated old-format slice into the new per-deployment map.
+//
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
+func migrateOldFormatVersions(
+	deploymentData *persistencespb.DeploymentData,
+	deploymentName string,
+	workerDeploymentData *persistencespb.WorkerDeploymentData,
+) {
+
+	oldVersions := deploymentData.GetVersions()
+	dst := make([]*deploymentspb.DeploymentVersionData, 0, len(oldVersions))
+	for _, dv := range oldVersions {
+		if dv.GetVersion().GetDeploymentName() == deploymentName {
+			// Move membership from old format into the per-deployment new-format map.
+			buildID := dv.GetVersion().GetBuildId()
+			if _, exists := workerDeploymentData.Versions[buildID]; !exists {
+				workerDeploymentData.Versions[buildID] = &deploymentspb.WorkerDeploymentVersionData{
+					Status: dv.GetStatus(),
+				}
+			}
+			continue
+		}
+		dst = append(dst, dv)
+	}
+	deploymentData.Versions = dst
 }
 
 // removeDeploymentVersions removes provided build IDs from the new-format per-deployment map and,
