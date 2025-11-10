@@ -188,6 +188,11 @@ config as the other services.`,
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
+	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
+		"system.enableActivityRetryStampIncrement",
+		false,
+		`EnableActivityRetryStampIncrement indicates if activity retry stamp increment is enabled`,
+	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
 		true,
