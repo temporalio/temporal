@@ -660,7 +660,6 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 	}
 	// update local state
 	delete(d.State.Versions, args.Version)
-	d.State.LastModifierIdentity = args.Identity
 	// update memo
 	return d.updateMemo(ctx)
 }
