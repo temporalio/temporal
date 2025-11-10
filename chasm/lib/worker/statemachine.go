@@ -53,9 +53,12 @@ var TransitionLeaseExpired = chasm.NewTransition(
 	workerstatepb.WORKER_STATUS_INACTIVE,
 	func(w *Worker, ctx chasm.MutableContext, event EventLeaseExpired) error {
 		// Schedule cleanup task with provided delay.
+		cleanupTime := ctx.Now(w).Add(event.CleanupDelay)
+		w.CleanupTime = timestamppb.New(cleanupTime)
+
 		cleanupTask := &workerstatepb.WorkerCleanupTask{}
 		taskAttrs := chasm.TaskAttributes{
-			ScheduledTime: time.Now().Add(event.CleanupDelay),
+			ScheduledTime: cleanupTime,
 		}
 		ctx.AddTask(w, taskAttrs, cleanupTask)
 		return nil
@@ -81,6 +84,8 @@ var TransitionWorkerResurrection = chasm.NewTransition(
 	[]workerstatepb.WorkerStatus{workerstatepb.WORKER_STATUS_INACTIVE},
 	workerstatepb.WORKER_STATUS_ACTIVE,
 	func(w *Worker, ctx chasm.MutableContext, event EventHeartbeatReceived) error {
+		// Clear cleanup time since worker is now active
+		w.CleanupTime = nil
 		updateWorkerLease(ctx, w, event.LeaseDeadline)
 		return nil
 	},
