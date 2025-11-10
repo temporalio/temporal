@@ -5786,7 +5786,7 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
-			if ms.shard.GetConfig().EnableActivityRetryStampIncrement(ms.GetNamespaceEntry().Name().String()) {
+			if ms.config.EnableActivityRetryStampIncrement() {
 				activityInfo.Stamp++
 			}
 			return nil
@@ -5862,7 +5862,7 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState historyi.MutableState) error {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
-			isActivityRetryStampIncrementEnabled := mutableStateImpl.shard.GetConfig().EnableActivityRetryStampIncrement(mutableStateImpl.GetNamespaceEntry().Name().String())
+			isActivityRetryStampIncrementEnabled := ms.config.EnableActivityRetryStampIncrement()
 			ai = UpdateActivityInfoForRetries(
 				activityInfo,
 				mutableStateImpl.GetCurrentVersion(),
