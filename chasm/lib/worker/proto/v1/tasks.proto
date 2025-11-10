@@ -8,6 +8,6 @@ option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerp
 message LeaseExpiryTask {
 }
 
-// Task for cleanup of expired workers.
-message WorkerCleanupTask {
+// Task that fires when an inactive worker is ready to be cleaned up.
+message CleanupTask {
 }

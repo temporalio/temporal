@@ -9,16 +9,16 @@ import "temporal/api/worker/v1/message.proto";
 
 // Metadata about the worker.
 message WorkerState {
-    // Time at which the lease expires.
-    google.protobuf.Timestamp lease_expiration_time = 1;
-
     // Current status of the worker.
-    WorkerStatus status = 2;
+    WorkerStatus status = 1;
 
     // Worker heartbeat information including metadata and capabilities.
-    temporal.api.worker.v1.WorkerHeartbeat worker_heartbeat = 3;
+    temporal.api.worker.v1.WorkerHeartbeat worker_heartbeat = 2;
 
-    // Time when the cleanup task is scheduled to fire (used for cleanup task validation).
+    // Time when the lease expires. (Active to Inactive state transition).
+    google.protobuf.Timestamp lease_expiration_time = 3;
+
+    // Time when the cleanup is scheduled (Inactive to CleanedUp state transition).
     google.protobuf.Timestamp cleanup_time = 4;
 }
 
