@@ -475,7 +475,7 @@ func (tm *priTaskMatcher) poll(
 ) (*internalTask, error) {
 	start := time.Now()
 	pollWasForwarded := false
-	var priority int32 = 0
+	var priority int32
 
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
