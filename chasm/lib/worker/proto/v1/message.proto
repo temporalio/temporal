@@ -17,6 +17,9 @@ message WorkerState {
 
     // Worker heartbeat information including metadata and capabilities.
     temporal.api.worker.v1.WorkerHeartbeat worker_heartbeat = 3;
+
+    // Time when the cleanup task is scheduled to fire (used for cleanup task validation).
+    google.protobuf.Timestamp cleanup_time = 4;
 }
 
 // Status of a worker.
