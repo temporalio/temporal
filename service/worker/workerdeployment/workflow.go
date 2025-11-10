@@ -660,7 +660,7 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 	}
 	// update local state
 	delete(d.State.Versions, args.Version)
-	if args.Identity != tryDeleteForAddingVersionIdentity {
+	if args.Identity != serverDeleteVersionIdentity {
 		d.State.LastModifierIdentity = args.Identity
 	}
 	// update memo
