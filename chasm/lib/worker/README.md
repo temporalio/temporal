@@ -29,7 +29,7 @@ ACTIVE ──────► INACTIVE ──────► CLEANED_UP
    │              │                 │
    │              │                 │
    └──────────────┘                 │
-      (resurrection)                │
+      (resurrect)                   │
                                     │
                               (terminal state)
 ```
@@ -41,7 +41,7 @@ ACTIVE ──────► INACTIVE ──────► CLEANED_UP
 #### INACTIVE  
 - Worker lease has expired (no heartbeats received)
 - Activities are cancelled and rescheduled to other workers
-- Worker can still reconnect (resurrection scenario due it temporary network partition)
+- Worker can still reconnect (resurrect)
 
 #### CLEANED_UP
 - Terminal state after cleanup grace period
@@ -54,11 +54,11 @@ ACTIVE ──────► INACTIVE ──────► CLEANED_UP
 **Trigger**: `LeaseExpiryTask` fires when lease deadline is reached
 **Actions**:
 - Mark worker as INACTIVE
-- Schedule `WorkerCleanupTask` with configurable delay
+- Schedule `CleanupTask` with configurable delay
 - Create and schedule `ActivityRescheduleTask` for each bound activity
 - Fan-out tasks to appropriate History service shards
 
-#### INACTIVE → ACTIVE (Worker Resurrection)
+#### INACTIVE → ACTIVE (Resurrect)
 **Trigger**: Heartbeat received from previously inactive worker
 **Actions**:
 - Update lease with new deadline
@@ -66,7 +66,7 @@ ACTIVE ──────► INACTIVE ──────► CLEANED_UP
 - Previous activities remain cancelled
 
 #### INACTIVE → CLEANED_UP (Cleanup)
-**Trigger**: `WorkerCleanupTask` executes after grace period
+**Trigger**: `CleanupTask` executes after grace period
 **Actions**:
 - Mark worker as CLEANED_UP (terminal state)
 - CHASM will clean up the worker state

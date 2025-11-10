@@ -55,7 +55,7 @@ var TransitionLeaseExpired = chasm.NewTransition(
 		cleanupTime := ctx.Now(w).Add(event.CleanupDelay)
 		w.CleanupTime = timestamppb.New(cleanupTime)
 
-		cleanupTask := &workerstatepb.WorkerCleanupTask{}
+		cleanupTask := &workerstatepb.CleanupTask{}
 		taskAttrs := chasm.TaskAttributes{
 			ScheduledTime: cleanupTime,
 		}
