@@ -97,15 +97,6 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
-	m.ms.logger.Info("DEBUG: ApplyWorkflowTaskScheduledEvent",
-		tag.WorkflowNamespaceID(m.ms.executionInfo.NamespaceId),
-		tag.WorkflowID(m.ms.executionInfo.WorkflowId),
-		tag.WorkflowRunID(m.ms.executionState.RunId),
-		tag.NewInt64("scheduled_event_id", scheduledEventID),
-		tag.NewInt32("attempt", attempt),
-		tag.NewInt32("current_stamp", m.ms.executionInfo.WorkflowTaskStamp),
-		tag.NewInt64("version", version),
-	)
 	m.UpdateWorkflowTask(workflowTask)
 	return workflowTask, nil
 }
@@ -809,29 +800,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 
 	var event *historypb.HistoryEvent
 	// Only emit WorkflowTaskFailedEvent if workflow task is not transient.
-	isTransient := m.ms.IsTransientWorkflowTask()
-	transientStr := "false"
-	if isTransient {
-		transientStr = "true"
-	}
-	m.ms.logger.Info("DEBUG: AddWorkflowTaskFailedEvent - checking if transient",
-		tag.WorkflowNamespaceID(m.ms.executionInfo.NamespaceId),
-		tag.WorkflowID(m.ms.executionInfo.WorkflowId),
-		tag.WorkflowRunID(m.ms.executionState.RunId),
-		tag.NewInt32("attempt", workflowTask.Attempt),
-		tag.NewInt32("current_stamp", m.ms.executionInfo.WorkflowTaskStamp),
-		tag.NewStringTag("is_transient", transientStr),
-	)
-
-	if !isTransient {
-		m.ms.logger.Info("DEBUG: Creating WorkflowTaskFailedEvent (NOT transient)",
-			tag.WorkflowNamespaceID(m.ms.executionInfo.NamespaceId),
-			tag.WorkflowID(m.ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(m.ms.executionState.RunId),
-			tag.NewInt64("scheduled_event_id", workflowTask.ScheduledEventID),
-			tag.NewInt64("started_event_id", workflowTask.StartedEventID),
-		)
-
+	if !m.ms.IsTransientWorkflowTask() {
 		event = m.ms.hBuilder.AddWorkflowTaskFailedEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.StartedEventID,
@@ -845,23 +814,10 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		)
 
 		if event != nil {
-			m.ms.logger.Info("DEBUG: WorkflowTaskFailedEvent created successfully",
-				tag.WorkflowNamespaceID(m.ms.executionInfo.NamespaceId),
-				tag.WorkflowID(m.ms.executionInfo.WorkflowId),
-				tag.WorkflowRunID(m.ms.executionState.RunId),
-				tag.NewInt64("event_id", event.EventId),
-			)
 			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause{
 				LastWorkflowTaskFailureCause: cause,
 			}
 		}
-	} else {
-		m.ms.logger.Info("DEBUG: SKIPPING WorkflowTaskFailedEvent creation (IS transient)",
-			tag.WorkflowNamespaceID(m.ms.executionInfo.NamespaceId),
-			tag.WorkflowID(m.ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(m.ms.executionState.RunId),
-			tag.NewInt32("attempt", workflowTask.Attempt),
-		)
 	}
 
 	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
@@ -887,20 +843,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	workflowTask *historyi.WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
-
-	isTransient := m.ms.IsTransientWorkflowTask()
-	transientStr := "false"
-	if isTransient {
-		transientStr = "true"
-	}
-	m.ms.logger.Info("DEBUG: AddWorkflowTaskTimedOutEvent - checking if transient",
-		tag.WorkflowNamespaceID(m.ms.executionInfo.NamespaceId),
-		tag.WorkflowID(m.ms.executionInfo.WorkflowId),
-		tag.WorkflowRunID(m.ms.executionState.RunId),
-		tag.NewInt32("attempt", workflowTask.Attempt),
-		tag.NewInt32("current_stamp", m.ms.executionInfo.WorkflowTaskStamp),
-		tag.NewStringTag("is_transient", transientStr),
-	)
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
@@ -998,16 +940,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
 		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
-		oldStamp := m.ms.executionInfo.WorkflowTaskStamp
 		m.ms.executionInfo.WorkflowTaskStamp += 1
-		m.ms.logger.Info("DEBUG: Incremented WorkflowTaskStamp on failWorkflowTask",
-			tag.WorkflowNamespaceID(m.ms.executionInfo.NamespaceId),
-			tag.WorkflowID(m.ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(m.ms.executionState.RunId),
-			tag.NewInt32("attempt", failWorkflowTaskInfo.Attempt),
-			tag.NewInt32("old_stamp", oldStamp),
-			tag.NewInt32("new_stamp", m.ms.executionInfo.WorkflowTaskStamp),
-		)
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)

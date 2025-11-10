@@ -450,14 +450,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		Version:          workflowTask.Version,
 		Stamp:            workflowTask.Stamp,
 	}
-	r.logger.Info("DEBUG: Creating TransferWorkflowTask",
-		tag.WorkflowNamespaceID(r.mutableState.GetWorkflowKey().NamespaceID),
-		tag.WorkflowID(r.mutableState.GetWorkflowKey().WorkflowID),
-		tag.WorkflowRunID(r.mutableState.GetWorkflowKey().RunID),
-		tag.NewInt64("scheduled_event_id", workflowTask.ScheduledEventID),
-		tag.NewInt32("stamp", workflowTask.Stamp),
-		tag.NewInt32("attempt", workflowTask.Attempt),
-	)
 	r.mutableState.AddTasks(wfTaskTransfer)
 
 	return nil
