@@ -437,7 +437,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		r.mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(wttt)
 	}
 
-	wfTaskTransfer := &tasks.WorkflowTask{
+	r.mutableState.AddTasks(&tasks.WorkflowTask{
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey: r.mutableState.GetWorkflowKey(),
 		// Store current task queue to the transfer task.
@@ -449,8 +449,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		ScheduledEventID: workflowTask.ScheduledEventID,
 		Version:          workflowTask.Version,
 		Stamp:            workflowTask.Stamp,
-	}
-	r.mutableState.AddTasks(wfTaskTransfer)
+	})
 
 	return nil
 }
