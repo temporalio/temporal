@@ -17,6 +17,8 @@ var allowedComparisonOperators = map[string]struct{}{
 	sqlparser.NotInStr:         {},
 	sqlparser.StartsWithStr:    {},
 	sqlparser.NotStartsWithStr: {},
+	sqlparser.ContainsStr:      {},
+	sqlparser.NotContainsStr:   {},
 }
 
 func NewQueryConverter(
