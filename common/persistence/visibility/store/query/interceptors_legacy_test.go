@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/searchattribute"
@@ -48,11 +48,11 @@ func TestNameInterceptor(t *testing.T) {
 	c := getTestConverter(&testNameInterceptor{}, nil)
 
 	queryParams, err := c.ConvertWhereOrderBy("ExecutionStatus='Running' order by StartTime")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
 	//nolint:staticcheck
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
+	require.JSONEq(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
 	var actualSorterMaps []interface{}
 	for _, sorter := range queryParams.Sorter {
 		actualSorterMap, _ := sorter.Source()
@@ -60,37 +60,37 @@ func TestNameInterceptor(t *testing.T) {
 	}
 	//nolint:staticcheck
 	actualSorterJson, _ := json.Marshal(actualSorterMaps)
-	assert.Equal(t, `[{"StartTime1":{"order":"asc"}}]`, string(actualSorterJson))
+	require.JSONEq(t, `[{"StartTime1":{"order":"asc"}}]`, string(actualSorterJson))
 
 	_, err = c.ConvertWhereOrderBy("error='Running' order by StartTime")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "interceptor error")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "interceptor error")
 }
 
 func TestValuesInterceptor(t *testing.T) {
 	c := getTestConverter(nil, &testValuesInterceptor{})
 	queryParams, err := c.ConvertWhereOrderBy("ExecutionStatus=1")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
 	//nolint:staticcheck
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus":"Status1"}}}}`, string(actualQueryJson))
+	require.JSONEq(t, `{"bool":{"filter":{"term":{"ExecutionStatus":"Status1"}}}}`, string(actualQueryJson))
 
 	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus in (1,2)")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	actualQueryMap, _ = queryParams.Query.Source()
 	actualQueryJson, _ = json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"terms":{"ExecutionStatus":["Status1","Status2"]}}}}`, string(actualQueryJson))
+	require.JSONEq(t, `{"bool":{"filter":{"terms":{"ExecutionStatus":["Status1","Status2"]}}}}`, string(actualQueryJson))
 
 	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus between 5 and 7")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	actualQueryMap, _ = queryParams.Query.Source()
 	actualQueryJson, _ = json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"range":{"ExecutionStatus":{"from":"Status5","include_lower":true,"include_upper":true,"to":"Status7"}}}}}`, string(actualQueryJson))
+	require.JSONEq(t, `{"bool":{"filter":{"range":{"ExecutionStatus":{"from":"Status5","include_lower":true,"include_upper":true,"to":"Status7"}}}}}`, string(actualQueryJson))
 
 	_, err = c.ConvertWhereOrderBy("error='Running'")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "interceptor error")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "interceptor error")
 }
 
 func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *ConverterLegacy {

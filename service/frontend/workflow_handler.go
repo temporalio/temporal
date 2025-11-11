@@ -4087,6 +4087,7 @@ func (wh *WorkflowHandler) ListSchedules(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
+			wh.config.VisibilityEnableUnifiedQueryConverter,
 			request.Query,
 		); err != nil {
 			return nil, err
