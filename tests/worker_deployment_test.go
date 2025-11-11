@@ -1688,6 +1688,10 @@ func (s *WorkerDeploymentSuite) TestDeleteVersion_ServerDeleteMaxVersionsReached
 	s.ensureCreateVersionInDeployment(tv)
 	pollerCancel()
 
+	// Set a different manager identity so that we can verify that the internal delete operation does not conduct the manager identity check
+	// while deleting the version
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "", "")
+
 	// Start another poller which shall aim to create a new version. This should, in turn, delete the first version.
 	pollerCtx2, pollerCancel2 := context.WithCancel(ctx)
 	go s.pollFromDeployment(pollerCtx2, tv2)
@@ -1702,7 +1706,7 @@ func (s *WorkerDeploymentSuite) TestDeleteVersion_ServerDeleteMaxVersionsReached
 			DeploymentName: tv.DeploymentSeries(),
 		})
 		a.NoError(err)
-		a.Equal(1, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+		a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
 		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
 
 		// Also verify that the last modifier identity is not set to the identity of the worker-deployment workflow.
@@ -3224,6 +3228,11 @@ func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(ctx context.Contex
 			ManagerIdentity: newManager,
 		}
 		expectedManagerIdentity = newManager
+		if newManager == "" {
+			req.Identity = tv.ClientIdentity()
+		} else {
+			req.Identity = newManager
+		}
 	}
 	resp, err := s.FrontendClient().SetWorkerDeploymentManager(ctx, req)
 	if expectedError != "" {
