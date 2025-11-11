@@ -7,7 +7,12 @@ option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerp
 import "chasm/lib/worker/proto/v1/request_response.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 
+// WorkerService provides RPCs for managing worker lifecycle and heartbeats.
 service WorkerService {
+    // RecordHeartbeat processes a worker heartbeat, updating the worker's lease and maintaining
+    // its active status. This RPC is called periodically by workers to signal liveness.
+    // If a worker fails to send heartbeats, its lease will expire and associated activities
+    // will be rescheduled to other workers.
     rpc RecordHeartbeat(RecordHeartbeatRequest) returns (RecordHeartbeatResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "worker_instance_key";
     }
