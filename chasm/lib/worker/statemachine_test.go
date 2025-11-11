@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	workerpb "go.temporal.io/api/worker/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
@@ -20,19 +21,37 @@ func newTestWorker() *Worker {
 	return worker
 }
 
+// newTestRequest creates a test RecordHeartbeatRequest
+func newTestRequest(workerInstanceKey string) *workerstatepb.RecordHeartbeatRequest {
+	return &workerstatepb.RecordHeartbeatRequest{
+		NamespaceId: "test-namespace-id",
+		FrontendRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+			Namespace: "test-namespace",
+			Identity:  "test-identity",
+			WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+				{
+					WorkerInstanceKey: workerInstanceKey,
+				},
+			},
+			// LeaseDuration will be available after proto regeneration
+		},
+	}
+}
+
 func TestRecordHeartbeat(t *testing.T) {
 	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
-	leaseDuration := 30 * time.Second
 
-	// Test successful heartbeat recording (first heartbeat, no token)
-	newToken, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, nil, leaseDuration)
+	req := newTestRequest("test-worker")
+
+	// Test successful heartbeat recording
+	err := worker.recordHeartbeat(ctx, req)
 	require.NoError(t, err)
 	require.NotEmpty(t, newToken)
 
-	// Verify lease deadline was set (approximately)
+	// Verify lease deadline was set (approximately, using default 1 minute)
 	require.NotNil(t, worker.LeaseExpirationTime)
-	expectedDeadline := time.Now().Add(leaseDuration)
+	expectedDeadline := time.Now().Add(1 * time.Minute) // Default lease duration
 	actualDeadline := worker.LeaseExpirationTime.AsTime()
 	require.WithinDuration(t, expectedDeadline, actualDeadline, time.Second)
 
@@ -166,17 +185,75 @@ func TestMultipleHeartbeats(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 
 	// First heartbeat
-	firstDuration := 30 * time.Second
-	token1, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, nil, firstDuration)
+	err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 	require.NoError(t, err)
 
-	// Second heartbeat extends the lease (with correct token)
-	secondDuration := 60 * time.Second
-	_, err = worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, token1, secondDuration)
+	// Second heartbeat extends the lease
+	err = worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 	require.NoError(t, err)
 
 	// Verify two tasks were scheduled (one for each heartbeat)
 	require.Len(t, ctx.Tasks, 2)
+}
+
+func TestWorkerResurrection(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+
+	t.Run("ResurrectionFromInactive", func(t *testing.T) {
+		worker := newTestWorker()
+		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
+
+		// Set cleanup time to simulate previous inactive period
+		oldCleanupTime := time.Now().Add(60 * time.Minute)
+		worker.CleanupTime = timestamppb.New(oldCleanupTime)
+
+		err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
+
+		// Should succeed - worker resurrection handles same identity reconnection
+		require.NoError(t, err)
+		require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
+		require.NotNil(t, worker.LeaseExpirationTime)
+
+		// Verify cleanup time was cleared during resurrection
+		require.Nil(t, worker.CleanupTime, "CleanupTime should be cleared during resurrection")
+
+		// Verify new lease expiry task was scheduled
+		require.Len(t, ctx.Tasks, 1)
+	})
+}
+
+func TestTransitionResurrected(t *testing.T) {
+	worker := newTestWorker()
+	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
+	ctx := &chasm.MockMutableContext{}
+
+	// Set cleanup time to simulate previous inactive period
+	oldCleanupTime := time.Now().Add(60 * time.Minute)
+	worker.CleanupTime = timestamppb.New(oldCleanupTime)
+
+	leaseDeadline := time.Now().Add(30 * time.Second)
+
+	event := EventHeartbeatReceived{
+		LeaseDeadline: leaseDeadline,
+	}
+
+	// Apply the resurrection transition directly
+	err := TransitionResurrected.Apply(ctx, worker, event)
+	require.NoError(t, err)
+
+	// Verify state changed to active
+	require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
+
+	// Verify lease was updated
+	require.NotNil(t, worker.LeaseExpirationTime)
+	require.Equal(t, leaseDeadline.Unix(), worker.LeaseExpirationTime.AsTime().Unix())
+
+	// Verify cleanup time was cleared during resurrection
+	require.Nil(t, worker.CleanupTime, "CleanupTime should be cleared during resurrection")
+
+	// Verify task was scheduled
+	require.Len(t, ctx.Tasks, 1)
+	require.Equal(t, leaseDeadline, ctx.Tasks[0].Attributes.ScheduledTime)
 }
 
 func TestInvalidTransitions(t *testing.T) {
@@ -186,8 +263,7 @@ func TestInvalidTransitions(t *testing.T) {
 		worker := newTestWorker()
 		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 
-		leaseDuration := 30 * time.Second
-		_, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, nil, leaseDuration)
+		err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 
 		// Should fail because worker is inactive (terminal state)
 		require.Error(t, err)
