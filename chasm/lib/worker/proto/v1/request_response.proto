@@ -20,4 +20,5 @@ message RecordHeartbeatRequest {
 
 // RecordHeartbeatResponse is the response for recording a worker heartbeat.
 message RecordHeartbeatResponse {
+    temporal.api.workflowservice.v1.RecordWorkerHeartbeatResponse frontend_response = 1;
 }
