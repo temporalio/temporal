@@ -10,7 +10,7 @@ The Worker CHASM component tracks the health and availability of Temporal worker
 
 1. **Worker** (`worker.go`) - CHASM entity representing a worker and its persistent state
 2. **State Machine** (`statemachine.go`) - Manages worker lifecycle transitions
-3. **Task Executors** (`tasks.go`) - Handle lease expiry and cleanup operations
+3. **Task Executors** (`executors.go`) - Handle lease expiry and cleanup operations
 4. **RPC Handler** (`handler.go`) - Processes heartbeat requests from workers
 
 ### Key Concepts
@@ -111,7 +111,7 @@ Worker Process ──► Frontened Service ──► History Service ──► C
 
 ## Configuration
 
-- `chasm.worker.inactiveWorkerCleanupDelay`: Time to wait before cleaning up inactive workers (default: 60 minutes)
+- `worker.inactiveWorkerCleanupDelay`: Time to wait before cleaning up inactive workers (default: 60 minutes)
 
 - `Lease duration`: Configurable per heartbeat request. Default: 1 minute if not specified in the request.
 
