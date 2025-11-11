@@ -156,7 +156,7 @@ func setTestComponentFields(c *TestComponent, backend *MockNodeBackend) {
 	c.SubData1 = NewDataField[*protoMessageType](nil, &protoMessageType{
 		CreateRequestId: "sub-data1",
 	})
-	c.MSPointer = backend
+	c.MSPointer = NewMSPointer(backend)
 }
 
 // returns serialized version of TestComponent from above.

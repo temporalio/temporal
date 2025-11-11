@@ -1145,7 +1145,7 @@ func (n *Node) deserializeComponentNode(
 				}
 			}
 		case fieldKindMutableState:
-			field.val.Set(reflect.ValueOf(n.backend))
+			field.val.Set(reflect.ValueOf(NewMSPointer(n.backend)))
 		}
 	}
 

@@ -2619,7 +2619,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		_, err := root.Component(validationContext, chasm.ComponentRef{})
 		if common.IsNotFoundError(err) {
 			mutableContext := chasm.NewMutableContext(context.Background(), root)
-			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
+			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
 		}
 	}
 

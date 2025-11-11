@@ -452,7 +452,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		ctx := NewMutableContext(context.Background(), rootNode)
 
 		rootComponent := &TestComponent{
-			MSPointer:                    s.nodeBackend,
+			MSPointer:                    NewMSPointer(s.nodeBackend),
 			SubComponent1:                NewComponentField(nil, sc1),
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
 			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
