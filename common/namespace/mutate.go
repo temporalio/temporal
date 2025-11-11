@@ -92,10 +92,6 @@ func WithPretendLocalNamespace(localClusterName string) Mutation {
 
 }
 
-// WithReplicationResolver assigns a custom ReplicationResolver to the Namespace.
-// This allows injecting partition-aware resolvers via fx or for testing purposes.
-//
-// If not provided, Namespace methods will use DefaultReplicationResolver as a fallback.
 func WithReplicationResolver(resolver ReplicationResolver) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
