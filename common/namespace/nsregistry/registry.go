@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -106,6 +105,7 @@ type (
 
 		// Temporary solution to force read search attributes from persistence
 		forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn
+		replicationResolver                     namespace.ReplicationResolver
 	}
 )
 
@@ -120,6 +120,7 @@ func NewRegistry(
 	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	replicationResolver namespace.ReplicationResolver,
 ) *registry {
 	reg := &registry{
 		persistence:              aPersistence,
@@ -134,6 +135,7 @@ func NewRegistry(
 		readthroughNotFoundCache: cache.New(readthroughCacheSize, &readthroughNotFoundCacheOpts),
 
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
+		replicationResolver:                     replicationResolver,
 	}
 	return reg
 }
@@ -352,7 +354,9 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 			ns := namespace.FromPersistentState(
 				namespaceDb.Namespace,
 				namespace.WithGlobalFlag(namespaceDb.IsGlobalNamespace),
-				namespace.WithNotificationVersion(namespaceDb.NotificationVersion))
+				namespace.WithNotificationVersion(namespaceDb.NotificationVersion),
+				namespace.WithReplicationResolver(r.replicationResolver),
+			)
 			namespacesDb = append(namespacesDb, ns)
 			namespaceIDsDb[namespace.ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
 		}
@@ -576,7 +580,9 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	return namespace.FromPersistentState(
 		response.Namespace,
 		namespace.WithGlobalFlag(response.IsGlobalNamespace),
-		namespace.WithNotificationVersion(response.NotificationVersion)), nil
+		namespace.WithNotificationVersion(response.NotificationVersion),
+		namespace.WithReplicationResolver(r.replicationResolver),
+	), nil
 }
 
 // this test should include anything that might affect whether a namespace is active on
@@ -588,153 +594,4 @@ func namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) b
 		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
 		old.ActiveClusterName() != new.ActiveClusterName() ||
 		old.ReplicationState() != new.ReplicationState()
-}
-
-// ===== PartitionStateResolver Implementation =====
-// These methods implement the namespace.PartitionStateResolver interface embedded in namespace.Registry.
-// Current implementation operates at the namespace level and ignores workflowID.
-// Future implementation will use workflowID to determine partition and make partition-level decisions.
-
-// IsActiveInCluster returns true if the workflow's partition is active in the specified cluster.
-func (r *registry) IsActiveInCluster(namespaceID namespace.ID, workflowID string, clusterName string) (bool, error) {
-	// TODO(partitioning): Use workflowID to determine partition and check partition-level active state
-	_ = workflowID
-
-	ns, err := r.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return false, err
-	}
-
-	// Use existing ActiveInCluster logic from namespace
-	return ns.ActiveInCluster(clusterName), nil
-}
-
-// GetActiveClusterName returns the name of the cluster that is currently active for the workflow's partition.
-func (r *registry) GetActiveClusterName(namespaceID namespace.ID, workflowID string) (string, error) {
-	// TODO(partitioning): Use workflowID to determine partition and return partition's active cluster
-	_ = workflowID
-
-	ns, err := r.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return "", err
-	}
-
-	return ns.ActiveClusterName(), nil
-}
-
-// GetForwardingTarget returns the cluster name to which requests should be forwarded,
-// and whether forwarding is needed for a given workflow.
-func (r *registry) GetForwardingTarget(namespaceID namespace.ID, workflowID string, currentCluster string) (targetCluster string, shouldForward bool, err error) {
-	// TODO(partitioning): Use workflowID to determine partition's forwarding target
-	_ = workflowID
-
-	ns, err := r.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return "", false, err
-	}
-
-	// If not global, no forwarding needed
-	if !ns.IsGlobalNamespace() {
-		return "", false, nil
-	}
-
-	activeCluster := ns.ActiveClusterName()
-
-	// If already on active cluster, no forwarding needed
-	if currentCluster == activeCluster {
-		return "", false, nil
-	}
-
-	// Forward to active cluster
-	return activeCluster, true, nil
-}
-
-// ShouldReplicateToCluster returns true if replication tasks for the given workflow
-// should be sent to the specified cluster.
-func (r *registry) ShouldReplicateToCluster(namespaceID namespace.ID, workflowID string, targetCluster string) (bool, error) {
-	// TODO(partitioning): Use workflowID to determine partition and check if partition replicates to targetCluster
-	_ = workflowID
-
-	ns, err := r.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return false, err
-	}
-
-	return ns.IsOnCluster(targetCluster), nil
-}
-
-// GetReplicationTargets returns the list of cluster names to which the workflow's partition should replicate.
-func (r *registry) GetReplicationTargets(namespaceID namespace.ID, workflowID string) ([]string, error) {
-	// TODO(partitioning): Use workflowID to determine partition and return partition's replication targets
-	_ = workflowID
-
-	ns, err := r.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	return ns.ClusterNames(), nil
-}
-
-// GetReplicationPolicy returns the replication policy for the workflow's partition.
-func (r *registry) GetReplicationPolicy(namespaceID namespace.ID, workflowID string) (namespace.ReplicationPolicy, error) {
-	// TODO(partitioning): Use workflowID to determine partition's replication policy
-	_ = workflowID
-
-	ns, err := r.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return namespace.ReplicationPolicyOneCluster, err
-	}
-
-	return ns.ReplicationPolicy(), nil
-}
-
-// IsInHandover returns true if the workflow's partition is currently in HANDOVER state.
-func (r *registry) IsInHandover(namespaceID namespace.ID, workflowID string) (bool, error) {
-	// TODO(partitioning): Use workflowID to determine if partition is in handover
-	_ = workflowID
-
-	ns, err := r.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return false, err
-	}
-
-	return ns.ReplicationState() == enumspb.REPLICATION_STATE_HANDOVER, nil
-}
-
-// CanProcessTasks returns true if the workflow's partition can currently process queue tasks.
-func (r *registry) CanProcessTasks(namespaceID namespace.ID, workflowID string) (bool, error) {
-	// During handover, task processing is blocked
-	// TODO(partitioning): Check partition-level handover state
-	inHandover, err := r.IsInHandover(namespaceID, workflowID)
-	if err != nil {
-		return false, err
-	}
-
-	return !inHandover, nil
-}
-
-// CanAcceptWrites returns true if the workflow's partition can accept write operations.
-func (r *registry) CanAcceptWrites(namespaceID namespace.ID, workflowID string) (bool, error) {
-	// During handover, writes are blocked
-	// TODO(partitioning): Check partition-level handover state
-	inHandover, err := r.IsInHandover(namespaceID, workflowID)
-	if err != nil {
-		return false, err
-	}
-
-	return !inHandover, nil
-}
-
-// GetReplicationState returns the replication state for the workflow's partition.
-func (r *registry) GetReplicationState(namespaceID namespace.ID, workflowID string) (enumspb.ReplicationState, error) {
-	// TODO(partitioning): Use workflowID to return partition-level state
-	_ = workflowID
-
-	ns, err := r.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return enumspb.REPLICATION_STATE_UNSPECIFIED, err
-	}
-
-	return ns.ReplicationState(), nil
 }

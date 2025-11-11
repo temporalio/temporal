@@ -52,7 +52,9 @@ func (s *registrySuite) SetupTest() {
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		dynamicconfig.GetBoolPropertyFn(false),
 		metrics.NoopMetricsHandler,
-		log.NewTestLogger())
+		log.NewTestLogger(),
+		namespace.DefaultReplicationResolver,
+	)
 }
 
 func (s *registrySuite) TearDownTest() {

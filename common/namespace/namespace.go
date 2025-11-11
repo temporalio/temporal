@@ -50,6 +50,7 @@ type (
 		notificationVersion         int64
 
 		customSearchAttributesMapper CustomSearchAttributesMapper
+		replicationResolver          ReplicationResolver
 	}
 
 	CustomSearchAttributesMapper struct {
@@ -173,28 +174,19 @@ func (ns *Namespace) State() enumspb.NamespaceState {
 }
 
 func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
-	if ns.replicationConfig == nil {
-		return enumspb.REPLICATION_STATE_UNSPECIFIED
-	}
-	return ns.replicationConfig.State
+	return ns.replicationResolver.NamespaceReplicationState(ns)
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
 func (ns *Namespace) ActiveClusterName() string {
-	if ns.replicationConfig == nil {
-		return ""
-	}
-	return ns.replicationConfig.ActiveClusterName
+	return ns.replicationResolver.ActiveClusterName(ns, "")
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
 // replicated.
 func (ns *Namespace) ClusterNames() []string {
-	// copy slice to preserve immutability
-	out := make([]string, len(ns.replicationConfig.Clusters))
-	copy(out, ns.replicationConfig.Clusters)
-	return out
+	return ns.replicationResolver.ClusterNames(ns, "")
 }
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.
