@@ -36,6 +36,8 @@ const (
 	DeleteVersion                     = "delete-version"                   // for WorkerDeployment wfs
 	DeleteDeployment                  = "delete-deployment"                // for WorkerDeployment wfs
 	SetManagerIdentity                = "set-manager-identity"             // for WorkerDeployment wfs
+	serverDeleteVersionIdentity       = "try-delete-for-add-version"       // identity of the worker-deployment workflow when it tries to delete a version on the event that the addition
+	// of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions)
 
 	// Signals
 	ForceCANSignalName       = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
