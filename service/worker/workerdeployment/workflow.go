@@ -638,7 +638,8 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
 	}
 
-	if d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
+	// Ignore the manager identity check if the delete operation is initiated by the server internally
+	if !args.GetServerDelete() && d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
 	}
 	return nil
@@ -660,7 +661,9 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 	}
 	// update local state
 	delete(d.State.Versions, args.Version)
-	d.State.LastModifierIdentity = args.Identity
+	if !args.GetServerDelete() {
+		d.State.LastModifierIdentity = args.Identity
+	}
 	// update memo
 	return d.updateMemo(ctx)
 }
@@ -968,8 +971,9 @@ func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	sortedSummaries := d.sortedSummaries()
 	for _, v := range sortedSummaries {
 		args := &deploymentspb.DeleteVersionArgs{
-			Identity: "try-delete-for-add-version",
-			Version:  v.Version,
+			Identity:     serverDeleteVersionIdentity,
+			Version:      v.Version,
+			ServerDelete: true,
 		}
 		if err := d.validateDeleteVersion(args); err == nil {
 			// this might hang on the lock

@@ -338,6 +338,10 @@ message DeleteVersionArgs {
     string identity = 1;
     string version = 2;
     bool skip_drainage = 3;
+    // If true, it would mean that the delete operation is initiated by the server internally. This is done on the
+    // event that the addition of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions). 
+    // False elsewhere.
+    bool server_delete = 4;
 }
 
 // used as Worker Deployment Activity input:
