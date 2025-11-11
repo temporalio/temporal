@@ -9,7 +9,7 @@ import (
 var (
 	// InactiveWorkerCleanupDelay is the time to wait before cleaning up inactive workers after their lease expires.
 	InactiveWorkerCleanupDelay = dynamicconfig.NewNamespaceDurationSetting(
-		"chasm.worker.inactiveWorkerCleanupDelay",
+		"worker.inactiveWorkerCleanupDelay",
 		60*time.Minute,
 		`InactiveWorkerCleanupDelay is the time to wait before cleaning up inactive workers after their lease expires.`,
 	)
