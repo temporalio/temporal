@@ -125,14 +125,24 @@ message ActivityAttemptState {
     // The time when the last activity attempt completed. If activity has not been completed yet, it will be null.
     google.protobuf.Timestamp last_attempt_complete_time = 4;
 
-    // Failure details from the last failed attempt.
-    temporal.api.failure.v1.Failure last_failure = 5;
+    message LastFailureDetails {
+      // The last time the activity attempt failed.
+      google.protobuf.Timestamp time = 1;
 
-    string last_worker_identity = 6;
+      // Failure details from the last failed attempt.
+      temporal.api.failure.v1.Failure failure = 2;
+    }
+
+    // Details about the last failure. This will only be updated when an activity attempt fails,
+    // including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
+    // will not reset it.
+    LastFailureDetails last_failure_details = 5;
+
+    string last_worker_identity = 7;
 
     // The Worker Deployment Version this activity was dispatched to most recently.
     // If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
-    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 7;
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 8;
 }
 
 message ActivityHeartbeatState {
@@ -157,6 +167,8 @@ message ActivityOutcome {
     }
 
     message Failed {
+        // Only filled on schedule-to-start timeouts, schedule-to-close timeouts or terminations. All other attempt
+        // failures will be recorded in ActivityAttemptState.last_failure_details.
         temporal.api.failure.v1.Failure failure = 1;
     }
 

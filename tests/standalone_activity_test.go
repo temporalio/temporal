@@ -78,6 +78,21 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	require.True(t, proto.Equal(input, pollResp.GetInput()))
 }
 
+func (s *standaloneActivityTestSuite) TestScheduleToStartShouldTimeout() {
+	// TODO implement when we have PollActivityExecution. Make sure we check the attempt vs. outcome failure population.
+	s.T().Skip("Temporarily disabled")
+}
+
+func (s *standaloneActivityTestSuite) TestScheduleToCloseShouldTimeout() {
+	// TODO implement when we have PollActivityExecution. Make sure we check the attempt vs. outcome failure population.
+	s.T().Skip("Temporarily disabled")
+}
+
+func (s *standaloneActivityTestSuite) TestStartToCloseShouldTimeout() {
+	// TODO implement when we have PollActivityExecution. Make sure we check the attempt vs. outcome failure population.
+	s.T().Skip("Temporarily disabled")
+}
+
 func createDefaultInput() *commonpb.Payloads {
 	return &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{
