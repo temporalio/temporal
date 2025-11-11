@@ -27,6 +27,10 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkerServiceClient interface {
+	// RecordHeartbeat processes a worker heartbeat, updating the worker's lease and maintaining
+	// its active status. This RPC is called periodically by workers to signal liveness.
+	// If a worker fails to send heartbeats, its lease will expire and associated activities
+	// will be rescheduled to other workers.
 	RecordHeartbeat(ctx context.Context, in *RecordHeartbeatRequest, opts ...grpc.CallOption) (*RecordHeartbeatResponse, error)
 }
 
@@ -51,6 +55,10 @@ func (c *workerServiceClient) RecordHeartbeat(ctx context.Context, in *RecordHea
 // All implementations must embed UnimplementedWorkerServiceServer
 // for forward compatibility
 type WorkerServiceServer interface {
+	// RecordHeartbeat processes a worker heartbeat, updating the worker's lease and maintaining
+	// its active status. This RPC is called periodically by workers to signal liveness.
+	// If a worker fails to send heartbeats, its lease will expire and associated activities
+	// will be rescheduled to other workers.
 	RecordHeartbeat(context.Context, *RecordHeartbeatRequest) (*RecordHeartbeatResponse, error)
 	mustEmbedUnimplementedWorkerServiceServer()
 }
