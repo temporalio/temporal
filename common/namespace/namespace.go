@@ -179,8 +179,14 @@ func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
 
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
+//
+// Deprecated: use ActiveClusterNameForEntity instead
 func (ns *Namespace) ActiveClusterName() string {
 	return ns.replicationResolver.ActiveClusterName(ns, "")
+}
+
+func (ns *Namespace) ActiveClusterNameForEntity(entityId string) string {
+	return ns.replicationResolver.ActiveClusterName(ns, entityId)
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
