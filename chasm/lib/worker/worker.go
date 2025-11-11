@@ -6,20 +6,16 @@ import (
 	"encoding/binary"
 	"time"
 
-	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
 
 const (
 	Archetype chasm.Archetype = "Worker"
-)
 
-// HeartbeatRequest is the internal request for CHASM component updates
-type HeartbeatRequest struct {
-	WorkerHeartbeat *workerpb.WorkerHeartbeat
-	LeaseDuration   time.Duration
-}
+	// Default duration for worker leases if not specified in the request.
+	defaultLeaseDuration = 1 * time.Minute
+)
 
 // Worker is a Chasm component that tracks worker heartbeats and manages worker lifecycle.
 type Worker struct {
@@ -68,27 +64,15 @@ func (w *Worker) workerID() string {
 }
 
 // recordHeartbeat processes a heartbeat, updating worker state and extending the lease.
-// Returns WorkerInactiveError if the worker is inactive (client must re-register).
-// Returns TokenMismatchError if the token doesn't match. Client should update its token
-// from the error and resend heartbeat with the same payload (deltas since last success).
-func (w *Worker) recordHeartbeat(
-	ctx chasm.MutableContext,
-	heartbeat *workerpb.WorkerHeartbeat,
-	token []byte,
-	leaseDuration time.Duration,
-) (newToken []byte, err error) {
-	// Check if worker is inactive (terminal state)
-	if w.Status == workerstatepb.WORKER_STATUS_INACTIVE {
-		return nil, &WorkerInactiveError{}
-	}
+func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, req *workerstatepb.RecordHeartbeatRequest) error {
+	// Extract worker heartbeat from request
+	frontendReq := req.GetFrontendRequest()
+	workerHeartbeat := frontendReq.GetWorkerHeartbeat()[0]
 
-	// Validate token (skip for first heartbeat when ConflictToken is 0)
-	if w.ConflictToken > 0 && !w.validateConflictToken(token) {
-		return nil, &TokenMismatchError{CurrentToken: w.encodeConflictToken()}
-	}
+	// TODO: Honor the lease duration from the request.
+	leaseDuration := defaultLeaseDuration
 
-	// Update worker state
-	w.WorkerHeartbeat = heartbeat
+	w.WorkerHeartbeat = workerHeartbeat
 
 	// Increment conflict token
 	w.ConflictToken++
