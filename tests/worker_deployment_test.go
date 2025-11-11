@@ -1670,6 +1670,46 @@ func (s *WorkerDeploymentSuite) TestSetManagerIdentity_WithDeleteVersion() {
 	s.tryDeleteVersion(ctx, tv, "")
 }
 
+// TestDeleteVersion_ServerDeleteMaxVersionsReached tests that when the internal limit for the number of versions
+// in a worker-deployment (defaultMaxVersions) is reached, the server deletes the oldest version to make space for the new version.
+// Additionally, the test verifies that the last modifier identity is not set to the identity of the worker-deployment workflow.
+// func (s *WorkerDeploymentSuite) TestDeleteVersion_ServerDeleteMaxVersionsReached() {
+// 	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+// 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, 1)
+
+// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+// 	defer cancel()
+// 	tv := testvars.New(s).WithBuildIDNumber(1)
+// 	tv2 := testvars.New(s).WithBuildIDNumber(2)
+
+// 	// start and stop polling so that version is eligible for deletion
+// 	pollerCtx, pollerCancel := context.WithCancel(ctx)
+// 	go s.pollFromDeployment(pollerCtx, tv)
+// 	s.ensureCreateVersionInDeployment(tv)
+// 	pollerCancel()
+
+// 	// Start another poller which shall aim to create a new version. This should, in turn, delete the first version.
+// 	pollerCtx2, pollerCancel2 := context.WithCancel(ctx)
+// 	go s.pollFromDeployment(pollerCtx2, tv2)
+// 	s.ensureCreateVersionInDeployment(tv2)
+// 	pollerCancel2()
+
+// 	// Verify that the worker deployment only has one version in it's version summaries.
+// 	s.EventuallyWithT(func(t *assert.CollectT) {
+// 		a := require.New(t)
+// 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+// 			Namespace:      s.Namespace().String(),
+// 			DeploymentName: tv.DeploymentSeries(),
+// 		})
+// 		a.NoError(err)
+// 		a.Equal(1, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+// 		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
+
+// 		// Also verify that the last modifier identity is not set to the identity of the worker-deployment workflow.
+// 		a.NotEqual(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+// 	}, time.Second*5, time.Millisecond*200)
+// }
+
 // Should see that the current version of the task queues becomes unversioned
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
