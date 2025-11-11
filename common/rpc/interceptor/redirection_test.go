@@ -200,6 +200,10 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RequestCancelActivityExecution": {},
 		"TerminateActivityExecution":     {},
 		"DeleteActivityExecution":        {},
+		"PauseActivityExecution":         {},
+		"UnpauseActivityExecution":       {},
+		"UpdateActivityExecutionOptions": {},
+		"ResetActivityExecution":         {},
 	}, apis)
 }
 
@@ -218,6 +222,7 @@ func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	for api, respAllocFn := range globalAPIResponses {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
+
 	s.Equal(expectedAPIs, actualAPIs)
 }
 

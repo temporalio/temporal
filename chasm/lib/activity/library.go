@@ -9,17 +9,26 @@ import (
 type library struct {
 	chasm.UnimplementedLibrary
 
-	handler                      *handler
-	ActivityDispatchTaskExecutor *activityDispatchTaskExecutor
+	handler                            *handler
+	activityDispatchTaskExecutor       *activityDispatchTaskExecutor
+	scheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor
+	scheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor
+	startToCloseTimeoutTaskExecutor    *startToCloseTimeoutTaskExecutor
 }
 
 func newLibrary(
 	handler *handler,
-	ActivityDispatchTaskExecutor *activityDispatchTaskExecutor,
+	activityDispatchTaskExecutor *activityDispatchTaskExecutor,
+	scheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor,
+	scheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor,
+	startToCloseTimeoutTaskExecutor *startToCloseTimeoutTaskExecutor,
 ) *library {
 	return &library{
-		handler:                      handler,
-		ActivityDispatchTaskExecutor: ActivityDispatchTaskExecutor,
+		handler:                            handler,
+		activityDispatchTaskExecutor:       activityDispatchTaskExecutor,
+		scheduleToStartTimeoutTaskExecutor: scheduleToStartTimeoutTaskExecutor,
+		scheduleToCloseTimeoutTaskExecutor: scheduleToCloseTimeoutTaskExecutor,
+		startToCloseTimeoutTaskExecutor:    startToCloseTimeoutTaskExecutor,
 	}
 }
 
@@ -40,9 +49,24 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 func (l *library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask[*Activity, *activitypb.ActivityDispatchTask](
-			"dispatchActivity",
-			l.ActivityDispatchTaskExecutor,
-			l.ActivityDispatchTaskExecutor,
+			"dispatch",
+			l.activityDispatchTaskExecutor,
+			l.activityDispatchTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"scheduleToStartTimer",
+			l.scheduleToStartTimeoutTaskExecutor,
+			l.scheduleToStartTimeoutTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"scheduleToCloseTimer",
+			l.scheduleToCloseTimeoutTaskExecutor,
+			l.scheduleToCloseTimeoutTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"startToCloseTimer",
+			l.startToCloseTimeoutTaskExecutor,
+			l.startToCloseTimeoutTaskExecutor,
 		),
 	}
 }
