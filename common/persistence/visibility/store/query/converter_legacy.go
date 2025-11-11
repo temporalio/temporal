@@ -18,7 +18,7 @@ type (
 		Convert(expr sqlparser.Expr) (elastic.Query, error)
 	}
 
-	Converter struct {
+	ConverterLegacy struct {
 		fnInterceptor  FieldNameInterceptor
 		whereConverter ExprConverter
 	}
@@ -58,18 +58,18 @@ type (
 
 	notSupportedExprConverter struct{}
 
-	QueryParams struct {
+	QueryParamsLegacy struct {
 		Query   elastic.Query
 		Sorter  []elastic.Sorter
 		GroupBy []string
 	}
 )
 
-func NewConverter(fnInterceptor FieldNameInterceptor, whereConverter ExprConverter) *Converter {
+func NewConverterLegacy(fnInterceptor FieldNameInterceptor, whereConverter ExprConverter) *ConverterLegacy {
 	if fnInterceptor == nil {
 		fnInterceptor = &NopFieldNameInterceptor{}
 	}
-	return &Converter{
+	return &ConverterLegacy{
 		fnInterceptor:  fnInterceptor,
 		whereConverter: whereConverter,
 	}
@@ -172,7 +172,7 @@ func NewNotSupportedExprConverter() ExprConverter {
 
 // ConvertWhereOrderBy transforms WHERE SQL statement to Elasticsearch query.
 // It also supports ORDER BY clause.
-func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (*QueryParams, error) {
+func (c *ConverterLegacy) ConvertWhereOrderBy(whereOrderBy string) (*QueryParamsLegacy, error) {
 	whereOrderBy = strings.TrimSpace(whereOrderBy)
 
 	if whereOrderBy != "" &&
@@ -186,7 +186,9 @@ func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (*QueryParams, erro
 }
 
 // ConvertSql transforms SQL to Elasticsearch query.
-func (c *Converter) ConvertSql(sql string) (*QueryParams, error) {
+//
+//nolint:staticcheck
+func (c *ConverterLegacy) ConvertSql(sql string) (*QueryParamsLegacy, error) {
 	stmt, err := sqlparser.Parse(sql)
 	if err != nil {
 		return nil, NewConverterError("%s: %v", MalformedSqlQueryErrMessage, err)
@@ -200,12 +202,12 @@ func (c *Converter) ConvertSql(sql string) (*QueryParams, error) {
 	return c.convertSelect(selectStmt)
 }
 
-func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
+func (c *ConverterLegacy) convertSelect(sel *sqlparser.Select) (*QueryParamsLegacy, error) {
 	if sel.Limit != nil {
 		return nil, NewConverterError("%s: 'limit' clause", NotSupportedErrMessage)
 	}
 
-	queryParams := &QueryParams{}
+	queryParams := &QueryParamsLegacy{}
 	if sel.Where != nil {
 		query, err := c.whereConverter.Convert(sel.Where.Expr)
 		if err != nil {
@@ -455,6 +457,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 	}
 
 	var query elastic.Query
+	//nolint:revive // missing default case
 	switch comparisonExpr.Operator {
 	case sqlparser.GreaterEqualStr:
 		query = elastic.NewRangeQuery(colName).Gte(colValues[0])
