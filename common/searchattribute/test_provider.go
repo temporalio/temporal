@@ -130,6 +130,10 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 	return "", serviceerror.NewInvalidArgument("unknown namespace")
 }
 
+func NewNoopMapper() Mapper {
+	return &noopMapper{}
+}
+
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
 	return NewMapperProvider(customMapper, nil, NewTestProvider(), false)
 }

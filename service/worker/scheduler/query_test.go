@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
@@ -36,6 +38,151 @@ func TestFieldNameAggInterceptor(t *testing.T) {
 
 	_, err = fnInterceptor.Name("search-attribute-not-found", query.FieldNameFilter)
 	s.Error(err)
+}
+
+func TestFieldSaAggInterceptor(t *testing.T) {
+	s := require.New(t)
+	saInterceptor := newSaAggInterceptor()
+	intCol := query.NewSAColumn(
+		"AliasForCustomIntField",
+		"CustomIntField",
+		enumspb.INDEXED_VALUE_TYPE_INT,
+	)
+	keywordCol := query.NewSAColumn(
+		"AliasForCustomKeywordField",
+		"CustomKeywordField",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	startTimeCol := query.NewSAColumn(
+		searchattribute.StartTime,
+		searchattribute.StartTime,
+		enumspb.INDEXED_VALUE_TYPE_DATETIME,
+	)
+
+	err := saInterceptor.Intercept(intCol)
+	s.NoError(err)
+	s.Equal(map[string]struct{}{"AliasForCustomIntField": struct{}{}}, saInterceptor.names)
+
+	err = saInterceptor.Intercept(keywordCol)
+	s.NoError(err)
+	s.Equal(
+		map[string]struct{}{
+			"AliasForCustomIntField":     struct{}{},
+			"AliasForCustomKeywordField": struct{}{},
+		},
+		saInterceptor.names,
+	)
+
+	err = saInterceptor.Intercept(intCol)
+	s.NoError(err)
+	s.Equal(
+		map[string]struct{}{
+			"AliasForCustomIntField":     struct{}{},
+			"AliasForCustomKeywordField": struct{}{},
+		},
+		saInterceptor.names,
+	)
+
+	err = saInterceptor.Intercept(startTimeCol)
+	s.NoError(err)
+	s.Equal(
+		map[string]struct{}{
+			"AliasForCustomIntField":     struct{}{},
+			"AliasForCustomKeywordField": struct{}{},
+			searchattribute.StartTime:    struct{}{},
+		},
+		saInterceptor.names,
+	)
+}
+
+func TestGetQueryFieldsLegacy(t *testing.T) {
+	testCases := []struct {
+		name           string
+		input          string
+		expectedFields []string
+		expectedErrMsg string
+	}{
+		{
+			name:           "empty query string",
+			input:          "",
+			expectedFields: []string{},
+			expectedErrMsg: "",
+		},
+		{
+			name:           "filter custom search attribute",
+			input:          "CustomKeywordField = 'foo'",
+			expectedFields: []string{"CustomKeywordField"},
+			expectedErrMsg: "",
+		},
+		{
+			name:           "filter multiple custom search attribute",
+			input:          "(CustomKeywordField = 'foo' AND CustomIntField = 123) OR CustomKeywordField = 'bar'",
+			expectedFields: []string{"CustomKeywordField", "CustomIntField"},
+			expectedErrMsg: "",
+		},
+		{
+			name:           "filter TemporalSchedulePaused",
+			input:          "TemporalSchedulePaused = true",
+			expectedFields: []string{"TemporalSchedulePaused"},
+			expectedErrMsg: "",
+		},
+		{
+			name:           "filter TemporalSchedulePaused",
+			input:          "TemporalSchedulePaused = true",
+			expectedFields: []string{"TemporalSchedulePaused"},
+			expectedErrMsg: "",
+		},
+		{
+			name:           "filter TemporalSchedulePaused and custom search attribute",
+			input:          "TemporalSchedulePaused = true AND CustomKeywordField = 'foo'",
+			expectedFields: []string{"TemporalSchedulePaused", "CustomKeywordField"},
+			expectedErrMsg: "",
+		},
+		{
+			name:           "filter system search attribute",
+			input:          "ExecutionDuration > '1s'",
+			expectedFields: []string{"ExecutionDuration"},
+			expectedErrMsg: "",
+		},
+		{
+			name:           "invalid query filter",
+			input:          "CustomKeywordField = foo",
+			expectedFields: nil,
+			expectedErrMsg: "invalid query",
+		},
+		{
+			name:           "invalid custom search attribute",
+			input:          "Foo = 'bar'",
+			expectedFields: nil,
+			expectedErrMsg: "invalid search attribute: Foo",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(
+			tc.name,
+			func(t *testing.T) {
+				s := require.New(t)
+				fields, err := getQueryFieldsLegacy(
+					testNamespace,
+					searchattribute.TestNameTypeMap,
+					searchattribute.NewTestMapperProvider(nil),
+					tc.input,
+				)
+				if tc.expectedErrMsg == "" {
+					s.NoError(err)
+					s.Len(fields, len(tc.expectedFields))
+					for _, f := range fields {
+						s.Contains(tc.expectedFields, f)
+					}
+				} else {
+					var invalidArgErr *serviceerror.InvalidArgument
+					s.ErrorAs(err, &invalidArgErr)
+					s.ErrorContains(err, tc.expectedErrMsg)
+				}
+			},
+		)
+	}
 }
 
 func TestGetQueryFields(t *testing.T) {
@@ -97,7 +244,7 @@ func TestGetQueryFields(t *testing.T) {
 			name:           "invalid custom search attribute",
 			input:          "Foo = 'bar'",
 			expectedFields: nil,
-			expectedErrMsg: "invalid search attribute: Foo",
+			expectedErrMsg: "'Foo' is not a valid search attribute",
 		},
 	}
 
@@ -177,7 +324,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 		{
 			name:           "invalid custom search attribute",
 			input:          "Foo = foo",
-			expectedErrMsg: "invalid search attribute: Foo",
+			expectedErrMsg: "'Foo' is not a valid search attribute",
 		},
 	}
 
@@ -190,6 +337,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 					testNamespace,
 					searchattribute.TestNameTypeMap,
 					searchattribute.NewTestMapperProvider(nil),
+					dynamicconfig.GetBoolPropertyFn(true),
 					tc.input,
 				)
 				if tc.expectedErrMsg == "" {
