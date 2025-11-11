@@ -971,7 +971,7 @@ func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	sortedSummaries := d.sortedSummaries()
 	for _, v := range sortedSummaries {
 		args := &deploymentspb.DeleteVersionArgs{
-			Identity:     "try-delete-for-add-version",
+			Identity:     serverDeleteVersionIdentity,
 			Version:      v.Version,
 			ServerDelete: true,
 		}
