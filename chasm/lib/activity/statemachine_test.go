@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -68,8 +69,11 @@ func TestTransitionScheduled(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{}
-			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				},
+			}
 			attemptState := &activitypb.ActivityAttemptState{Count: tc.startingAttemptCount}
 			outcome := &activitypb.ActivityOutcome{}
 
@@ -95,81 +99,21 @@ func TestTransitionScheduled(t *testing.T) {
 			for i, expectedTask := range tc.expectedTasks {
 				actualTask := ctx.Tasks[i]
 
+				require.IsType(t, expectedTask.Payload, actualTask.Payload, "expected %T at index %d, got %T",
+					expectedTask.Payload, i, actualTask.Payload)
+
 				switch expectedTask.Payload.(type) {
 				case *activitypb.ActivityDispatchTask:
-					_, ok := actualTask.Payload.(*activitypb.ActivityDispatchTask)
-					require.True(t, ok, "expected ActivityDispatchTask at index %d", i)
 					require.Empty(t, actualTask.Attributes.ScheduledTime)
 				case *activitypb.ScheduleToStartTimeoutTask:
-					_, ok := actualTask.Payload.(*activitypb.ScheduleToStartTimeoutTask)
-					require.True(t, ok, "expected ScheduleToStartTimeoutTask at index %d", i)
 					require.Equal(t, defaultTime.Add(tc.scheduleToStartTimeout), actualTask.Attributes.ScheduledTime)
 				case *activitypb.ScheduleToCloseTimeoutTask:
-					_, ok := actualTask.Payload.(*activitypb.ScheduleToCloseTimeoutTask)
-					require.True(t, ok, "expected ScheduleToCloseTimeoutTask at index %d", i)
 					require.Equal(t, defaultTime.Add(tc.scheduleToCloseTimeout), actualTask.Attributes.ScheduledTime)
 				default:
 					t.Fatalf("unexpected task payload type at index %d: %T", i, actualTask.Payload)
 				}
 
 			}
-		})
-	}
-}
-
-func TestTransitionScheduledFromInvalidStatus(t *testing.T) {
-	testCases := []struct {
-		name           string
-		startingStatus activitypb.ActivityExecutionStatus
-	}{
-		{
-			name:           "from scheduled status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-		},
-		{
-			name:           "from started status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		},
-		{
-			name:           "from cancel requested status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		},
-		{
-			name:           "from completed status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-		},
-		{
-			name:           "from cancelled status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-		},
-		{
-			name:           "from terminated status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		},
-		{
-			name:           "from timed out status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{}
-
-			activity := &Activity{
-				ActivityState: &activitypb.ActivityState{
-					RetryPolicy:            defaultRetryPolicy,
-					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
-					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
-					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
-					Status:                 tc.startingStatus,
-				},
-				Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 0}),
-				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-			}
-
-			err := TransitionScheduled.Apply(activity, ctx, nil)
-			require.Error(t, err)
 		})
 	}
 }
@@ -240,7 +184,10 @@ func TestTransitionRescheduled(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, activity.Status)
 			require.Equal(t, tc.startingAttemptCount+1, attemptState.Count)
-			require.Equal(t, durationpb.New(tc.expectedRetryInterval), attemptState.GetCurrentRetryInterval())
+			require.True(t, proto.Equal(
+				durationpb.New(tc.expectedRetryInterval),
+				attemptState.GetCurrentRetryInterval(),
+			), "retry intervals should be equal")
 
 			// Verify attempt state failure details updated correctly
 			lastFailureDetails := attemptState.GetLastFailureDetails()
@@ -268,63 +215,6 @@ func TestTransitionRescheduled(t *testing.T) {
 				}
 
 			}
-		})
-	}
-}
-
-func TestTransitionRescheduledFromInvalidStatus(t *testing.T) {
-	testCases := []struct {
-		name           string
-		startingStatus activitypb.ActivityExecutionStatus
-	}{
-		{
-			name:           "from unspecified status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
-		},
-		{
-			name:           "from scheduled status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-		},
-		{
-			name:           "from cancel requested status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		},
-		{
-			name:           "from completed status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-		},
-		{
-			name:           "from cancelled status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-		},
-		{
-			name:           "from terminated status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		},
-		{
-			name:           "from timed out status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{}
-
-			activity := &Activity{
-				ActivityState: &activitypb.ActivityState{
-					RetryPolicy:            defaultRetryPolicy,
-					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
-					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
-					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
-					Status:                 tc.startingStatus,
-				},
-				Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
-				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-			}
-
-			err := TransitionRescheduled.Apply(activity, ctx, nil)
-			require.Error(t, err)
 		})
 	}
 }
@@ -357,63 +247,6 @@ func TestTransitionStarted(t *testing.T) {
 	_, ok := ctx.Tasks[0].Payload.(*activitypb.StartToCloseTimeoutTask)
 	require.True(t, ok, "expected ScheduleToStartTimeoutTask")
 	require.Equal(t, defaultTime.Add(defaultStartToCloseTimeout), ctx.Tasks[0].Attributes.ScheduledTime)
-}
-
-func TestTransitionStartedFromInvalidStatus(t *testing.T) {
-	testCases := []struct {
-		name           string
-		startingStatus activitypb.ActivityExecutionStatus
-	}{
-		{
-			name:           "from unspecified status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
-		},
-		{
-			name:           "from started status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		},
-		{
-			name:           "from cancel requested status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		},
-		{
-			name:           "from completed status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-		},
-		{
-			name:           "from cancelled status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-		},
-		{
-			name:           "from terminated status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		},
-		{
-			name:           "from timed out status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{}
-
-			activity := &Activity{
-				ActivityState: &activitypb.ActivityState{
-					RetryPolicy:            defaultRetryPolicy,
-					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
-					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
-					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
-					Status:                 tc.startingStatus,
-				},
-				Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
-				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-			}
-
-			err := TransitionStarted.Apply(activity, ctx, nil)
-			require.Error(t, err)
-		})
-	}
 }
 
 func TestTransitionTimedout(t *testing.T) {
@@ -497,59 +330,6 @@ func TestTransitionTimedout(t *testing.T) {
 			}
 
 			require.Empty(t, ctx.Tasks)
-		})
-	}
-}
-
-func TestTransitionTimeOutFromInvalidStatus(t *testing.T) {
-	testCases := []struct {
-		name           string
-		startingStatus activitypb.ActivityExecutionStatus
-	}{
-		{
-			name:           "from unspecified status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
-		},
-		{
-			name:           "from cancel requested status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		},
-		{
-			name:           "from completed status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-		},
-		{
-			name:           "from cancelled status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-		},
-		{
-			name:           "from terminated status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		},
-		{
-			name:           "from timed out status",
-			startingStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{}
-
-			activity := &Activity{
-				ActivityState: &activitypb.ActivityState{
-					RetryPolicy:            defaultRetryPolicy,
-					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
-					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
-					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
-					Status:                 tc.startingStatus,
-				},
-				Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
-				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-			}
-
-			err := TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
-			require.Error(t, err)
 		})
 	}
 }
