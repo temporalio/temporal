@@ -31,6 +31,7 @@ type ActivityStore interface {
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
 // embedded within a workflow.
+// TODO implement VisibilitySearchAttributesProvider to support timeout status
 type Activity struct {
 	chasm.UnimplementedComponent
 
@@ -64,10 +65,9 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 		return chasm.LifecycleStateCompleted
 	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
 		return chasm.LifecycleStateFailed
-	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
-		return chasm.LifecycleStateTimedout
 	default:
 		return chasm.LifecycleStateRunning
 	}

@@ -53,7 +53,7 @@ const (
 	LifecycleStateCompleted
 	LifecycleStateFailed
 	// LifecycleStateTerminated
-	LifecycleStateTimedout
+	// LifecycleStateTimedout
 	// LifecycleStateReset
 )
 
