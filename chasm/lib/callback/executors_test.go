@@ -84,7 +84,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
 				// Success state is terminal - no tasks should be generated
-				require.Len(t, mctx.Tasks, 0)
+				require.Empty(t, mctx.Tasks)
 			},
 		},
 		{
@@ -126,7 +126,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 				// Failed state is terminal - no tasks should be generated
-				require.Len(t, mctx.Tasks, 0)
+				require.Empty(t, mctx.Tasks)
 			},
 		},
 	}
@@ -418,7 +418,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
 				// Success state is terminal - no tasks should be generated
-				require.Len(t, mctx.Tasks, 0)
+				require.Empty(t, mctx.Tasks)
 			},
 		},
 		{
@@ -454,7 +454,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
 				// Success state is terminal - no tasks should be generated
-				require.Len(t, mctx.Tasks, 0)
+				require.Empty(t, mctx.Tasks)
 			},
 		},
 		{
@@ -507,7 +507,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 				// Failed state is terminal - no tasks should be generated
-				require.Len(t, mctx.Tasks, 0)
+				require.Empty(t, mctx.Tasks)
 			},
 		},
 		{
@@ -529,7 +529,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 				// Failed state is terminal - no tasks should be generated
-				require.Len(t, mctx.Tasks, 0)
+				require.Empty(t, mctx.Tasks)
 			},
 		},
 		{
@@ -551,7 +551,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 				// Failed state is terminal - no tasks should be generated
-				require.Len(t, mctx.Tasks, 0)
+				require.Empty(t, mctx.Tasks)
 			},
 		},
 	}
