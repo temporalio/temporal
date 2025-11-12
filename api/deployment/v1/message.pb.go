@@ -2014,10 +2014,14 @@ func (x *SetCurrentVersionResponse) GetConflictToken() []byte {
 
 // used as Worker Deployment workflow update input:
 type DeleteVersionArgs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Identity      string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	SkipDrainage  bool                   `protobuf:"varint,3,opt,name=skip_drainage,json=skipDrainage,proto3" json:"skip_drainage,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Identity     string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	Version      string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	SkipDrainage bool                   `protobuf:"varint,3,opt,name=skip_drainage,json=skipDrainage,proto3" json:"skip_drainage,omitempty"`
+	// If true, it would mean that the delete operation is initiated by the server internally. This is done on the
+	// event that the addition of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions).
+	// False elsewhere.
+	ServerDelete  bool `protobuf:"varint,4,opt,name=server_delete,json=serverDelete,proto3" json:"server_delete,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2069,6 +2073,13 @@ func (x *DeleteVersionArgs) GetVersion() string {
 func (x *DeleteVersionArgs) GetSkipDrainage() bool {
 	if x != nil {
 		return x.SkipDrainage
+	}
+	return false
+}
+
+func (x *DeleteVersionArgs) GetServerDelete() bool {
+	if x != nil {
+		return x.ServerDelete
 	}
 	return false
 }
@@ -4552,11 +4563,12 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x10allow_no_pollers\x18\x05 \x01(\bR\x0eallowNoPollers\"m\n" +
 	"\x19SetCurrentVersionResponse\x12)\n" +
 	"\x10previous_version\x18\x01 \x01(\tR\x0fpreviousVersion\x12%\n" +
-	"\x0econflict_token\x18\x02 \x01(\fR\rconflictToken\"n\n" +
+	"\x0econflict_token\x18\x02 \x01(\fR\rconflictToken\"\x93\x01\n" +
 	"\x11DeleteVersionArgs\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12#\n" +
-	"\rskip_drainage\x18\x03 \x01(\bR\fskipDrainage\"\xbe\x01\n" +
+	"\rskip_drainage\x18\x03 \x01(\bR\fskipDrainage\x12#\n" +
+	"\rserver_delete\x18\x04 \x01(\bR\fserverDelete\"\xbe\x01\n" +
 	"\x19DeleteVersionActivityArgs\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12'\n" +
 	"\x0fdeployment_name\x18\x02 \x01(\tR\x0edeploymentName\x12\x18\n" +

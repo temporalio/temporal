@@ -5786,7 +5786,9 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
-			activityInfo.Stamp++
+			if ms.config.EnableActivityRetryStampIncrement() {
+				activityInfo.Stamp++
+			}
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -5860,12 +5862,14 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState historyi.MutableState) error {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
+			isActivityRetryStampIncrementEnabled := ms.config.EnableActivityRetryStampIncrement()
 			ai = UpdateActivityInfoForRetries(
 				activityInfo,
 				mutableStateImpl.GetCurrentVersion(),
 				nextAttempt,
 				mutableStateImpl.truncateRetryableActivityFailure(activityFailure),
 				timestamppb.New(nextScheduledTime),
+				isActivityRetryStampIncrementEnabled,
 			)
 		}
 		return nil
@@ -6028,23 +6032,14 @@ func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload []s
 	if oldPayload == nil && newPayload != nil {
 		// Adding search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute added",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.NewStringsTag("reported-problems", newPayload))
 	} else if oldPayload != nil && newPayload == nil {
 		// Removing search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute removed",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.NewStringsTag("previous-reported-problems", oldPayload))
 	} else if oldPayload != nil && newPayload != nil {
 		// Updating search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute updated",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.NewStringsTag("previous-reported-problems", oldPayload),
 			tag.NewStringsTag("reported-problems", newPayload))
 	}
@@ -6059,9 +6054,6 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 	decoded, err := searchattribute.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		ms.logger.Error("Failed to decode TemporalReportedProblems payload for logging",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.Error(err))
 		softassert.Fail(ms.logger, "Failed to decode TemporalReportedProblems payload for logging")
 		return []string{}
@@ -6069,10 +6061,7 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 
 	problems, ok := decoded.([]string)
 	if !ok {
-		ms.logger.Error("TemporalReportedProblems payload decoded to unexpected type for logging",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId))
+		ms.logger.Error("TemporalReportedProblems payload decoded to unexpected type for logging")
 		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
 		return []string{}
 	}

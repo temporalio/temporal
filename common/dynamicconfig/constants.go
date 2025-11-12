@@ -102,6 +102,12 @@ var (
 		`SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
 values in system search attributes.`,
 	)
+	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
+		"system.visibilityEnableUnifiedQueryConverter",
+		false,
+		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
+query.`,
+	)
 
 	HistoryArchivalState = NewGlobalStringSetting(
 		"system.historyArchivalState",
@@ -187,6 +193,11 @@ config as the other services.`,
 		"system.enableActivityEagerExecution",
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
+		"system.enableActivityRetryStampIncrement",
+		false,
+		`EnableActivityRetryStampIncrement indicates if activity retry stamp increment is enabled`,
 	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",

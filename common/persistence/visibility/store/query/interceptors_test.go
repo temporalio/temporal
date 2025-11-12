@@ -1,107 +1,42 @@
 package query
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/temporalio/sqlparser"
-	enumspb "go.temporal.io/api/enums/v1"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/searchattribute"
 )
 
-type (
-	testNameInterceptor   struct{}
-	testValuesInterceptor struct{}
-)
-
-func (t *testNameInterceptor) Name(name string, usage FieldNameUsage) (string, error) {
-	if name == "error" {
-		return "", errors.New("interceptor error")
-	}
-
-	return name + "1", nil
+type testSearchAttributeInterceptor struct {
+	seenFields []string
 }
 
-func (t *testValuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
-	if name == "error" {
-		return nil, errors.New("interceptor error")
-	}
+var _ SearchAttributeInterceptor = (*testSearchAttributeInterceptor)(nil)
 
-	var result []interface{}
-	for _, value := range values {
-		if name == "ExecutionStatus" {
-			intVal, isIntVal := value.(int64)
-			if isIntVal {
-				result = append(result, fmt.Sprintf("Status%v", intVal))
-				continue
-			}
-		}
-		result = append(result, value)
+func (t *testSearchAttributeInterceptor) Intercept(col *SAColumn) error {
+	if col.FieldName == "Keyword01" {
+		return errors.New("interceptor error")
 	}
-	return result, nil
+	t.seenFields = append(t.seenFields, col.FieldName)
+	return nil
 }
 
-func TestNameInterceptor(t *testing.T) {
-	c := getTestConverter(&testNameInterceptor{}, nil)
+func TestSearchAttributeInterceptor(t *testing.T) {
+	t.Parallel()
 
-	queryParams, err := c.ConvertWhereOrderBy("ExecutionStatus='Running' order by StartTime")
-	assert.NoError(t, err)
-	actualQueryMap, _ := queryParams.Query.Source()
-	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
-	var actualSorterMaps []interface{}
-	for _, sorter := range queryParams.Sorter {
-		actualSorterMap, _ := sorter.Source()
-		actualSorterMaps = append(actualSorterMaps, actualSorterMap)
-	}
-	actualSorterJson, _ := json.Marshal(actualSorterMaps)
-	assert.Equal(t, `[{"StartTime1":{"order":"asc"}}]`, string(actualSorterJson))
+	interceptor := &testSearchAttributeInterceptor{}
+	c := NewNilQueryConverter(
+		"",
+		searchattribute.TestNameTypeMap,
+		&searchattribute.TestMapper{},
+	).WithSearchAttributeInterceptor(interceptor)
 
-	_, err = c.ConvertWhereOrderBy("error='Running' order by StartTime")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "interceptor error")
-}
+	_, err := c.Convert("ExecutionStatus='Running' order by StartTime")
+	require.NoError(t, err)
+	require.Equal(t, []string{"ExecutionStatus", "StartTime", "TemporalNamespaceDivision"}, interceptor.seenFields)
 
-func TestValuesInterceptor(t *testing.T) {
-	c := getTestConverter(nil, &testValuesInterceptor{})
-	queryParams, err := c.ConvertWhereOrderBy("ExecutionStatus=1")
-	assert.NoError(t, err)
-	actualQueryMap, _ := queryParams.Query.Source()
-	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus":"Status1"}}}}`, string(actualQueryJson))
-
-	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus in (1,2)")
-	assert.NoError(t, err)
-	actualQueryMap, _ = queryParams.Query.Source()
-	actualQueryJson, _ = json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"terms":{"ExecutionStatus":["Status1","Status2"]}}}}`, string(actualQueryJson))
-
-	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus between 5 and 7")
-	assert.NoError(t, err)
-	actualQueryMap, _ = queryParams.Query.Source()
-	actualQueryJson, _ = json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"range":{"ExecutionStatus":{"from":"Status5","include_lower":true,"include_upper":true,"to":"Status7"}}}}}`, string(actualQueryJson))
-
-	_, err = c.ConvertWhereOrderBy("error='Running'")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "interceptor error")
-}
-
-func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *Converter {
-	testNameTypeMap := searchattribute.NewNameTypeMapStub(
-		map[string]enumspb.IndexedValueType{
-			"ExecutionStatus1": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"StartTime1":       enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		},
-	)
-	whereConverter := NewWhereConverter(
-		nil,
-		nil,
-		NewRangeCondConverter(fnInterceptor, fvInterceptor, false),
-		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]struct{}{sqlparser.EqualStr: {}, sqlparser.InStr: {}}, testNameTypeMap),
-		nil)
-	return NewConverter(fnInterceptor, whereConverter)
+	_, err = c.Convert("AliasForKeyword01='Running' order by StartTime")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "interceptor error")
 }
