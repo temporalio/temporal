@@ -256,7 +256,7 @@ type (
 		ApplyWorkflowExecutionContinuedAsNewEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionFailedEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionSignaled(*historypb.HistoryEvent) error
-		ApplyWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent, int64) error
 		ApplyWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error

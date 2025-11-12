@@ -2556,6 +2556,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		startRequest.StartRequest.GetRequestId(),
 		event,
+		startRequest.GetTaskDispatchRevisionNumber(),
 	); err != nil {
 		return nil, err
 	}
@@ -2594,6 +2595,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	execution *commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
+	taskDispatchRevisionNumber int64,
 ) error {
 	if ms.executionInfo.NamespaceId != ms.namespaceEntry.ID().String() {
 		return serviceerror.NewInternalf("applying conflicting namespace ID: %v != %v",
@@ -2811,6 +2813,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.approximateSize += ms.executionInfo.Size()
 	ms.approximateSize += ms.executionState.Size()
+	ms.SetVersioningRevisionNumber(taskDispatchRevisionNumber)
 
 	ms.writeEventToCache(startEvent)
 	return nil
@@ -8467,6 +8470,9 @@ func (ms *MutableStateImpl) GetVersioningRevisionNumber() int64 {
 }
 
 func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
+	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
+		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+	}
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
 }
 

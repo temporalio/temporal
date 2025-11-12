@@ -162,6 +162,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				execution,
 				requestID,
 				event,
+				0, // TODO (Shivam): Right now, there is no way of getting the task dispatch revision number from the history event. Passing 0 for now but come back to this.
 			); err != nil {
 				return nil, err
 			}

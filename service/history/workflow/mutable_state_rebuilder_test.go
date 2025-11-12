@@ -187,7 +187,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: startWorkflowAttribute},
 	}
 
-	s.mockMutableState.EXPECT().ApplyWorkflowExecutionStartedEvent(nil, execution, requestID, protomock.Eq(event)).Return(nil)
+	s.mockMutableState.EXPECT().ApplyWorkflowExecutionStartedEvent(nil, execution, requestID, protomock.Eq(event), 0).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateRecordWorkflowStartedTasks(
 		protomock.Eq(event),
@@ -233,7 +233,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: startWorkflowAttribute},
 	}
 
-	s.mockMutableState.EXPECT().ApplyWorkflowExecutionStartedEvent(nil, protomock.Eq(execution), requestID, protomock.Eq(event)).Return(nil)
+	s.mockMutableState.EXPECT().ApplyWorkflowExecutionStartedEvent(nil, protomock.Eq(execution), requestID, protomock.Eq(event), 0).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateRecordWorkflowStartedTasks(
 		protomock.Eq(event),

@@ -1014,6 +1014,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedPinnedOverride,
 		inheritedPinnedVersion,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
+		mutableState.GetVersioningRevisionNumber(),
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))

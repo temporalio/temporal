@@ -4070,4 +4070,149 @@ func (s *Versioning3Suite) TestActivityTQLags_IndependentActivityDispatchesToIts
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-// func (s *Versioning3Suite) TestRampChangeDoesNotTriggerTransition_WithRevisionNumberMechanics() {}
+func (s *Versioning3Suite) TestChildStartsWithParentRevision_TaskQueueDoesNotLag() {
+	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
+
+	tv := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvChild := tv.WithWorkflowIDNumber(2)
+
+	// 1) Set parent/child TQ current deployment and known revision number
+	rev := int64(1)
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            rev,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
+		tv.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
+	}, []string{}, tqTypeWf)
+
+	// 2) Parent workflow: execute a child with known ID
+	parent := func(ctx workflow.Context) error {
+		_ = workflow.ExecuteChildWorkflow(
+			workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+				TaskQueue:  tv.TaskQueue().GetName(),
+				WorkflowID: tvChild.WorkflowID(),
+			}),
+			"child",
+		).Get(ctx, nil)
+		return nil
+	}
+	child := func(ctx workflow.Context) error { return nil }
+
+	w := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{Version: tv.SDKDeploymentVersion(), UseVersioning: true, DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade},
+	})
+	w.RegisterWorkflowWithOptions(parent, workflow.RegisterOptions{Name: "parent", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	w.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	// 3) Start parent
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID: tv.WorkflowID(), TaskQueue: tv.TaskQueue().GetName(),
+	}, "parent")
+	s.NoError(err)
+
+	// 4) Wait for child to exist, then read its MS and assert revision
+	s.Eventually(func() bool {
+		ms, err := s.GetTestCluster().HistoryClient().GetMutableState(context.Background(),
+			&historyservice.GetMutableStateRequest{
+				NamespaceId: s.NamespaceID().String(),
+				Execution:   tvChild.WorkflowExecution()})
+		if err != nil || ms.GetVersioningInfo().GetRevisionNumber() == 0 {
+			return false
+		}
+		got := ms.GetVersioningInfo().GetRevisionNumber()
+		s.Equal(rev, got)
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
+	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
+
+	tvParent := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvChild := tvParent.WithWorkflowIDNumber(2)
+
+	parentRev := int64(1)   // parent TQ revision
+	rollbackRev := int64(0) // simulate lag on the TQ by rolling back
+
+	// Make v1 current on parent TQ with parentRev
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(tvParent, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tvParent.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            parentRev,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
+		tvParent.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
+	}, []string{}, tqTypeWf)
+
+	// Parent workflow waits for a signal before starting the child.
+	parent := func(ctx workflow.Context) (string, error) {
+		workflow.GetSignalChannel(ctx, "startChild").Receive(ctx, nil)
+		f := workflow.ExecuteChildWorkflow(
+			workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+				TaskQueue:  tvChild.TaskQueue().GetName(),
+				WorkflowID: tvChild.WorkflowID(),
+			}),
+			"child",
+		)
+
+		var childResult string
+		f.Get(ctx, &childResult)
+		return childResult, nil
+	}
+	child := func(ctx workflow.Context) (string, error) { return "v1", nil }
+
+	// Workers on parent and child TQs
+	w := worker.New(s.SdkClient(), tvParent.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{Version: tvParent.SDKDeploymentVersion(), UseVersioning: true, DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade},
+	})
+	w.RegisterWorkflowWithOptions(parent, workflow.RegisterOptions{Name: "parent", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	w.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	// Start parent
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        tvParent.WorkflowID(),
+		TaskQueue: tvParent.TaskQueue().GetName(),
+	}, "parent")
+	s.NoError(err)
+
+	// Roll back the child TQ routing-config revision to simulate lag (set v0 as current with older revision)
+	tv0Child := tvChild.WithBuildIDNumber(0)
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv0Child, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0Child.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            rollbackRev,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
+		tv0Child.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
+	}, []string{}, tqTypeWf)
+
+	// Unblock parent to start the child
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
+
+	// Verify that the child starts with at least the parent's revision, despite TQ lag/rollback.
+	s.Eventually(func() bool {
+		ms, gerr := s.GetTestCluster().HistoryClient().GetMutableState(context.Background(),
+			&historyservice.GetMutableStateRequest{
+				NamespaceId: s.NamespaceID().String(),
+				Execution:   tvChild.WorkflowExecution(),
+			})
+		if gerr != nil || ms.GetVersioningInfo() == nil {
+			return false
+		}
+		got := ms.GetVersioningInfo().GetRevisionNumber()
+		s.Equal(parentRev, got)
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Verify that the parent workflow completed successfully.
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("v1", result)
+}
