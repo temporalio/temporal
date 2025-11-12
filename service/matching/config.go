@@ -37,6 +37,7 @@ type (
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter // [cleanup-wv-pre-release]
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
 
@@ -111,6 +112,7 @@ type (
 		VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
 		VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableUnifiedQueryConverter   dynamicconfig.BoolPropertyFn
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
 		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
@@ -249,6 +251,7 @@ func NewConfig(
 		HistoryMaxPageSize:                       dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
 		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc), // [cleanup-wv-pre-release]
 		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
+		UseRevisionNumberForWorkerVersioning:     dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
 		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
@@ -318,6 +321,7 @@ func NewConfig(
 		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+		VisibilityEnableUnifiedQueryConverter:   dynamicconfig.VisibilityEnableUnifiedQueryConverter.Get(dc),
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
 		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
