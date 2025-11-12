@@ -72,14 +72,15 @@ type Versioning3Suite struct {
 	useV32                    bool
 	deploymentWorkflowVersion workerdeployment.DeploymentWorkflowVersion
 	useRevisionNumbers        bool
-	useNewDeploymentData      bool
+	// TODO: this is always false. clean it up.
+	useNewDeploymentData bool
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	//suite.Run(t, &Versioning3Suite{useV32: true})
+	suite.Run(t, &Versioning3Suite{useV32: true})
 	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
-	//suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping, useRevisionNumbers: true})
+	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping, useRevisionNumbers: true})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
