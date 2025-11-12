@@ -355,7 +355,6 @@ func unfairness(vs []int) float64 {
 	return float64(totalDelay) / float64(len(firsts)*len(firsts))
 }
 
-// TODO: rename
 func (s *FairnessSuite) TestFairness_UpdateWorkflowExecutionOptions_InvalidatesPendingTask() {
 	tv := testvars.New(s.T())
 
