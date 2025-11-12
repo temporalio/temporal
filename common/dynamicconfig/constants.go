@@ -102,6 +102,12 @@ var (
 		`SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
 values in system search attributes.`,
 	)
+	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
+		"system.visibilityEnableUnifiedQueryConverter",
+		false,
+		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
+query.`,
+	)
 
 	HistoryArchivalState = NewGlobalStringSetting(
 		"system.historyArchivalState",
@@ -187,6 +193,11 @@ config as the other services.`,
 		"system.enableActivityEagerExecution",
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
+		"system.enableActivityRetryStampIncrement",
+		false,
+		`EnableActivityRetryStampIncrement indicates if activity retry stamp increment is enabled`,
 	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
@@ -875,6 +886,11 @@ and deployment interaction in matching and history.`,
 		`EnableDeploymentVersions enables deployment versions (versioning v3) in all services,
 including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
+	)
+	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
+		"system.useRevisionNumberForWorkerVersioning",
+		false,
+		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",

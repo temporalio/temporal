@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/nexusoperations"
@@ -3646,6 +3647,503 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 	}
 }
 
+// Following are tests for SyncDeploymentUserData API when it uses the new deployment data format.
+
+// TestSyncDeploymentUserData_NewDeploymentDataRemovesOldVersions verifies that when a new routing config is set for a deployment using the latest deployment data format,
+// versions, under the same deployment, that had synced using the old deployment data format are removed.
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_NewDeploymentDataRemovesOldVersions() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	tq := tv.TaskQueue().GetName()
+
+	// Seed user data with old-format versions across two deployments: foo.A and bar.B
+	t1 := timestamp.TimePtr(time.Now().Add(-time.Hour))
+	userData := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						Versions: []*deploymentspb.DeploymentVersionData{
+							{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "A"}, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+							{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "bar", BuildId: "B"}, RoutingUpdateTime: t1, CurrentSinceTime: t1},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Using the lower level UpdateTaskQueueUserData to set the user data for multiple versions at once.
+	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID: namespaceID,
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			tq: {UserData: userData},
+		},
+	}))
+	userData.Version++
+
+	// Sync new-format routing config for deployment "foo" with a newer revision to trigger cleanup
+	rc := &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "C"},
+		CurrentVersionChangedTime: timestamppb.Now(),
+		RevisionNumber:            1,
+	}
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:         namespaceID,
+		TaskQueue:           tq,
+		DeploymentName:      "foo",
+		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+		UpdateRoutingConfig: rc,
+	})
+	s.NoError(err)
+
+	// Fetch and verify that old-format versions under the same deployment (foo) are removed, others remain
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	//nolint:staticcheck // SA1019 deprecated versions will clean up later
+	got := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetVersions()
+	s.Require().Len(got, 1)
+	s.Equal("bar", got[0].GetVersion().GetDeploymentName())
+	s.Equal("B", got[0].GetVersion().GetBuildId())
+}
+
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_RoutingConfigRevisionGating() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	tq := tv.TaskQueue().GetName()
+
+	rc1 := &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "rev1"},
+		RevisionNumber:            1,
+		CurrentVersionChangedTime: timestamppb.Now(),
+	}
+	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:         namespaceID,
+		TaskQueue:           tq,
+		DeploymentName:      "foo",
+		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpdateRoutingConfig: rc1,
+	})
+	s.NoError(err)
+	s.True(resp.GetRoutingConfigChanged())
+
+	// Attempt to sync lower revision (0) — should be ignored
+	rc0 := &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "rev0"},
+		RevisionNumber:            0,
+		CurrentVersionChangedTime: timestamppb.Now(),
+	}
+	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:         namespaceID,
+		TaskQueue:           tq,
+		DeploymentName:      "foo",
+		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpdateRoutingConfig: rc0,
+	})
+	s.NoError(err)
+	s.False(resp.GetRoutingConfigChanged())
+
+	// Verify still rev 1
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	gotRC := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()["foo"].GetRoutingConfig()
+	s.Equal(int64(1), gotRC.GetRevisionNumber())
+	s.Equal("rev1", gotRC.GetCurrentDeploymentVersion().GetBuildId())
+
+	// Now sync higher revision (2) — should be applied
+	rc2 := &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "rev2"},
+		RevisionNumber:            2,
+		CurrentVersionChangedTime: timestamppb.Now(),
+	}
+	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:         namespaceID,
+		TaskQueue:           tq,
+		DeploymentName:      "foo",
+		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpdateRoutingConfig: rc2,
+	})
+	s.NoError(err)
+	s.True(resp.GetRoutingConfigChanged())
+
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	gotRC = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()["foo"].GetRoutingConfig()
+	s.Equal(int64(2), gotRC.GetRevisionNumber())
+	s.Equal("rev2", gotRC.GetCurrentDeploymentVersion().GetBuildId())
+}
+
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertAndForgetVersions_WithoutRoutingConfig() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	tq := tv.TaskQueue().GetName()
+	deploymentName := "foo"
+
+	// Upsert versions without providing RoutingConfig
+	upserts1 := map[string]*deploymentspb.WorkerDeploymentVersionData{
+		"b1": {},
+		"b2": {},
+	}
+	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:        namespaceID,
+		TaskQueue:          tq,
+		DeploymentName:     deploymentName,
+		TaskQueueTypes:     []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpsertVersionsData: upserts1,
+		// No UpdateRoutingConfig provided
+	})
+	s.NoError(err)
+	s.False(resp.GetRoutingConfigChanged())
+
+	// Verify both b1 and b2 exist
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	versions := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
+	s.Contains(versions, "b1")
+	s.Contains(versions, "b2")
+	s.Len(versions, 2)
+
+	// Forget b1 and upsert b3, still without RoutingConfig
+	upserts2 := map[string]*deploymentspb.WorkerDeploymentVersionData{
+		"b3": {},
+	}
+	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:        namespaceID,
+		TaskQueue:          tq,
+		DeploymentName:     deploymentName,
+		TaskQueueTypes:     []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpsertVersionsData: upserts2,
+		ForgetVersions:     []string{"b1"},
+		// No UpdateRoutingConfig provided
+	})
+	s.NoError(err)
+	s.False(resp.GetRoutingConfigChanged())
+
+	// Verify b1 removed, b2 remains, b3 added
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	versions = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
+	s.NotContains(versions, "b1")
+	s.Contains(versions, "b2")
+	s.Contains(versions, "b3")
+	s.Len(versions, 2)
+}
+
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_UnsetOldFormatRamp_ClearsNewFormatRamp() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	tq := tv.TaskQueue().GetName()
+	deploymentName := "foo"
+
+	// New-format ramp for deployment "foo"
+	rc := &deploymentpb.RoutingConfig{
+		RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "b1"},
+		RampingVersionPercentage:            25,
+		RampingVersionPercentageChangedTime: timestamppb.Now(),
+		RevisionNumber:                      1,
+	}
+	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:         namespaceID,
+		TaskQueue:           tq,
+		DeploymentName:      deploymentName,
+		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpdateRoutingConfig: rc,
+		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"b1": {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
+			},
+		},
+	})
+	s.NoError(err)
+	s.True(resp.GetRoutingConfigChanged())
+
+	// Verify ramp present in new-format data
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	rcGot := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetRoutingConfig()
+	s.NotNil(rcGot.GetRampingDeploymentVersion())
+	s.Equal("b1", rcGot.GetRampingDeploymentVersion().GetBuildId())
+	s.InDelta(float32(25), rcGot.GetRampingVersionPercentage(), 0.0000)
+
+	// Now unset ramp via old-format unversioned ramp (Version=nil, RampingSinceTime=nil)
+	unsetVD := &deploymentspb.DeploymentVersionData{
+		// Version: nil (unversioned)
+		// RampingSinceTime: nil indicates unset
+	}
+	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:    namespaceID,
+		TaskQueue:      tq,
+		DeploymentName: deploymentName,
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+			UpdateVersionData: unsetVD,
+		},
+	})
+	s.NoError(err)
+
+	// Verify unversioned ramp cleared and new-format ramp cleared
+	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	depData := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
+	// old-format unversioned ramp should be nil
+	s.Nil(depData.GetUnversionedRampData())
+	// new-format ramp entries should be cleared
+	rcGot = depData.GetDeploymentsData()[deploymentName].GetRoutingConfig()
+	s.Nil(rcGot.GetRampingDeploymentVersion())
+	s.InDelta(float32(0), rcGot.GetRampingVersionPercentage(), 0.0000)
+	s.Nil(rcGot.GetRampingVersionPercentageChangedTime())
+	s.Nil(rcGot.GetRampingVersionChangedTime())
+}
+
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_OldFormatSetSameCurrent_ClearsNewFormatCurrent() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	tq := tv.TaskQueue().GetName()
+	deploymentName := "foo"
+
+	// set current=v1
+	rc := &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "v1"},
+		CurrentVersionChangedTime: timestamppb.Now(),
+		RevisionNumber:            1,
+	}
+	resp, err := s.matchingEngine.SyncDeploymentUserData(
+		context.Background(),
+		&matchingservice.SyncDeploymentUserDataRequest{
+			NamespaceId:         namespaceID,
+			TaskQueue:           tq,
+			DeploymentName:      deploymentName,
+			TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			UpdateRoutingConfig: rc,
+		},
+	)
+	s.NoError(err)
+	s.True(resp.GetRoutingConfigChanged())
+
+	// Verify current=v1 present in new-format
+	res, err := s.matchingEngine.GetTaskQueueUserData(
+		context.Background(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              namespaceID,
+			TaskQueue:                tq,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0,
+		},
+	)
+	s.NoError(err)
+	rcGot := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].
+		GetDeploymentData().GetDeploymentsData()[deploymentName].GetRoutingConfig()
+	s.Equal("v1", rcGot.GetCurrentDeploymentVersion().GetBuildId())
+
+	// Old-format: set SAME version (v1) as current -> should clear new-format current
+	vdCurrent := &deploymentspb.DeploymentVersionData{
+		Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "v1"},
+		CurrentSinceTime:  timestamppb.Now(),
+		RoutingUpdateTime: timestamppb.Now(),
+	}
+	_, err = s.matchingEngine.SyncDeploymentUserData(
+		context.Background(),
+		&matchingservice.SyncDeploymentUserDataRequest{
+			NamespaceId:    namespaceID,
+			TaskQueue:      tq,
+			DeploymentName: deploymentName,
+			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+				UpdateVersionData: vdCurrent,
+			},
+		},
+	)
+	s.NoError(err)
+
+	// Verify new-format current cleared
+	res, err = s.matchingEngine.GetTaskQueueUserData(
+		context.Background(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              namespaceID,
+			TaskQueue:                tq,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0,
+		},
+	)
+	s.NoError(err)
+	rcGot = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].
+		GetDeploymentData().GetDeploymentsData()[deploymentName].GetRoutingConfig()
+	s.Nil(rcGot.GetCurrentDeploymentVersion())
+}
+
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetNewFormat_RemovesOldFormatMembership() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	tq := tv.TaskQueue().GetName()
+	deploymentName := "foo"
+	buildID := "b1"
+
+	// Upsert b1 using the old format
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:    namespaceID,
+		TaskQueue:      tq,
+		DeploymentName: deploymentName,
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+			UpdateVersionData: &deploymentspb.DeploymentVersionData{
+				Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
+				RoutingUpdateTime: timestamppb.Now(),
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Upsert b1 using the new format
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:    namespaceID,
+		TaskQueue:      tq,
+		DeploymentName: deploymentName,
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+			buildID: {},
+		},
+	})
+	s.NoError(err)
+
+	// Forget via new-format
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:         namespaceID,
+		TaskQueue:           tq,
+		DeploymentName:      deploymentName,
+		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		ForgetVersions:      []string{buildID},
+		UpdateRoutingConfig: nil,
+	})
+	s.NoError(err)
+
+	// Verify removal from both formats
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	depData := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
+	// new-format membership
+	_, exists := depData.GetDeploymentsData()[deploymentName].GetVersions()[buildID]
+	s.False(exists)
+	// old-format slice
+	for _, dv := range depData.GetVersions() {
+		s.NotEqual(buildID, dv.GetVersion().GetBuildId())
+	}
+	// and the deployment entry should be removed from DeploymentsData as versions map is now empty
+	_, deploymentExists := depData.GetDeploymentsData()[deploymentName]
+	s.False(deploymentExists)
+}
+
+//nolint:staticcheck // SA1019 deprecated versions will clean up later
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetOldFormat_RemovesNewFormatMembership() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	tq := tv.TaskQueue().GetName()
+	deploymentName := "foo"
+	buildID := "b1"
+
+	// Upsert b1 using the old format
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:    namespaceID,
+		TaskQueue:      tq,
+		DeploymentName: deploymentName,
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+			UpdateVersionData: &deploymentspb.DeploymentVersionData{
+				Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
+				RoutingUpdateTime: timestamppb.Now(),
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Upsert b1 using the new format (membership map)
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:    namespaceID,
+		TaskQueue:      tq,
+		DeploymentName: deploymentName,
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+			buildID: {},
+		},
+	})
+	s.NoError(err)
+
+	// Forget via old-format
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:    namespaceID,
+		TaskQueue:      tq,
+		DeploymentName: deploymentName,
+		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+			ForgetVersion: &deploymentspb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
+		},
+	})
+	s.NoError(err)
+
+	// Verify removal from both formats
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	depData := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
+	// new-format membership map
+	_, exists := depData.GetDeploymentsData()[deploymentName].GetVersions()[buildID]
+	s.False(exists)
+	// old-format slice
+	for _, dv := range depData.GetVersions() {
+		s.NotEqual(buildID, dv.GetVersion().GetBuildId())
+	}
+	// the deployment entry should be removed from DeploymentsData as versions map is now empty
+	_, deploymentExists := depData.GetDeploymentsData()[deploymentName]
+	s.False(deploymentExists)
+}
+
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -3675,7 +4173,6 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 			}, nil
 		}).AnyTimes()
 }
-
 func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID int64,
 	scheduleAttributes *commandpb.ScheduleActivityTaskCommandAttributes,
 ) *historypb.HistoryEvent {
@@ -3693,6 +4190,81 @@ func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID i
 		WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 	}}
 	return historyEvent
+}
+
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpdateRoutingConfig_MigratesOldVersionsToNewFormat() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	tq := tv.TaskQueue().GetName()
+	depFoo := "foo"
+	depBar := "bar"
+
+	// Add old-format versions: foo:A, foo:B, bar:C
+	addOldFormatVersion := func(dep, build string) {
+		_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+			NamespaceId:    namespaceID,
+			TaskQueue:      tq,
+			DeploymentName: dep,
+			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+				UpdateVersionData: &deploymentspb.DeploymentVersionData{
+					Version:           &deploymentspb.WorkerDeploymentVersion{DeploymentName: dep, BuildId: build},
+					RoutingUpdateTime: timestamppb.Now(),
+				},
+			},
+		})
+		s.NoError(err)
+	}
+	addOldFormatVersion(depFoo, "A")
+	addOldFormatVersion(depFoo, "B")
+	addOldFormatVersion(depBar, "C")
+
+	// Apply new-format routing config for foo with higher revision to trigger migration
+	rc := &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: depFoo, BuildId: "A"},
+		CurrentVersionChangedTime: timestamppb.Now(),
+		RevisionNumber:            1,
+	}
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+		NamespaceId:         namespaceID,
+		TaskQueue:           tq,
+		DeploymentName:      depFoo,
+		TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+		UpdateRoutingConfig: rc,
+	})
+	s.NoError(err)
+
+	// Verify: old-format slice retains only bar:C; foo:A & foo:B migrated
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID,
+		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		LastKnownUserDataVersion: 0,
+	})
+	s.NoError(err)
+	depData := res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
+
+	// Old-format slice check
+	var oldSliceBuilds []string
+	//nolint:staticcheck // SA1019 deprecated versions will clean up later
+	for _, dv := range depData.GetVersions() {
+		if dv.GetVersion().GetDeploymentName() == depBar {
+			oldSliceBuilds = append(oldSliceBuilds, dv.GetVersion().GetBuildId())
+		}
+		// Ensure none for foo remain
+		s.NotEqual(depFoo, dv.GetVersion().GetDeploymentName())
+	}
+	s.ElementsMatch([]string{"C"}, oldSliceBuilds)
+
+	// New-format membership map for foo should contain A & B
+	fooVersions := depData.GetDeploymentsData()[depFoo].GetVersions()
+	_, hasA := fooVersions["A"]
+	_, hasB := fooVersions["B"]
+	s.True(hasA)
+	s.True(hasB)
+	// And not C
+	_, hasC := fooVersions["C"]
+	s.False(hasC)
 }
 
 func newHistoryEvent(eventID int64, eventType enumspb.EventType) *historypb.HistoryEvent {

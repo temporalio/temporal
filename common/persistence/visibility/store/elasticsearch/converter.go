@@ -19,11 +19,11 @@ var allowedComparisonOperators = map[string]struct{}{
 	sqlparser.NotStartsWithStr: {},
 }
 
-func NewQueryConverter(
+func NewQueryConverterLegacy(
 	fnInterceptor query.FieldNameInterceptor,
 	fvInterceptor query.FieldValuesInterceptor,
 	saNameType searchattribute.NameTypeMap,
-) *query.Converter {
+) *query.ConverterLegacy {
 	if fnInterceptor == nil {
 		fnInterceptor = &query.NopFieldNameInterceptor{}
 	}
@@ -44,5 +44,5 @@ func NewQueryConverter(
 	whereConverter.And = query.NewAndConverter(whereConverter)
 	whereConverter.Or = query.NewOrConverter(whereConverter)
 
-	return query.NewConverter(fnInterceptor, whereConverter)
+	return query.NewConverterLegacy(fnInterceptor, whereConverter)
 }

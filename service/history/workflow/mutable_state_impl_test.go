@@ -919,7 +919,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	s.NoError(err)
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	err = s.mutableState.StartDeploymentTransition(deployment)
+	err = s.mutableState.StartDeploymentTransition(deployment, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
@@ -969,7 +969,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1008,7 +1008,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1050,7 +1050,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1201,7 +1201,7 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that transition fails
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
@@ -1226,7 +1226,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that redirect fails - should be its own test
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here -- good
@@ -2382,6 +2382,7 @@ func (s *mutableStateSuite) TestRetryWorkflowTask_WithNextRetryDelay() {
 }
 func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.EnableActivityRetryStampIncrement = dynamicconfig.GetBoolPropertyFn(true)
 
 	// scheduling, starting & completing workflow task is omitted here
 
@@ -2448,6 +2449,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 
 func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.EnableActivityRetryStampIncrement = dynamicconfig.GetBoolPropertyFn(true)
 
 	workflowTaskCompletedEventID := int64(4)
 	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(

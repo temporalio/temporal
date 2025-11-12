@@ -1134,9 +1134,12 @@ type RecordWorkflowTaskStartedRequest struct {
 	// Versioning directive that was sent by history when scheduling the task.
 	VersionDirective *v112.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	// Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
-	Stamp         int32 `protobuf:"varint,11,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Stamp int32 `protobuf:"varint,11,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	// Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
+	// that may arise due to stale routing configs in task queue partitions.
+	TaskDispatchRevisionNumber int64 `protobuf:"varint,12,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3" json:"task_dispatch_revision_number,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedRequest) Reset() {
@@ -1235,6 +1238,13 @@ func (x *RecordWorkflowTaskStartedRequest) GetVersionDirective() *v112.TaskVersi
 func (x *RecordWorkflowTaskStartedRequest) GetStamp() int32 {
 	if x != nil {
 		return x.Stamp
+	}
+	return 0
+}
+
+func (x *RecordWorkflowTaskStartedRequest) GetTaskDispatchRevisionNumber() int64 {
+	if x != nil {
+		return x.TaskDispatchRevisionNumber
 	}
 	return 0
 }
@@ -1636,8 +1646,11 @@ type RecordActivityTaskStartedRequest struct {
 	ScheduledDeployment *v16.Deployment `protobuf:"bytes,10,opt,name=scheduled_deployment,json=scheduledDeployment,proto3" json:"scheduled_deployment,omitempty"`
 	// Versioning directive that was sent by history when scheduling the task.
 	VersionDirective *v112.TaskVersionDirective `protobuf:"bytes,12,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
+	// that may arise due to stale routing configs in task queue partitions.
+	TaskDispatchRevisionNumber int64 `protobuf:"varint,13,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3" json:"task_dispatch_revision_number,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskStartedRequest) Reset() {
@@ -1738,6 +1751,13 @@ func (x *RecordActivityTaskStartedRequest) GetVersionDirective() *v112.TaskVersi
 		return x.VersionDirective
 	}
 	return nil
+}
+
+func (x *RecordActivityTaskStartedRequest) GetTaskDispatchRevisionNumber() int64 {
+	if x != nil {
+		return x.TaskDispatchRevisionNumber
+	}
+	return 0
 }
 
 type RecordActivityTaskStartedResponse struct {
@@ -9943,7 +9963,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x0estart_workflow\x18\x01 \x01(\v2E.temporal.server.api.historyservice.v1.StartWorkflowExecutionResponseH\x00R\rstartWorkflow\x12q\n" +
 	"\x0fupdate_workflow\x18\x02 \x01(\v2F.temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponseH\x00R\x0eupdateWorkflowB\n" +
 	"\n" +
-	"\bresponse\"\xfd\x05\n" +
+	"\bresponse\"\xc0\x06\n" +
 	" RecordWorkflowTaskStartedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12X\n" +
 	"\x12workflow_execution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\x12,\n" +
@@ -9956,7 +9976,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x14scheduled_deployment\x18\t \x01(\v2&.temporal.api.deployment.v1.DeploymentR\x13scheduledDeployment\x12c\n" +
 	"\x11version_directive\x18\n" +
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
-	"\x05stamp\x18\v \x01(\x05R\x05stamp:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\x94\n" +
+	"\x05stamp\x18\v \x01(\x05R\x05stamp\x12A\n" +
+	"\x1dtask_dispatch_revision_number\x18\f \x01(\x03R\x1ataskDispatchRevisionNumber:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\x94\n" +
 	"\n" +
 	"!RecordWorkflowTaskStartedResponse\x12I\n" +
 	"\rworkflow_type\x18\x01 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x129\n" +
@@ -10008,7 +10029,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\n" +
-	"\x10\v\"\x83\x06\n" +
+	"\x10\v\"\xc6\x06\n" +
 	" RecordActivityTaskStartedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12X\n" +
 	"\x12workflow_execution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\x12,\n" +
@@ -10021,7 +10042,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x05stamp\x18\t \x01(\x05R\x05stamp\x12Y\n" +
 	"\x14scheduled_deployment\x18\n" +
 	" \x01(\v2&.temporal.api.deployment.v1.DeploymentR\x13scheduledDeployment\x12c\n" +
-	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xfc\x05\n" +
+	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12A\n" +
+	"\x1dtask_dispatch_revision_number\x18\r \x01(\x03R\x1ataskDispatchRevisionNumber:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xfc\x05\n" +
 	"!RecordActivityTaskStartedResponse\x12N\n" +
 	"\x0fscheduled_event\x18\x01 \x01(\v2%.temporal.api.history.v1.HistoryEventR\x0escheduledEvent\x12=\n" +
 	"\fstarted_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12\x18\n" +

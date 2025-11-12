@@ -8,11 +8,9 @@ from typing import Any, Dict
 import requests
 
 
-def process_tests(data, pattern, output_file: str):
-    lines = []
-    lines.append(f"|{pattern}, Name with Url|Count|\n")
-    lines.append("| -------- | ------- |\n")
-
+def process_tests(data, pattern, output_file: str, max_links: int = 3):
+    # Group data by test name and collect artifacts for tests matching pattern
+    test_groups = {}
     for item in data:
         name_parts = item["name"].split("/")
         if len(name_parts) < 2:
@@ -20,6 +18,10 @@ def process_tests(data, pattern, output_file: str):
         if not item["name"].endswith(pattern):
             continue
 
+        test_name = item["name"]
+        if test_name not in test_groups:
+            test_groups[test_name] = []
+
         parts = item["artifact"].split("--")
         if len(parts) > 0 and len(parts[1]) > 0 and len(parts[2]) > 0:
             p2 = parts[2]
@@ -32,39 +34,99 @@ def process_tests(data, pattern, output_file: str):
         else:
             job_url = item["artifact"]
 
-        lines.append(f"|[{item['name']}]({job_url})|{item['failure_count']}|\n")
+        test_groups[test_name].append(job_url)
 
-    with open(output_file, "w") as outfile:
-        outfile.writelines(lines)
+    # Transform into list with counts and multiple links
+    transformed = []
+    for test_name, artifacts in test_groups.items():
+        failure_count = len(artifacts)
+        # Get up to max_links most recent artifacts (already sorted desc from SQL)
+        recent_artifacts = artifacts[:max_links]
 
+        transformed.append({
+            "name": test_name,
+            "count": failure_count,
+            "artifacts": recent_artifacts,
+        })
 
-def process_crash(data, pattern, output_file: str):
+    # Sort by failure count descending
+    transformed.sort(key=lambda x: x["count"], reverse=True)
+
+    # Write markdown table
     lines = []
     lines.append(f"|{pattern}, Name with Url|Count|\n")
     lines.append("| -------- | ------- |\n")
-
-    for item in data:
-        if "crash" in item["name"]:
-            job_url = ""
-            parts = item["artifact"].split("--")
-            if len(parts) > 0 and len(parts[1]) > 0:
-                job_url = (
-                    f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
-                )
-            else:
-                job_url = item["artifact"]
-            lines.append(f"|[{item['name']}]({job_url})|{item['failure_count']}|\n")
+    for item in transformed:
+        # Format: `TestName`: [1](url1) [2](url2) [3](url3)
+        links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
+        lines.append(f"|`{item['name']}`: {links}|{item['count']}|\n")
 
     with open(output_file, "w") as outfile:
         outfile.writelines(lines)
 
 
-def process_flaky(data, output_file: str):
+def process_crash(data, pattern, output_file: str, max_links: int = 3):
+    # Group data by test name and collect artifacts for crash tests
+    test_groups = {}
+    for item in data:
+        if "crash" not in item["name"]:
+            continue
+
+        test_name = item["name"]
+        if test_name not in test_groups:
+            test_groups[test_name] = []
+
+        parts = item["artifact"].split("--")
+        if len(parts) > 0 and len(parts[1]) > 0:
+            job_url = (
+                f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
+            )
+        else:
+            job_url = item["artifact"]
+
+        test_groups[test_name].append(job_url)
+
+    # Transform into list with counts and multiple links
     transformed = []
+    for test_name, artifacts in test_groups.items():
+        failure_count = len(artifacts)
+        # Get up to max_links most recent artifacts (already sorted desc from SQL)
+        recent_artifacts = artifacts[:max_links]
+
+        transformed.append({
+            "name": test_name,
+            "count": failure_count,
+            "artifacts": recent_artifacts,
+        })
+
+    # Sort by failure count descending
+    transformed.sort(key=lambda x: x["count"], reverse=True)
+
+    # Write markdown table
+    lines = []
+    lines.append(f"|{pattern}, Name with Url|Count|\n")
+    lines.append("| -------- | ------- |\n")
+    for item in transformed:
+        # Format: `TestName`: [1](url1) [2](url2) [3](url3)
+        links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
+        lines.append(f"|`{item['name']}`: {links}|{item['count']}|\n")
+
+    with open(output_file, "w") as outfile:
+        outfile.writelines(lines)
+
+
+def process_flaky(data, output_file: str, max_links: int = 3):
+    # Group data by test name and collect artifacts
+    test_groups = {}
     for item in data:
         name_parts = item["name"].split("/")
         if len(name_parts) < 2:
             continue
+
+        test_name = item["name"]
+        if test_name not in test_groups:
+            test_groups[test_name] = []
+
         parts = item["artifact"].split("--")
         if len(parts) > 0 and len(parts[1]) > 0 and len(parts[2]) > 0:
             p2 = parts[2]
@@ -77,23 +139,35 @@ def process_flaky(data, output_file: str):
         else:
             job_url = item["artifact"]
 
-        transformed.append(
-            {
-                "name": item["name"],  # the 'name' field from the original
-                "job_url": job_url,  # the newly constructed job URL
-                "count": item["failure_count"],  # store the failure_count
-            }
-        )
+        test_groups[test_name].append(job_url)
 
-        if len(transformed) > 10:
-            break
+    # Transform into list with counts and multiple links
+    transformed = []
+    for test_name, artifacts in test_groups.items():
+        failure_count = len(artifacts)
+        # Get up to max_links most recent artifacts (already sorted desc from SQL)
+        recent_artifacts = artifacts[:max_links]
+
+        transformed.append({
+            "name": test_name,
+            "count": failure_count,
+            "artifacts": recent_artifacts,
+        })
+
+    # Sort by failure count descending
+    transformed.sort(key=lambda x: x["count"], reverse=True)
+
+    # Limit to top 10 flaky tests
+    transformed = transformed[:10]
 
     # Write both markdown table (for GitHub) and plain text (for Slack)
     lines = []
     lines.append("|Name with Url|Count|\n")
     lines.append("| -------- | ------- |\n")
     for item in transformed:
-        lines.append(f"|[{item['name']}]({item['job_url']})|{item['count']}|\n")
+        # Format: `TestName`: [1](url1) [2](url2) [3](url3)
+        links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
+        lines.append(f"|`{item['name']}`: {links}|{item['count']}|\n")
 
     with open(output_file, "w") as outfile:
         outfile.writelines(lines)
@@ -340,7 +414,7 @@ def write_github_actions_summary(summary_content: str) -> None:
         print(f"⚠️ Warning: Could not write GitHub Actions summary: {e}", file=sys.stderr)
 
 
-def process_json_file(input_filename: str):
+def process_json_file(input_filename: str, max_links: int = 3):
     with open(input_filename, "r") as file:
         # Load the file content as JSON
         data = json.load(file)
@@ -348,10 +422,10 @@ def process_json_file(input_filename: str):
     # Create output directory if it doesn't exist
     os.makedirs("out", exist_ok=True)
 
-    process_flaky(data, "out/flaky.txt")
-    process_tests(data, "(timeout)", "out/timeout.txt")
-    process_tests(data, "(retry 2)", "out/retry.txt")
-    process_crash(data, "(crash)", "out/crash.txt")
+    process_flaky(data, "out/flaky.txt", max_links)
+    process_tests(data, "(timeout)", "out/timeout.txt", max_links)
+    process_tests(data, "(retry 2)", "out/retry.txt", max_links)
+    process_crash(data, "(crash)", "out/crash.txt", max_links)
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -378,6 +452,14 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-id", help="GitHub Actions run ID")
     parser.add_argument("--ref-name", help="Git branch name")
     parser.add_argument("--sha", help="Git commit SHA")
+
+    # Display options
+    parser.add_argument(
+        "--max-links",
+        type=int,
+        default=3,
+        help="Maximum number of failure links to show per test (default: 3)",
+    )
 
     return parser
 
@@ -469,7 +551,7 @@ def main():
 
     # Try to process the JSON file and handle both success and failure cases
     try:
-        process_json_file(args.file)
+        process_json_file(args.file, args.max_links)
         print(f"Successfully processed {args.file}")
         handle_success_case(args)
 
