@@ -257,21 +257,7 @@ reredirectTask:
 		assignedBuildId = spoolQueue.QueueKey().Version().BuildId()
 	}
 
-	pm.logger.Info("DEBUG-SPOOL: About to spool task to database",
-		tag.WorkflowScheduledEventID(params.taskInfo.GetScheduledEventId()),
-		tag.NewInt32("stamp-before-spool", params.taskInfo.GetStamp()),
-		tag.WorkflowID(params.taskInfo.GetWorkflowId()),
-		tag.WorkflowRunID(params.taskInfo.GetRunId()),
-		tag.NewStringTag("queue-name", spoolQueue.QueueKey().Partition().RpcName()))
-
-	err = spoolQueue.SpoolTask(params.taskInfo)
-
-	pm.logger.Info("DEBUG-SPOOL: Task spooled to database",
-		tag.WorkflowScheduledEventID(params.taskInfo.GetScheduledEventId()),
-		tag.NewInt32("stamp-after-spool", params.taskInfo.GetStamp()),
-		tag.Error(err))
-
-	return assignedBuildId, false, err
+	return assignedBuildId, false, spoolQueue.SpoolTask(params.taskInfo)
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
@@ -415,15 +401,6 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	backlogQueue *PhysicalTaskQueueKey,
 ) error {
 	taskInfo := task.event.GetData()
-
-	pm.logger.Info("DEBUG-PROCESS-SPOOLED: Processing spooled task from backlog",
-		tag.WorkflowScheduledEventID(taskInfo.GetScheduledEventId()),
-		tag.NewInt32("stamp-in-spooled-task", taskInfo.GetStamp()),
-		tag.WorkflowID(taskInfo.GetWorkflowId()),
-		tag.WorkflowRunID(taskInfo.GetRunId()),
-		tag.NewInt64("task-id", task.event.GetTaskId()),
-		tag.NewStringTag("backlog-queue", backlogQueue.PersistenceName()))
-
 	// This task came from taskReader so task.event is always set here.
 	directive := taskInfo.GetVersionDirective()
 	assignedBuildId := backlogQueue.Version().BuildId()
@@ -472,14 +449,6 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 			task.finish(nil, false)
 			return nil
 		}
-		pm.logger.Info("DEBUG-DISPATCH: Dispatching spooled task to sync match queue",
-			tag.WorkflowScheduledEventID(taskInfo.GetScheduledEventId()),
-			tag.NewInt32("stamp-before-dispatch", taskInfo.GetStamp()),
-			tag.WorkflowID(taskInfo.GetWorkflowId()),
-			tag.WorkflowRunID(taskInfo.GetRunId()),
-			tag.NewStringTag("sync-match-queue", syncMatchQueue.QueueKey().PersistenceName()),
-			tag.NewBoolTag("has-redirect-info", task.redirectInfo != nil))
-
 		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
 		if err != errInterrupted {
 			return err

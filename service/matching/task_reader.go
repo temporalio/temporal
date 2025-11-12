@@ -98,13 +98,6 @@ dispatchLoop:
 			}
 			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask)
 
-			tr.backlogMgr.logger.Info("DEBUG-TASK-READER: Created internalTask from backlog, about to process",
-				tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
-				tag.NewInt32("stamp-in-internal-task", task.event.Data.GetStamp()),
-				tag.WorkflowID(task.event.Data.GetWorkflowId()),
-				tag.WorkflowRunID(task.event.Data.GetRunId()),
-				tag.NewInt64("task-id", task.event.GetTaskId()))
-
 			for ctx.Err() == nil {
 				tr.updateBacklogAge(task)
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
@@ -211,15 +204,6 @@ func (tr *taskReader) getTaskBatchWithRange(
 	response, err := tr.backlogMgr.db.GetTasks(ctx, subqueueZero, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
 	if err != nil {
 		return nil, err
-	}
-
-	// DEBUG: Log all tasks read from database
-	for _, task := range response.Tasks {
-		tr.backlogMgr.logger.Info("DEBUG-READ-DB: Task read from database backlog",
-			tag.WorkflowScheduledEventID(task.Data.GetScheduledEventId()),
-			tag.NewInt32("stamp-from-db", task.Data.GetStamp()),
-			tag.WorkflowID(task.Data.GetWorkflowId()),
-			tag.WorkflowRunID(task.Data.GetRunId()))
 	}
 
 	return response.Tasks, err

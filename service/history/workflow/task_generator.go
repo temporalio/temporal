@@ -437,14 +437,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		r.mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(wttt)
 	}
 
-	// STEP 4 LOG: Creating transfer task for matching
-	r.logger.Info("DEBUG-FLOW [STEP 4]: Creating transfer task to dispatch to matching",
-		tag.NewInt64("scheduled-event-id", workflowTask.ScheduledEventID),
-		tag.NewStringTag("task-queue", workflowTask.TaskQueue.GetName()),
-		tag.NewStringTag("build-id-in-task", workflowTask.BuildId),
-		tag.NewInt32("stamp-in-task", workflowTask.Stamp),
-		tag.NewInt32("attempt", workflowTask.Attempt))
-
 	r.mutableState.AddTasks(&tasks.WorkflowTask{
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey: r.mutableState.GetWorkflowKey(),

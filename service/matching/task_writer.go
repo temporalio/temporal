@@ -86,12 +86,6 @@ func (w *taskWriter) appendTask(
 	taskInfo *persistencespb.TaskInfo,
 ) error {
 
-	w.backlogMgr.logger.Info("DEBUG-WRITE-TASK: About to write task to database",
-		tag.WorkflowScheduledEventID(taskInfo.GetScheduledEventId()),
-		tag.NewInt32("stamp-before-write", taskInfo.GetStamp()),
-		tag.WorkflowID(taskInfo.GetWorkflowId()),
-		tag.WorkflowRunID(taskInfo.GetRunId()))
-
 	select {
 	case <-w.backlogMgr.tqCtx.Done():
 		return errShutdown
