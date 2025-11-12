@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -163,7 +163,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages() {
 	messageID := int64(11)
 
 	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
-		Id: uuid.New(),
+		Id: uuid.NewString(),
 	}
 
 	tasks := []*replicationspb.ReplicationTask{
@@ -194,7 +194,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnGetDLQAckLevel() 
 	messageID := int64(11)
 	testError := fmt.Errorf("test")
 	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
-		Id: uuid.New(),
+		Id: uuid.NewString(),
 	}
 
 	tasks := []*replicationspb.ReplicationTask{
@@ -246,10 +246,10 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 	messageID2 := int64(12)
 	testError := fmt.Errorf("test")
 	namespaceAttribute1 := &replicationspb.NamespaceTaskAttributes{
-		Id: uuid.New(),
+		Id: uuid.NewString(),
 	}
 	namespaceAttribute2 := &replicationspb.NamespaceTaskAttributes{
-		Id: uuid.New(),
+		Id: uuid.NewString(),
 	}
 	tasks := []*replicationspb.ReplicationTask{
 		{
@@ -287,10 +287,10 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	messageID2 := int64(12)
 	testError := fmt.Errorf("test")
 	namespaceAttribute1 := &replicationspb.NamespaceTaskAttributes{
-		Id: uuid.New(),
+		Id: uuid.NewString(),
 	}
 	namespaceAttribute2 := &replicationspb.NamespaceTaskAttributes{
-		Id: uuid.New(),
+		Id: uuid.NewString(),
 	}
 	tasks := []*replicationspb.ReplicationTask{
 		{
@@ -328,7 +328,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_IgnoreErrorOnUpdateDLQAckLeve
 	messageID := int64(11)
 	testError := fmt.Errorf("test")
 	namespaceAttribute := &replicationspb.NamespaceTaskAttributes{
-		Id: uuid.New(),
+		Id: uuid.NewString(),
 	}
 
 	tasks := []*replicationspb.ReplicationTask{

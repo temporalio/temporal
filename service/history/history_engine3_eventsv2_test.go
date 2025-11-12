@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -398,7 +398,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
 		NamespaceId: namespaceID.String(),
@@ -436,7 +436,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -489,7 +489,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{

@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -2089,7 +2089,7 @@ func newContext(
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
-		owner:                   fmt.Sprintf("%s-%v-%v", hostIdentity, sequenceID, uuid.New()),
+		owner:                   fmt.Sprintf("%s-%v-%v", hostIdentity, sequenceID, uuid.NewString()),
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,

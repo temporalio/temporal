@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -55,7 +55,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:    uuid.New(),
+			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
@@ -199,7 +199,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:    uuid.New(),
+			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
@@ -314,7 +314,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:    uuid.New(),
+			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),

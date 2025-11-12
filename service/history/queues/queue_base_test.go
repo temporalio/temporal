@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -157,7 +157,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 							PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
 							Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 								NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-									NamespaceIds: []string{uuid.New()},
+									NamespaceIds: []string{uuid.NewString()},
 								},
 							},
 						},
@@ -208,7 +208,7 @@ func (s *queueBaseSuite) TestStartStop() {
 			mockTask := tasks.NewMockTask(s.controller)
 			key := NewRandomKeyInRange(paginationRange)
 			mockTask.EXPECT().GetKey().Return(key).AnyTimes()
-			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -455,7 +455,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 	exclusiveReaderHighWatermark := tasks.MaximumKey
 	scopes := NewRandomScopes(3)
-	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.New()})
+	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.NewString()})
 	scopes[2].Predicate = tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})
 	initialQueueState := &queueState{
 		readerScopes: map[int64][]Scope{

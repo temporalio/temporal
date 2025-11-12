@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -66,10 +66,10 @@ func (s *conflictResolverSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.namespaceID = uuid.New()
+	s.namespaceID = uuid.NewString()
 	s.namespace = "some random namespace name"
 	s.workflowID = "some random workflow ID"
-	s.runID = uuid.New()
+	s.runID = uuid.NewString()
 
 	s.nDCConflictResolver = NewConflictResolver(
 		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
@@ -86,7 +86,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 	ctx := context.Background()
 	updateCondition := int64(59)
 	dbVersion := int64(1444)
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	version := int64(12)
 	historySize := int64(12345)
 

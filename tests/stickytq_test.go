@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,7 +39,7 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
@@ -87,7 +87,7 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 						SignalName:        "signalB",
 						Input:             codec.EncodeString("signal input"),
 						Identity:          identity,
-						RequestId:         uuid.New(),
+						RequestId:         uuid.NewString(),
 					})
 					s.NoError(err)
 				}
@@ -126,7 +126,7 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		SignalName:        "signalA",
 		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -167,7 +167,7 @@ WaitForStickyTimeoutLoop:
 		SignalName:        "signalB",
 		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -234,7 +234,7 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
@@ -307,7 +307,7 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 		SignalName:        "signalA",
 		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -355,7 +355,7 @@ WaitForStickyTimeoutLoop:
 		SignalName:        "signalB",
 		Input:             payloads.EncodeString("signal input"),
 		Identity:          identity,
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err)
 

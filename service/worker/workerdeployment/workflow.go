@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -653,7 +653,7 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 		Identity:       args.Identity,
 		DeploymentName: d.DeploymentName,
 		Version:        args.Version,
-		RequestId:      uuid.New(),
+		RequestId:      uuid.NewString(),
 		SkipDrainage:   args.SkipDrainage,
 	}).Get(ctx, &res)
 	if err != nil {
@@ -1132,7 +1132,7 @@ func (d *WorkflowRunner) startVersion(ctx workflow.Context, args *deploymentspb.
 func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-		return uuid.New()
+		return uuid.NewString()
 	}).Get(&val)
 	return val
 }

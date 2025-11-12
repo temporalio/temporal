@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -191,7 +191,7 @@ func signalRemoteCluster(
 			signalCtx,
 			&workflowservice.SignalWithStartWorkflowExecutionRequest{
 				Namespace:  primitives.SystemLocalNamespace,
-				RequestId:  uuid.New(),
+				RequestId:  uuid.NewString(),
 				WorkflowId: getWorkflowID(numWorkflows),
 				WorkflowType: &commonpb.WorkflowType{
 					Name: processorWFTypeName,

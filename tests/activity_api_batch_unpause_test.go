@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -169,7 +169,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.NoError(err)
@@ -205,7 +205,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.Error(err)
@@ -221,7 +221,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.Error(err)
