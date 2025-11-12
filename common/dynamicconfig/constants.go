@@ -3022,11 +3022,4 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
 	)
-
-	EnableWorkerStateTracking = NewNamespaceBoolSetting(
-		"frontend.enableWorkerStateTracking",
-		false,
-		`EnableWorkerStateTracking controls whether to create/update CHASM Worker entities in History service.
-This is disabled by default as it's an experimental feature.`,
-	)
 )
