@@ -1,7 +1,6 @@
 package updateworkflowoptions
 
 import (
-	"cmp"
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
