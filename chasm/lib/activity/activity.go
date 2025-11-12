@@ -147,7 +147,7 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 	}
 
 	// The requestID is set by the matching service to a UUID, allowing safe retries if the response is lost. If the
-	// existing request ID is empty, this is fresh start so update attempt attributes. If there's a mismatch, then
+	// existing request ID is empty, this is a fresh start so update attempt attributes. If there's a mismatch, then
 	// returns a TaskAlreadyStarted error. Else it's a valid retry, so no-op and return response.
 	if attempt.GetRequestId() == "" {
 		if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
