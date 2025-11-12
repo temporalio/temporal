@@ -104,11 +104,16 @@ func (c *Callback) loadInvocationArgs(
 	}
 }
 
+type saveResultInput struct {
+	result invocationResult
+	config *Config
+}
+
 func (c *Callback) saveResult(
 	ctx chasm.MutableContext,
-	result invocationResult,
+	input saveResultInput,
 ) (chasm.NoValue, error) {
-	switch r := result.(type) {
+	switch r := input.result.(type) {
 	case invocationResultOK:
 		err := TransitionSucceeded.Apply(ctx, c, EventSucceeded{Time: ctx.Now(c)})
 		return nil, err
@@ -116,7 +121,7 @@ func (c *Callback) saveResult(
 		err := TransitionAttemptFailed.Apply(ctx, c, EventAttemptFailed{
 			Time:        ctx.Now(c),
 			Err:         r.err,
-			RetryPolicy: r.retryPolicy,
+			RetryPolicy: input.config.RetryPolicy(),
 		})
 		return nil, err
 	case invocationResultFail:
@@ -127,7 +132,7 @@ func (c *Callback) saveResult(
 		return nil, err
 	default:
 		return nil, queues.NewUnprocessableTaskError(
-			fmt.Sprintf("unrecognized callback result %v", result),
+			fmt.Sprintf("unrecognized callback result %v", input.result),
 		)
 	}
 }

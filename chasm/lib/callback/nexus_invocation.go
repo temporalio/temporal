@@ -114,7 +114,7 @@ func (n nexusInvocation) Invoke(
 
 	if err != nil {
 		e.logger.Error("Callback request failed with error", tag.Error(err))
-		return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
+		return invocationResultRetry{err: err}
 	}
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
@@ -124,7 +124,7 @@ func (n nexusInvocation) Invoke(
 		if _, err = io.Copy(io.Discard, response.Body); err == nil {
 			if err = response.Body.Close(); err != nil {
 				e.logger.Error("Callback request failed with error", tag.Error(err))
-				return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
+				return invocationResultRetry{err: err}
 			}
 		}
 		return invocationResultOK{}
@@ -134,7 +134,7 @@ func (n nexusInvocation) Invoke(
 	err = readHandlerErrFromResponse(response, e.logger)
 	e.logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
-		return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
+		return invocationResultRetry{err: err}
 	}
 	return invocationResultFail{err}
 }

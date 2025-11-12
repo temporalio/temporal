@@ -7,7 +7,6 @@ import (
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -96,8 +95,7 @@ func (r invocationResultFail) error() error {
 
 // invocationResultRetry marks an invocation as failed with the intent to retry.
 type invocationResultRetry struct {
-	err         error
-	retryPolicy backoff.RetryPolicy
+	err error
 }
 
 func (invocationResultRetry) mustImplementInvocationResult() {}
@@ -146,7 +144,10 @@ func (e InvocationTaskExecutor) Invoke(
 		ctx,
 		ref,
 		(*Callback).saveResult,
-		result,
+		saveResultInput{
+			result: result,
+			config: e.config,
+		},
 	)
 	return invokable.WrapError(result, saveErr)
 }
