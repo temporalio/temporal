@@ -42,8 +42,7 @@ type Engine interface {
 	PollComponent(
 		context.Context,
 		ComponentRef,
-		func(Context, Component) (any, bool, error),
-		func(MutableContext, Component, any) error,
+		func(Context, Component) (bool, error),
 		...TransitionOption,
 	) ([]byte, error)
 }
@@ -176,6 +175,9 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 //   - consider remove ComponentRef from the return value and allow components to get
 //     the ref in the transition function. There are some caveats there, check the
 //     comment of the NewRef method in MutableContext.
+//
+// UpdateComponent applies updateFn to the component identified by the supplied component reference.
+// It returns the result, along with the new component reference.
 func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
@@ -207,6 +209,8 @@ func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 	return output, newSerializedRef, err
 }
 
+// ReadComponent returns the result of evaluating readFn against the current state of the component
+// identified by the supplied component reference.
 func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
@@ -234,18 +238,14 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 	return output, err
 }
 
-type PollComponentRequest[C Component, I any, O any] struct {
-	Ref         ComponentRef
-	PredicateFn func(C, Context, I) bool
-	OperationFn func(C, MutableContext, I) (O, error)
-	Input       I
-}
-
-func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
+// PollComponent waits until the predicate is true when evaluated against the component identified
+// by the supplied component reference. It returns the output of the predicate function, along with
+// a component reference identifying the state at which the predicate was satisfied. If the
+// predicate is true at the outset then it returns immediately.
+func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
-	predicateFn func(C, Context, I) (T, bool, error),
-	operationFn func(C, MutableContext, I, T) (O, error),
+	predicateFn func(C, Context, I) (O, bool, error),
 	input I,
 	opts ...TransitionOption,
 ) (O, []byte, error) {
@@ -259,13 +259,12 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
 	newSerializedRef, err := engineFromContext(ctx).PollComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (any, bool, error) {
-			return predicateFn(c.(C), ctx, input)
-		},
-		func(ctx MutableContext, c Component, t any) error {
-			var err error
-			output, err = operationFn(c.(C), ctx, input, t.(T))
-			return err
+		func(ctx Context, c Component) (bool, error) {
+			out, satisfied, err := predicateFn(c.(C), ctx, input)
+			if satisfied {
+				output = out
+			}
+			return satisfied, err
 		},
 		opts...,
 	)

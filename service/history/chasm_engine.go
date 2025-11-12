@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
@@ -32,6 +34,7 @@ type (
 		shardController shard.Controller
 		registry        *chasm.Registry
 		config          *configs.Config
+		notifier        *ChasmNotifier
 	}
 
 	newEntityParams struct {
@@ -56,10 +59,22 @@ var defaultTransitionOptions = chasm.TransitionOptions{
 }
 
 var ChasmEngineModule = fx.Options(
+	fx.Provide(NewChasmNotifier),
 	fx.Provide(newChasmEngine),
 	fx.Provide(func(impl *ChasmEngine) chasm.Engine { return impl }),
-	fx.Invoke(func(impl *ChasmEngine, shardController shard.Controller) {
+	fx.Invoke(func(lc fx.Lifecycle, impl *ChasmEngine, shardController shard.Controller) {
 		impl.SetShardController(shardController)
+
+		lc.Append(fx.Hook{
+			OnStart: func(context.Context) error {
+				impl.Start()
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				impl.Stop()
+				return nil
+			},
+		})
 	}),
 )
 
@@ -67,11 +82,13 @@ func newChasmEngine(
 	entityCache cache.Cache,
 	registry *chasm.Registry,
 	config *configs.Config,
+	notifier *ChasmNotifier,
 ) *ChasmEngine {
 	return &ChasmEngine{
 		entityCache: entityCache,
 		registry:    registry,
 		config:      config,
+		notifier:    notifier,
 	}
 }
 
@@ -81,6 +98,16 @@ func (e *ChasmEngine) SetShardController(
 	shardController shard.Controller,
 ) {
 	e.shardController = shardController
+}
+
+// Start starts the ChasmEngine
+func (e *ChasmEngine) Start() {
+	e.notifier.Start()
+}
+
+// Stop stops the ChasmEngine
+func (e *ChasmEngine) Stop() {
+	e.notifier.Stop()
 }
 
 func (e *ChasmEngine) NewEntity(
@@ -155,6 +182,10 @@ func (e *ChasmEngine) UpdateWithNewEntity(
 	return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("UpdateWithNewEntity is not yet supported")
 }
 
+// UpdateComponent applies updateFn to the component identified by the supplied component reference,
+// returning the new component reference corresponding to the transition. An error is returned if
+// the state transition specified by the supplied component reference is inconsistent with entity
+// transition history.
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -204,9 +235,17 @@ func (e *ChasmEngine) UpdateComponent(
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
 	}
 
+	e.notifier.Notify(&ChasmComponentNotification{
+		Key: ref.EntityKey,
+		Ref: newSerializedRef,
+	})
+
 	return newSerializedRef, nil
 }
 
+// ReadComponent evaluates readFn against the current state of the component identified by the
+// supplied component reference. An error is returned if the state transition specified by the
+// component reference is not interpretable as part of the entity transition history.
 func (e *ChasmEngine) ReadComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -241,14 +280,159 @@ func (e *ChasmEngine) ReadComponent(
 	return readFn(chasmContext, component)
 }
 
+// PollComponent waits until the supplied predicate is satisfied when evaluated against the
+// component identified by the supplied component reference. It returns a component reference
+// identifying the state at which the predicate was satisfied. An error is returned if entity
+// transition history is (after reloading from persistence) behind the requested ref, or if the ref
+// is not interpretable as part of the entity transition history. Thus when the predicate function
+// is evaluated, it is guaranteed that the entity VT >= requestRef VT.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
-	entityRef chasm.ComponentRef,
-	predicateFn func(chasm.Context, chasm.Component) (any, bool, error),
-	operationFn func(chasm.MutableContext, chasm.Component, any) error,
+	requestRef chasm.ComponentRef,
+	predicateFn func(chasm.Context, chasm.Component) (bool, error),
 	opts ...chasm.TransitionOption,
-) (newEntityRef []byte, retError error) {
-	return nil, serviceerror.NewUnimplemented("PollComponent is not yet supported")
+) ([]byte, error) {
+	// 1. Acquire lock
+	// 2. Error if shard entity VT < requestRef VT ('stale state')
+	// 3. If predicate satisfied, release lock and return
+	// 4. Subscribe to notifications for this entity
+	// 5. Release lock
+	// 6. On notification repeat (1) and (2)
+
+	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
+	if err != nil {
+		// E.g. requestRef VT inconsistent with shard VT ('stale reference')
+		return nil, err
+	}
+
+	// hold lock until return or subscription established
+	released := false
+	defer func() {
+		if !released {
+			// read-only operation; don't pass error
+			executionLease.GetReleaseFn()(nil)
+		}
+	}()
+
+	// At this point it's possible that shard VT < requestRef VT (getExecutionLease does not
+	// guarantee that returned shard state is non-stale w.r.t. requestRef).
+	currentRef, err := e.checkPredicate(ctx, requestRef, executionLease, predicateFn)
+	if err != nil {
+		return nil, err
+	}
+	// shard VT >= requestRef VT (enforced by checkPredicate)
+
+	if currentRef != nil {
+		// wait condition was satisfied
+		return currentRef, nil
+	}
+
+	// Wait condition not satisfied; long-poll
+
+	channel, subscriberID, err := e.notifier.Subscribe(requestRef.EntityKey)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = e.notifier.Unsubscribe(requestRef.EntityKey, subscriberID)
+	}()
+
+	// Release the lock, now that we are subscribed
+	executionLease.GetReleaseFn()(nil)
+	released = true
+
+	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(requestRef.EntityKey.NamespaceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(dan): check desired timeout logic here
+	ctx, cancel := contextutil.WithDeadlineBuffer(
+		ctx,
+		shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()),
+		time.Second,
+	)
+	defer cancel()
+
+	for {
+		select {
+		case notification := <-channel:
+			if notification == nil {
+				return nil, serviceerror.NewInternal("nil component notification")
+			}
+			// Received a notification. Re-acquire the lock and check the predicate.
+			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+			if err != nil {
+				return nil, err
+			}
+
+			newRef, err := e.checkPredicate(ctx, requestRef, executionLease, predicateFn)
+			executionLease.GetReleaseFn()(nil)
+			if err != nil {
+				return nil, err
+			}
+			if newRef != nil {
+				// wait condition was satisfied
+				return newRef, nil
+			}
+		case <-ctx.Done():
+			// TODO(dan): return empty response?
+			return nil, serviceerror.NewDeadlineExceeded("long-poll timed out")
+		}
+	}
+}
+
+// checkPredicate is a helper function for PollComponent. It returns (ref, err) where ref is non-nil
+// iff there's no error and predicateFn evaluates to true.
+func (e *ChasmEngine) checkPredicate(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	executionLease api.WorkflowLease,
+	predicateFn func(chasm.Context, chasm.Component) (bool, error),
+) ([]byte, error) {
+
+	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
+	if !ok {
+		return nil, serviceerror.NewInternalf(
+			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
+			executionLease.GetMutableState().ChasmTree(),
+			&chasm.Node{},
+		)
+	}
+
+	// It is not acceptable to declare the predicate to be satisfied against shard state that is
+	// behind the requested reference. However, getExecutionLease does not currently guarantee that
+	// shard VT >= ref VT, therefore we call IsStale() again here and return any error (which at
+	// this point must be ErrStaleState; ErrStaleReference has already been eliminated).
+	err := chasmTree.IsStale(ref)
+	if err != nil {
+		// ErrStaleState
+		// TODO(dan): this should be retryable if it is the failover version that is stale
+		return nil, err
+	}
+	// We know now that shard VT >= ref VT
+
+	chasmContext := chasm.NewContext(ctx, chasmTree)
+
+	component, err := chasmTree.Component(chasmContext, ref)
+	if err != nil {
+		return nil, err
+	}
+	satisfied, err := predicateFn(chasmContext, component)
+	if err != nil {
+		return nil, err
+	}
+	if !satisfied {
+		return nil, nil
+	}
+
+	newRef, err := chasmContext.Ref(component)
+	if err != nil {
+		return nil, err
+	}
+	return newRef, nil
 }
 
 func (e *ChasmEngine) constructTransitionOptions(
@@ -372,6 +556,7 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newEntityParams.events,
 	)
 	if err == nil {
+		// TODO(dan): send notification on creation?
 		return currentRunInfo{}, false, nil
 	}
 
@@ -524,6 +709,7 @@ func (e *ChasmEngine) handleReusePolicy(
 	if err != nil {
 		return chasm.EntityKey{}, nil, err
 	}
+	// TODO(dan): send notification on creation?
 
 	serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
 	if err != nil {
@@ -547,6 +733,14 @@ func (e *ChasmEngine) getShardContext(
 	return e.shardController.GetShardByID(shardID)
 }
 
+// getExecutionLease returns shard context and mutable state for the entity identified by the
+// supplied component reference, with the lock held. An error is returned if the state transition
+// specified by the component reference is not consistent with mutable state transition history. If
+// the state transition specified by the component reference is consistent with mutable state being
+// stale, then mutable state is reloaded from persistence before returning. It does not check that
+// mutable state is non-stale after reload.
+// TODO(dan): if mutable state is stale after reload, return an error (retryable iff the failover
+// version is stale since that is expected under some multi-cluster scenarios).
 func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,
 	ref chasm.ComponentRef,

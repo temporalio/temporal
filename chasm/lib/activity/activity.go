@@ -1,9 +1,11 @@
 package activity
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
+	"go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,14 +39,12 @@ type Activity struct {
 
 	*activitypb.ActivityState
 
-	// Standalone only
 	Visibility    chasm.Field[*chasm.Visibility]
 	Attempt       chasm.Field[*activitypb.ActivityAttemptState]
 	LastHeartbeat chasm.Field[*activitypb.ActivityHeartbeatState]
+	Outcome       chasm.Field[*activitypb.ActivityOutcome]
 	// Standalone only
 	RequestData chasm.Field[*activitypb.ActivityRequestData]
-	Outcome     chasm.Field[*activitypb.ActivityOutcome]
-
 	// Pointer to an implementation of the "store". for a workflow activity this would be a parent pointer back to
 	// the workflow. For a standalone activity this would be nil.
 	// TODO: revisit a standalone activity pointing to itself once we handle storing it more efficiently.
@@ -313,4 +313,125 @@ func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.P
 		Details:      details,
 	})
 	return nil, nil
+}
+
+func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context, key chasm.EntityKey) (*activity.ActivityExecutionInfo, error) {
+	if a.ActivityState == nil {
+		return nil, errors.New("activity state is nil")
+	}
+
+	// TODO(dan): support pause states
+	var status enumspb.ActivityExecutionStatus
+	var runState enumspb.PendingActivityState
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+		runState = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+		runState = enumspb.PENDING_ACTIVITY_STATE_STARTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+		runState = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		status = enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	}
+
+	requestData, err := a.RequestData.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &activity.ActivityExecutionInfo{
+		ActivityId:    key.BusinessID,
+		RunId:         key.EntityID,
+		ActivityType:  a.GetActivityType(),
+		Status:        status,
+		RunState:      runState,
+		ScheduledTime: a.GetScheduledTime(),
+		Priority:      a.GetPriority(),
+		Header:        requestData.GetHeader(),
+		// TODO(dan): populate remaining fields
+	}
+
+	return info, nil
+}
+
+func (a *Activity) buildPollActivityExecutionResponse(
+	ctx chasm.Context,
+	req *activitypb.PollActivityExecutionRequest,
+) (*activitypb.PollActivityExecutionResponse, error) {
+	var err error
+	request := req.GetFrontendRequest()
+
+	// TODO(dan): pass ref into this function?
+	ref, err := ctx.Ref(a)
+	if err != nil {
+		return nil, err
+	}
+
+	var info *activity.ActivityExecutionInfo
+	if request.GetIncludeInfo() {
+		info, err = a.buildActivityExecutionInfo(ctx, chasm.EntityKey{
+			NamespaceID: req.GetNamespaceId(),
+			BusinessID:  request.GetActivityId(),
+			EntityID:    request.GetRunId(),
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var input *commonpb.Payloads
+	if request.GetIncludeInput() {
+		activityRequest, err := a.RequestData.Get(ctx)
+		if err != nil {
+			return nil, err
+		}
+		input = activityRequest.Input
+	}
+
+	response := &workflowservice.PollActivityExecutionResponse{
+		Info:                     info,
+		RunId:                    ctx.ExecutionKey().EntityID,
+		Input:                    input,
+		StateChangeLongPollToken: ref,
+	}
+
+	if request.GetIncludeOutcome() {
+		activityOutcome, err := a.Outcome.Get(ctx)
+		if err != nil {
+			return nil, err
+		}
+		switch v := activityOutcome.GetVariant().(type) {
+		case *activitypb.ActivityOutcome_Failed_:
+			response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
+				Failure: v.Failed.GetFailure(),
+			}
+		case *activitypb.ActivityOutcome_Successful_:
+			response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
+				Result: v.Successful.GetOutput(),
+			}
+		}
+	}
+
+	return &activitypb.PollActivityExecutionResponse{
+		FrontendResponse: response,
+	}, nil
 }
