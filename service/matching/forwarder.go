@@ -13,6 +13,8 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -26,6 +28,7 @@ type (
 		queue     *PhysicalTaskQueueKey
 		partition *tqid.NormalPartition
 		client    matchingservice.MatchingServiceClient
+		logger    log.Logger
 
 		// token channels that vend tokens necessary to make
 		// API calls exposed by forwarder. Tokens are used
@@ -70,6 +73,7 @@ func newForwarder(
 	cfg *forwarderConfig,
 	queue *PhysicalTaskQueueKey,
 	client matchingservice.MatchingServiceClient,
+	logger log.Logger,
 ) (*Forwarder, error) {
 	partition, ok := queue.Partition().(*tqid.NormalPartition)
 	if !ok {
@@ -81,6 +85,7 @@ func newForwarder(
 		client:                client,
 		partition:             partition,
 		queue:                 queue,
+		logger:                logger,
 		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
 		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
 		limiter: quotas.NewDefaultOutgoingRateLimiter(
@@ -115,25 +120,49 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		expirationDuration = durationpb.New(remaining)
 	}
 
+	// DEBUG: Log task details before forwarding
+	fwdr.logger.Info("DEBUG-FORWARD: About to forward task to parent partition",
+		tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
+		tag.NewInt32("stamp-before-forward", task.event.Data.GetStamp()),
+		tag.WorkflowID(task.event.Data.GetWorkflowId()),
+		tag.WorkflowRunID(task.event.Data.GetRunId()),
+		tag.NewStringTag("source-partition", fwdr.partition.RpcName()),
+		tag.NewStringTag("target-partition", target.RpcName()),
+		tag.NewBoolTag("already-forwarded", task.isForwarded()))
+
 	switch fwdr.partition.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
-		_, err = fwdr.client.AddWorkflowTask(
-			ctx, &matchingservice.AddWorkflowTaskRequest{
-				NamespaceId: task.event.Data.GetNamespaceId(),
-				Execution:   task.workflowExecution(),
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: target.RpcName(),
-					Kind: fwdr.partition.Kind(),
-				},
-				ScheduledEventId:       task.event.Data.GetScheduledEventId(),
-				Clock:                  task.event.Data.GetClock(),
-				ScheduleToStartTimeout: expirationDuration,
-				ForwardInfo:            fwdr.getForwardInfo(task),
-				VersionDirective:       task.event.Data.GetVersionDirective(),
-				Priority:               task.event.Data.GetPriority(),
-				Stamp:                  task.event.Data.GetStamp(),
+		forwardReq := &matchingservice.AddWorkflowTaskRequest{
+			NamespaceId: task.event.Data.GetNamespaceId(),
+			Execution:   task.workflowExecution(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: target.RpcName(),
+				Kind: fwdr.partition.Kind(),
 			},
-		)
+			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
+			Clock:                  task.event.Data.GetClock(),
+			ScheduleToStartTimeout: expirationDuration,
+			ForwardInfo:            fwdr.getForwardInfo(task),
+			VersionDirective:       task.event.Data.GetVersionDirective(),
+			Priority:               task.event.Data.GetPriority(),
+			Stamp:                  task.event.Data.GetStamp(),
+		}
+
+		fwdr.logger.Info("DEBUG-FORWARD: Sending forward request to parent",
+			tag.WorkflowScheduledEventID(forwardReq.ScheduledEventId),
+			tag.NewInt32("stamp-in-forward-request", forwardReq.Stamp),
+			tag.WorkflowID(forwardReq.Execution.GetWorkflowId()),
+			tag.WorkflowRunID(forwardReq.Execution.GetRunId()),
+			tag.NewStringTag("target-partition", target.RpcName()),
+			tag.NewBoolTag("has-forward-info", forwardReq.ForwardInfo != nil),
+			tag.NewStringTag("forward-source", func() string {
+				if forwardReq.ForwardInfo != nil {
+					return forwardReq.ForwardInfo.GetSourcePartition()
+				}
+				return "none"
+			}()))
+
+		_, err = fwdr.client.AddWorkflowTask(ctx, forwardReq)
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(
 			ctx, &matchingservice.AddActivityTaskRequest{

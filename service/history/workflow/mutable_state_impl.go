@@ -3076,11 +3076,20 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 	buildId string,
 	redirectCounter int64,
 ) error {
+	ms.logger.Info("DEBUG-FLOW [STEP 6-redirect]: ApplyBuildIdRedirect called",
+		tag.NewInt64("starting-task-scheduled-event-id", startingTaskScheduledEventId),
+		tag.NewStringTag("new-build-id", buildId),
+		tag.NewInt64("redirect-counter", redirectCounter),
+		tag.NewStringTag("current-assigned-build-id", ms.GetAssignedBuildId()),
+		tag.NewInt64("current-redirect-counter", ms.GetExecutionInfo().GetBuildIdRedirectCounter()),
+		tag.NewInt32("current-stamp", ms.executionInfo.WorkflowTaskStamp))
+
 	if ms.GetExecutionInfo().GetBuildIdRedirectCounter() >= redirectCounter {
 		// Existing redirect counter is more than the given one, so ignore this redirect because
 		// this or a more recent one has already been applied. This can happen when replaying
 		// history because redirects can be applied at activity started time, but we don't record
 		// the actual order of activity started events in history (they're transient tasks).
+		ms.logger.Info("DEBUG-FLOW [STEP 6-redirect-skip]: Skipping redirect (already applied)")
 		return nil
 	}
 	err := ms.UpdateBuildIdAssignment(buildId)
@@ -3092,11 +3101,19 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 	// cluster and events applied by WF rebuilder.
 	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
 
+	ms.logger.Info("DEBUG-FLOW [STEP 6-redirect-reschedule]: About to reschedule pending workflow task",
+		tag.NewStringTag("new-assigned-build-id", ms.GetAssignedBuildId()),
+		tag.NewInt64("new-redirect-counter", redirectCounter),
+		tag.NewInt32("stamp-before-reschedule", ms.executionInfo.WorkflowTaskStamp))
+
 	// Re-scheduling pending workflow and activity tasks.
-	err = ms.reschedulePendingWorkflowTask(false)
+	err = ms.reschedulePendingWorkflowTask(false) // NOTE: false = do NOT increment stamp!
 	if err != nil {
 		return err
 	}
+
+	ms.logger.Info("DEBUG-FLOW [STEP 6-redirect-after]: After rescheduling workflow task",
+		tag.NewInt32("stamp-after-reschedule", ms.executionInfo.WorkflowTaskStamp))
 
 	for _, ai := range ms.GetPendingActivityInfos() {
 		if ai.ScheduledEventId == startingTaskScheduledEventId ||

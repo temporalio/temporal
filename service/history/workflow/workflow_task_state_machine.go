@@ -80,6 +80,14 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 		}
 	}
 
+	// STEP 3 LOG: Before scheduling
+	m.ms.logger.Info("DEBUG-FLOW [STEP 3a]: About to schedule new workflow task",
+		tag.NewInt64("scheduled-event-id", scheduledEventID),
+		tag.NewInt32("attempt", attempt),
+		tag.NewStringTag("assigned-build-id", m.ms.GetAssignedBuildId()),
+		tag.NewStringTag("executionInfo-task-build-id", m.ms.executionInfo.WorkflowTaskBuildId),
+		tag.NewInt32("current-stamp", m.ms.executionInfo.WorkflowTaskStamp))
+
 	workflowTask := &historyi.WorkflowTaskInfo{
 		Version:               version,
 		ScheduledEventID:      scheduledEventID,
@@ -98,6 +106,15 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
 	m.UpdateWorkflowTask(workflowTask)
+
+	// STEP 3 LOG: After scheduling
+	m.ms.logger.Info("DEBUG-FLOW [STEP 3b]: New workflow task scheduled",
+		tag.NewInt64("scheduled-event-id", scheduledEventID),
+		tag.NewInt32("attempt", attempt),
+		tag.NewStringTag("task-build-id-after-retain", workflowTask.BuildId),
+		tag.NewStringTag("executionInfo-task-build-id-after-update", m.ms.executionInfo.WorkflowTaskBuildId),
+		tag.NewInt32("stamp-after-update", m.ms.executionInfo.WorkflowTaskStamp))
+
 	return workflowTask, nil
 }
 
@@ -107,8 +124,16 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 //     created at WFT completion time
 func (m *workflowTaskStateMachine) retainWorkflowTaskBuildIdInfo(workflowTask *historyi.WorkflowTaskInfo) {
 	if workflowTask.Attempt > 1 {
+		m.ms.logger.Info("DEBUG-FLOW [STEP 3-retain]: Retaining build ID for retry (attempt > 1)",
+			tag.NewInt32("attempt", workflowTask.Attempt),
+			tag.NewStringTag("retained-build-id", m.ms.executionInfo.WorkflowTaskBuildId),
+			tag.NewInt64("retained-redirect-counter", m.ms.executionInfo.BuildIdRedirectCounter))
+
 		workflowTask.BuildId = m.ms.executionInfo.WorkflowTaskBuildId
 		workflowTask.BuildIdRedirectCounter = m.ms.executionInfo.BuildIdRedirectCounter
+	} else {
+		m.ms.logger.Info("DEBUG-FLOW [STEP 3-retain]: First attempt, not retaining build ID",
+			tag.NewInt32("attempt", workflowTask.Attempt))
 	}
 }
 
@@ -209,26 +234,55 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		BuildIdRedirectCounter: redirectCounter,
 	}
 
+	// STEP 6 LOG: Before applying redirect
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
+		m.ms.logger.Info("DEBUG-FLOW [STEP 6a]: Worker started task with versioning stamp",
+			tag.NewInt64("scheduled-event-id", scheduledEventID),
+			tag.NewStringTag("worker-build-id", buildId),
+			tag.NewInt64("redirect-counter", redirectCounter),
+			tag.NewStringTag("current-assigned-build-id", m.ms.GetAssignedBuildId()),
+			tag.NewStringTag("current-task-build-id", m.ms.executionInfo.WorkflowTaskBuildId))
+
 		if redirectCounter == 0 {
 			// this is the initial build ID, it should normally be persisted after scheduling the wf task,
 			// but setting it here again in case it failed to be persisted before.
+			m.ms.logger.Info("DEBUG-FLOW [STEP 6-init]: Initial build ID assignment",
+				tag.NewStringTag("build-id", buildId))
 			err := m.ms.UpdateBuildIdAssignment(buildId)
 			if err != nil {
 				return nil, err
 			}
 		} else {
+			// STEP 6 LOG: Applying redirect
+			m.ms.logger.Info("DEBUG-FLOW [STEP 6b]: Applying build ID redirect",
+				tag.NewInt64("scheduled-event-id", scheduledEventID),
+				tag.NewStringTag("redirect-to-build-id", buildId),
+				tag.NewInt64("redirect-counter", redirectCounter))
+
 			// apply redirect if applicable
 			err := m.ms.ApplyBuildIdRedirect(scheduledEventID, buildId, redirectCounter)
 			if err != nil {
 				return nil, err
 			}
+
+			m.ms.logger.Info("DEBUG-FLOW [STEP 6c]: After ApplyBuildIdRedirect",
+				tag.NewStringTag("new-assigned-build-id", m.ms.GetAssignedBuildId()),
+				tag.NewInt32("stamp-after-redirect", m.ms.executionInfo.WorkflowTaskStamp))
 		}
 		workflowTask.BuildId = buildId
 		workflowTask.BuildIdRedirectCounter = m.ms.GetExecutionInfo().GetBuildIdRedirectCounter()
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
+
+	// STEP 7 LOG: After UpdateWorkflowTask
+	m.ms.logger.Info("DEBUG-FLOW [STEP 7]: WorkflowTask updated with redirect info",
+		tag.NewInt64("scheduled-event-id", scheduledEventID),
+		tag.NewStringTag("task-build-id-after-update", workflowTask.BuildId),
+		tag.NewStringTag("executionInfo-task-build-id-after-update", m.ms.executionInfo.WorkflowTaskBuildId),
+		tag.NewStringTag("executionInfo-assigned-build-id", m.ms.GetAssignedBuildId()),
+		tag.NewInt32("stamp-final", m.ms.executionInfo.WorkflowTaskStamp))
+
 	return workflowTask, nil
 }
 
@@ -921,6 +975,15 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		m.ms.ClearStickyTaskQueue()
 	}
 
+	// LOG: Before clearing the task
+	oldStamp := m.ms.executionInfo.WorkflowTaskStamp
+	m.ms.logger.Info("DEBUG-STAMP: failWorkflowTask called",
+		tag.WorkflowScheduledEventID(currentWorkflowTask.ScheduledEventID),
+		tag.WorkflowStartedEventID(currentWorkflowTask.StartedEventID),
+		tag.NewInt32("old-stamp", oldStamp),
+		tag.NewBoolTag("increment-attempt", incrementAttempt),
+		tag.Attempt(currentWorkflowTask.Attempt))
+
 	failWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
 		Version:               common.EmptyVersion,
 		ScheduledEventID:      common.EmptyEventID,
@@ -941,9 +1004,21 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
 		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
 		m.ms.executionInfo.WorkflowTaskStamp += 1
+
+		// LOG: After incrementing stamp
+		m.ms.logger.Info("DEBUG-STAMP: Stamp incremented",
+			tag.NewInt32("old-stamp", oldStamp),
+			tag.NewInt32("new-stamp", m.ms.executionInfo.WorkflowTaskStamp),
+			tag.NewInt32("new-attempt", failWorkflowTaskInfo.Attempt))
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
+
+	// LOG: After updating workflow task
+	m.ms.logger.Info("DEBUG-STAMP: Workflow task cleared",
+		tag.NewInt64("old-scheduled-event-id", currentWorkflowTask.ScheduledEventID),
+		tag.NewInt64("new-scheduled-event-id", failWorkflowTaskInfo.ScheduledEventID),
+		tag.NewInt32("current-stamp", m.ms.executionInfo.WorkflowTaskStamp))
 
 	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
 	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt >= int32(consecutiveFailuresRequired) {
@@ -1077,6 +1152,12 @@ func (m *workflowTaskStateMachine) GetWorkflowTaskByID(scheduledEventID int64) *
 	if scheduledEventID == workflowTask.ScheduledEventID {
 		return workflowTask
 	}
+
+	// LOG: Task lookup failed
+	m.ms.logger.Info("DEBUG-STAMP: GetWorkflowTaskByID returning nil (mismatch)",
+		tag.NewInt64("requested-scheduled-event-id", scheduledEventID),
+		tag.NewInt64("current-scheduled-event-id", workflowTask.ScheduledEventID),
+		tag.NewInt32("current-stamp", m.ms.executionInfo.WorkflowTaskStamp))
 
 	return nil
 }

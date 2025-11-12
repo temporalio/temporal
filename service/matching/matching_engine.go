@@ -517,6 +517,25 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, err
 	}
 
+	// MATCHING LOG: Transfer task received from history - COMPREHENSIVE
+	forwardSourcePartition := "none"
+	taskSourceStr := "direct-from-history"
+	if addRequest.ForwardInfo != nil {
+		forwardSourcePartition = addRequest.ForwardInfo.GetSourcePartition()
+		taskSourceStr = addRequest.ForwardInfo.GetTaskSource().String()
+	}
+
+	e.logger.Info("DEBUG-MATCHING: AddWorkflowTask - Received transfer task from history",
+		tag.WorkflowScheduledEventID(addRequest.GetScheduledEventId()),
+		tag.NewInt32("stamp-in-request", addRequest.Stamp),
+		tag.WorkflowID(addRequest.Execution.GetWorkflowId()),
+		tag.WorkflowRunID(addRequest.Execution.GetRunId()),
+		tag.NewStringTag("task-source", taskSourceStr),
+		tag.NewStringTag("forward-source-partition", forwardSourcePartition),
+		tag.NewAnyTag("clock", addRequest.Clock),
+		tag.NewStringTag("task-queue", addRequest.TaskQueue.GetName()),
+		tag.NewStringTag("partition-kind", partition.Kind().String()))
+
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
@@ -546,10 +565,24 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		Priority:         addRequest.Priority,
 	}
 
-	return pm.AddTask(ctx, addTaskParams{
+	e.logger.Info("DEBUG-MATCHING: Created TaskInfo for matching queue",
+		tag.WorkflowScheduledEventID(taskInfo.ScheduledEventId),
+		tag.NewInt32("stamp-in-taskinfo", taskInfo.Stamp),
+		tag.NewBoolTag("has-forward-info", addRequest.ForwardInfo != nil))
+
+	result, syncMatch, err := pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
 		forwardInfo: addRequest.ForwardInfo,
 	})
+
+	e.logger.Info("DEBUG-MATCHING: AddTask result",
+		tag.WorkflowScheduledEventID(taskInfo.ScheduledEventId),
+		tag.NewInt32("stamp", taskInfo.Stamp),
+		tag.NewStringTag("result-build-id", result),
+		tag.NewBoolTag("sync-match", syncMatch),
+		tag.Error(err))
+
+	return result, syncMatch, err
 }
 
 // AddActivityTask either delivers task directly to waiting poller or save it into task queue persistence.
@@ -2969,6 +3002,17 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
+
+	// MATCHING LOG: Before calling RecordWorkflowTaskStarted
+	e.logger.Info("DEBUG-MATCHING: About to call RecordWorkflowTaskStarted",
+		tag.WorkflowScheduledEventID(task.event.Data.GetScheduledEventId()),
+		tag.NewInt32("stamp-from-task-event", task.event.Data.GetStamp()),
+		tag.NewStringTag("build-id-redirect", func() string {
+			if task.redirectInfo != nil {
+				return task.redirectInfo.GetAssignedBuildId()
+			}
+			return "none"
+		}()))
 
 	recordStartedRequest := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),

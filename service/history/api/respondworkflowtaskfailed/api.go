@@ -2,12 +2,14 @@ package respondworkflowtaskfailed
 
 import (
 	"context"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
@@ -57,12 +59,35 @@ func Invoke(
 			scheduledEventID := token.GetScheduledEventId()
 			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
 
+			// LOG: Check result before validation
+			shardContext.GetLogger().Info("DEBUG-STAMP: RespondWorkflowTaskFailed called",
+				tag.NewInt64("requested-scheduled-event-id", scheduledEventID),
+				tag.NewBoolTag("task-found", workflowTask != nil),
+				tag.NewInt32("current-stamp", mutableState.GetExecutionInfo().GetWorkflowTaskStamp()))
+
 			if workflowTask == nil ||
 				workflowTask.StartedEventID == common.EmptyEventID ||
 				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) ||
 				(token.StartedTime != nil && !workflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(workflowTask.StartedTime)) ||
 				workflowTask.Attempt != token.Attempt ||
 				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
+				// LOG: Rejection reason
+				shardContext.GetLogger().Info("DEBUG-STAMP: RespondWorkflowTaskFailed REJECTED",
+					tag.NewStringTag("reason", func() string {
+						if workflowTask == nil {
+							return "workflowTask is nil"
+						}
+						if workflowTask.StartedEventID == common.EmptyEventID {
+							return "StartedEventID is empty"
+						}
+						if token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID {
+							return fmt.Sprintf("StartedEventID mismatch: token=%d, task=%d", token.StartedEventId, workflowTask.StartedEventID)
+						}
+						if workflowTask.Attempt != token.Attempt {
+							return fmt.Sprintf("Attempt mismatch: token=%d, task=%d", token.Attempt, workflowTask.Attempt)
+						}
+						return "other mismatch"
+					}()))
 				// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
 				workflowLease.GetReleaseFn()(nil)
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
@@ -87,6 +112,14 @@ func Invoke(
 				0); err != nil {
 				return nil, err
 			}
+
+			// STEP 2 LOG: Task failed
+			shardContext.GetLogger().Info("DEBUG-FLOW [STEP 2]: Task failed, about to reschedule",
+				tag.WorkflowScheduledEventID(workflowTask.ScheduledEventID),
+				tag.NewStringTag("assigned-build-id", mutableState.GetAssignedBuildId()),
+				tag.NewStringTag("task-build-id", mutableState.GetExecutionInfo().GetWorkflowTaskBuildId()),
+				tag.NewInt32("current-stamp", mutableState.GetExecutionInfo().GetWorkflowTaskStamp()),
+				tag.NewStringTag("failure-cause", request.GetCause().String()))
 
 			metrics.FailedWorkflowTasksCounter.With(shardContext.GetMetricsHandler()).Record(
 				1,
