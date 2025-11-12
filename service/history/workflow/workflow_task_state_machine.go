@@ -98,7 +98,6 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
 	m.UpdateWorkflowTask(workflowTask)
-
 	return workflowTask, nil
 }
 
@@ -230,7 +229,6 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
-
 	return workflowTask, nil
 }
 

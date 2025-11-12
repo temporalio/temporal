@@ -97,7 +97,6 @@ dispatchLoop:
 				break dispatchLoop
 			}
 			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask)
-
 			for ctx.Err() == nil {
 				tr.updateBacklogAge(task)
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
@@ -205,7 +204,6 @@ func (tr *taskReader) getTaskBatchWithRange(
 	if err != nil {
 		return nil, err
 	}
-
 	return response.Tasks, err
 }
 

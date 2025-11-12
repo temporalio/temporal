@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -27,7 +26,6 @@ type (
 		queue     *PhysicalTaskQueueKey
 		partition *tqid.NormalPartition
 		client    matchingservice.MatchingServiceClient
-		logger    log.Logger
 
 		// token channels that vend tokens necessary to make
 		// API calls exposed by forwarder. Tokens are used
@@ -72,7 +70,6 @@ func newForwarder(
 	cfg *forwarderConfig,
 	queue *PhysicalTaskQueueKey,
 	client matchingservice.MatchingServiceClient,
-	logger log.Logger,
 ) (*Forwarder, error) {
 	partition, ok := queue.Partition().(*tqid.NormalPartition)
 	if !ok {
@@ -84,7 +81,6 @@ func newForwarder(
 		client:                client,
 		partition:             partition,
 		queue:                 queue,
-		logger:                logger,
 		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
 		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
 		limiter: quotas.NewDefaultOutgoingRateLimiter(
