@@ -67,13 +67,13 @@ func setFieldValue[T any](field *chasm.Field[T], value T) {
 	vField.Set(reflect.ValueOf(value))
 }
 
-// Test the full executeInvocationTask flow with chasm.ComponentRef
+// Test the full executeInvocationTask flow with direct executor calls
 func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 	cases := []struct {
 		name                  string
 		caller                HTTPCaller
 		expectedMetricOutcome string
-		assertOutcome         func(*testing.T, *Callback)
+		assertOutcome         func(*testing.T, *Callback, *chasm.MockMutableContext)
 	}{
 		{
 			name: "success",
@@ -81,8 +81,10 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "status:200",
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+				// Success state is terminal - no tasks should be generated
+				require.Len(t, mctx.Tasks, 0)
 			},
 		},
 		{
@@ -91,8 +93,13 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return nil, errors.New("fake failure")
 			},
 			expectedMetricOutcome: "unknown-error",
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+				// Should generate a BackoffTask
+				require.Len(t, mctx.Tasks, 1)
+				require.IsType(t, &callbackspb.BackoffTask{}, mctx.Tasks[0].Payload)
+				backoffTask := mctx.Tasks[0].Payload.(*callbackspb.BackoffTask)
+				require.Equal(t, cb.Attempt, backoffTask.Attempt)
 			},
 		},
 		{
@@ -101,8 +108,13 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "status:500",
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+				// Should generate a BackoffTask
+				require.Len(t, mctx.Tasks, 1)
+				require.IsType(t, &callbackspb.BackoffTask{}, mctx.Tasks[0].Payload)
+				backoffTask := mctx.Tasks[0].Payload.(*callbackspb.BackoffTask)
+				require.Equal(t, cb.Attempt, backoffTask.Attempt)
 			},
 		},
 		{
@@ -111,8 +123,10 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "status:400",
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+				// Failed state is terminal - no tasks should be generated
+				require.Len(t, mctx.Tasks, 0)
 			},
 		},
 	}
@@ -155,7 +169,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
-			// Create callback with CanGetNexusCompletion field
+			// Create callback in SCHEDULED state
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
 					RequestId:        "request-id",
@@ -168,31 +182,32 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						},
 					},
 					Status:  callbackspb.CALLBACK_STATUS_SCHEDULED,
-					Attempt: 1,
+					Attempt: 0,
 				},
 			}
 
-			// Set up the CompletionSource field to return our mock
+			// Set up the CompletionSource field
 			completionGetter := &mockNexusCompletionGetter{
 				completion: completion,
 			}
-			// Set the CanGetNexusCompletion field using reflection.
-			// This is necessary because CanGetNexusCompletion is a plain interface,
-			// not a chasm.Component, so we can't use NewComponentField.
 			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
 
 			// Create task executor with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			// Create mock engine and setup expectations
+			// Create MockMutableContext to capture tasks
+			var capturedMockCtx *chasm.MockMutableContext
+
+			// Create mock engine
 			mockEngine := chasm.NewMockEngine(ctrl)
+
+			// Setup engine expectations to directly call executor logic with MockMutableContext
 			mockEngine.EXPECT().ReadComponent(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
 			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
-				// Create a mock context
 				mockCtx := &chasm.MockContext{
 					HandleNow: func(component chasm.Component) time.Time {
 						return timeSource.Now()
@@ -201,8 +216,6 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						return []byte{}, nil
 					},
 				}
-
-				// Call the readFn with our callback
 				return readFn(mockCtx, callback)
 			})
 
@@ -211,7 +224,6 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				gomock.Any(),
 				gomock.Any(),
 			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
-				// Create a mock mutable context
 				mockCtx := &chasm.MockMutableContext{
 					MockContext: chasm.MockContext{
 						HandleNow: func(component chasm.Component) time.Time {
@@ -222,13 +234,12 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						},
 					},
 				}
-
-				// Call the updateFn with our callback
+				capturedMockCtx = mockCtx
 				err := updateFn(mockCtx, callback)
 				return nil, err
 			})
 
-			executor := InvocationTaskExecutor{
+			executor := &InvocationTaskExecutor{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -251,27 +262,26 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				EntityID:    "run-id",
 			})
 
-			// Create context with engine
-			ctx := chasm.NewEngineContext(context.Background(), mockEngine)
-
-			// Execute the invocation task
-			task := &callbackspb.InvocationTask{Attempt: 1}
+			// Execute with engine context
+			engineCtx := chasm.NewEngineContext(context.Background(), mockEngine)
 			err = executor.Invoke(
-				ctx,
+				engineCtx,
 				ref,
 				chasm.TaskAttributes{Destination: "http://localhost"},
-				task,
+				&callbackspb.InvocationTask{Attempt: 0},
 			)
 
-			// We expect an error because CanGetNexusCompletion field is not set up properly
-			// In the meantime, verify we got past the panic
-			if err != nil {
-				// This is expected - we can't fully test until Field API is available
-				t.Logf("Expected error: %v", err)
+			// For successful and non-retryable errors, expect no error from Invoke
+			// For retryable errors, expect an error to be returned
+			expectedError := tc.name == "network-error-retry" || tc.name == "retryable-http-error"
+			if expectedError {
+				require.Error(t, err)
 			} else {
-				// Verify the outcome if no error
-				tc.assertOutcome(t, callback)
+				require.NoError(t, err)
 			}
+
+			// Verify the outcome and tasks
+			tc.assertOutcome(t, callback, capturedMockCtx)
 		})
 	}
 }
@@ -370,7 +380,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 		completion           nexusrpc.OperationCompletion
 		headerValue          string
 		expectsInternalError bool
-		assertOutcome        func(*testing.T, *Callback)
+		assertOutcome        func(*testing.T, *Callback, *chasm.MockMutableContext)
 	}{
 		{
 			name: "success-with-successful-operation",
@@ -405,8 +415,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				return comp
 			}(),
 			headerValue: encodedRef,
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+				// Success state is terminal - no tasks should be generated
+				require.Len(t, mctx.Tasks, 0)
 			},
 		},
 		{
@@ -439,8 +451,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				return comp
 			}(),
 			headerValue: encodedRef,
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+				// Success state is terminal - no tasks should be generated
+				require.Len(t, mctx.Tasks, 0)
 			},
 		},
 		{
@@ -463,8 +477,11 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          encodedRef,
 			expectsInternalError: true,
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+				// Should generate a BackoffTask
+				require.Len(t, mctx.Tasks, 1)
+				require.IsType(t, &callbackspb.BackoffTask{}, mctx.Tasks[0].Payload)
 			},
 		},
 		{
@@ -487,8 +504,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          encodedRef,
 			expectsInternalError: true,
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+				// Failed state is terminal - no tasks should be generated
+				require.Len(t, mctx.Tasks, 0)
 			},
 		},
 		{
@@ -507,8 +526,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          "invalid-base64!!!",
 			expectsInternalError: true,
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+				// Failed state is terminal - no tasks should be generated
+				require.Len(t, mctx.Tasks, 0)
 			},
 		},
 		{
@@ -527,8 +548,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
 			expectsInternalError: true,
-			assertOutcome: func(t *testing.T, cb *Callback) {
+			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+				// Failed state is terminal - no tasks should be generated
+				require.Len(t, mctx.Tasks, 0)
 			},
 		},
 	}
@@ -589,6 +612,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
+			// Create MockMutableContext to capture tasks
+			var capturedMockCtx *chasm.MockMutableContext
+
 			// Create mock engine and setup expectations
 			mockEngine := chasm.NewMockEngine(ctrl)
 			mockEngine.EXPECT().ReadComponent(
@@ -633,6 +659,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 						},
 					},
 				}
+				capturedMockCtx = mockCtx
 
 				// Call the updateFn with our callback
 				err := updateFn(mockCtx, callback)
@@ -679,7 +706,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			tc.assertOutcome(t, callback)
+			tc.assertOutcome(t, callback, capturedMockCtx)
 		})
 	}
 }
