@@ -184,6 +184,9 @@ type Client interface {
 	) error
 }
 
+type ErrMaxTaskQueuesInVersion struct{ error }
+type ErrMaxVersionsInDeployment struct{ error }
+type ErrMaxDeploymentsInNamespace struct{ error }
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -320,9 +323,9 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to client-side error type
-		return &serviceerror.ResourceExhausted{Message: failure.Message, Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE}
+		return ErrMaxTaskQueuesInVersion{error: errors.New(failure.Message)}
 	} else if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-		return &serviceerror.ResourceExhausted{Message: failure.Message, Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE}
+		return ErrMaxVersionsInDeployment{error: errors.New(failure.Message)}
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {
@@ -1229,7 +1232,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		}
 		limit := d.maxDeployments(namespaceEntry.Name().String())
 		if count >= int64(limit) {
-			return nil, &serviceerror.ResourceExhausted{Message: fmt.Sprintf("reached maximum deployments in namespace (%d)", limit), Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE}
+			return nil, ErrMaxDeploymentsInNamespace{error: errors.New(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))}
 		}
 	}
 
