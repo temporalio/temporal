@@ -246,7 +246,8 @@ func Invoke(
 
 	// Check for CHASM callbacks (regardless of feature flag setting)
 	chasmTree := mutableState.ChasmTree()
-	if chasmTree != nil && chasmTree.Archetype() != "" {
+	// Only process CHASM callbacks if we have an actual chasm.Node (not a noopChasmTree)
+	if chasmNode, ok := chasmTree.(*chasm.Node); ok && chasmNode != nil {
 		chasmCallbackInfos, err := buildCallbackInfosFromChasm(
 			ctx,
 			namespaceID,
@@ -437,7 +438,18 @@ func buildCallbackInfosFromChasm(
 	logger log.Logger,
 ) ([]*workflowpb.CallbackInfo, error) {
 	chasmTree := mutableState.ChasmTree()
-	chasmCtx := chasm.NewContext(ctx, chasmTree.(*chasm.Node))
+	// This should always be a *chasm.Node at this point, but we check for safety
+	chasmNode, ok := chasmTree.(*chasm.Node)
+	if !ok || chasmNode == nil {
+		logger.Error(
+			"expected *chasm.Node but got different type",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(executionInfo.WorkflowId),
+			tag.WorkflowRunID(executionState.RunId),
+		)
+		return nil, serviceerror.NewInternal("failed to construct describe response")
+	}
+	chasmCtx := chasm.NewContext(ctx, chasmNode)
 
 	rootComponent, err := chasmTree.ComponentByPath(chasmCtx, nil)
 	if err != nil {
