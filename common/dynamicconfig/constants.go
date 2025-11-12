@@ -3022,4 +3022,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
 	)
+
+	EnableWorkerStateTracking = NewNamespaceBoolSetting(
+		"frontend.enableWorkerStateTracking",
+		false,
+		`EnableWorkerStateTracking controls whether worker heartbeats are tracked in CHASM for worker liveness monitoring.`,
+	)
 )
