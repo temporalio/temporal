@@ -386,9 +386,10 @@ type ActivityAttemptState struct {
 	// The Worker Deployment Version this activity was dispatched to most recently.
 	// If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
 	LastDeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,8,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
-	// Request identifier for idempotent task start operations. Matching service sets this to a UUID, allowing safe
-	// retries if the response is lost. History service returns success (not AlreadyStarted error) when retrying with a
-	// matching request_id, ensuring tasks are delivered to workers even after network failures.
+	// Request identifier for idempotent task start operations. Matching service sets this to a
+	// UUID, allowing safe retries if the response is lost. History service returns success (not
+	// AlreadyStarted error) when retrying with a matching request_id, ensuring tasks are delivered
+	// to workers even after network failures.
 	RequestId     string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
