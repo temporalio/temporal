@@ -949,6 +949,7 @@ func reapplyEvents(
 				requestID,
 				callbacks,
 				event.Links,
+				attr.Priority,
 			); err != nil {
 				return reappliedEvents, err
 			}
