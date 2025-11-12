@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -148,7 +149,7 @@ func processActivityOptionsUpdate(
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		StartToCloseTimeout:    ai.StartToCloseTimeout,
 		HeartbeatTimeout:       ai.HeartbeatTimeout,
-		Priority:               ai.Priority,
+		Priority:               common.CloneProto(ai.Priority),
 		RetryPolicy: &commonpb.RetryPolicy{
 			BackoffCoefficient: ai.RetryBackoffCoefficient,
 			InitialInterval:    ai.RetryInitialInterval,
