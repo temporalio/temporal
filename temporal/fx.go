@@ -140,11 +140,12 @@ var (
 			InternalFrontendServiceProvider,
 			WorkerServiceProvider,
 			ApplyClusterMetadataConfigProvider,
-			serialization.NewSerializer,
 		),
 		dynamicconfig.Module,
 		pprof.Module,
 		TraceExportModule,
+		chasm.Module,
+		serialization.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
 	)
