@@ -109,6 +109,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.config = tests.NewDynamicConfig()
+	s.config.EnableWorkflowTaskStampIncrementOnFailure = func() bool { return true }
 	s.namespaceEntry = tests.GlobalStandbyNamespaceEntry
 	s.namespaceID = s.namespaceEntry.ID()
 	s.version = s.namespaceEntry.FailoverVersion()
