@@ -186,7 +186,7 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 
 // validateAndUpdateRequestID the requestID is set by the matching service to a UUID, allowing safe retries if the
 // response is lost. If the existing request ID is empty, it sets it to the incoming one as this is a first attempt.
-// If they match, it's a valid retry, and it's a successful no-op. f there's a mismatch, it returns a TaskAlreadyStarted
+// If they match, it's a valid retry, and it's a successful no-op. If there's a mismatch, it returns a TaskAlreadyStarted
 // error.
 func (a *Activity) validateAndUpdateRequestID(attempt *activitypb.ActivityAttemptState, requestID string) error {
 	if attempt.GetRequestId() == "" {
