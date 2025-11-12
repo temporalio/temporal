@@ -320,7 +320,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to client-side error type
-		return &serviceerror.ResourceExhausted{Message: failure.Message, Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE} // ErrMaxTaskQueuesInVersion{error: errors.New(failure.Message)}
+		return &serviceerror.ResourceExhausted{Message: failure.Message, Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE}
 	} else if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
 		return &serviceerror.ResourceExhausted{Message: failure.Message, Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE}
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
