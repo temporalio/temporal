@@ -1,12 +1,12 @@
 package callback
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -14,6 +14,10 @@ import (
 const (
 	Archetype chasm.Archetype = "Callback"
 )
+
+type CompletionSource interface {
+	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.OperationCompletion, error)
+}
 
 var _ chasm.Component = (*Callback)(nil)
 var _ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
@@ -65,43 +69,41 @@ func (c *Callback) recordAttempt(ts time.Time) {
 
 //nolint:revive // context.Context is an input parameter for chasm.ReadComponent, not a function parameter
 func (c *Callback) loadInvocationArgs(
-	chasmCtx chasm.Context,
-	ctx context.Context,
+	ctx chasm.Context,
+	_ chasm.NoValue,
 ) (callbackInvokable, error) {
-	target, err := c.CompletionSource.Get(chasmCtx)
+	target, err := c.CompletionSource.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO (seankane,yichao): we should be able to use the chasm context here.
 	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
 		return nil, err
 	}
 
-	switch variant := c.GetCallback().GetVariant().(type) {
-	case *callbackspb.Callback_Nexus_:
-		if variant.Nexus.Url == chasm.NexusCompletionHandlerURL {
-			return chasmInvocation{
-				nexus:      variant.Nexus,
-				attempt:    c.Attempt,
-				completion: completion,
-				requestID:  c.RequestId,
-			}, nil
-		}
-		return nexusInvocation{
-			nexus:      variant.Nexus,
-			completion: completion,
-			// workflowID: c.WorkflowId,
-			workflowID: chasmCtx.ExecutionKey().BusinessID,
-			runID:      chasmCtx.ExecutionKey().EntityID,
-			attempt:    c.Attempt,
-		}, nil
-	default:
+	variant := c.GetCallback().GetNexus()
+	if variant == nil {
 		return nil, queues.NewUnprocessableTaskError(
 			fmt.Sprintf("unprocessable callback variant: %v", variant),
 		)
 	}
+
+	if variant.Url == chasm.NexusCompletionHandlerURL {
+		return chasmInvocation{
+			nexus:      variant,
+			attempt:    c.Attempt,
+			completion: completion,
+			requestID:  c.RequestId,
+		}, nil
+	}
+	return nexusInvocation{
+		nexus:      variant,
+		completion: completion,
+		workflowID: ctx.ExecutionKey().BusinessID,
+		runID:      ctx.ExecutionKey().EntityID,
+		attempt:    c.Attempt,
+	}, nil
 }
 
 func (c *Callback) saveResult(
