@@ -11,6 +11,9 @@ var HistoryModule = fx.Module(
 	"activity-history",
 	fx.Provide(
 		newActivityDispatchTaskExecutor,
+		newScheduleToStartTimeoutTaskExecutor,
+		newScheduleToCloseTimeoutTaskExecutor,
+		newStartToCloseTimeoutTaskExecutor,
 		newHandler,
 		newLibrary,
 	),
