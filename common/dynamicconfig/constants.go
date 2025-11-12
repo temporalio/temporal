@@ -943,6 +943,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
+	MaxCHASMCallbacksPerWorkflow = NewNamespaceIntSetting(
+		"system.maxCHASMCallbacksPerWorkflow",
+		2000,
+		`MaxCHASMCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow when using the CHASM implementation.`,
+	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
 		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
@@ -2622,18 +2627,11 @@ instead of the existing (V1) implementation.`,
 to the CHASM (V2) implementation on active scheduler workflows.`,
 	)
 
-	EnableCHASMCallbackCreation = NewNamespaceBoolSetting(
-		"history.enableCHASMCallbackCreation",
+	EnableCHASMCallbacks = NewNamespaceBoolSetting(
+		"history.enableCHASMCallbacks",
 		false,
-		`EnableCHASMCallbackCreation controls whether new callbacks are created using the CHASM (V2) implementation
-instead of the existing (V1) implementation.`,
-	)
-
-	EnableCHASMCallbackMigration = NewNamespaceBoolSetting(
-		"history.enableCHASMCallbackMigration",
-		false,
-		`EnableCHASMCallbackMigration controls whether existing V1 callbacks are automatically migrated
-to the CHASM (V2) implementation on active callback workflows.`,
+		`Controls whether new callbacks are created using the CHASM implementation
+instead of the previous HSM backed implementation.`,
 	)
 
 	// keys for worker

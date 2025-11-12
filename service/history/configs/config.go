@@ -62,13 +62,13 @@ type Config struct {
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCHASMCallbacksPerWorkflow          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableRequestIdRefLinks               dynamicconfig.BoolPropertyFn
 	EnableChasm                           dynamicconfig.BoolPropertyFn
 	ChasmMaxInMemoryPureTasks             dynamicconfig.IntPropertyFn
 	EnableCHASMSchedulerCreation          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableCHASMCallbackCreation           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableCHASMCallbackMigration          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -446,6 +446,7 @@ func NewConfig(
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		MaxCHASMCallbacksPerWorkflow:          dynamicconfig.MaxCHASMCallbacksPerWorkflow.Get(dc),
 		EnableRequestIdRefLinks:               dynamicconfig.EnableRequestIdRefLinks.Get(dc),
 		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
 		ChasmMaxInMemoryPureTasks:             dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
@@ -453,8 +454,7 @@ func NewConfig(
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerMigration: dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 
-		EnableCHASMCallbackCreation:  dynamicconfig.EnableCHASMCallbackCreation.Get(dc),
-		EnableCHASMCallbackMigration: dynamicconfig.EnableCHASMCallbackMigration.Get(dc),
+		EnableCHASMCallbacks: dynamicconfig.EnableCHASMCallbacks.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB

@@ -34,7 +34,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -241,22 +240,14 @@ func Invoke(
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
 	}
 
-	// Check if using CHASM callbacks
+	// Collect callbacks from both CHASM and HSM sources
+	// A single execution could have callbacks in both places, so we need to check both
 	var callbackInfos []*workflowpb.CallbackInfo
-	useChasmCallbacks := false
-	chasmTree := mutableState.ChasmTree()
-	if chasmTree != nil {
-		// Check if CHASM tree is enabled (not a noop)
-		if chasmTree.Archetype() != "" {
-			// CHASM tree is enabled, check if callback creation flag is on
-			if shard.GetConfig().EnableCHASMCallbackCreation(mutableState.GetNamespaceEntry().Name().String()) {
-				useChasmCallbacks = true
-			}
-		}
-	}
 
-	if useChasmCallbacks {
-		callbackInfos, err = buildCallbackInfosFromChasm(
+	// Check for CHASM callbacks (regardless of feature flag setting)
+	chasmTree := mutableState.ChasmTree()
+	if chasmTree != nil && chasmTree.Archetype() != "" {
+		chasmCallbackInfos, err := buildCallbackInfosFromChasm(
 			ctx,
 			namespaceID,
 			mutableState,
@@ -265,19 +256,26 @@ func Invoke(
 			outboundQueueCBPool,
 			shard.GetLogger(),
 		)
-	} else {
-		callbackInfos, err = buildCallbackInfosFromHSM(
-			namespaceID,
-			mutableState,
-			executionInfo,
-			executionState,
-			outboundQueueCBPool,
-			shard.GetLogger(),
-		)
+		if err != nil {
+			return nil, err
+		}
+		callbackInfos = append(callbackInfos, chasmCallbackInfos...)
 	}
+
+	// Check for HSM callbacks
+	hsmCallbackInfos, err := buildCallbackInfosFromHSM(
+		namespaceID,
+		mutableState,
+		executionInfo,
+		executionState,
+		outboundQueueCBPool,
+		shard.GetLogger(),
+	)
 	if err != nil {
 		return nil, err
 	}
+	callbackInfos = append(callbackInfos, hsmCallbackInfos...)
+
 	result.Callbacks = callbackInfos
 
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
@@ -317,12 +315,12 @@ func Invoke(
 	return result, nil
 }
 
-func buildCallbackInfo(
+func buildCallbackInfoFromHSM(
 	namespaceID namespace.ID,
 	callback callbacks.Callback,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.CallbackInfo, error) {
-	if callback.Callback.GetNexus() == nil {
+	if callback.GetCallback().GetNexus() == nil {
 		// Ignore non-nexus callbacks for now (there aren't any just yet).
 		return nil, nil
 	}
@@ -408,7 +406,7 @@ func buildCallbackInfosFromHSM(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		callbackInfo, err := buildCallbackInfo(namespaceID, callback, outboundQueueCBPool)
+		callbackInfo, err := buildCallbackInfoFromHSM(namespaceID, callback, outboundQueueCBPool)
 		if err != nil {
 			logger.Error(
 				"failed to build callback info while building describe response",
@@ -504,29 +502,20 @@ func buildCallbackInfoFromChasm(
 	callback *chasmcallback.Callback,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.CallbackInfo, error) {
-	if callback.Callback.GetNexus() == nil {
+	nexusVariant := callback.GetCallback().GetNexus()
+	if nexusVariant == nil {
+		// Only Nexus callbacks are supported
 		return nil, nil
 	}
 
 	cbSpec := &commonpb.Callback{
-		Links: callback.Callback.GetLinks(),
-	}
-	switch variant := callback.Callback.Variant.(type) {
-	case *callbackspb.Callback_Nexus_:
-		cbSpec.Variant = &commonpb.Callback_Nexus_{
+		Links: callback.GetCallback().GetLinks(),
+		Variant: &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
-				Url:    variant.Nexus.GetUrl(),
-				Header: variant.Nexus.GetHeader(),
+				Url:    nexusVariant.GetUrl(),
+				Header: nexusVariant.GetHeader(),
 			},
-		}
-	default:
-		data, err := proto.Marshal(callback.Callback)
-		if err != nil {
-			return nil, err
-		}
-		cbSpec.Variant = &commonpb.Callback_Internal_{
-			Internal: &commonpb.Callback_Internal{Data: data},
-		}
+		},
 	}
 
 	var state enumspb.CallbackState

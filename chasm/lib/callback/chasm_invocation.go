@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -33,22 +32,7 @@ type chasmInvocation struct {
 }
 
 func (c chasmInvocation) WrapError(result invocationResult, err error) error {
-	// If there was an error saving the result, return it
-	if err != nil {
-		return err
-	}
-
-	// For retry cases, return the error
-	if retry, ok := result.(invocationResultRetry); ok {
-		return retry.err
-	}
-
-	// For permanent failures, return unprocessable task error
-	if failure, ok := result.(invocationResultFail); ok {
-		return queues.NewUnprocessableTaskError(failure.err.Error())
-	}
-
-	return nil
+	return err
 }
 
 // logInternalError emits a log statement for internalMsg, tagged with both

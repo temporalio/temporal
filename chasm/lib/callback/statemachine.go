@@ -33,7 +33,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		cb.NextAttemptScheduleTime = nil
 		ctx.AddTask(
 			cb,
-			chasm.TaskAttributes{ScheduledTime: time.Time{}},
+			chasm.TaskAttributes{Destination: cb.Callback.GetNexus().GetUrl()},
 			&callbackspb.InvocationTask{Attempt: cb.Attempt},
 		)
 		return nil
