@@ -485,6 +485,7 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.GetConflictToken()) {
 		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
+
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if args.Version == d.State.GetRoutingConfig().GetCurrentVersion() &&
 		!(args.Version == worker_versioning.UnversionedVersionId && args.Percentage == 0) {
@@ -567,133 +568,62 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	asyncMode := d.hasMinVersion(AsyncSetCurrentAndRamping)
 
-	// Determine timestamps based on whether we're setting or unsetting ramp
-	if newRampingVersion == "" {
-		// unsetting ramp
-		rampingVersionUpdateTime = routingUpdateTime
-	} else if prevRampingVersion == newRampingVersion {
-		// version was already ramping, user changing ramp %
-		rampingSinceTime = d.State.RoutingConfig.RampingVersionChangedTime
-		rampingVersionUpdateTime = d.State.RoutingConfig.RampingVersionChangedTime
-	} else {
-		// version ramping for the first time
-		rampingSinceTime = routingUpdateTime
-		rampingVersionUpdateTime = routingUpdateTime
-	}
+	if (prevRampingVersion != newRampingVersion && prevRampingVersionPercentage != args.Percentage) || !asyncMode {
+		// In async mode we do not touch routing config and versions if this is not changing the
+		// ramping version or percentage (but could still come here because modifier identity is changing).
 
-	// Build pending routing config with the updated ramping version
-	// Initialize for both sync and async modes to simplify state update logic
-	pendingRoutingConfig := &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:            d.State.RoutingConfig.CurrentDeploymentVersion,
-		CurrentVersion:                      d.State.RoutingConfig.CurrentVersion,
-		RampingDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newRampingVersion),
-		RampingVersion:                      newRampingVersion,
-		RampingVersionPercentage:            args.Percentage,
-		CurrentVersionChangedTime:           d.State.RoutingConfig.CurrentVersionChangedTime,
-		RampingVersionChangedTime:           rampingVersionUpdateTime,
-		RampingVersionPercentageChangedTime: routingUpdateTime,
-		RevisionNumber:                      d.State.RoutingConfig.RevisionNumber,
-	}
-
-	var routingConfigToSync *deploymentpb.RoutingConfig
-
-	if asyncMode {
-		pendingRoutingConfig.RevisionNumber++
-		// only setting it in the request if it's async mode
-		routingConfigToSync = pendingRoutingConfig
-	}
-
-	if newRampingVersion == "" {
-		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: routingUpdateTime,
-			RampingSinceTime:  nil, // remove ramp
-			RampPercentage:    0,   // remove ramp
-			RoutingConfig:     routingConfigToSync,
-		}
-
-		if !d.rampingVersionStringUnversioned(prevRampingVersion) {
-			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
-				return nil, err
-			}
-		} else if asyncMode {
-			// In async mode, updates for unversioned ramps are propagated through the current version
-			// because we send the full routing config (not just version-specific data)
-			if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, unsetRampUpdateArgs, false); err != nil {
-				return nil, err
-			}
+		// Determine timestamps based on whether we're setting or unsetting ramp
+		if newRampingVersion == "" {
+			// unsetting ramp
+			rampingVersionUpdateTime = routingUpdateTime
+		} else if prevRampingVersion == newRampingVersion {
+			// version was already ramping, user changing ramp %
+			rampingSinceTime = d.State.RoutingConfig.RampingVersionChangedTime
+			rampingVersionUpdateTime = d.State.RoutingConfig.RampingVersionChangedTime
 		} else {
-			// Only should call this in sync mode
-			if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
-				return nil, err
-			}
+			// version ramping for the first time
+			rampingSinceTime = routingUpdateTime
+			rampingVersionUpdateTime = routingUpdateTime
 		}
 
-		// Set summary drainage status immediately to draining.
-		// We know prevRampingVersion cannot have been current, so it must now be draining
-		d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
-	} else {
-		// setting ramp
-
-		if prevRampingVersion != newRampingVersion {
-			// version ramping for the first time - need to check for missing task queues
-
-			currentVersion := d.State.RoutingConfig.CurrentVersion
-			if !args.IgnoreMissingTaskQueues &&
-				currentVersion != worker_versioning.UnversionedVersionId &&
-				newRampingVersion != worker_versioning.UnversionedVersionId {
-				isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, currentVersion, newRampingVersion)
-				if err != nil {
-					d.logger.Info("Error verifying poller presence in version", "error", err)
-					return nil, err
-				}
-				if isMissingTaskQueues {
-					return nil, serviceerror.NewFailedPrecondition(ErrRampingVersionDoesNotHaveAllTaskQueues)
-				}
-			}
-
-			// Erase summary drainage status immediately, so it is not draining/drained.
-			d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, routingUpdateTime)
+		// Build pending routing config with the updated ramping version
+		// Initialize for both sync and async modes to simplify state update logic
+		pendingRoutingConfig := &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:            d.State.RoutingConfig.CurrentDeploymentVersion,
+			CurrentVersion:                      d.State.RoutingConfig.CurrentVersion,
+			RampingDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newRampingVersion),
+			RampingVersion:                      newRampingVersion,
+			RampingVersionPercentage:            args.Percentage,
+			CurrentVersionChangedTime:           d.State.RoutingConfig.CurrentVersionChangedTime,
+			RampingVersionChangedTime:           rampingVersionUpdateTime,
+			RampingVersionPercentageChangedTime: routingUpdateTime,
+			RevisionNumber:                      d.State.RoutingConfig.RevisionNumber,
 		}
 
-		setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: routingUpdateTime,
-			RampingSinceTime:  rampingSinceTime,
-			RampPercentage:    args.Percentage,
-			RoutingConfig:     routingConfigToSync,
-		}
-		if !d.rampingVersionStringUnversioned(newRampingVersion) {
-			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs, true); err != nil {
-				return nil, err
-			}
-		} else if asyncMode {
-			// In async mode, updates for unversioned ramps are propagated through the current version
-			// because we send the full routing config (not just version-specific data)
-			if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, setRampUpdateArgs, true); err != nil {
-				return nil, err
-			}
-		} else {
-			// Only should call this in sync mode
-			if err := d.syncUnversionedRamp(ctx, setRampUpdateArgs); err != nil {
-				return nil, err
-			}
+		var routingConfigToSync *deploymentpb.RoutingConfig
+
+		if asyncMode {
+			pendingRoutingConfig.RevisionNumber++
+			// only setting it in the request if it's async mode
+			routingConfigToSync = pendingRoutingConfig
 		}
 
-		// tell previous ramping version, if present, that it's no longer ramping
-		if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
+		if newRampingVersion == "" {
 			unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 				RoutingUpdateTime: routingUpdateTime,
 				RampingSinceTime:  nil, // remove ramp
 				RampPercentage:    0,   // remove ramp
 				RoutingConfig:     routingConfigToSync,
 			}
+
 			if !d.rampingVersionStringUnversioned(prevRampingVersion) {
 				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
 					return nil, err
 				}
 			} else if asyncMode {
-				// In async mode, updates for unversioned ramps are propagated through the current version
-				// because we send the full routing config (not just version-specific data)
-				if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, unsetRampUpdateArgs, true); err != nil {
+				// Here, we are unsetting unversioned ramp in async mode. This only can happen if there IS a current version, so we
+				// propagate the ramp status in routing config through the current version.
+				if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, unsetRampUpdateArgs, false); err != nil {
 					return nil, err
 				}
 			} else {
@@ -702,14 +632,88 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 					return nil, err
 				}
 			}
+
 			// Set summary drainage status immediately to draining.
 			// We know prevRampingVersion cannot have been current, so it must now be draining
 			d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
+		} else {
+			// setting ramp
+
+			if prevRampingVersion != newRampingVersion {
+				// version ramping for the first time - need to check for missing task queues
+
+				currentVersion := d.State.RoutingConfig.CurrentVersion
+				if !args.IgnoreMissingTaskQueues &&
+					currentVersion != worker_versioning.UnversionedVersionId &&
+					newRampingVersion != worker_versioning.UnversionedVersionId {
+					isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, currentVersion, newRampingVersion)
+					if err != nil {
+						d.logger.Info("Error verifying poller presence in version", "error", err)
+						return nil, err
+					}
+					if isMissingTaskQueues {
+						return nil, serviceerror.NewFailedPrecondition(ErrRampingVersionDoesNotHaveAllTaskQueues)
+					}
+				}
+
+				// Erase summary drainage status immediately, so it is not draining/drained.
+				d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, routingUpdateTime)
+			}
+
+			setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: routingUpdateTime,
+				RampingSinceTime:  rampingSinceTime,
+				RampPercentage:    args.Percentage,
+				RoutingConfig:     routingConfigToSync,
+			}
+			if !d.rampingVersionStringUnversioned(newRampingVersion) {
+				if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs, true); err != nil {
+					return nil, err
+				}
+			} else if asyncMode {
+				// Here, we are setting unversioned ramp in async mode. This only can happen if there IS a current version, so we
+				// propagate the ramp status in routing config through the current version.
+				if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, setRampUpdateArgs, true); err != nil {
+					return nil, err
+				}
+			} else {
+				// Only should call this in sync mode
+				if err := d.syncUnversionedRamp(ctx, setRampUpdateArgs); err != nil {
+					return nil, err
+				}
+			}
+
+			// tell previous ramping version, if present, that it's no longer ramping
+			if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
+				unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+					RoutingUpdateTime: routingUpdateTime,
+					RampingSinceTime:  nil, // remove ramp
+					RampPercentage:    0,   // remove ramp
+					RoutingConfig:     routingConfigToSync,
+				}
+				if !d.rampingVersionStringUnversioned(prevRampingVersion) {
+					if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
+						return nil, err
+					}
+				} else if asyncMode {
+					// Here, we are setting a versioned ramp on top of an unversioned ramp in async mode. In this case we
+					// already synced the ramp status through the new ramping version so there is no need for another sync.
+				} else {
+					// Only should call this in sync mode
+					if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+						return nil, err
+					}
+				}
+				// Set summary drainage status immediately to draining.
+				// We know prevRampingVersion cannot have been current, so it must now be draining
+				d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
+			}
 		}
+
+		// update local state - use pendingRoutingConfig (initialized for both sync and async modes)
+		d.State.RoutingConfig = pendingRoutingConfig
 	}
 
-	// update local state - use pendingRoutingConfig (initialized for both sync and async modes)
-	d.State.RoutingConfig = pendingRoutingConfig
 	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
 	d.State.LastModifierIdentity = args.Identity
 
@@ -948,94 +952,107 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 	asyncMode := d.hasMinVersion(AsyncSetCurrentAndRamping)
 
-	// Build pending routing config with the updated current version
-	// Initialize for both sync and async modes to simplify state update logic
-	pendingRoutingConfig := &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newCurrentVersion),
-		CurrentVersion:                      newCurrentVersion,
-		RampingDeploymentVersion:            d.State.RoutingConfig.RampingDeploymentVersion,
-		RampingVersion:                      d.State.RoutingConfig.RampingVersion,
-		RampingVersionPercentage:            d.State.RoutingConfig.RampingVersionPercentage,
-		CurrentVersionChangedTime:           updateTime,
-		RampingVersionChangedTime:           d.State.RoutingConfig.RampingVersionChangedTime,
-		RampingVersionPercentageChangedTime: d.State.RoutingConfig.RampingVersionPercentageChangedTime,
-		RevisionNumber:                      d.State.RoutingConfig.RevisionNumber,
-	}
-	if asyncMode {
-		pendingRoutingConfig.RevisionNumber++
-	}
-	// Unset ramping if it's being promoted to current
-	if newCurrentVersion == d.State.RoutingConfig.RampingVersion {
-		pendingRoutingConfig.RampingVersion = ""
-		pendingRoutingConfig.RampingDeploymentVersion = nil
-		pendingRoutingConfig.RampingVersionPercentage = 0
-		pendingRoutingConfig.RampingVersionChangedTime = updateTime
-		pendingRoutingConfig.RampingVersionPercentageChangedTime = updateTime
-	}
+	if prevCurrentVersion != newCurrentVersion || !asyncMode {
+		// In async mode we do not touch routing config and versions if this is not changing the
+		// current version (but could still come here because modifier identity is changing).
 
-	// TODO (Shivam): remove the empty string check once canary stops flaking out
-	if newCurrentVersion != worker_versioning.UnversionedVersionId && newCurrentVersion != "" {
-		// Tell new current version that it's current
-		currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			CurrentSinceTime:  updateTime,
-			RampingSinceTime:  nil, // remove ramp for that version if it was ramping
-			RampPercentage:    0,   // remove ramp for that version if it was ramping
+		// Build pending routing config with the updated current version
+		// Initialize for both sync and async modes to simplify state update logic
+		pendingRoutingConfig := &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newCurrentVersion),
+			CurrentVersion:                      newCurrentVersion,
+			RampingDeploymentVersion:            d.State.RoutingConfig.RampingDeploymentVersion,
+			RampingVersion:                      d.State.RoutingConfig.RampingVersion,
+			RampingVersionPercentage:            d.State.RoutingConfig.RampingVersionPercentage,
+			CurrentVersionChangedTime:           updateTime,
+			RampingVersionChangedTime:           d.State.RoutingConfig.RampingVersionChangedTime,
+			RampingVersionPercentageChangedTime: d.State.RoutingConfig.RampingVersionPercentageChangedTime,
+			RevisionNumber:                      d.State.RoutingConfig.RevisionNumber,
 		}
+
+		var routingConfigToSync *deploymentpb.RoutingConfig
 		if asyncMode {
-			currUpdateArgs.RoutingConfig = pendingRoutingConfig
+			pendingRoutingConfig.RevisionNumber++
+			// only setting it in the request if it's async mode
+			routingConfigToSync = pendingRoutingConfig
 		}
-		if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs, true); err != nil {
-			return nil, err
+
+		// Unset ramping if it's being promoted to current
+		if newCurrentVersion == d.State.RoutingConfig.RampingVersion {
+			pendingRoutingConfig.RampingVersion = ""
+			pendingRoutingConfig.RampingDeploymentVersion = nil
+			pendingRoutingConfig.RampingVersionPercentage = 0
+			pendingRoutingConfig.RampingVersionChangedTime = updateTime
+			pendingRoutingConfig.RampingVersionPercentageChangedTime = updateTime
 		}
-		// Erase summary drainage status immediately (in case it was previously drained/draining)
-		d.setDrainageStatus(newCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, updateTime)
+
+		// TODO (Shivam): remove the empty string check once canary stops flaking out
+		if newCurrentVersion != worker_versioning.UnversionedVersionId && newCurrentVersion != "" {
+			// Tell new current version that it's current
+			currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: updateTime,
+				CurrentSinceTime:  updateTime,
+				RampingSinceTime:  nil, // remove ramp for that version if it was ramping
+				RampPercentage:    0,   // remove ramp for that version if it was ramping
+				RoutingConfig:     routingConfigToSync,
+			}
+			if asyncMode {
+				currUpdateArgs.RoutingConfig = pendingRoutingConfig
+			}
+			if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs, true); err != nil {
+				return nil, err
+			}
+			// Erase summary drainage status immediately (in case it was previously drained/draining)
+			d.setDrainageStatus(newCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, updateTime)
+		}
+		// If the new current version is unversioned and there was no unversioned ramp, all we need to
+		// do is tell the previous current version that it is not current. Then, the task queues in the
+		// previous current version will have no current version and will become unversioned implicitly.
+
+		// TODO (Shivam): remove the empty string check once canary stops flaking out
+		if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
+			// Tell previous current that it's no longer current
+			prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: updateTime,
+				CurrentSinceTime:  nil, // remove current
+				RampingSinceTime:  nil, // no change, the prev current was not ramping
+				RampPercentage:    0,   // no change, the prev current was not ramping
+				RoutingConfig:     routingConfigToSync,
+			}
+			if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs, false); err != nil {
+				return nil, err
+			}
+			// Set summary drainage status immediately to draining.
+			// We know prevCurrentVersion cannot have been ramping, so it must now be draining
+			d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
+		}
+
+		//nolint:staticcheck // deprecated stuff will be cleaned
+		if newCurrentVersion == worker_versioning.UnversionedVersionId && d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId &&
+			// this step is not needed in async mode because the task queues got full routing info (including removed ramp) through the previous version.
+			!asyncMode {
+			// If the new current is unversioned, and it was previously ramping, we need to tell
+			// all the task queues with unversioned ramp that they no longer have unversioned ramp.
+			// The task queues with unversioned ramp are the task queues of the previous current version.
+			// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
+			unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: updateTime,
+				RampingSinceTime:  nil, // remove ramp
+				RampPercentage:    0,   // remove ramp
+			}
+			if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+				return nil, err
+			}
+		}
+
+		// If the previous current version was unversioned, there is nothing in the task queues
+		// to remove, because they were implicitly unversioned. We don't have to remove any
+		// unversioned ramps, because current and ramping cannot both be unversioned.
+
+		// update local state - use pendingRoutingConfig (initialized for both sync and async modes)
+		d.State.RoutingConfig = pendingRoutingConfig
 	}
-	// If the new current version is unversioned and there was no unversioned ramp, all we need to
-	// do is tell the previous current version that it is not current. Then, the task queues in the
-	// previous current version will have no current version and will become unversioned implicitly.
 
-	// TODO (Shivam): remove the empty string check once canary stops flaking out
-	if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
-		// Tell previous current that it's no longer current
-		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			CurrentSinceTime:  nil, // remove current
-			RampingSinceTime:  nil, // no change, the prev current was not ramping
-			RampPercentage:    0,   // no change, the prev current was not ramping
-		}
-		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs, false); err != nil {
-			return nil, err
-		}
-		// Set summary drainage status immediately to draining.
-		// We know prevCurrentVersion cannot have been ramping, so it must now be draining
-		d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
-	}
-
-	//nolint:staticcheck // deprecated stuff will be cleaned
-	if newCurrentVersion == worker_versioning.UnversionedVersionId && d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId &&
-		// this step is not needed in async mode because the task queues got full routing info (including removed ramp) through the previous version.
-		!asyncMode {
-		// If the new current is unversioned, and it was previously ramping, we need to tell
-		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
-		// The task queues with unversioned ramp are the task queues of the previous current version.
-		// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
-		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			RampingSinceTime:  nil, // remove ramp
-			RampPercentage:    0,   // remove ramp
-		}
-		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
-			return nil, err
-		}
-	}
-
-	// If the previous current version was unversioned, there is nothing in the task queues
-	// to remove, because they were implicitly unversioned. We don't have to remove any
-	// unversioned ramps, because current and ramping cannot both be unversioned.
-
-	// update local state - use pendingRoutingConfig (initialized for both sync and async modes)
-	d.State.RoutingConfig = pendingRoutingConfig
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
 	d.State.LastModifierIdentity = args.Identity
 
@@ -1048,7 +1065,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		PreviousVersion: prevCurrentVersion,
 		ConflictToken:   d.State.ConflictToken,
 	}, nil
-
 }
 
 // to-be-deprecated
@@ -1132,28 +1148,7 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 
 	// Update the VersionSummary, stored as part of the WorkerDeploymentLocalState, for this version.
 	if err == nil {
-		summary := &deploymentspb.WorkerDeploymentVersionSummary{
-			Version:           targetVersion,
-			RoutingUpdateTime: versionUpdateArgs.RoutingUpdateTime,
-			CurrentSinceTime:  versionUpdateArgs.CurrentSinceTime,
-			RampingSinceTime:  versionUpdateArgs.RampingSinceTime,
-		}
-		if activated {
-			summary.FirstActivationTime = versionUpdateArgs.RoutingUpdateTime
-		} else {
-			summary.LastDeactivationTime = versionUpdateArgs.RoutingUpdateTime
-		}
-
-		// Setting the appropriate status for the version. The status of a version is never set to
-		// DRAINED from within the deployment workflow since the version workflow is responsible for
-		// querying visibility after which it signals the deployment workflow if the version is drained.
-		if summary.CurrentSinceTime != nil {
-			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT
-		} else if summary.RampingSinceTime != nil {
-			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING
-		} else {
-			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
-		}
+		summary := versionStateToSummary(res.GetVersionState())
 		d.updateVersionSummary(summary)
 	}
 	return res.VersionState, err

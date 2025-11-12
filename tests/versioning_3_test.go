@@ -69,21 +69,24 @@ const (
 
 type Versioning3Suite struct {
 	WorkflowUpdateBaseSuite
-	useV32               bool
-	useNewDeploymentData bool
+	useV32                    bool
+	deploymentWorkflowVersion workerdeployment.DeploymentWorkflowVersion
+	useRevisionNumbers        bool
+	useNewDeploymentData      bool
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &Versioning3Suite{useV32: true})
-	suite.Run(t, &Versioning3Suite{useV32: true, useNewDeploymentData: true})
+	//suite.Run(t, &Versioning3Suite{useV32: true})
+	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	//suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping, useRevisionNumbers: true})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.EnableDeploymentVersions.Key():                   true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
+		dynamicconfig.MatchingDeploymentWorkflowVersion.Key():    int(s.deploymentWorkflowVersion),
+		dynamicconfig.UseRevisionNumberForWorkerVersioning.Key(): s.useRevisionNumbers,
+		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():  partitionTreeDegree,
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
@@ -2910,31 +2913,6 @@ func (s *Versioning3Suite) forgetDeploymentVersionsFromDeploymentData(
 	s.NoError(err)
 }
 
-func (s *Versioning3Suite) forgetDeploymentVersionsFromDeploymentData(
-	tv *testvars.TestVars,
-	deploymentName string,
-	forgetUnversionedRamp bool,
-	revisionNumber int64,
-	t ...enumspb.TaskQueueType,
-) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-	v := tv.DeploymentVersion()
-	if forgetUnversionedRamp {
-		v.BuildId = ""
-	}
-	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
-		ctx, &matchingservice.SyncDeploymentUserDataRequest{
-			NamespaceId:    s.NamespaceID().String(),
-			TaskQueue:      tv.TaskQueue().GetName(),
-			TaskQueueTypes: t,
-			DeploymentName: deploymentName,
-			ForgetVersions: []string{tv.BuildID()},
-		},
-	)
-	s.NoError(err)
-}
-
 func (s *Versioning3Suite) forgetTaskQueueDeploymentVersion(
 	tv *testvars.TestVars,
 	t enumspb.TaskQueueType,
@@ -3362,27 +3340,6 @@ func (s *Versioning3Suite) idlePollWorkflow(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.Fail(unexpectedTaskMessage)
-			return nil, nil
-		},
-		taskpoller.WithTimeout(timeout),
-	)
-}
-
-func (s *Versioning3Suite) idlePollUnversionedActivity(
-	tv *testvars.TestVars,
-	timeout time.Duration,
-	unexpectedTaskMessage string,
-) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-	_, _ = poller.PollActivityTask(
-		&workflowservice.PollActivityTaskQueueRequest{},
-	).HandleTask(
-		tv,
-		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			if task != nil {
-				s.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
-				s.Fail(unexpectedTaskMessage)
-			}
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),

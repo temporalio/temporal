@@ -1162,7 +1162,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 			Name:       tv.DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      worker_versioning.UnversionedVersionId, //nolint:staticcheck // SA1019: worker versioning v0.31
+				RampingVersion:                      "",
 				RampingVersionPercentage:            0,
 				RampingVersionChangedTime:           unsetRampingUpdateTime,
 				RampingVersionPercentageChangedTime: unsetRampingUpdateTime,
@@ -3122,12 +3122,11 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 	expectedError string,
 	expectedResp *workflowservice.SetWorkerDeploymentRampingVersionResponse,
 ) {
-	version := tv.DeploymentVersionString()
-	if unversioned {
-		version = worker_versioning.UnversionedVersionId
+	bld := tv.BuildID()
+	if unversioned || unset {
+		bld = ""
 	}
 	if unset {
-		version = worker_versioning.UnversionedVersionId
 		percentage = 0
 	}
 	if !allowNoPollers && ensureSystemWorkflowsExist {
@@ -3140,7 +3139,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 	resp, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 		Namespace:               s.Namespace().String(),
 		DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
-		Version:                 version,
+		BuildId:                 bld,
 		Percentage:              float32(percentage),
 		Identity:                tv.ClientIdentity(),
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
@@ -3157,7 +3156,12 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 		s.Equal(prevVersion.GetBuildId(), resp.GetPreviousDeploymentVersion().GetBuildId())
 		s.Equal(prevVersion.GetDeploymentName(), resp.GetPreviousDeploymentVersion().GetDeploymentName())
 	} else {
-		s.Equal(expectedResp.GetPreviousVersion(), resp.GetPreviousVersion()) // nolint:staticcheck // SA1019: version v0.31
+		if expectedResp.GetPreviousVersion() == "" {
+			s.Nil(resp.GetPreviousDeploymentVersion())
+		} else {
+			// nolint:staticcheck // SA1019: version v0.31
+			s.Equal(expectedResp.GetPreviousVersion(), worker_versioning.ExternalWorkerDeploymentVersionToStringV31(resp.GetPreviousDeploymentVersion()))
+		}
 	}
 	s.Equal(expectedResp.GetPreviousPercentage(), resp.GetPreviousPercentage())
 }
@@ -3171,10 +3175,12 @@ func (s *WorkerDeploymentSuite) setCurrentVersionAllowNoPollersOption(ctx contex
 }
 
 func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(ctx context.Context, tv *testvars.TestVars, unversioned bool, previousCurrent string, ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool, expectedError string) {
-	version := tv.DeploymentVersionString()
+	bld := tv.DeploymentVersion().GetBuildId()
+	if unversioned {
+		bld = ""
+	}
 	if !allowNoPollers && ensureSystemWorkflowsExist {
 		if unversioned {
-			version = worker_versioning.UnversionedVersionId
 			s.ensureCreateDeployment(tv)
 		} else {
 			s.ensureCreateVersionInDeployment(tv)
@@ -3184,7 +3190,7 @@ func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(ctx context.C
 	resp, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:               s.Namespace().String(),
 		DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
-		Version:                 version,
+		BuildId:                 bld,
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 		Identity:                tv.ClientIdentity(),
 		AllowNoPollers:          allowNoPollers,
@@ -3195,8 +3201,7 @@ func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(ctx context.C
 		return
 	}
 	s.NoError(err)
-	s.NotNil(resp.PreviousVersion)
-	s.Equal(previousCurrent, resp.PreviousVersion)
+	s.ProtoEqual(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(previousCurrent), resp.PreviousDeploymentVersion)
 }
 
 func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(ctx context.Context, tv *testvars.TestVars, self, useWrongConflictToken bool, newManager, prevManager, expectedError string) {

@@ -54,12 +54,6 @@ message WorkerDeploymentVersionData {
     temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;
 }
 
-// Information that a TQ should know about a particular Deployment Version. This info is not part of
-// RoutingConfig and hence not protected by the revision number.
-message WorkerDeploymentVersionData {
-    temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;
-}
-
 // Local state for Worker Deployment Version
 message VersionLocalState {
     WorkerDeploymentVersion version = 1;
@@ -221,21 +215,21 @@ message DescribeVersionFromWorkerDeploymentActivityResult {
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 message SyncVersionStateUpdateArgs {
     // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
-    google.protobuf.Timestamp routing_update_time = 1;
+    google.protobuf.Timestamp routing_update_time = 1 [deprecated = true];
 
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not current.
-    google.protobuf.Timestamp current_since_time = 2;
+    google.protobuf.Timestamp current_since_time = 2 [deprecated = true];
 
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
-    google.protobuf.Timestamp ramping_since_time = 3;
+    google.protobuf.Timestamp ramping_since_time = 3 [deprecated = true];
 
     // Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
     // Can be in the range [0, 100] if the version is ramping.
-    float ramp_percentage = 4;
+    float ramp_percentage = 4 [deprecated = true];
 
     // Full routing config for async propagation mode. When present, the version workflow
     // will propagate the entire routing config asynchronously. When absent, sync mode is used.
@@ -302,9 +296,9 @@ message SyncDeploymentVersionUserDataRequest {
     // if true, the version will be forgotten from the task queue user data.
     bool forget_version = 3;
     // Async mode: full routing config to propagate (includes revision_number)
-    temporal.api.deployment.v1.RoutingConfig update_routing_config = 4;
+    temporal.api.deployment.v1.RoutingConfig update_routing_config = 5;
     // Async mode: version-specific data to upsert
-    WorkerDeploymentVersionData upsert_version_data = 5;
+    WorkerDeploymentVersionData upsert_version_data = 6;
 
     message SyncUserData {
         string name = 1;
