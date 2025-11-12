@@ -141,28 +141,31 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 // RecordActivityTaskStarted updates the activity on recording activity task started and populates the response.
 func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params RecordActivityTaskStartedParams) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
-		return nil, err
-	}
-
 	attempt, err := a.Attempt.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	attempt.LastStartedTime = timestamppb.New(ctx.Now(a))
-	attempt.LastWorkerIdentity = params.WorkerIdentity
-
-	if versionDirective := params.VersionDirective.GetDeploymentVersion(); versionDirective != nil {
-		attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
-			BuildId:        versionDirective.GetBuildId(),
-			DeploymentName: versionDirective.GetDeploymentName(),
+	// The requestID is set by the matching service to a UUID, allowing safe retries if the response is lost. If the
+	// existing request ID is empty, this is fresh start so update attempt attributes. If there's a mismatch, then
+	// returns a TaskAlreadyStarted error. Else it's a valid retry, so no-op and return response.
+	if attempt.GetRequestId() == "" {
+		if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
+			return nil, err
 		}
-	}
 
-	err = a.validateAndUpdateRequestID(attempt, params.RequestID)
-	if err != nil {
-		return nil, err
+		attempt.RequestId = params.RequestID
+		attempt.LastStartedTime = timestamppb.New(ctx.Now(a))
+		attempt.LastWorkerIdentity = params.WorkerIdentity
+
+		if versionDirective := params.VersionDirective.GetDeploymentVersion(); versionDirective != nil {
+			attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+				BuildId:        versionDirective.GetBuildId(),
+				DeploymentName: versionDirective.GetDeploymentName(),
+			}
+		}
+	} else if attempt.GetRequestId() != params.RequestID {
+		return nil, serviceerrors.NewTaskAlreadyStarted("Activity")
 	}
 
 	store, err := a.Store.Get(ctx)
@@ -182,23 +185,6 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 	}
 
 	return response, nil
-}
-
-// validateAndUpdateRequestID the requestID is set by the matching service to a UUID, allowing safe retries if the
-// response is lost. If the existing request ID is empty, it sets it to the incoming one as this is a first attempt.
-// If they match, it's a valid retry, and it's a successful no-op. If there's a mismatch, it returns a TaskAlreadyStarted
-// error.
-func (a *Activity) validateAndUpdateRequestID(attempt *activitypb.ActivityAttemptState, requestID string) error {
-	if attempt.GetRequestId() == "" {
-		attempt.RequestId = requestID
-		return nil
-	}
-
-	if attempt.GetRequestId() == requestID {
-		return nil
-	}
-
-	return serviceerrors.NewTaskAlreadyStarted("Activity")
 }
 
 func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {
