@@ -816,10 +816,13 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 		return
 	}
 
+	db.Lock()
 	priorities := make(map[int32]struct{})
 	for _, s := range db.subqueues {
 		priorities[s.Key.Priority] = struct{}{}
 	}
+	db.Unlock()
+
 	for k := range priorities {
 		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
 	}
