@@ -143,6 +143,12 @@ message ActivityAttemptState {
     // The Worker Deployment Version this activity was dispatched to most recently.
     // If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
     temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 8;
+
+  // Request identifier for idempotent task start operations. Matching service sets this to a
+  // UUID, allowing safe retries if the response is lost. History service returns success (not
+  // AlreadyStarted error) when retrying with a matching request_id, ensuring tasks are delivered
+  // to workers even after network failures.
+  string request_id = 9;
 }
 
 message ActivityHeartbeatState {

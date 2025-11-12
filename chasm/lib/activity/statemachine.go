@@ -89,6 +89,7 @@ var TransitionRescheduled = chasm.NewTransition(
 
 		currentTime := ctx.Now(a)
 		attempt.Count += 1
+		attempt.RequestId = ""
 
 		// If this is a retry, calculate the delay before scheduling tasks and update attempt fields
 		// TODO: for activity failures it'll go through this retry path as well; we'll need to refactor the record timeout and retryInterval recording, probably passed as an event func

@@ -52,6 +52,7 @@ func Invoke(
 			activity.RecordActivityTaskStartedParams{
 				VersionDirective: request.GetVersionDirective(),
 				WorkerIdentity:   request.GetPollRequest().GetIdentity(),
+				RequestID:        request.GetRequestId(),
 			},
 		)
 

@@ -386,8 +386,12 @@ type ActivityAttemptState struct {
 	// The Worker Deployment Version this activity was dispatched to most recently.
 	// If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
 	LastDeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,8,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Request identifier for idempotent task start operations. Matching service sets this to a UUID, allowing safe
+	// retries if the response is lost. History service returns success (not AlreadyStarted error) when retrying with a
+	// matching request_id, ensuring tasks are delivered to workers even after network failures.
+	RequestId     string `protobuf:"bytes,9,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -467,6 +471,13 @@ func (x *ActivityAttemptState) GetLastDeploymentVersion() *v12.WorkerDeploymentV
 		return x.LastDeploymentVersion
 	}
 	return nil
+}
+
+func (x *ActivityAttemptState) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
 }
 
 type ActivityHeartbeatState struct {
@@ -835,7 +846,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +
 	"\frequest_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12\x1a\n" +
 	"\bidentity\x18\x03 \x01(\tR\bidentity\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xc9\x05\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xe8\x05\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12F\n" +
@@ -843,7 +854,9 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x1alast_attempt_complete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12\x86\x01\n" +
 	"\x14last_failure_details\x18\x05 \x01(\v2T.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetailsR\x12lastFailureDetails\x120\n" +
 	"\x14last_worker_identity\x18\a \x01(\tR\x12lastWorkerIdentity\x12k\n" +
-	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x1a\x80\x01\n" +
+	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\t \x01(\tR\trequestId\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\x95\x01\n" +

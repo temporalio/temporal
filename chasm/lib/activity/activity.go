@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -56,6 +57,7 @@ type Activity struct {
 type RecordActivityTaskStartedParams struct {
 	VersionDirective *taskqueuespb.TaskVersionDirective
 	WorkerIdentity   string
+	RequestID        string
 }
 
 // LifecycleState TODO: we need to add more lifecycle states to better categorize some activity states, particulary for terminated/canceled.
@@ -158,6 +160,11 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 		}
 	}
 
+	err = a.validateAndUpdateRequestID(attempt, params.RequestID)
+	if err != nil {
+		return nil, err
+	}
+
 	store, err := a.Store.Get(ctx)
 	if err != nil {
 		return nil, err
@@ -175,6 +182,23 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 	}
 
 	return response, nil
+}
+
+// validateAndUpdateRequestID the requestID is set by the matching service to a UUID, allowing safe retries if the
+// response is lost. If the existing request ID is empty, it sets it to the incoming one as this is a first attempt.
+// If they match, it's a valid retry, and it's a successful no-op. f there's a mismatch, it returns a TaskAlreadyStarted
+// error.
+func (a *Activity) validateAndUpdateRequestID(attempt *activitypb.ActivityAttemptState, requestID string) error {
+	if attempt.GetRequestId() == "" {
+		attempt.RequestId = requestID
+		return nil
+	}
+
+	if attempt.GetRequestId() == requestID {
+		return nil
+	}
+
+	return serviceerrors.NewTaskAlreadyStarted("Activity")
 }
 
 func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {
