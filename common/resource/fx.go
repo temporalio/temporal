@@ -74,6 +74,7 @@ type (
 var Module = fx.Options(
 	persistenceClient.Module,
 	dynamicconfig.Module,
+	serialization.Module,
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
@@ -86,10 +87,6 @@ var Module = fx.Options(
 		func(p namespace.Registry) pingable.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
-	fx.Provide(serialization.NewSerializer),
-	fx.Provide(func(s serialization.Serializer) serialization.TaskSerializer {
-		return serialization.NewTaskSerializer(s)
-	}),
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
