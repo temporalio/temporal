@@ -149,17 +149,23 @@ func mergeWorkflowExecutionOptions(
 	}
 
 	if _, ok := updateFields["priority.priorityKey"]; ok {
-		mergeInto.Priority = cmp.Or(mergeInto.Priority, &commonpb.Priority{})
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
 		mergeInto.Priority.PriorityKey = mergeFrom.GetPriority().GetPriorityKey()
 	}
 
 	if _, ok := updateFields["priority.fairnessKey"]; ok {
-		mergeInto.Priority = cmp.Or(mergeInto.Priority, &commonpb.Priority{})
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
 		mergeInto.Priority.FairnessKey = mergeFrom.Priority.GetFairnessKey()
 	}
 
 	if _, ok := updateFields["priority.fairnessWeight"]; ok {
-		mergeInto.Priority = cmp.Or(mergeInto.Priority, &commonpb.Priority{})
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
 	}
 
