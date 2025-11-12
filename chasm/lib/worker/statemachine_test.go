@@ -45,9 +45,9 @@ func TestRecordHeartbeat(t *testing.T) {
 	req := newTestRequest("test-worker")
 
 	// Test successful heartbeat recording
-	err := worker.recordHeartbeat(ctx, req)
+	resp, err := worker.recordHeartbeat(ctx, req)
 	require.NoError(t, err)
-	require.NotEmpty(t, newToken)
+	require.NotNil(t, resp)
 
 	// Verify lease deadline was set (approximately, using default 1 minute)
 	require.NotNil(t, worker.LeaseExpirationTime)
@@ -185,12 +185,14 @@ func TestMultipleHeartbeats(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 
 	// First heartbeat
-	err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
+	resp, err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 	require.NoError(t, err)
+	require.NotNil(t, resp)
 
 	// Second heartbeat extends the lease
-	err = worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
+	resp, err = worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 	require.NoError(t, err)
+	require.NotNil(t, resp)
 
 	// Verify two tasks were scheduled (one for each heartbeat)
 	require.Len(t, ctx.Tasks, 2)
@@ -207,10 +209,11 @@ func TestWorkerResurrection(t *testing.T) {
 		oldCleanupTime := time.Now().Add(60 * time.Minute)
 		worker.CleanupTime = timestamppb.New(oldCleanupTime)
 
-		err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
+		resp, err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 
 		// Should succeed - worker resurrection handles same identity reconnection
 		require.NoError(t, err)
+		require.NotNil(t, resp)
 		require.Equal(t, workerstatepb.WORKER_STATUS_ACTIVE, worker.Status)
 		require.NotNil(t, worker.LeaseExpirationTime)
 
@@ -263,12 +266,12 @@ func TestInvalidTransitions(t *testing.T) {
 		worker := newTestWorker()
 		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 
-		err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
+		resp, err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 
 		// Should fail because worker is inactive (terminal state)
 		require.Error(t, err)
-		_, ok := err.(*WorkerInactiveError)
-		require.True(t, ok, "expected WorkerInactiveError")
+		require.Nil(t, resp)
+		require.Contains(t, err.Error(), "cannot record heartbeat for worker in state CleanedUp")
 	})
 
 	t.Run("LeaseExpiryOnInactiveWorker", func(t *testing.T) {
