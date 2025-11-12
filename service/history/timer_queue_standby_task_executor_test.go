@@ -903,6 +903,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_AttemptMismatch() {
+	// This test verifies that when a workflow task fails and is rescheduled with a new attempt,
+	// the old timer task (with old attempt and old stamp) correctly returns stale reference error.
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -963,8 +965,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Atte
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
-		// Current task attempt is 2, so the standby verification should complete
-		// despite current workflow task is still exists with the same scheduled ID
+		// Timer task has old attempt (1) and old stamp (default 0).
+		// Current workflow task has new attempt (2) and new stamp (incremented).
+		// This should return stale reference error due to stamp mismatch.
 		ScheduleAttempt:     1,
 		Version:             s.version,
 		TaskID:              s.mustGenerateTaskID(),
@@ -978,7 +981,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Atte
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(resp.ExecutionErr)
+	// After workflow task fails and is rescheduled, the stamp is incremented.
+	// The old timer task with old stamp should now return stale reference error.
+	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_StampMismatch() {
