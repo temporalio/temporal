@@ -373,7 +373,7 @@ func NewConfig(
 		WorkerHeartbeatsEnabled:        dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
 		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
-		WorkflowPauseEnabled:           dynamicconfig.WorkflowPauseEnabled.Get(dc),
+		EnableWorkerStateTracking:      dynamicconfig.EnableWorkerStateTracking.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
