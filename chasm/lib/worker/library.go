@@ -3,7 +3,6 @@ package worker
 import (
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc"
 )
@@ -19,10 +18,9 @@ type Library struct {
 func NewLibrary(
 	logger log.Logger,
 	config *Config,
-	dc *dynamicconfig.Collection,
 ) *Library {
 	return &Library{
-		handler:                   newHandler(dc),
+		handler:                   newHandler(),
 		leaseExpiryTaskExecutor:   NewLeaseExpiryTaskExecutor(logger, config),
 		workerCleanupTaskExecutor: NewWorkerCleanupTaskExecutor(logger),
 	}
