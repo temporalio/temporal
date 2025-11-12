@@ -148,8 +148,8 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            fwdr.getForwardInfo(task),
 				Stamp:                  task.event.Data.GetStamp(),
-				VersionDirective:       task.event.Data.GetVersionDirective(),
 				Priority:               task.event.Data.GetPriority(),
+				VersionDirective:       task.event.Data.GetVersionDirective(),
 			},
 		)
 	default:
