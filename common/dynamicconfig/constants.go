@@ -2625,8 +2625,8 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 	EnableCHASMCallbackCreation = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbackCreation",
 		false,
-		`EnableCHASMCallbackCreation controls whether new callbacks are created using the CHASM (V2) implementation
-instead of the existing (V1) implementation.`,
+		`Controls whether new callbacks are created using the CHASM implementation
+instead of the previous HSM backed implementation.`,
 	)
 
 	EnableCHASMCallbackMigration = NewNamespaceBoolSetting(
