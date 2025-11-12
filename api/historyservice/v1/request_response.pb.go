@@ -188,8 +188,10 @@ type StartWorkflowExecutionRequest struct {
 	ChildWorkflowOnly bool `protobuf:"varint,14,opt,name=child_workflow_only,json=childWorkflowOnly,proto3" json:"child_workflow_only,omitempty"`
 	// If present, the new workflow should start on this version with pinned base behavior.
 	InheritedPinnedVersion *v16.WorkerDeploymentVersion `protobuf:"bytes,15,opt,name=inherited_pinned_version,json=inheritedPinnedVersion,proto3" json:"inherited_pinned_version,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// TODO (Shivam): Complete the comment for this field.
+	TaskDispatchRevisionNumber int64 `protobuf:"varint,16,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3" json:"task_dispatch_revision_number,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *StartWorkflowExecutionRequest) Reset() {
@@ -325,6 +327,13 @@ func (x *StartWorkflowExecutionRequest) GetInheritedPinnedVersion() *v16.WorkerD
 		return x.InheritedPinnedVersion
 	}
 	return nil
+}
+
+func (x *StartWorkflowExecutionRequest) GetTaskDispatchRevisionNumber() int64 {
+	if x != nil {
+		return x.TaskDispatchRevisionNumber
+	}
+	return 0
 }
 
 type StartWorkflowExecutionResponse struct {
@@ -9861,7 +9870,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"task_token\x18\x06 \x01(\tR\ttaskToken\x12\x1d\n" +
 	"\n" +
 	"task_infos\x18\a \x01(\tR\ttaskInfos\x12.\n" +
-	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\x8e\n" +
+	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\xd1\n" +
 	"\n" +
 	"\x1dStartWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
@@ -9879,7 +9888,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x12inherited_build_id\x18\f \x01(\tR\x10inheritedBuildId\x12]\n" +
 	"\x13versioning_override\x18\r \x01(\v2,.temporal.api.workflow.v1.VersioningOverrideR\x12versioningOverride\x12.\n" +
 	"\x13child_workflow_only\x18\x0e \x01(\bR\x11childWorkflowOnly\x12m\n" +
-	"\x18inherited_pinned_version\x18\x0f \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x16inheritedPinnedVersion:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_id\"\xfc\x02\n" +
+	"\x18inherited_pinned_version\x18\x0f \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x16inheritedPinnedVersion\x12A\n" +
+	"\x1dtask_dispatch_revision_number\x18\x10 \x01(\x03R\x1ataskDispatchRevisionNumber:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_id\"\xfc\x02\n" +
 	"\x1eStartWorkflowExecutionResponse\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12?\n" +
 	"\x05clock\x18\x02 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12n\n" +

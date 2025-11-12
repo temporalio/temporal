@@ -1586,6 +1586,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedPinnedOverride *workflowpb.VersioningOverride,
 	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	priority *commonpb.Priority,
+	taskDispatchRevisionNumber int64,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                targetNamespace.String(),
@@ -1599,15 +1600,16 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 
 		// Use the same request ID to dedupe StartWorkflowExecution calls
-		RequestId:             childRequestID,
-		WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-		RetryPolicy:           attributes.RetryPolicy,
-		CronSchedule:          attributes.CronSchedule,
-		Memo:                  attributes.Memo,
-		SearchAttributes:      attributes.SearchAttributes,
-		UserMetadata:          userMetadata,
-		VersioningOverride:    inheritedPinnedOverride,
-		Priority:              priority,
+		RequestId:                  childRequestID,
+		WorkflowIdReusePolicy:      attributes.WorkflowIdReusePolicy,
+		RetryPolicy:                attributes.RetryPolicy,
+		CronSchedule:               attributes.CronSchedule,
+		Memo:                       attributes.Memo,
+		SearchAttributes:           attributes.SearchAttributes,
+		UserMetadata:               userMetadata,
+		VersioningOverride:         inheritedPinnedOverride,
+		Priority:                   priority,
+		TaskDispatchRevisionNumber: taskDispatchRevisionNumber,
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(

@@ -93,6 +93,8 @@ message StartWorkflowExecutionRequest {
     bool child_workflow_only = 14;
     // If present, the new workflow should start on this version with pinned base behavior.
     temporal.api.deployment.v1.WorkerDeploymentVersion inherited_pinned_version = 15;
+    // TODO (Shivam): Complete the comment for this field.
+    int64 task_dispatch_revision_number = 16;
 }
 
 message StartWorkflowExecutionResponse {
