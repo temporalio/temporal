@@ -816,8 +816,8 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 		return
 	}
 
-	db.Lock()
 	priorities := make(map[int32]struct{})
+	db.Lock()
 	for _, s := range db.subqueues {
 		priorities[s.Key.Priority] = struct{}{}
 	}
