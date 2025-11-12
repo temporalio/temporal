@@ -336,7 +336,7 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 	query = `StartTime = "2018-06-07T15:04:05.123456789-08:00"`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"StartTime":{"query":"2018-06-07T15:04:05.123456789-08:00"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"StartTime":{"query":"2018-06-07T15:04:05.123456789-08:00"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
