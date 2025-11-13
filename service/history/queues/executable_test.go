@@ -756,13 +756,60 @@ func (s *executableSuite) TestHandleErr_RandomErr() {
 	s.Error(executable.HandleErr(errors.New("random error")))
 }
 
-func (s *executableSuite) TestTaskAck() {
+func (s *executableSuite) TestTaskAck_ValidTask_NoRetry() {
 	executable := s.newTestExecutable()
 
 	s.Equal(ctasks.TaskStatePending, executable.State())
 
+	capture := s.metricsHandler.StartCapture()
+
 	executable.Ack()
 	s.Equal(ctasks.TaskStateAcked, executable.State())
+
+	snapshot := capture.Snapshot()
+	s.Len(snapshot[metrics.TaskAttempt.Name()], 1)
+	s.Len(snapshot[metrics.TaskLatency.Name()], 1)
+	s.Len(snapshot[metrics.TaskQueueLatency.Name()], 1)
+}
+
+func (s *executableSuite) TestTaskAck_ValidTask_WithRetry() {
+	executable := s.newTestExecutable()
+
+	s.Equal(ctasks.TaskStatePending, executable.State())
+
+	// For retried tasks, they are not considered invalid even
+	// if their last attempt completed with a invalid task error.
+	executable.HandleErr(context.DeadlineExceeded)
+	executable.HandleErr(consts.ErrActivityNotFound)
+
+	capture := s.metricsHandler.StartCapture()
+
+	executable.Ack()
+	s.Equal(ctasks.TaskStateAcked, executable.State())
+
+	snapshot := capture.Snapshot()
+	s.Len(snapshot[metrics.TaskAttempt.Name()], 1)
+	s.Len(snapshot[metrics.TaskLatency.Name()], 1)
+	s.Len(snapshot[metrics.TaskQueueLatency.Name()], 1)
+}
+
+func (s *executableSuite) TestTaskAck_InvalidTask() {
+	executable := s.newTestExecutable()
+
+	s.Equal(ctasks.TaskStatePending, executable.State())
+
+	// This will mark the task as invalid
+	executable.HandleErr(consts.ErrActivityNotFound)
+
+	capture := s.metricsHandler.StartCapture()
+
+	executable.Ack()
+	s.Equal(ctasks.TaskStateAcked, executable.State())
+
+	snapshot := capture.Snapshot()
+	s.Empty(snapshot[metrics.TaskAttempt.Name()])
+	s.Empty(snapshot[metrics.TaskLatency.Name()])
+	s.Empty(snapshot[metrics.TaskQueueLatency.Name()])
 }
 
 func (s *executableSuite) TestTaskNack_Resubmit_Success() {

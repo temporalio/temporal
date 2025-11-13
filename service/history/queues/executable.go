@@ -153,6 +153,7 @@ type (
 		attemptNoUserLatency       time.Duration
 		inMemoryNoUserLatency      time.Duration
 		lastActiveness             bool
+		invalidTask                bool
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
@@ -395,7 +396,7 @@ func (e *executableImpl) isUserError(err error) bool {
 	return resourceExhaustedErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
 }
 
-func (e *executableImpl) isSafeToDropError(err error) bool {
+func (e *executableImpl) isInvalidTaskError(err error) bool {
 	if errors.Is(err, consts.ErrStaleReference) {
 		// The task is stale and is safe to be dropped.
 		// Even though ErrStaleReference is castable to serviceerror.NotFound, we give this error special treatment
@@ -414,13 +415,17 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 		return true
 	}
 
-	if err == consts.ErrTaskDiscarded {
-		metrics.TaskDiscarded.With(e.metricsHandler).Record(1)
+	if err == consts.ErrTaskVersionMismatch {
+		metrics.TaskVersionMisMatch.With(e.metricsHandler).Record(1)
 		return true
 	}
 
-	if err == consts.ErrTaskVersionMismatch {
-		metrics.TaskVersionMisMatch.With(e.metricsHandler).Record(1)
+	return false
+}
+
+func (e *executableImpl) isSafeToDropError(err error) bool {
+	if err == consts.ErrTaskDiscarded {
+		metrics.TaskDiscarded.With(e.metricsHandler).Record(1)
 		return true
 	}
 
@@ -531,6 +536,13 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if matchedErr := e.matchDLQErrorPattern(err); matchedErr != nil {
 		e.incAttempt()
 		return matchedErr
+	}
+
+	if e.isInvalidTaskError(err) {
+		// only consider task invalid if it's the first attempt
+		// otherwise we have no idea if it's invalid due to the (failed) write operation in previous attempts.
+		e.invalidTask = e.Attempt() == 1
+		return nil
 	}
 
 	if e.isSafeToDropError(err) {
@@ -654,6 +666,12 @@ func (e *executableImpl) Ack() {
 	}
 
 	e.state = ctasks.TaskStateAcked
+
+	if e.invalidTask {
+		// do not emit metrics for invalid tasks
+		// as they are expected to have to high latency due to reprocessing upon shard movement.
+		return
+	}
 
 	metrics.TaskLoadLatency.With(e.metricsHandler).Record(
 		e.loadTime.Sub(e.GetVisibilityTime()),
