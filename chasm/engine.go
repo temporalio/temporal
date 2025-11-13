@@ -239,7 +239,8 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 }
 
 // PollComponent waits until the predicate is true when evaluated against the component identified
-// by the supplied component reference. It returns (output, ref, err), where output is the
+// by the supplied component reference. If it times out due to a server-imposed long-poll timeout
+// then it returns (nil, nil, nil). Otherwise it returns (output, ref, err), where output is the
 // output of the predicate function, and ref is a component reference identifying the state at which
 // the predicate was satisfied. If the predicate is true at the outset then it returns immediately.
 func PollComponent[C Component, R []byte | ComponentRef, I any, O any](

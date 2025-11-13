@@ -281,7 +281,8 @@ func (e *ChasmEngine) ReadComponent(
 }
 
 // PollComponent waits until the supplied predicate is satisfied when evaluated against the
-// component identified by the supplied component reference. If there is no error, it
+// component identified by the supplied component reference. If it times out due to the
+// server-imposed long-poll timeout then it returns (nil, nil). Otherwise if there is no error, it
 // returns (ref, nil) where ref is a component reference identifying the state at which the
 // predicate was satisfied. It is an error if entity transition history is (after reloading from
 // persistence) behind the requested ref, or if the ref is not consistent with entity transition
@@ -349,13 +350,13 @@ func (e *ChasmEngine) PollComponent(
 		return nil, err
 	}
 
-	// TODO(dan): check desired timeout logic here
-	ctx, cancel := contextutil.WithDeadlineBuffer(
-		ctx,
-		shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()),
-		time.Second,
-	)
-	defer cancel()
+	// Long-poll timeout semantics are the same as PollWorkflowExecutionUpdate: if the long-poll
+	// times out due to the server-imposed soft timeout, then return a non-error empty response
+	// indicating to a caller that they should continue long-polling. Unlike
+	// PollWorkflowExecutionUpdate we reserve 1s buffer.
+	softTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	stCtx, stCancel := contextutil.WithDeadlineBuffer(ctx, softTimeout, time.Second)
+	defer stCancel()
 
 	for {
 		select {
@@ -364,23 +365,40 @@ func (e *ChasmEngine) PollComponent(
 				return nil, serviceerror.NewInternal("nil component notification")
 			}
 			// Received a notification. Re-acquire the lock and check the predicate.
-			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+			_, executionLease, err := e.getExecutionLease(stCtx, requestRef)
 			if err != nil {
+				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+					return nil, ctx.Err()
+				}
+				if errors.Is(err, stCtx.Err()) {
+					// Server-imposed timeout; caller should continue long-polling.
+					return nil, nil
+				}
 				return nil, err
 			}
 
-			newRef, err := e.checkPredicate(ctx, requestRef, executionLease, predicateFn)
+			newRef, err := e.checkPredicate(stCtx, requestRef, executionLease, predicateFn)
 			executionLease.GetReleaseFn()(nil)
 			if err != nil {
+				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+					return nil, ctx.Err()
+				}
+				if errors.Is(err, stCtx.Err()) {
+					// Server-imposed timeout; caller should continue long-polling.
+					return nil, nil
+				}
 				return nil, err
 			}
 			if newRef != nil {
 				// Wait condition was satisfied.
 				return newRef, nil
 			}
-		case <-ctx.Done():
-			// TODO(dan): return empty response?
-			return nil, serviceerror.NewDeadlineExceeded("long-poll timed out")
+		case <-stCtx.Done():
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			// Server-imposed timeout; caller should continue long-polling.
+			return nil, nil
 		}
 	}
 }

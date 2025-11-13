@@ -59,8 +59,10 @@ func Invoke(
 		return nil, err
 	}
 	softTimeout := shardContext.GetConfig().LongPollExpirationInterval(ns.Name().String())
-	// If the long-poll times out due to softTimeout
-	// then return a non-error empty response with actual reached stage.
+
+	// Long-poll timeout semantics are the same as PollActivityExecution.
+	// If the long-poll times out due to softTimeout then return a non-error empty response with
+	// actual reached stage.
 	status, err := upd.WaitLifecycleStage(ctx, waitStage, softTimeout)
 	if err != nil {
 		return nil, err

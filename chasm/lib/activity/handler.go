@@ -183,7 +183,15 @@ func pollActivityExecutionWaitAnyStateChange(
 	if err != nil {
 		return nil, err
 	}
-	response.GetFrontendResponse().StateChangeLongPollToken = newRef
+	if response == nil {
+		// nil response indicates server-imposed long-poll timeout. Communicate this to callers by
+		// returning a non-error empty response.
+		response = &activitypb.PollActivityExecutionResponse{
+			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
+		}
+	} else {
+		response.GetFrontendResponse().StateChangeLongPollToken = newRef
+	}
 	return response, nil
 }
 
@@ -221,6 +229,14 @@ func pollActivityExecutionWaitCompletion(
 	if err != nil {
 		return nil, err
 	}
-	response.GetFrontendResponse().StateChangeLongPollToken = newRef
+	if response == nil {
+		// nil response indicates server-imposed long-poll timeout. Communicate this to callers by
+		// returning a non-error empty response.
+		response = &activitypb.PollActivityExecutionResponse{
+			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
+		}
+	} else {
+		response.GetFrontendResponse().StateChangeLongPollToken = newRef
+	}
 	return response, nil
 }
