@@ -270,7 +270,7 @@ func (s *VersionWorkflowSuite) Test_SyncRoutingConfigAsync() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err)
+				s.Require().NoError(err)
 			},
 		}, syncStateArgs)
 	}, 1*time.Millisecond)
@@ -350,7 +350,7 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err)
+				s.Require().NoError(err)
 			},
 		}, syncStateArgs)
 	}, 1*time.Millisecond)
@@ -433,7 +433,7 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationSkipsUnchangedTaskQueues() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err)
+				s.Require().NoError(err)
 			},
 		}, syncStateArgs)
 	}, 1*time.Millisecond)
@@ -505,7 +505,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "delete version should complete without error")
+				s.Require().NoError(err, "delete version should complete without error")
 			},
 		}, deleteArgs)
 	}, 1*time.Millisecond)
@@ -532,7 +532,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.Require().NoError(s.env.GetWorkflowError())
 }
 
 // Test_DeleteVersion_QueryAfterDeletion tests that querying a deleted version returns an error
@@ -572,7 +572,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "delete version should complete without error")
+				s.Require().NoError(err, "delete version should complete without error")
 			},
 		}, deleteArgs)
 	}, 1*time.Millisecond)
@@ -580,7 +580,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 	// Query after deletion - should fail
 	s.env.RegisterDelayedCallback(func() {
 		val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-		s.Error(err, "query should fail after deletion")
+		s.Require().Error(err, "query should fail after deletion")
 		s.Nil(val)
 		s.Contains(err.Error(), "worker deployment version deleted")
 	}, 5*time.Millisecond)
@@ -607,7 +607,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.Require().NoError(s.env.GetWorkflowError())
 }
 
 // Test_DeleteVersion_FailsWhenDraining tests that deletion fails when version is draining
@@ -632,7 +632,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWhenDraining() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.Error(err, "delete version should fail when version is draining")
+				s.Require().Error(err, "delete version should fail when version is draining")
 				s.Contains(err.Error(), ErrVersionIsDraining)
 			},
 		}, deleteArgs)
@@ -704,7 +704,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_SucceedsWhenDrainingWithSkipFl
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "delete version should succeed when SkipDrainage is true")
+				s.Require().NoError(err, "delete version should succeed when SkipDrainage is true")
 			},
 		}, deleteArgs)
 	}, 1*time.Millisecond)
@@ -736,7 +736,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_SucceedsWhenDrainingWithSkipFl
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.Require().NoError(s.env.GetWorkflowError())
 }
 
 // Test_DeleteVersion_FailsWithActivePollers tests that deletion fails when version has active pollers
@@ -763,7 +763,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWithActivePollers() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.Error(err, "delete version should fail when version has active pollers")
+				s.Require().Error(err, "delete version should fail when version has active pollers")
 				s.Contains(err.Error(), ErrVersionHasPollers)
 			},
 		}, deleteArgs)
@@ -806,12 +806,12 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryBeforeDeletion() {
 	// Query before deletion - should succeed
 	s.env.RegisterDelayedCallback(func() {
 		val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-		s.NoError(err, "query should succeed before deletion")
+		s.Require().NoError(err, "query should succeed before deletion")
 		s.NotNil(val)
 
 		var resp deploymentspb.QueryDescribeVersionResponse
 		err = val.Get(&resp)
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.NotNil(resp.VersionState)
 		s.Equal(tv.BuildID(), resp.VersionState.Version.BuildId)
 	}, 1*time.Millisecond)
@@ -885,7 +885,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "delete version should complete without error even with async propagation")
+				s.Require().NoError(err, "delete version should complete without error even with async propagation")
 			},
 		}, deleteArgs)
 	}, 1*time.Millisecond)
@@ -894,7 +894,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 	// This verifies that deleteVersion flag is set immediately, not after propagation completes
 	s.env.RegisterDelayedCallback(func() {
 		val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-		s.Error(err, "query should fail after deletion even in async mode")
+		s.Require().Error(err, "query should fail after deletion even in async mode")
 		s.Nil(val)
 		s.Contains(err.Error(), "worker deployment version deleted")
 	}, 10*time.Millisecond)
@@ -921,7 +921,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.Require().NoError(s.env.GetWorkflowError())
 }
 
 // Test_DeleteVersion_AsyncPropagation_BlocksWorkerRegistration tests that:
@@ -990,7 +990,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "delete version should complete without error")
+				s.Require().NoError(err, "delete version should complete without error")
 				deleteCompleted = true
 			},
 		}, deleteArgs)
@@ -1014,7 +1014,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 			OnComplete: func(result interface{}, err error) {
 				// Worker registration should complete only after propagation finishes
 				s.True(deleteCompleted, "worker registration should complete after delete propagation")
-				s.NoError(err, "register worker should complete without error")
+				s.Require().NoError(err, "register worker should complete without error")
 				workerRegistrationCompleted = true
 			},
 		}, registerWorkerArgs)
@@ -1041,7 +1041,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "second delete should complete without error")
+				s.Require().NoError(err, "second delete should complete without error")
 			},
 		}, deleteArgs2)
 	}, 500*time.Millisecond)
@@ -1068,6 +1068,6 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.Error(s.env.GetWorkflowError()) // CaN
+	s.Require().Error(s.env.GetWorkflowError()) // CaN
 	s.True(workerRegistrationCompleted, "worker registration should have completed")
 }

@@ -31,7 +31,7 @@ type WorkerDeploymentSuite struct {
 }
 
 func TestWorkerDeploymentSuite(t *testing.T) {
-	//suite.Run(t, &WorkerDeploymentSuite{workflowVersion: InitialVersion})
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: InitialVersion})
 	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: AsyncSetCurrentAndRamping})
 }
 
@@ -104,7 +104,7 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 					OnComplete: func(a interface{}, err error) {
 						// Update #2 clears the validator and waits for the first update to complete. Once it starts
 						// being processed, it should be rejected since completion of the first update changed the state.
-						s.ErrorContains(err, errNoChangeType)
+						s.Require().ErrorContains(err, errNoChangeType)
 					},
 				}, updateArgs)
 			},
@@ -175,7 +175,7 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 					OnComplete: func(a interface{}, err error) {
 						// Update #2 clears the validator and waits for the first update to complete. Once it starts
 						// being processed, it should be rejected since completion of the first update changed the state.
-						s.ErrorContains(err, errNoChangeType)
+						s.Require().ErrorContains(err, errNoChangeType)
 					},
 				}, updateArgs)
 
@@ -448,9 +448,9 @@ func (s *WorkerDeploymentSuite) getDeploymentWorkflowFunc() func(ctx workflow.Co
 
 func (s *WorkerDeploymentSuite) verifyRevisionNumber(expected int) {
 	queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
-	s.NoError(err)
+	s.Require().NoError(err)
 	var stateAfterSetRamping deploymentspb.QueryDescribeWorkerDeploymentResponse
-	s.NoError(queryResult.Get(&stateAfterSetRamping))
+	s.Require().NoError(queryResult.Get(&stateAfterSetRamping))
 	s.Equal(int64(expected), stateAfterSetRamping.State.RoutingConfig.RevisionNumber)
 }
 
@@ -683,9 +683,9 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete() {
 
 	// Query to verify the revision was removed
 	queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
-	s.NoError(err)
+	s.Require().NoError(err)
 	var state deploymentspb.QueryDescribeWorkerDeploymentResponse
-	s.NoError(queryResult.Get(&state))
+	s.Require().NoError(queryResult.Get(&state))
 
 	// Verify the revision was removed from the propagating revisions
 	s.Require().Contains(state.State.PropagatingRevisions, buildID)
@@ -734,9 +734,9 @@ func (s *WorkerDeploymentSuite) Test_HandlePropagationComplete_RemovesEmptyBuild
 
 	// Query to verify the build ID was removed entirely
 	queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
-	s.NoError(err)
+	s.Require().NoError(err)
 	var state deploymentspb.QueryDescribeWorkerDeploymentResponse
-	s.NoError(queryResult.Get(&state))
+	s.Require().NoError(queryResult.Get(&state))
 
 	// Verify the build ID entry was removed entirely
 	s.NotContains(state.State.PropagatingRevisions, buildID)
@@ -754,7 +754,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_Success() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "delete deployment should complete without error")
+				s.Require().NoError(err, "delete deployment should complete without error")
 			},
 		}, nil) // DeleteDeployment takes no arguments
 	}, 1*time.Millisecond)
@@ -769,7 +769,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_Success() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.Require().NoError(s.env.GetWorkflowError())
 }
 
 // Test_DeleteDeployment_FailsWithVersions tests that deletion fails when deployment has versions
@@ -783,7 +783,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_FailsWithVersions() {
 		s.env.UpdateWorkflow(DeleteDeployment, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
 				// The validator should reject this update
-				s.ErrorContains(err, "deployment has versions, can't be deleted")
+				s.Require().ErrorContains(err, "deployment has versions, can't be deleted")
 			},
 			OnAccept: func() {
 				s.Fail("delete deployment should have been rejected by validator")
@@ -825,7 +825,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryAfterDeletion() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "delete deployment should complete without error")
+				s.Require().NoError(err, "delete deployment should complete without error")
 			},
 		}, nil)
 	}, 1*time.Millisecond)
@@ -833,7 +833,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryAfterDeletion() {
 	// Query after deletion - should fail
 	s.env.RegisterDelayedCallback(func() {
 		val, err := s.env.QueryWorkflow(QueryDescribeDeployment)
-		s.Error(err, "query should fail after deletion")
+		s.Require().Error(err, "query should fail after deletion")
 		s.Nil(val)
 		s.Contains(err.Error(), errDeploymentDeleted)
 	}, 5*time.Millisecond)
@@ -848,7 +848,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryAfterDeletion() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.Require().NoError(s.env.GetWorkflowError())
 }
 
 // Test_DeleteDeployment_QueryBeforeDeletion tests that querying before deletion works normally
@@ -859,12 +859,12 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryBeforeDeletion() {
 	// Query before deletion - should succeed
 	s.env.RegisterDelayedCallback(func() {
 		val, err := s.env.QueryWorkflow(QueryDescribeDeployment)
-		s.NoError(err, "query should succeed before deletion")
+		s.Require().NoError(err, "query should succeed before deletion")
 		s.NotNil(val)
 
 		var resp deploymentspb.QueryDescribeWorkerDeploymentResponse
 		err = val.Get(&resp)
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.NotNil(resp.State)
 	}, 1*time.Millisecond)
 
@@ -898,7 +898,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_Success() {
 			},
 			OnAccept: func() {},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "delete version should complete without error")
+				s.Require().NoError(err, "delete version should complete without error")
 			},
 		}, &deploymentspb.DeleteVersionArgs{
 			Identity:     tv.ClientIdentity(),
@@ -910,9 +910,9 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_Success() {
 	// Query after deletion to verify version was removed
 	s.env.RegisterDelayedCallback(func() {
 		queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
-		s.NoError(err)
+		s.Require().NoError(err)
 		var state deploymentspb.QueryDescribeWorkerDeploymentResponse
-		s.NoError(queryResult.Get(&state))
+		s.Require().NoError(queryResult.Get(&state))
 		s.NotContains(state.State.Versions, version, "version should be removed from state after deletion")
 	}, 50*time.Millisecond)
 
@@ -948,7 +948,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenCurrentOrRamping() {
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
 				// The validator should reject this update
-				s.ErrorContains(err, ErrVersionIsCurrentOrRamping)
+				s.Require().ErrorContains(err, ErrVersionIsCurrentOrRamping)
 			},
 			OnAccept: func() {
 				s.Fail("delete version should have been rejected by validator")
@@ -995,7 +995,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenVersionNotFound() {
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
 				// The validator should reject this update
-				s.ErrorContains(err, errVersionNotFound)
+				s.Require().ErrorContains(err, errVersionNotFound)
 			},
 			OnAccept: func() {
 				s.Fail("delete version should have been rejected by validator")
@@ -1057,13 +1057,13 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_ConcurrentDeletes() {
 					OnAccept: func() {},
 					OnComplete: func(result interface{}, err error) {
 						// Second delete should fail because version is already deleted
-						s.Error(err, "second delete should fail")
-						s.ErrorContains(err, errVersionNotFound)
+						s.Require().Error(err, "second delete should fail")
+						s.Require().ErrorContains(err, errVersionNotFound)
 					},
 				}, deleteArgs)
 			},
 			OnComplete: func(result interface{}, err error) {
-				s.NoError(err, "first delete should complete without error")
+				s.Require().NoError(err, "first delete should complete without error")
 			},
 		}, deleteArgs)
 	}, 1*time.Millisecond)

@@ -3329,7 +3329,10 @@ func (s *Versioning3Suite) idlePollWorkflow(
 	).HandleTask(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.Fail(unexpectedTaskMessage)
+			// Can't call s.Fail directly because linter will complain about unsafe assertion in another go routine.
+			// s.Assert().Fail is safe but linter automatically converts it to s.Fail if written directly!
+			a := s.Assert()
+			a.Fail(unexpectedTaskMessage)
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),

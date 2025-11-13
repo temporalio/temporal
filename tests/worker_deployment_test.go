@@ -3112,6 +3112,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersion(
 	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, unset, percentage, ignoreMissingTaskQueues, false, true, expectedError, expectedResp)
 }
 
+//nolint:staticcheck // SA1019
 func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 	ctx context.Context,
 	tv *testvars.TestVars,

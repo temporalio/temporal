@@ -36,6 +36,7 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 		return nil, err
 	}
 	return &deploymentspb.SyncVersionStateActivityResult{
+		//nolint:staticcheck // SA1019
 		VersionState: res.GetVersionState(),
 		Summary:      res.GetSummary(),
 	}, nil

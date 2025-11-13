@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -216,7 +215,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 			(d.deleteVersion || // version is deleted -> it's ok to drop all signals and updates.
 				// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 				(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-					d.drainageStatusSyncInProgress == false &&
+					!d.drainageStatusSyncInProgress &&
 					d.asyncPropagationsInProgress == 0 && // Don't CaN while async propagations are in progress
 					(d.forceCAN || d.stateChanged)))
 	})
@@ -351,6 +350,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 }
 
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Context) {
+	//nolint:revive,errcheck // In async mode the activities retry indefinitely so this function should not return error
 	d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
 	d.propagatingDelete = false
 }
@@ -536,6 +536,7 @@ func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersio
 	return nil
 }
 
+//nolint:staticcheck // SA1019
 func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.SyncVersionStateResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
@@ -568,33 +569,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		if err != nil {
 			return nil, err
 		}
-		// apply changes to state based on routing config
-		if newStatus != enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED {
-			// In UNSPECIFIED case the routing info doesn't affect the status of this version. It just needs to propagate to
-			// task queues (not sure if it happens in practice though.)
-			state.Status = newStatus
-			state.CurrentSinceTime = nil
-			state.RampingSinceTime = nil
-			state.RampPercentage = 0
-			switch newStatus {
-			case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT:
-				state.CurrentSinceTime = rg.GetCurrentVersionChangedTime()
-				state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
-			case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING:
-				state.RampingSinceTime = rg.GetRampingVersionChangedTime()
-				state.RampPercentage = args.RampPercentage
-				// Percentage change time is updated even if only ramping version changes, we should use this for RoutingUpdateTime.
-				state.RoutingUpdateTime = rg.GetRampingVersionPercentageChangedTime()
-			case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING:
-				// Version just became draining. So we need to update RoutingUpdateTime which is the max of the following:
-				state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
-				if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RampingSinceTime.AsTime()) {
-					state.RoutingUpdateTime = rg.GetRampingVersionPercentageChangedTime()
-				}
-			}
-		}
-
-		fmt.Printf(">>> rg: %s \n new state %s \n", rg.String(), state.String())
+		d.updateStateFromRoutingConfig(newStatus, state, rg)
 	} else {
 		// SYNC MODE: propagate only version data (existing behavior)
 		newStatus = d.findNewVersionStatus(args)
@@ -645,6 +620,39 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	return &deploymentspb.SyncVersionStateResponse{
 		Summary: versionStateToSummary(state),
 	}, nil
+}
+
+func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
+	newStatus enumspb.WorkerDeploymentVersionStatus,
+	state *deploymentspb.VersionLocalState,
+	rg *deploymentpb.RoutingConfig,
+) {
+	// apply changes to state based on routing config
+	if newStatus != enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED {
+		// In UNSPECIFIED case the routing info doesn't affect the status of this version. It just needs to propagate to
+		// task queues (not sure if it happens in practice though.)
+		state.Status = newStatus
+		state.CurrentSinceTime = nil
+		state.RampingSinceTime = nil
+		state.RampPercentage = 0
+		switch newStatus {
+		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT:
+			state.CurrentSinceTime = rg.GetCurrentVersionChangedTime()
+			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
+		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING:
+			state.RampingSinceTime = rg.GetRampingVersionChangedTime()
+			state.RampPercentage = rg.GetRampingVersionPercentage()
+			// Percentage change time is updated even if only ramping version changes, we should use this for RoutingUpdateTime.
+			state.RoutingUpdateTime = rg.GetRampingVersionPercentageChangedTime()
+		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING:
+			// Version just became draining. So we need to update RoutingUpdateTime which is the max of the following:
+			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
+			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RampingSinceTime.AsTime()) {
+				state.RoutingUpdateTime = rg.GetRampingVersionPercentageChangedTime()
+			}
+		default: // Shouldn't happen
+		}
+	}
 }
 
 func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeVersionResponse, error) {
@@ -763,8 +771,8 @@ func (d *VersionWorkflowRunner) findNewVersionStatusFromRoutingConfig(rg *deploy
 	state := d.GetVersionState()
 
 	wasActive := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
-	isCurrent := proto.Equal(rg.GetCurrentDeploymentVersion(), worker_versioning.ExternalWorkerDeploymentVersionFromVersion(state.GetVersion()))
-	isRamping := proto.Equal(rg.GetRampingDeploymentVersion(), worker_versioning.ExternalWorkerDeploymentVersionFromVersion(state.GetVersion()))
+	isCurrent := rg.GetCurrentDeploymentVersion().GetBuildId() == state.GetVersion().GetBuildId() && rg.GetCurrentDeploymentVersion().GetDeploymentName() == state.GetVersion().GetDeploymentName()
+	isRamping := rg.GetRampingDeploymentVersion().GetBuildId() == state.GetVersion().GetBuildId() && rg.GetRampingDeploymentVersion().GetDeploymentName() == state.GetVersion().GetDeploymentName()
 
 	if wasActive && !isCurrent && !isRamping {
 		return enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
@@ -992,8 +1000,8 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 		completedBatches++
 
 		// Merge results into taskQueueMaxVersionsToCheck
-		for tqName, maxVersion := range result {
-			taskQueueMaxVersionsToCheck[tqName] = maxVersion
+		for _, tqName := range workflow.DeterministicKeys(result) {
+			taskQueueMaxVersionsToCheck[tqName] = result[tqName]
 		}
 	}
 
