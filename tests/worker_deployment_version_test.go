@@ -491,6 +491,32 @@ func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRa
 	}, time.Second*10, time.Millisecond*1000)
 }
 
+func (s *DeploymentVersionSuite) TestUnsetCurrentVersion() {
+	// Override the dynamic config so that we can verify we don't get any unexpected masked errors.
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaskInternalErrorDetails, true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Create a deployment version
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Set version as current
+	err := s.setCurrent(tv1, false)
+	s.Nil(err)
+
+	// Note empty build id -> unset
+	req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv1.DeploymentSeries(),
+		IgnoreMissingTaskQueues: true,
+		Identity:                tv1.ClientIdentity(),
+	}
+	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
+	s.Nil(err)
+}
+
 // Testing DeleteVersion
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
