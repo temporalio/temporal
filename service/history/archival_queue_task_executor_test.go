@@ -513,6 +513,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				timeSource,
 				namespaceRegistry,
 				mockMetadata,
+				queues.GetTaskTypeTagValue,
 				logger,
 				metrics.NoopMetricsHandler,
 				telemetry.NoopTracer,

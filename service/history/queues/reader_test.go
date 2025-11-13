@@ -63,6 +63,7 @@ func (s *readerSuite) SetupTest() {
 			clock.NewRealTimeSource(),
 			nil,
 			nil,
+			GetTaskTypeTagValue,
 			nil,
 			metrics.NoopMetricsHandler,
 			telemetry.NoopTracer,

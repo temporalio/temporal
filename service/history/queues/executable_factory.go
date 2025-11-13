@@ -27,6 +27,7 @@ type (
 		timeSource                 clock.TimeSource
 		namespaceRegistry          namespace.Registry
 		clusterMetadata            cluster.Metadata
+		taskTypeTagProvider        TaskTypeTagProvider
 		logger                     log.Logger
 		metricsHandler             metrics.Handler
 		tracer                     trace.Tracer
@@ -50,6 +51,7 @@ func NewExecutableFactory(
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	taskTypeTagProvider TaskTypeTagProvider,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	tracer trace.Tracer,
@@ -67,6 +69,7 @@ func NewExecutableFactory(
 		timeSource:                 timeSource,
 		namespaceRegistry:          namespaceRegistry,
 		clusterMetadata:            clusterMetadata,
+		taskTypeTagProvider:        taskTypeTagProvider,
 		logger:                     logger,
 		metricsHandler:             metricsHandler.WithTags(defaultExecutableMetricsTags...),
 		tracer:                     tracer,
@@ -89,6 +92,7 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 		f.timeSource,
 		f.namespaceRegistry,
 		f.clusterMetadata,
+		f.taskTypeTagProvider,
 		f.logger,
 		f.metricsHandler,
 		f.tracer,

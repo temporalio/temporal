@@ -158,6 +158,7 @@ func (s *memoryScheduledQueueSuite) newSpeculativeWorkflowTaskTimeoutTestExecuta
 			s.mockTimeSource,
 			nil,
 			nil,
+			GetTaskTypeTagValue,
 			nil,
 			nil,
 			telemetry.NoopTracer,
