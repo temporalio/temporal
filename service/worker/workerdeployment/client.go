@@ -399,7 +399,7 @@ func (d *ClientImpl) DescribeVersion(
 			return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
 		var queryFailed *serviceerror.QueryFailed
-		if errors.As(err, &queryFailed) && queryFailed.Error() == errDeploymentDeleted {
+		if errors.As(err, &queryFailed) && queryFailed.Error() == errVersionDeleted {
 			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
 		}
 		return nil, nil, err
@@ -1383,8 +1383,20 @@ func (d *ClientImpl) updateWithStart(
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
-		// All updates that are admitted as the workflow is closing are considered retryable.
-		return errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error()
+		if errors.Is(err, errRetry) {
+			return true
+		}
+
+		// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
+		var errMultiOps *serviceerror.MultiOperationExecution
+		if errors.As(err, &errMultiOps) {
+			for _, e := range errMultiOps.OperationErrors() {
+				if e.Error() == consts.ErrWorkflowClosing.Error() {
+					return true
+				}
+			}
+		}
+		return false
 	}
 	var outcome *updatepb.Outcome
 
@@ -1785,11 +1797,7 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 		return serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
 
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInVersionArgs{
-		TaskQueueName: args.TaskQueueName,
-		TaskQueueType: args.TaskQueueType,
-		MaxTaskQueues: args.MaxTaskQueues,
-	})
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
 	}

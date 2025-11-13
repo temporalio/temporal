@@ -3310,6 +3310,7 @@ func clearVersionFromRoutingConfig(
 	oldCurrent := oldVd.GetCurrentSinceTime() != nil
 	newCurrent := newVd.GetCurrentSinceTime() != nil
 	if oldCurrent != newCurrent || newCurrent {
+		rc.CurrentVersion = ""
 		rc.CurrentDeploymentVersion = nil
 		rc.CurrentVersionChangedTime = nil
 	}

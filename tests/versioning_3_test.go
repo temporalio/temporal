@@ -78,8 +78,8 @@ type Versioning3Suite struct {
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	//suite.Run(t, &Versioning3Suite{useV32: true})
-	//suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	suite.Run(t, &Versioning3Suite{useV32: true})
+	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
 	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping, useRevisionNumbers: true})
 }
 
@@ -469,19 +469,18 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 
 	pollerDone := make(chan struct{})
 	go func() {
-		s.idlePollWorkflow(tv2, true, ver3MinPollTime, "new deployment should not receive query")
+		s.idlePollWorkflow(tv2, true, 5*time.Second, "new deployment should not receive query")
 		close(pollerDone)
 	}()
 	s.pollAndQueryWorkflow(tv, sticky)
 	s.WaitForChannel(ctx, pollerDone) // wait for the idle poller to complete to not interfere with the next poller
 
-	// redirect query to new deployment
-	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	s.setCurrentDeployment(tv2)
+	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf)
 
 	go s.idlePollWorkflow(tv, true, ver3MinPollTime, "old deployment should not receive query")
 	// Since the current deployment has changed, task will move to the normal queue (thus, sticky=false)
 	s.pollAndQueryWorkflow(tv2, false)
-
 }
 
 func (s *Versioning3Suite) pollAndQueryWorkflow(
@@ -644,7 +643,7 @@ func (s *Versioning3Suite) drainWorkflowTaskAfterSetCurrent(
 	return execution, runID
 }
 
-func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNewDeployment() {
+func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNewDeployment() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv1)

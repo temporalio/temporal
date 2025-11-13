@@ -45,6 +45,7 @@ const (
 
 type (
 	DeploymentVersionSuite struct {
+		// TODO: this is always true. cleanup code
 		useV32 bool
 		testcore.FunctionalTestBase
 	}
@@ -57,7 +58,6 @@ var (
 func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &DeploymentVersionSuite{useV32: true})
-	suite.Run(t, &DeploymentVersionSuite{useV32: false})
 }
 
 func (s *DeploymentVersionSuite) SetupSuite() {

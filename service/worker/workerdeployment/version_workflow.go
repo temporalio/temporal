@@ -474,13 +474,17 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
 
 	// initial data
-	data := &deploymentspb.DeploymentVersionData{
-		Version:           d.VersionState.Version,
-		RoutingUpdateTime: d.VersionState.RoutingUpdateTime,
-		CurrentSinceTime:  d.VersionState.CurrentSinceTime,
-		RampingSinceTime:  d.VersionState.RampingSinceTime,
-		RampPercentage:    d.VersionState.RampPercentage,
-		Status:            d.VersionState.Status,
+	var data *deploymentspb.DeploymentVersionData
+	if args.GetRoutingConfig() == nil {
+		// Sync mode
+		data = &deploymentspb.DeploymentVersionData{
+			Version:           d.VersionState.Version,
+			RoutingUpdateTime: d.VersionState.RoutingUpdateTime,
+			CurrentSinceTime:  d.VersionState.CurrentSinceTime,
+			RampingSinceTime:  d.VersionState.RampingSinceTime,
+			RampPercentage:    d.VersionState.RampPercentage,
+			Status:            d.VersionState.Status,
+		}
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
