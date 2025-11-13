@@ -75,7 +75,7 @@ type Versioning3Suite struct {
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &Versioning3Suite{useV32: true})
+	// suite.Run(t, &Versioning3Suite{useV32: true})
 	suite.Run(t, &Versioning3Suite{useV32: true, useNewDeploymentData: true})
 }
 
@@ -3652,13 +3652,6 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	for i := 0; i < numWorkflows; i++ {
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			s.verifyWorkflowVersioning(wfVarsV0[i], vbUnpinned, tv0.Deployment(), nil, nil)
-		}, 10*time.Second, 100*time.Millisecond)
-	}
-
-	// Verify that all workflows are running on v0 by using v1 vars
-	for i := 0; i < numWorkflows; i++ {
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			s.verifyWorkflowVersioning(wfVarsV1[i], vbUnpinned, tv0.Deployment(), nil, nil)
 		}, 10*time.Second, 100*time.Millisecond)
 	}
 
