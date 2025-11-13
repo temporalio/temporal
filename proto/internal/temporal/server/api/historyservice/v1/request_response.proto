@@ -93,8 +93,15 @@ message StartWorkflowExecutionRequest {
     bool child_workflow_only = 14;
     // If present, the new workflow should start on this version with pinned base behavior.
     temporal.api.deployment.v1.WorkerDeploymentVersion inherited_pinned_version = 15;
-    // TODO (Shivam): Complete the comment for this field.
-    int64 task_dispatch_revision_number = 16;
+    // If the parent workflow has AutoUpgrade behavior, then we assume that the child workflow or the continued-as-new workflow will also have AutoUpgrade behavior.
+    InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
+
+    message InheritedAutoUpgradeInfo {
+        // The source deployment version of the parent workflow.
+        temporal.api.deployment.v1.WorkerDeploymentVersion source_deployment_version = 1;
+        // The revision number of the source deployment version of the parent workflow.
+        int64 source_deployment_revision_number = 2;
+    }
 }
 
 message StartWorkflowExecutionResponse {

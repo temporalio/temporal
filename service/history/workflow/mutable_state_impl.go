@@ -2556,7 +2556,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		startRequest.StartRequest.GetRequestId(),
 		event,
-		startRequest.GetTaskDispatchRevisionNumber(),
+		startRequest.GetInheritedAutoUpgradeInfo(),
 	); err != nil {
 		return nil, err
 	}
@@ -2595,7 +2595,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	execution *commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
-	taskDispatchRevisionNumber int64,
+	inheritedAutoUpgradeInfo *historyservice.StartWorkflowExecutionRequest_InheritedAutoUpgradeInfo,
 ) error {
 	if ms.executionInfo.NamespaceId != ms.namespaceEntry.ID().String() {
 		return serviceerror.NewInternalf("applying conflicting namespace ID: %v != %v",
@@ -2813,7 +2813,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.approximateSize += ms.executionInfo.Size()
 	ms.approximateSize += ms.executionState.Size()
-	ms.SetVersioningRevisionNumber(taskDispatchRevisionNumber)
+
+	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
+	if inheritedAutoUpgradeInfo != nil {
+		ms.SetVersioningRevisionNumber(inheritedAutoUpgradeInfo.GetSourceDeploymentRevisionNumber())
+		if ms.executionInfo.VersioningInfo == nil {
+			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		}
+		ms.executionInfo.VersioningInfo.DeploymentVersion = inheritedAutoUpgradeInfo.GetSourceDeploymentVersion()
+		// Assume AutoUpgrade behavior for the first workflow task.
+		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	}
 
 	ms.writeEventToCache(startEvent)
 	return nil
@@ -8320,6 +8330,7 @@ func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 //     completion. Exception: if Deployment is set but the workflow's effective behavior is
 //     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 //
+// TODO (Shivam): Pending test passing, but add comment here that if revision number is not 0, we return the deployment version.
 // Note: Deployment objects are immutable, never change their fields.
 func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 	return GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo())

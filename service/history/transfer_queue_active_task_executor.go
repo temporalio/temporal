@@ -301,6 +301,9 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	directive := MakeDirectiveForWorkflowTask(mutableState)
 	priority := mutableState.GetExecutionInfo().Priority
 
+	fmt.Println("before pushWorkflowTask, the revision number is", mutableState.GetVersioningRevisionNumber())
+	fmt.Printf("Directive for %s: revision=%d, behavior=%v\n", transferTask.GetWorkflowID(), directive.GetRevisionNumber(), directive.GetBehavior())
+
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
 	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
@@ -944,6 +947,29 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 	}
 
+	// If the parent has AutoUpgrade behavior, we populate the inherited auto upgrade info based on whether the child TQ is in the same deployment as the parent TQ.
+	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
+	var sourceDeploymentRevisionNumber int64
+	if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+		sourceDeploymentRevisionNumber = mutableState.GetVersioningRevisionNumber()
+
+		newTQ := attributes.GetTaskQueue().GetName()
+		if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
+			sourceDeploymentVersion = nil
+			sourceDeploymentRevisionNumber = 0
+		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
+			TQInSourceDeployment, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, sourceDeploymentVersion)
+			if err != nil {
+				return errors.New(fmt.Sprintf("error determining child task queue presence in auto upgrade deployment: %s", err.Error()))
+			}
+			if !TQInSourceDeployment {
+				sourceDeploymentVersion = nil
+				sourceDeploymentRevisionNumber = 0
+			}
+		}
+	}
+
 	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
 	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
 	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
@@ -1014,7 +1040,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedPinnedOverride,
 		inheritedPinnedVersion,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
-		mutableState.GetVersioningRevisionNumber(),
+		sourceDeploymentVersion,
+		sourceDeploymentRevisionNumber,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1587,7 +1614,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedPinnedOverride *workflowpb.VersioningOverride,
 	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	priority *commonpb.Priority,
-	taskDispatchRevisionNumber int64,
+	sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
+	sourceDeploymentRevisionNumber int64,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                targetNamespace.String(),
@@ -1601,16 +1629,15 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 
 		// Use the same request ID to dedupe StartWorkflowExecution calls
-		RequestId:                  childRequestID,
-		WorkflowIdReusePolicy:      attributes.WorkflowIdReusePolicy,
-		RetryPolicy:                attributes.RetryPolicy,
-		CronSchedule:               attributes.CronSchedule,
-		Memo:                       attributes.Memo,
-		SearchAttributes:           attributes.SearchAttributes,
-		UserMetadata:               userMetadata,
-		VersioningOverride:         inheritedPinnedOverride,
-		Priority:                   priority,
-		TaskDispatchRevisionNumber: taskDispatchRevisionNumber,
+		RequestId:             childRequestID,
+		WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
+		RetryPolicy:           attributes.RetryPolicy,
+		CronSchedule:          attributes.CronSchedule,
+		Memo:                  attributes.Memo,
+		SearchAttributes:      attributes.SearchAttributes,
+		UserMetadata:          userMetadata,
+		VersioningOverride:    inheritedPinnedOverride,
+		Priority:              priority,
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
@@ -1629,6 +1656,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		},
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),
+		sourceDeploymentVersion,
+		sourceDeploymentRevisionNumber,
 	)
 
 	request.SourceVersionStamp = sourceVersionStamp

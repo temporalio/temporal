@@ -403,6 +403,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 			nil,
 			nil,
 			time.Now().UTC(),
+			nil, // TODO (Shivam): Do we need to fil these?
+			0,
 		),
 	)
 	if err != nil {
@@ -669,6 +671,8 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 					nil,
 					nil,
 					time.Now().UTC(),
+					nil,
+					0,
 				),
 			},
 		}
@@ -3151,6 +3155,8 @@ func (wh *WorkflowHandler) CreateSchedule(
 			nil,
 			nil,
 			time.Now().UTC(),
+			nil, // source deployment version
+			0,   // source deployment revision number
 		),
 	)
 
@@ -4607,6 +4613,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			nil,
 			nil,
 			time.Now().UTC(),
+			nil, // source deployment version
+			0,   // source deployment revision number
 		),
 	)
 	if err != nil {

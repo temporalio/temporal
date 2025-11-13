@@ -1736,7 +1736,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		execution,
 		uuid.New(),
 		workflowStartEvent,
-		0,
+		nil,
 	)
 	s.Nil(err)
 

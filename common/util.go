@@ -12,6 +12,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -535,6 +536,8 @@ func CreateHistoryStartWorkflowRequest(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	now time.Time,
+	sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
+	sourceDeploymentRevisionNumber int64,
 ) *historyservice.StartWorkflowExecutionRequest {
 	// We include the original startRequest in the forwarded request to History, but
 	// we don't want to send workflow payloads twice. We deep copy to a new struct,
@@ -542,6 +545,7 @@ func CreateHistoryStartWorkflowRequest(
 	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
 		startRequest = CloneProto(startRequest)
 	}
+
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              namespaceID,
 		StartRequest:             startRequest,
@@ -569,6 +573,15 @@ func CreateHistoryStartWorkflowRequest(
 
 	if timestamp.DurationValue(startRequest.GetWorkflowStartDelay()) > 0 {
 		histRequest.FirstWorkflowTaskBackoff = startRequest.GetWorkflowStartDelay()
+	}
+
+	// Populate the inherited auto upgrade info only if the source deployment version and revision number are not nil
+	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+		inheritedAutoUpgradeInfo := &historyservice.StartWorkflowExecutionRequest_InheritedAutoUpgradeInfo{
+			SourceDeploymentVersion:        sourceDeploymentVersion,
+			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+		}
+		histRequest.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
 	}
 
 	return histRequest

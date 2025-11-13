@@ -1401,7 +1401,7 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionSignaled(arg0 any)
 }
 
 // ApplyWorkflowExecutionStartedEvent mocks base method.
-func (m *MockMutableState) ApplyWorkflowExecutionStartedEvent(arg0 *clock.VectorClock, arg1 *common.WorkflowExecution, arg2 string, arg3 *history.HistoryEvent, arg4 int64) error {
+func (m *MockMutableState) ApplyWorkflowExecutionStartedEvent(arg0 *clock.VectorClock, arg1 *common.WorkflowExecution, arg2 string, arg3 *history.HistoryEvent, arg4 *historyservice.StartWorkflowExecutionRequest_InheritedAutoUpgradeInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionStartedEvent", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)

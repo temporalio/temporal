@@ -499,7 +499,7 @@ func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
 	}
 	startRequestClone := CloneProto(startRequest)
 
-	histRequest := CreateHistoryStartWorkflowRequest(startRequest.Namespace, startRequest, nil, nil, time.Now())
+	histRequest := CreateHistoryStartWorkflowRequest(startRequest.Namespace, startRequest, nil, nil, time.Now(), nil, 0)
 
 	// ensure we aren't copying the payloads into the history request twice
 	require.Equal(t, failurePayload, histRequest.ContinuedFailure)

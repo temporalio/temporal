@@ -162,7 +162,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				execution,
 				requestID,
 				event,
-				0, // TODO (Shivam): Right now, there is no way of getting the task dispatch revision number from the history event. Passing 0 for now but come back to this.
+				nil, // inherited auto upgrade info is not present in the history event (TODO (shivam): Should we be required to add this later on?)
 			); err != nil {
 				return nil, err
 			}
