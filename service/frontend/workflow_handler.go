@@ -5227,8 +5227,10 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 			}
 
 			headerSize := 0
+			lowerCaseHeaders := make(map[string]string, len(cb.Nexus.GetHeader()))
 			for k, v := range cb.Nexus.GetHeader() {
 				headerSize += len(k) + len(v)
+				lowerCaseHeaders[strings.ToLower(k)] = v
 			}
 			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
 				return status.Error(
@@ -5239,6 +5241,7 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 					),
 				)
 			}
+			cb.Nexus.Header = lowerCaseHeaders
 		case *commonpb.Callback_Internal_:
 			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
 			continue

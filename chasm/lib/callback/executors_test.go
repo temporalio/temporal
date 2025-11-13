@@ -42,7 +42,7 @@ type mockNexusCompletionGetter struct {
 	err        error
 }
 
-func (m *mockNexusCompletionGetter) GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+func (m *mockNexusCompletionGetter) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.OperationCompletion, error) {
 	return m.completion, m.err
 }
 
