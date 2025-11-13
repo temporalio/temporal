@@ -266,6 +266,7 @@ type Config struct {
 	ReplicationTaskProcessorCleanupJitterCoefficient     dynamicconfig.FloatPropertyFnWithShardIDFilter
 	ReplicationTaskProcessorHostQPS                      dynamicconfig.FloatPropertyFn
 	ReplicationTaskProcessorShardQPS                     dynamicconfig.FloatPropertyFn
+	ReplicationTaskProcessorApplyPersistenceQPS          dynamicconfig.FloatPropertyFn
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
 	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 	ReplicationMultipleBatches                           dynamicconfig.BoolPropertyFn
@@ -556,6 +557,7 @@ func NewConfig(
 		ReplicatorProcessorMaxSkipTaskCount:                 dynamicconfig.ReplicatorMaxSkipTaskCount.Get(dc),
 		ReplicationTaskProcessorHostQPS:                     dynamicconfig.ReplicationTaskProcessorHostQPS.Get(dc),
 		ReplicationTaskProcessorShardQPS:                    dynamicconfig.ReplicationTaskProcessorShardQPS.Get(dc),
+		ReplicationTaskProcessorApplyPersistenceQPS:         dynamicconfig.ReplicationTaskProcessorApplyPersistenceQPS.Get(dc),
 		ReplicationEnableDLQMetrics:                         dynamicconfig.ReplicationEnableDLQMetrics.Get(dc),
 		ReplicationEnableUpdateWithNewTaskMerge:             dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Get(dc),
 		ReplicationStreamSyncStatusDuration:                 dynamicconfig.ReplicationStreamSyncStatusDuration.Get(dc),

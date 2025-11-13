@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -104,6 +105,7 @@ type (
 		workflowCache     wcache.Cache
 		eventsReapplier   EventsReapplier
 		transactionMgr    TransactionManager
+		rateLimiter       quotas.RateLimiter
 		logger            log.Logger
 
 		mutableStateMapper *MutableStateMapperImpl
@@ -137,7 +139,10 @@ func NewHistoryReplicator(
 		workflowCache:     workflowCache,
 		transactionMgr:    transactionMgr,
 		eventsReapplier:   eventsReapplier,
-		logger:            logger,
+		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
+			func() float64 { return shardContext.GetConfig().ReplicationTaskProcessorApplyPersistenceQPS() },
+		),
+		logger: logger,
 
 		mutableStateMapper: NewMutableStateMapping(
 			shardContext,
@@ -192,6 +197,7 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
+	_ = r.rateLimiter.Wait(ctx) // WaitN(ctx, tokens) based on the request events size?
 
 	task, err := newReplicationTaskFromRequest(
 		r.clusterMetadata,
@@ -210,6 +216,8 @@ func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
 	ctx context.Context,
 	request *historyi.BackfillHistoryEventsRequest,
 ) error {
+	_ = r.rateLimiter.Wait(ctx) // WaitN(ctx, tokens) based on the request events size?
+
 	task, err := newReplicationTaskFromBatch(
 		r.clusterMetadata,
 		r.logger,
@@ -404,6 +412,8 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 	newEvents []*historypb.HistoryEvent,
 	newRunID string,
 ) error {
+	_ = r.rateLimiter.Wait(ctx) // WaitN(ctx, tokens) based on the request events size?
+
 	task, err := newReplicationTaskFromBatch(
 		r.clusterMetadata,
 		r.logger,
