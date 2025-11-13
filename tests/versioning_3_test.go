@@ -150,7 +150,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 					RevisionNumber:            1,
 				}, map[string]*deploymentspb.WorkerDeploymentVersionData{tvOldDeployment.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 					Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-				}}, []string{}, tqTypeWf, tqTypeAct)
+				}}, []string{}, tqTypeWf)
 
 				// current deployment
 				s.updateTaskQueueDeploymentDataWithRoutingConfig(tvNewDeployment, &deploymentpb.RoutingConfig{
@@ -159,7 +159,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 					RevisionNumber:            2,
 				}, map[string]*deploymentspb.WorkerDeploymentVersionData{tvNewDeployment.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 					Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-				}}, []string{}, tqTypeWf, tqTypeAct)
+				}}, []string{}, tqTypeWf)
 
 				s.startWorkflow(tv, nil)
 
@@ -1873,7 +1873,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 			RevisionNumber:            1,
 		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf, tqTypeAct)
+		}}, []string{}, tqTypeWf)
 
 		if crossTq {
 			s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1Child, &deploymentpb.RoutingConfig{
@@ -1882,7 +1882,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 				RevisionNumber:            1,
 			}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1Child.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-			}}, []string{}, tqTypeWf, tqTypeAct)
+			}}, []string{}, tqTypeWf)
 		}
 	} else {
 		s.setCurrentDeployment(tv1)
@@ -1913,7 +1913,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 			RevisionNumber:            2,
 		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv2.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf, tqTypeAct)
+		}}, []string{}, tqTypeWf)
 	} else {
 		s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf)
 	}
@@ -1925,7 +1925,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 				RevisionNumber:            2,
 			}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv2Child.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-			}}, []string{}, tqTypeWf, tqTypeAct)
+			}}, []string{}, tqTypeWf)
 		} else {
 			s.updateTaskQueueDeploymentData(tv2Child, true, 0, false, 0, tqTypeWf)
 		}
@@ -2288,7 +2288,7 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	if s.useNewDeploymentData {
 		s.syncTaskQueueDeploymentDataWithRoutingConfig(tv, newRoutingConfig, map[string]*deploymentspb.WorkerDeploymentVersionData{tv.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf, tqTypeAct)
+		}}, []string{}, tqTypeWf)
 	} else {
 		s.syncTaskQueueDeploymentData(tv, false, 20, false, t1, tqTypeWf)
 	}
@@ -3940,7 +3940,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 		RevisionNumber:            2,
 	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-	}}, []string{}, tqTypeWf, tqTypeAct)
+	}}, []string{}, tqTypeWf)
 	// Wait until all task queue partitions know that v1 is current.
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf)
 
@@ -4036,7 +4036,7 @@ func (s *Versioning3Suite) TestActivityTQLags_IndependentActivityDispatchesToIts
 		RevisionNumber:            2,
 	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-	}}, []string{}, tqTypeWf, tqTypeAct)
+	}}, []string{}, tqTypeWf)
 	// Wait until all task queue partitions know that v1 is current
 	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf)
 

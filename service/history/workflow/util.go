@@ -215,7 +215,7 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 		}
 		return override.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30
 	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED || // v0.30 and v0.31 auto-upgrade
-		versioningInfo.GetVersioningOverride().GetAutoUpgrade() || (versioningInfo.GetDeploymentVersion() != nil && versioningInfo.GetRevisionNumber() != 0) { // v0.32 auto-upgrade
+		versioningInfo.GetVersioningOverride().GetAutoUpgrade() { // v0.32 auto-upgrade
 		//nolint:revive // nesting will be reduced after old code clean up
 		if v := versioningInfo.GetDeploymentVersion(); v != nil { // v0.32 auto-upgrade
 			return worker_versioning.DeploymentFromExternalDeploymentVersion(v)
