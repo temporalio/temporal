@@ -78,9 +78,25 @@ type Versioning3Suite struct {
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &Versioning3Suite{useV32: true})
-	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
-	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping, useRevisionNumbers: true})
+
+	t.Run("basic", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{useV32: true})
+	})
+
+	t.Run("async_deployment", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			useV32:                    true,
+			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+		})
+	})
+
+	t.Run("async_deployment_with_revisions", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			useV32:                    true,
+			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			useRevisionNumbers:        true,
+		})
+	})
 }
 
 func (s *Versioning3Suite) SetupSuite() {

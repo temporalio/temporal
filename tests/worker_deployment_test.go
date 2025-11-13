@@ -38,8 +38,12 @@ type (
 
 func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
-	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	t.Run("v0", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
+	})
+	t.Run("v1", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	})
 }
 
 func (s *WorkerDeploymentSuite) SetupSuite() {
