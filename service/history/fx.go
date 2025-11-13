@@ -83,8 +83,8 @@ var Module = fx.Options(
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 	chasmscheduler.Module,
-	chasmworkflow.Module,
 	chasmcallback.Module,
+	chasmworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
