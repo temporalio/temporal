@@ -188,7 +188,11 @@ type StartWorkflowExecutionRequest struct {
 	ChildWorkflowOnly bool `protobuf:"varint,14,opt,name=child_workflow_only,json=childWorkflowOnly,proto3" json:"child_workflow_only,omitempty"`
 	// If present, the new workflow should start on this version with pinned base behavior.
 	InheritedPinnedVersion *v16.WorkerDeploymentVersion `protobuf:"bytes,15,opt,name=inherited_pinned_version,json=inheritedPinnedVersion,proto3" json:"inherited_pinned_version,omitempty"`
-	// If the parent workflow has AutoUpgrade behavior, then we assume that the child workflow or the continued-as-new workflow will also have AutoUpgrade behavior.
+	// If the parent workflow has AutoUpgrade behavior, then the first task of the
+	// child workflow or the continued-as-new workflow will also have AutoUpgrade behavior. This field is used to
+	// pass along the source deployment version and revision number to the child/continued-as-new workflow.
+	// The effective behavior of these workflows is set to AutoUpgrade prior to the dispatching of the first workflow task.
+	// After the first workflow task, the effective behavior of these workflows depends on worker sent values in subsequent workflow tasks.
 	InheritedAutoUpgradeInfo *StartWorkflowExecutionRequest_InheritedAutoUpgradeInfo `protobuf:"bytes,16,opt,name=inherited_auto_upgrade_info,json=inheritedAutoUpgradeInfo,proto3" json:"inherited_auto_upgrade_info,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
