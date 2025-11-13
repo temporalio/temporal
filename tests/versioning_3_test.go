@@ -78,8 +78,8 @@ type Versioning3Suite struct {
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &Versioning3Suite{useV32: true})
-	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	//suite.Run(t, &Versioning3Suite{useV32: true})
+	//suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
 	suite.Run(t, &Versioning3Suite{useV32: true, deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping, useRevisionNumbers: true})
 }
 

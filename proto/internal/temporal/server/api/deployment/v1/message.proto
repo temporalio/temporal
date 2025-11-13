@@ -238,7 +238,9 @@ message SyncVersionStateUpdateArgs {
 
 // used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
 message SyncVersionStateResponse {
-    VersionLocalState version_state = 1;
+    // Deprecated. State could be so large, no need to send it to the deployment workflow.
+    VersionLocalState version_state = 1 [deprecated = true];
+    WorkerDeploymentVersionSummary summary = 2;
 }
 
 // Sent from Version workflow to Worker Deployment workflow
@@ -438,7 +440,8 @@ message SyncVersionStateActivityArgs {
 
 // used as Worker Deployment activity result:
 message SyncVersionStateActivityResult {
-    VersionLocalState version_state = 1;
+    VersionLocalState version_state = 1 [deprecated = true];
+    WorkerDeploymentVersionSummary summary = 2;
 }
 
 // used as Worker Deployment activity input:

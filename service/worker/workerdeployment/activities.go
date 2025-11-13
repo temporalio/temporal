@@ -36,7 +36,8 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 		return nil, err
 	}
 	return &deploymentspb.SyncVersionStateActivityResult{
-		VersionState: res.VersionState,
+		VersionState: res.GetVersionState(),
+		Summary:      res.GetSummary(),
 	}, nil
 }
 

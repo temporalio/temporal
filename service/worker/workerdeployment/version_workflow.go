@@ -633,16 +633,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 		// Clear drainage information, if present, when a version gets activated.
 		// This handles the rollback scenario where a previously draining/drained version
-		// is reactivated and should have it's drainage information cleared.
-
-		v := workflow.GetVersion(ctx, "clear-drainage-on-activation", workflow.DefaultVersion, 0)
-		if v != workflow.DefaultVersion {
-			state.DrainageInfo = nil
-		}
+		// is reactivated and should have its drainage information cleared.
+		state.DrainageInfo = nil
+		state.LastDeactivationTime = nil
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
-		VersionState: state,
+		Summary: versionStateToSummary(state),
 	}, nil
 }
 

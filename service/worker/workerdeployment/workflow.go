@@ -568,7 +568,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 	asyncMode := d.hasMinVersion(AsyncSetCurrentAndRamping)
 
-	if (prevRampingVersion != newRampingVersion && prevRampingVersionPercentage != args.Percentage) || !asyncMode {
+	if prevRampingVersion != newRampingVersion || prevRampingVersionPercentage != args.Percentage || !asyncMode {
 		// In async mode we do not touch routing config and versions if this is not changing the
 		// ramping version or percentage (but could still come here because modifier identity is changing).
 
@@ -1148,8 +1148,11 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 
 	// Update the VersionSummary, stored as part of the WorkerDeploymentLocalState, for this version.
 	if err == nil {
-		summary := versionStateToSummary(res.GetVersionState())
-		d.updateVersionSummary(summary)
+		if sum := res.GetSummary(); sum != nil {
+			d.updateVersionSummary(sum)
+		} else {
+			d.updateVersionSummary(versionStateToSummary(res.GetVersionState()))
+		}
 	}
 	return res.VersionState, err
 }
