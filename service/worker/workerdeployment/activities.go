@@ -200,6 +200,7 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 			if input.ForgetVersion {
 				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 					NamespaceId:    a.namespace.ID().String(),
+					DeploymentName: input.GetDeploymentName(),
 					TaskQueue:      syncData.Name,
 					TaskQueueTypes: syncData.Types,
 					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
@@ -209,6 +210,7 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 			} else {
 				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 					NamespaceId:    a.namespace.ID().String(),
+					DeploymentName: input.GetDeploymentName(),
 					TaskQueue:      syncData.Name,
 					TaskQueueTypes: syncData.Types,
 					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
