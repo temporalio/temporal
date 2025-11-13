@@ -140,14 +140,14 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			name:                         "NotFoundError",
 			taskErr:                      serviceerror.NewNotFound("not found error"),
 			expectError:                  false,
-			expectedAttemptNoUserLatency: attemptNoUserLatency,
+			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
 		},
 		{
 			name:                         "NotFoundErrorWrapped",
 			taskErr:                      fmt.Errorf("%w: some reason", consts.ErrWorkflowCompleted),
 			expectError:                  false,
-			expectedAttemptNoUserLatency: attemptNoUserLatency,
+			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
 		},
 		{
@@ -221,21 +221,28 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 				s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
 				s.mockRescheduler.EXPECT().Add(executable, gomock.Any())
 				executable.Nack(err)
+				return
+			}
+
+			s.NoError(err)
+			capture := s.metricsHandler.StartCapture()
+			executable.Ack()
+			snapshot := capture.Snapshot()
+			recordings := snapshot[metrics.TaskLatency.Name()]
+			if tc.expectedAttemptNoUserLatency == 0 {
+				// invalid task, no noUserLatency will be recorded.
+				s.Empty(recordings)
+				return
+			}
+
+			s.Len(recordings, 1)
+			actualAttemptNoUserLatency, ok := recordings[0].Value.(time.Duration)
+			s.True(ok)
+			if tc.expectBackoff {
+				// the backoff duration is random, so we can't compare the exact value
+				s.Less(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
 			} else {
-				s.NoError(err)
-				capture := s.metricsHandler.StartCapture()
-				executable.Ack()
-				snapshot := capture.Snapshot()
-				recordings := snapshot[metrics.TaskLatency.Name()]
-				s.Len(recordings, 1)
-				actualAttemptNoUserLatency, ok := recordings[0].Value.(time.Duration)
-				s.True(ok)
-				if tc.expectBackoff {
-					// the backoff duration is random, so we can't compare the exact value
-					s.Less(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
-				} else {
-					s.Equal(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
-				}
+				s.Equal(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
 			}
 		})
 	}
@@ -779,8 +786,8 @@ func (s *executableSuite) TestTaskAck_ValidTask_WithRetry() {
 
 	// For retried tasks, they are not considered invalid even
 	// if their last attempt completed with a invalid task error.
-	executable.HandleErr(context.DeadlineExceeded)
-	executable.HandleErr(consts.ErrActivityNotFound)
+	_ = executable.HandleErr(context.DeadlineExceeded)
+	_ = executable.HandleErr(consts.ErrActivityNotFound)
 
 	capture := s.metricsHandler.StartCapture()
 
@@ -799,7 +806,7 @@ func (s *executableSuite) TestTaskAck_InvalidTask() {
 	s.Equal(ctasks.TaskStatePending, executable.State())
 
 	// This will mark the task as invalid
-	executable.HandleErr(consts.ErrActivityNotFound)
+	_ = executable.HandleErr(consts.ErrActivityNotFound)
 
 	capture := s.metricsHandler.StartCapture()
 
