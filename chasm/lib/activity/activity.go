@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -351,6 +352,8 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context, key chasm.Entit
 	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
 		status = enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
 		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	default:
+		return nil, serviceerror.NewInternalf("unknown activity execution status: %s", a.GetStatus())
 	}
 
 	requestData, err := a.RequestData.Get(ctx)
@@ -377,7 +380,6 @@ func (a *Activity) buildPollActivityExecutionResponse(
 	ctx chasm.Context,
 	req *activitypb.PollActivityExecutionRequest,
 ) (*activitypb.PollActivityExecutionResponse, error) {
-	var err error
 	request := req.GetFrontendRequest()
 
 	// TODO(dan): pass ref into this function?

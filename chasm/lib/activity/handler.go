@@ -2,7 +2,6 @@ package activity
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -61,9 +60,8 @@ func (h *handler) PollActivityExecution(
 	ctx context.Context,
 	req *activitypb.PollActivityExecutionRequest,
 ) (*activitypb.PollActivityExecutionResponse, error) {
-
-	waitPolicy := req.GetFrontendRequest().GetWaitPolicy()
-	if waitPolicy == nil {
+	switch req.GetFrontendRequest().GetWaitPolicy().(type) {
+	case nil:
 		return chasm.ReadComponent(
 			ctx,
 			chasm.NewComponentRef[*Activity](chasm.EntityKey{
@@ -75,25 +73,13 @@ func (h *handler) PollActivityExecution(
 			req,
 			nil,
 		)
-	}
-
-	var response *activitypb.PollActivityExecutionResponse
-	var newRef []byte
-	var err error
-
-	switch waitPolicy.(type) {
 	case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
-		response, newRef, err = pollActivityExecutionWaitAnyStateChange(ctx, req)
+		return pollActivityExecutionWaitAnyStateChange(ctx, req)
 	case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
-		response, newRef, err = pollActivityExecutionWaitCompletion(ctx, req)
+		return pollActivityExecutionWaitCompletion(ctx, req)
 	default:
-		return nil, fmt.Errorf("unexpected wait policy type: %T", waitPolicy)
+		return nil, serviceerror.NewInvalidArgumentf("unexpected wait policy type: %T", req.GetFrontendRequest().GetWaitPolicy())
 	}
-	if err != nil {
-		return nil, err
-	}
-	response.GetFrontendResponse().StateChangeLongPollToken = newRef
-	return response, nil
 }
 
 // pollActivityExecutionWaitAnyStateChange waits until the activity state has advanced beyond that
@@ -102,7 +88,7 @@ func (h *handler) PollActivityExecution(
 func pollActivityExecutionWaitAnyStateChange(
 	ctx context.Context,
 	req *activitypb.PollActivityExecutionRequest,
-) (*activitypb.PollActivityExecutionResponse, []byte, error) {
+) (*activitypb.PollActivityExecutionResponse, error) {
 
 	// TODO(dan): do we want to guarantee that response data will differ from that received when the
 	// token was obtained? It's potentially confusing for the server to say "there's been a change"
@@ -117,13 +103,13 @@ func pollActivityExecutionWaitAnyStateChange(
 		var err error
 		lastSeenRef, err = chasm.DeserializeComponentRef(refBytesFromToken)
 		if err != nil {
-			return nil, nil, serviceerror.NewInvalidArgument("invalid long poll token")
+			return nil, serviceerror.NewInvalidArgument("invalid long poll token")
 		}
 		if lastSeenRef.NamespaceID != req.GetNamespaceId() ||
 			lastSeenRef.BusinessID != req.GetFrontendRequest().GetActivityId() ||
 			lastSeenRef.EntityID != req.GetFrontendRequest().GetRunId() {
 			// token is inconsistent with request
-			return nil, nil, serviceerror.NewInvalidArgument("invalid long poll token")
+			return nil, serviceerror.NewInvalidArgument("invalid long poll token")
 		}
 	} else {
 		// This ref will compare less than currentRef in the comparison below.
@@ -138,7 +124,7 @@ func pollActivityExecutionWaitAnyStateChange(
 	// transition history on this shard, or if the state on this shard is behind the ref after a
 	// reload.
 	// TODO(dan): retryability of these errors
-	return chasm.PollComponent(
+	response, newRef, err := chasm.PollComponent(
 		ctx,
 		lastSeenRef,
 		func(
@@ -194,15 +180,20 @@ func pollActivityExecutionWaitAnyStateChange(
 		},
 		req,
 	)
+	if err != nil {
+		return nil, err
+	}
+	response.GetFrontendResponse().StateChangeLongPollToken = newRef
+	return response, nil
 }
 
 // pollActivityExecutionWaitCompletion waits until the activity is completed.
 func pollActivityExecutionWaitCompletion(
 	ctx context.Context,
 	req *activitypb.PollActivityExecutionRequest,
-) (*activitypb.PollActivityExecutionResponse, []byte, error) {
+) (*activitypb.PollActivityExecutionResponse, error) {
 	// TODO(dan): implement functional test when RecordActivityTaskCompleted is implemented
-	return chasm.PollComponent(
+	response, newRef, err := chasm.PollComponent(
 		ctx,
 		chasm.NewComponentRef[*Activity](chasm.EntityKey{
 			NamespaceID: req.GetNamespaceId(),
@@ -214,7 +205,8 @@ func pollActivityExecutionWaitCompletion(
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
-			completed := a.StateMachineState() == activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+			panic("TODO(dan): pollActivityExecutionWaitCompletion is not implemented")
+			completed := false
 			if completed {
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				if err != nil {
@@ -226,4 +218,9 @@ func pollActivityExecutionWaitCompletion(
 		},
 		req,
 	)
+	if err != nil {
+		return nil, err
+	}
+	response.GetFrontendResponse().StateChangeLongPollToken = newRef
+	return response, nil
 }
