@@ -43,7 +43,6 @@ type Engine interface {
 		context.Context,
 		ComponentRef,
 		func(Context, Component) (bool, error),
-		...TransitionOption,
 	) ([]byte, error)
 }
 
@@ -248,7 +247,6 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 	r R,
 	predicateFn func(C, Context, I) (O, bool, error),
 	input I,
-	opts ...TransitionOption,
 ) (O, []byte, error) {
 	var output O
 
@@ -267,7 +265,6 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 			}
 			return satisfied, err
 		},
-		opts...,
 	)
 	if err != nil {
 		return output, nil, err

@@ -292,7 +292,6 @@ func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
-	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	// 1. Acquire lock
 	// 2. Error if shard entity VT < requestRef VT ('stale state')
