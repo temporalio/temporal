@@ -159,17 +159,6 @@ type Client interface {
 		skipDrainage bool,
 	) error
 
-	// Used internally by the Worker Deployment Version workflow in its AddVersionToWorkerDeployment Activity
-	// to-be-deprecated
-	AddVersionToWorkerDeployment(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		deploymentName string,
-		args *deploymentspb.AddVersionUpdateArgs,
-		identity string,
-		requestID string,
-	) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error)
-
 	// Used internally by the Drainage workflow (child of Worker Deployment Version workflow)
 	// in its GetVersionDrainageStatus Activity
 	GetVersionDrainageStatus(
@@ -195,9 +184,6 @@ type Client interface {
 	) error
 }
 
-type ErrMaxTaskQueuesInVersion struct{ error }
-type ErrMaxVersionsInDeployment struct{ error }
-type ErrMaxDeploymentsInNamespace struct{ error }
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -332,17 +318,23 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 }
 
 func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {
-	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
-		// translate to client-side error type
-		return ErrMaxTaskQueuesInVersion{error: errors.New(failure.Message)}
-	} else if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-		return ErrMaxVersionsInDeployment{error: errors.New(failure.Message)}
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType ||
+		failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		return newResourceExhaustedError(failure.GetMessage())
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {
 		return ErrRegister{error: errors.New(failure.Message)}
 	}
 	return nil
+}
+
+func newResourceExhaustedError(message string) *serviceerror.ResourceExhausted {
+	return &serviceerror.ResourceExhausted{
+		Message: message,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS,
+	}
 }
 
 func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome) error {
@@ -1243,7 +1235,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		}
 		limit := d.maxDeployments(namespaceEntry.Name().String())
 		if count >= int64(limit) {
-			return nil, ErrMaxDeploymentsInNamespace{error: errors.New(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))}
+			return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 		}
 	}
 
@@ -1326,58 +1318,6 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		identity,
 		requestID,
 	)
-}
-
-func (d *ClientImpl) AddVersionToWorkerDeployment(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-	args *deploymentspb.AddVersionUpdateArgs,
-	identity string,
-	requestID string,
-) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
-	if err != nil {
-		return nil, err
-	}
-
-	updateRequest := &updatepb.Request{
-		Input: &updatepb.Input{Name: AddVersionToWorkerDeployment, Args: updatePayload},
-		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
-	}
-
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
-
-	outcome, err := d.updateWithStart(
-		ctx,
-		namespaceEntry,
-		WorkerDeploymentWorkflowType,
-		workflowID,
-		nil,
-		nil,
-		updateRequest,
-		identity,
-		requestID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyExistsType {
-		// pretend this is a success
-		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
-	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-		return nil, serviceerror.NewFailedPrecondition(failure.Message)
-	} else if failure != nil {
-		return nil, serviceerror.NewInternalf("failed to add version %v to worker deployment %v with error %v", args.Version, deploymentName, failure.Message)
-	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternalf("outcome missing success and failure while adding version %v to worker deployment %v", args.Version, deploymentName)
-	}
-
-	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
 }
 
 func (d *ClientImpl) updateWithStart(

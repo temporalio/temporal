@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
-	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -724,16 +723,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			// error is not from registration, just return it without waiting
 			return err
 		}
-		var errMaxTaskQueuesInVersion workerdeployment.ErrMaxTaskQueuesInVersion
-		var errMaxVersionsInDeployment workerdeployment.ErrMaxVersionsInDeployment
-		var errMaxDeploymentsInNamespace workerdeployment.ErrMaxDeploymentsInNamespace
-		if errors.As(err, &errMaxTaskQueuesInVersion) {
-			err = errMaxTaskQueuesInVersion
-		} else if errors.As(err, &errMaxVersionsInDeployment) {
-			err = errMaxVersionsInDeployment
-		} else if errors.As(err, &errMaxDeploymentsInNamespace) {
-			err = errMaxDeploymentsInNamespace
-		} else {
+		var errResourceExhausted *serviceerror.ResourceExhausted
+		if !errors.As(err, &errResourceExhausted) {
 			// Do not surface low level error to user
 			c.logger.Error("error while registering version", tag.Error(err))
 			err = errDeploymentVersionNotReady
