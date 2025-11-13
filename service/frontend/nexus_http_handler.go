@@ -261,9 +261,10 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
 		if err != nil {
 			h.logger.Error("failed to get namespace name by ID", tag.Error(err))
-			var notFoundErr *serviceerror.NotFound
+			var notFoundErr *serviceerror.NamespaceNotFound
 			if errors.As(err, &notFoundErr) {
-				h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
+				w.Header().Set("nexus-request-retryable", "true")
+				h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "invalid endpoint target"})
 			} else {
 				h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
 			}
