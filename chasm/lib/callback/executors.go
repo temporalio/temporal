@@ -127,7 +127,7 @@ func (e InvocationTaskExecutor) Invoke(
 		ctx,
 		ref,
 		(*Callback).loadInvocationArgs,
-		ctx,
+		nil,
 	)
 	if err != nil {
 		return err

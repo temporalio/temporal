@@ -115,7 +115,7 @@ func emitWorkflowCompletionStats(
 		startTime := completion.startTime.AsTime()
 		closeTime := completion.closeTime.AsTime()
 		if closeTime.After(startTime) {
-			metrics.WorkflowDuration.With(handler).Record(closeTime.Sub(startTime))
+			metrics.WorkflowScheduleToCloseLatency.With(handler).Record(closeTime.Sub(startTime))
 		}
 	}
 }

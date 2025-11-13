@@ -1785,16 +1785,6 @@ func (s *Versioning3Suite) TestChildWorkflowInheritance_ParentPinnedByOverride()
 	s.testChildWorkflowInheritance_ExpectInherit(false, true, vbUnpinned)
 }
 
-func (s *Versioning3Suite) TestChildWorkflowInheritance_PinnedParent_CrossTQ() {
-	s.T().Skip() // until cross TQ inheritance is implemented
-	s.testChildWorkflowInheritance_ExpectInherit(true, false, vbPinned)
-}
-
-func (s *Versioning3Suite) TestChildWorkflowInheritance_PinnedParent_CrossTQ_WithOverride() {
-	s.T().Skip() // until cross TQ inheritance is implemented
-	s.testChildWorkflowInheritance_ExpectInherit(true, true, vbPinned)
-}
-
 func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bool, withOverride bool, parentRegistrationBehavior enumspb.VersioningBehavior) {
 	// Child wf of a pinned parent starts on the parents pinned version.
 

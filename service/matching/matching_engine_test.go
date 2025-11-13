@@ -3566,8 +3566,8 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 			name:      "deadline_exceeded_immediately",
 			sleepTime: ctxTimeout - defaultTimeoutBuffer,
 			assertion: func(t *testing.T, response *matchingservice.DispatchNexusTaskResponse, err error) {
-				require.Error(t, err)
-				require.Nil(t, response)
+				require.NoError(t, err)
+				require.NotNil(t, response.GetRequestTimeout())
 			},
 		},
 		{
