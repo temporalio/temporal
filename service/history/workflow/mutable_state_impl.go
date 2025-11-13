@@ -2403,8 +2403,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
-	// New run initiated by workflow ContinueAsNew of AUTO_UPGRADE run will inherit the previous run's
-	// deployment version and revision number if the new run's Task Queue belongs to that deployment.
+	// New run initiated by ContinueAsNew of an AUTO_UPGRADE workflow execution will inherit the previous run's
+	// deployment version and revision number iff the new run's Task Queue belongs to that deployment.
 	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var sourceDeploymentRevisionNumber int64
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
@@ -2421,6 +2421,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 				sourceDeploymentVersion,
 			)
 			if err != nil {
+				//nolint:staticcheck
 				return nil, errors.New(fmt.Sprintf("error determining CAN task queue presence in auto upgrade deployment: %s", err.Error()))
 			}
 			if !TQInSourceDeployment {
@@ -8365,7 +8366,6 @@ func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 //     completion. Exception: if Deployment is set but the workflow's effective behavior is
 //     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 //
-// TODO (Shivam): Pending test passing, but add comment here that if revision number is not 0, we return the deployment version.
 // Note: Deployment objects are immutable, never change their fields.
 func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 	return GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo())

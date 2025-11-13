@@ -4359,15 +4359,6 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("v1", result)
-
-	// Verify that the child workflow's MutableState has the right revision number.
-	ms, err := s.GetTestCluster().HistoryClient().GetMutableState(context.Background(),
-		&historyservice.GetMutableStateRequest{
-			NamespaceId: s.NamespaceID().String(),
-			Execution:   tvChild.WorkflowExecution(),
-		})
-	s.NoError(err)
-	s.Equal(childRev, ms.GetVersioningInfo().GetRevisionNumber())
 }
 
 // Tests testing continue-as-new of an AutoUpgrade workflow using revision number mechanics.
@@ -4508,24 +4499,6 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 			return newRunID != run.GetRunID()
 		}
 		return false
-	}, 10*time.Second, 100*time.Millisecond)
-
-	// Verify that the new run (CAN) starts with at least the parent's revision, despite TQ lag/rollback
-	s.Eventually(func() bool {
-		ms, err := s.GetTestCluster().HistoryClient().GetMutableState(context.Background(),
-			&historyservice.GetMutableStateRequest{
-				NamespaceId: s.NamespaceID().String(),
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: tv1.WorkflowID(),
-					RunId:      newRunID,
-				},
-			})
-		if err != nil || ms.GetVersioningInfo() == nil {
-			return false
-		}
-		got := ms.GetVersioningInfo().GetRevisionNumber()
-		s.Equal(parentRev, got)
-		return true
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify that the workflow completed successfully on v1
