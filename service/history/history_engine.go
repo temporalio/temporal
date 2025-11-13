@@ -760,8 +760,13 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
-func (e *historyEngineImpl) ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error {
-	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName)
+func (e *historyEngineImpl) ReplicateVersionedTransition(
+	ctx context.Context,
+	artifact *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+	limits historyi.WorkflowTaskCompletionLimits,
+) error {
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName, limits)
 }
 
 func (e *historyEngineImpl) ImportWorkflowExecution(

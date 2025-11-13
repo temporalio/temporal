@@ -32,6 +32,7 @@ type (
 			history [][]*historypb.HistoryEvent,
 			newRunHistory []*historypb.HistoryEvent,
 			newRunID string,
+			limits historyi.WorkflowTaskCompletionLimits,
 		) (historyi.MutableState, error)
 	}
 
@@ -75,14 +76,15 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	history [][]*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
 	newRunID string,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) (historyi.MutableState, error) {
 	for i := 0; i < len(history)-1; i++ {
-		_, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[i], nil, "")
+		_, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[i], nil, "", limits)
 		if err != nil {
 			return nil, err
 		}
 	}
-	newMutableState, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[len(history)-1], newRunHistory, newRunID)
+	newMutableState, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[len(history)-1], newRunHistory, newRunID, limits)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +110,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	history []*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
 	newRunID string,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) (historyi.MutableState, error) {
 
 	if len(history) == 0 {
@@ -250,6 +253,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
 			if err := b.mutableState.ApplyWorkflowTaskCompletedEvent(
 				event,
+				limits,
 			); err != nil {
 				return nil, err
 			}
@@ -691,6 +695,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			RunId:      newRunID,
 		},
 		newRunHistory,
+		limits,
 	)
 }
 
@@ -699,6 +704,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 	namespaceID namespace.ID,
 	newExecution *commonpb.WorkflowExecution,
 	newRunHistory []*historypb.HistoryEvent,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) (historyi.MutableState, error) {
 
 	// TODO: replication task should contain enough information to determine whether the new run is part of the same chain
@@ -748,6 +754,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 		[][]*historypb.HistoryEvent{newRunHistory},
 		nil,
 		"",
+		limits,
 	)
 	if err != nil {
 		return nil, err

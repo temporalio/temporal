@@ -4,7 +4,6 @@ package workflow
 
 import (
 	"cmp"
-	"math"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -234,12 +233,10 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) error {
 	m.beforeAddWorkflowTaskCompletedEvent()
-	return m.afterAddWorkflowTaskCompletedEvent(
-		event,
-		historyi.WorkflowTaskCompletionLimits{MaxResetPoints: math.MaxInt, MaxSearchAttributeValueSize: math.MaxInt},
-	)
+	return m.afterAddWorkflowTaskCompletedEvent(event, limits)
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {

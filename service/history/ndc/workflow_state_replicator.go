@@ -54,6 +54,7 @@ type (
 			ctx context.Context,
 			versionedTransition *replicationspb.VersionedTransitionArtifact,
 			sourceClusterName string,
+			limits historyi.WorkflowTaskCompletionLimits,
 		) error
 	}
 
@@ -196,6 +197,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ctx context.Context,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) (retError error) {
 	if versionedTransition.StateAttributes == nil {
 		return serviceerror.NewInvalidArgument("both snapshot and mutation are nil")
@@ -257,7 +259,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case *serviceerror.NotFound:
-		return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, nil, versionedTransition, sourceClusterName)
+		return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, nil, versionedTransition, sourceClusterName, limits)
 	case nil:
 		localTransitionHistory := ms.GetExecutionInfo().TransitionHistory
 		if len(localTransitionHistory) == 0 {
@@ -303,7 +305,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
-				return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName)
+				return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName, limits)
 			}
 			return consts.ErrDuplicate
 		}
@@ -316,7 +318,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		case errors.Is(err, consts.ErrStaleState):
 			// local is stale, try to apply mutable state update
 			if snapshot != nil {
-				return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName)
+				return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName, limits)
 			}
 			return r.applyMutation(ctx, namespaceID, wid, rid, wfCtx, ms, releaseFn, versionedTransition, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
@@ -571,6 +573,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	localMutableState historyi.MutableState,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) error {
 	attribute := versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
 	if attribute == nil || attribute.State == nil {
@@ -591,7 +594,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	if localMutableState == nil {
 		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true, versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication)
 	}
-	return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, localMutableState, snapshot, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName)
+	return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, localMutableState, snapshot, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, limits)
 }
 
 func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
@@ -606,6 +609,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	eventBlobs []*commonpb.DataBlob,
 	newRunInfo *replicationspb.NewRunInfo,
 	sourceClusterName string,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) (retErr error) {
 	var isBranchSwitched bool
 	var localTransitionHistory []*persistencespb.VersionedTransition
@@ -675,7 +679,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 
 	var newRunWorkflow Workflow
 	if newRunInfo != nil {
-		newRunWorkflow, err = r.getNewRunWorkflow(ctx, namespaceID, workflowID, localMutableState, newRunInfo)
+		newRunWorkflow, err = r.getNewRunWorkflow(ctx, namespaceID, workflowID, localMutableState, newRunInfo, limits)
 		if err != nil {
 			return err
 		}
@@ -769,9 +773,10 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 	workflowID string,
 	originalMutableState historyi.MutableState,
 	newRunInfo *replicationspb.NewRunInfo,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) (Workflow, error) {
 	// TODO: Refactor. Copied from mutableStateRebuilder.applyNewRunHistory
-	newMutableState, err := r.getNewRunMutableState(ctx, namespaceID, workflowID, newRunInfo.RunId, originalMutableState, newRunInfo.EventBatch, true)
+	newMutableState, err := r.getNewRunMutableState(ctx, namespaceID, workflowID, newRunInfo.RunId, originalMutableState, newRunInfo.EventBatch, true, limits)
 	if err != nil {
 		return nil, err
 	}
@@ -805,6 +810,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 	originalMutableState historyi.MutableState,
 	newRunEventsBlob *commonpb.DataBlob,
 	isStateBased bool,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) (historyi.MutableState, error) {
 	newRunHistory, err := r.historySerializer.DeserializeEvents(newRunEventsBlob)
 	if err != nil {
@@ -857,6 +863,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 		[][]*historypb.HistoryEvent{newRunHistory},
 		nil,
 		"",
+		limits,
 	)
 	if err != nil {
 		return nil, err
@@ -1281,6 +1288,7 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 			originalMutableState,
 			newRunInfo.EventBatch,
 			isStateBased,
+			limits,
 		)
 		if err != nil {
 			return err

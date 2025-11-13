@@ -231,7 +231,7 @@ type (
 		ApplyChildWorkflowExecutionStartedEvent(*historypb.HistoryEvent, *clockspb.VectorClock) error
 		ApplyChildWorkflowExecutionTerminatedEvent(*historypb.HistoryEvent) error
 		ApplyChildWorkflowExecutionTimedOutEvent(*historypb.HistoryEvent) error
-		ApplyWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
+		ApplyWorkflowTaskCompletedEvent(*historypb.HistoryEvent, WorkflowTaskCompletionLimits) error
 		ApplyWorkflowTaskFailedEvent() error
 		ApplyWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *durationpb.Duration, int32, *timestamppb.Timestamp, *timestamppb.Timestamp, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		ApplyWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64, *commonpb.WorkerVersionStamp, int64) (*WorkflowTaskInfo, error)

@@ -3378,8 +3378,9 @@ func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) error {
-	return ms.workflowTaskManager.ApplyWorkflowTaskCompletedEvent(event)
+	return ms.workflowTaskManager.ApplyWorkflowTaskCompletedEvent(event, limits)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskTimedOutEvent(

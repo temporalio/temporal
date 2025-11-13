@@ -17,6 +17,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -104,7 +105,11 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.ReplicateVersionedTransition(ctx, e.taskAttr.VersionedTransitionArtifact, e.SourceClusterName())
+	limits := historyi.WorkflowTaskCompletionLimits{
+		MaxResetPoints:              e.Config.MaxAutoResetPoints(namespaceName),
+		MaxSearchAttributeValueSize: e.Config.SearchAttributesSizeOfValueLimit(namespaceName),
+	}
+	return engine.ReplicateVersionedTransition(ctx, e.taskAttr.VersionedTransitionArtifact, e.SourceClusterName(), limits)
 }
 
 func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
@@ -131,11 +136,15 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		}
 		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
-
+		limits := historyi.WorkflowTaskCompletionLimits{
+			MaxResetPoints:              e.Config.MaxAutoResetPoints(namespaceName),
+			MaxSearchAttributeValueSize: e.Config.SearchAttributesSizeOfValueLimit(namespaceName),
+		}
 		if doContinue, syncStateErr := e.SyncState(
 			ctx,
 			taskErr,
 			ResendAttempt,
+			limits,
 		); syncStateErr != nil || !doContinue {
 			if syncStateErr != nil {
 				e.Logger.Error("SyncVersionedTransition replication task encountered error during sync state",

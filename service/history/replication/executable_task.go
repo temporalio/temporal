@@ -85,6 +85,7 @@ type (
 			ctx context.Context,
 			syncStateErr *serviceerrors.SyncState,
 			remainingAttempt int,
+			limits historyi.WorkflowTaskCompletionLimits,
 		) (bool, error)
 		ReplicationTask() *replicationspb.ReplicationTask
 		MarkPoisonPill() error
@@ -607,6 +608,7 @@ func (e *ExecutableTaskImpl) SyncState(
 	ctx context.Context,
 	syncStateErr *serviceerrors.SyncState,
 	remainingAttempt int,
+	limits historyi.WorkflowTaskCompletionLimits,
 ) (bool, error) {
 
 	// TODO: check & update remainingAttempt
@@ -685,7 +687,7 @@ func (e *ExecutableTaskImpl) SyncState(
 	if err != nil {
 		return false, err
 	}
-	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, e.SourceClusterName())
+	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, e.SourceClusterName(), limits)
 	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
 	}
