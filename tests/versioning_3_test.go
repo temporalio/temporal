@@ -3585,7 +3585,6 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 }
 
 func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() {
-	s.T().Skip("This test is flaky right now and shall be fixed in a future PR.") // TODO (Shivam)
 	/*
 
 		Test plan:
@@ -3699,7 +3698,15 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	}
 
 	// Rollback the userData to v0. Using the lower API here.
-	_, err := s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
+
+	currentData, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:   s.NamespaceID().String(),
+		TaskQueue:     tv0.TaskQueue().GetName(),
+		TaskQueueType: tqTypeWf,
+	})
+	s.NoError(err)
+
+	_, err = s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
 		NamespaceId: s.NamespaceID().String(),
 		TaskQueue:   tv0.TaskQueue().GetName(),
 		UserData: &persistencespb.VersionedTaskQueueUserData{
@@ -3743,7 +3750,7 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 					},
 				},
 			},
-			Version: 0,
+			Version: currentData.GetUserData().GetVersion(),
 		},
 	})
 	s.NoError(err)
@@ -4158,8 +4165,8 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 		)
 
 		var childResult string
-		f.Get(ctx, &childResult)
-		return childResult, nil
+		err := f.Get(ctx, &childResult)
+		return childResult, err
 	}
 	child := func(ctx workflow.Context) (string, error) {
 		return "v1", nil
@@ -4239,6 +4246,7 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 		return current.GetBuildId() == tv0Child.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
 	}, 10*time.Second, 100*time.Millisecond)
 
+	//nolint:testifylint
 	go s.idlePollWorkflow(tv0Child, true, 1*time.Minute, "workflow should not go to the old deployment")
 
 	// Unblock parent to start the child
@@ -4265,7 +4273,9 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 	s.Equal("v1", result)
 }
 
-func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_DifferentTQ_TQLags() {
+// TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ demonstrates that a child workflow of an AutoUpgrade parent, not sharing
+// the same task queue, starts with no inherited auto upgrade info.
+func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ() {
 	if !s.useNewDeploymentData {
 		s.T().Skip("This test is only supported on new deployment data")
 	}
@@ -4311,8 +4321,8 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_Differe
 		)
 
 		var childResult string
-		f.Get(ctx, &childResult)
-		return childResult, nil
+		err := f.Get(ctx, &childResult)
+		return childResult, err
 	}
 	child := func(ctx workflow.Context) (string, error) { return "v1", nil }
 
