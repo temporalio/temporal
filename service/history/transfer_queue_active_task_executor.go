@@ -301,9 +301,6 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	directive := MakeDirectiveForWorkflowTask(mutableState)
 	priority := mutableState.GetExecutionInfo().Priority
 
-	fmt.Println("before pushWorkflowTask, the revision number is", mutableState.GetVersioningRevisionNumber())
-	fmt.Printf("Directive for %s: revision=%d, behavior=%v\n", transferTask.GetWorkflowID(), directive.GetRevisionNumber(), directive.GetBehavior())
-
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
 	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
