@@ -162,7 +162,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				execution,
 				requestID,
 				event,
-				nil, // inherited auto upgrade info is not present in the history event (TODO (shivam): Should we be required to add this later on?)
+				nil,
 			); err != nil {
 				return nil, err
 			}

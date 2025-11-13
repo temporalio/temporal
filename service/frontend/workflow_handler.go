@@ -403,7 +403,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 			nil,
 			nil,
 			time.Now().UTC(),
-			nil, // TODO (Shivam): Do we need to fil these?
+			nil,
 			0,
 		),
 	)
@@ -3155,8 +3155,8 @@ func (wh *WorkflowHandler) CreateSchedule(
 			nil,
 			nil,
 			time.Now().UTC(),
-			nil, // source deployment version
-			0,   // source deployment revision number
+			nil,
+			0,
 		),
 	)
 
