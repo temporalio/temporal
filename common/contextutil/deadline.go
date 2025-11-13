@@ -7,12 +7,12 @@ import (
 
 var noop = func() {}
 
-// WithDeadlineBuffer creates a child context with desired timeout.
-// If buffer is non-zero, then child context timeout will be
-// the minOf(parentCtx.Deadline()-buffer, maxTimeout). Use this
-// method to create child context when childContext cannot use
-// all of parent's deadline but instead there is a need to leave
-// some time for parent to do some post-work
+// WithDeadlineBuffer returns a child context with a deadline that ensures that at least buffer
+// amount of time remains after the child deadline expires and before the parent deadline expires.
+// The returned context timeout is therefore <= the requested timeout. If the parent deadline itself
+// does not allow buffer amount of time, then the returned context deadline expires immediately. Use
+// this method to create child context when the child cannot use all of parent's deadline but
+// instead there is a need to leave some time for parent to do some post-work.
 func WithDeadlineBuffer(
 	parent context.Context,
 	timeout time.Duration,
@@ -22,15 +22,17 @@ func WithDeadlineBuffer(
 		return parent, noop
 	}
 
-	deadline, hasDeadline := parent.Deadline()
+	parentDeadline, parentHasDeadline := parent.Deadline()
 
-	if !hasDeadline {
+	if !parentHasDeadline {
+		// No parent deadline, so buffer is available to parent after child deadline expiry.
 		return context.WithTimeout(parent, timeout)
 	}
 
-	remaining := time.Until(deadline) - buffer
+	// If parent deadline itself does not allow buffer then set child timeout to zero. Otherwise
+	// compute child deadline such that at least buffer remains after it and before parent deadline.
+	remaining := time.Until(parentDeadline) - buffer
 	if remaining < timeout {
-		// Cap the timeout to the remaining time minus buffer.
 		timeout = max(0, remaining)
 	}
 	return context.WithTimeout(parent, timeout)
