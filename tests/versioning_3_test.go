@@ -3599,6 +3599,7 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflow_NoBouncingBetweenVersions() {
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
@@ -3717,6 +3718,20 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflow_NoBouncingBetweenVersions() {
 		},
 	})
 	s.NoError(err)
+
+	// Verify that the userData is rolled back to v1.
+	s.Eventually(func() bool {
+		ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv1.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+		})
+		s.NoError(err)
+
+		// Find the current version for this task-queue specifically. It should be set to v1.
+		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
+		return current.GetBuildId() == tv1.DeploymentVersion().GetBuildId() && currentRevisionNumber == 1
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Ensure that the workflow does not bounce back to v1.
 	go s.idlePollWorkflow(tv1, true, ver3MinPollTime, "workflow should not bounce back to v1")
