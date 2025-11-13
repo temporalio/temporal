@@ -239,9 +239,9 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 }
 
 // PollComponent waits until the predicate is true when evaluated against the component identified
-// by the supplied component reference. It returns the output of the predicate function, along with
-// a component reference identifying the state at which the predicate was satisfied. If the
-// predicate is true at the outset then it returns immediately.
+// by the supplied component reference. It returns (output, ref, err), where output is the
+// output of the predicate function, and ref is a component reference identifying the state at which
+// the predicate was satisfied. If the predicate is true at the outset then it returns immediately.
 func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,

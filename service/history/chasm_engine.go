@@ -281,11 +281,12 @@ func (e *ChasmEngine) ReadComponent(
 }
 
 // PollComponent waits until the supplied predicate is satisfied when evaluated against the
-// component identified by the supplied component reference. It returns a component reference
-// identifying the state at which the predicate was satisfied. An error is returned if entity
-// transition history is (after reloading from persistence) behind the requested ref, or if the ref
-// is not interpretable as part of the entity transition history. Thus when the predicate function
-// is evaluated, it is guaranteed that the entity VT >= requestRef VT.
+// component identified by the supplied component reference. If there is no error, it
+// returns (ref, nil) where ref is a component reference identifying the state at which the
+// predicate was satisfied. It is an error if entity transition history is (after reloading from
+// persistence) behind the requested ref, or if the ref is not consistent with entity transition
+// history. Thus when the predicate function is evaluated, it is guaranteed that the entity VT >=
+// requestRef VT.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
@@ -374,7 +375,7 @@ func (e *ChasmEngine) PollComponent(
 				return nil, err
 			}
 			if newRef != nil {
-				// wait condition was satisfied
+				// Wait condition was satisfied.
 				return newRef, nil
 			}
 		case <-ctx.Done():
