@@ -4354,20 +4354,18 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ
 	// Unblock parent to start the child
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
 
-	// Verify that the child starts without the parent's revision number. This happens because the child TQ is in a different deployment than the parent TQ.
-	s.Eventually(func() bool {
-		ms, err := s.GetTestCluster().HistoryClient().GetMutableState(context.Background(),
-			&historyservice.GetMutableStateRequest{
-				NamespaceId: s.NamespaceID().String(),
-				Execution:   tvChild.WorkflowExecution(),
-			})
-		s.NoError(err)
-		s.Equal(childRev, ms.GetVersioningInfo().GetRevisionNumber())
-		return true
-	}, 10*time.Second, 100*time.Millisecond)
-
 	// Verify that the parent workflow completed successfully.
+	// This shall only be possible if the child workflow started on it's worker and completed.
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("v1", result)
+
+	// Verify that the child workflow's MutableState has the right revision number.
+	ms, err := s.GetTestCluster().HistoryClient().GetMutableState(context.Background(),
+		&historyservice.GetMutableStateRequest{
+			NamespaceId: s.NamespaceID().String(),
+			Execution:   tvChild.WorkflowExecution(),
+		})
+	s.NoError(err)
+	s.Equal(childRev, ms.GetVersioningInfo().GetRevisionNumber())
 }

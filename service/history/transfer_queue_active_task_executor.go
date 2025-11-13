@@ -961,7 +961,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
 			TQInSourceDeployment, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, sourceDeploymentVersion)
 			if err != nil {
-				return fmt.Errorf(fmt.Sprintf("error determining child task queue presence in auto upgrade deployment: %s", err.Error()))
+				//nolint:staticcheck
+				return errors.New(fmt.Sprintf("error determining child task queue presence in auto upgrade deployment: %s", err.Error()))
 			}
 			if !TQInSourceDeployment {
 				sourceDeploymentVersion = nil

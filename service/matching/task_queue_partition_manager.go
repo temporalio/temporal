@@ -3,8 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -1075,15 +1073,15 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
-	if strings.Contains(workflowId, "evision_SameTQ_TQLags-cb8391fa_workflow_id_2") && targetDeploymentRevisionNumber != 0 {
-		fmt.Println("--------------------------------")
-		fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-		fmt.Println("workflowId", workflowId)
-		fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-		fmt.Println("targetDeploymentVersion", targetDeploymentVersion)
-		fmt.Println("targetDeployment", targetDeployment)
-		fmt.Println("--------------------------------")
-	}
+	// if strings.Contains(workflowId, "evision_SameTQ_TQLags-cb8391fa_workflow_id_2") && targetDeploymentRevisionNumber != 0 {
+	// 	fmt.Println("--------------------------------")
+	// 	fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
+	// 	fmt.Println("workflowId", workflowId)
+	// 	fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
+	// 	fmt.Println("targetDeploymentVersion", targetDeploymentVersion)
+	// 	fmt.Println("targetDeployment", targetDeployment)
+	// 	fmt.Println("--------------------------------")
+	// }
 	var targetDeploymentQueue physicalTaskQueueManager
 	if directive.GetAssignedBuildId() == "" && targetDeployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
