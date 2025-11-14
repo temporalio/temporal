@@ -121,7 +121,7 @@ func TestArchiver(t *testing.T) {
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"Text01": payload.EncodeString("value"),
 			}},
-			NameTypeMap: searchattribute.TestNameTypeMap,
+			NameTypeMap: searchattribute.TestNameTypeMap(),
 
 			ExpectArchiveVisibility: true,
 		},

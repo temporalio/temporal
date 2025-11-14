@@ -35,7 +35,7 @@ func (s *QueryInterceptorSuite) TearDownTest() {
 func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestEsNameTypeMap(),
 	)
 
 	cases := []struct {
@@ -72,7 +72,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestEsNameTypeMap(),
 	)
 
 	cases := []struct {
@@ -115,7 +115,7 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestEsNameTypeMap(),
 	)
 
 	cases := []struct {
@@ -171,7 +171,7 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestEsNameTypeMap(),
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.WorkflowID, "test-schedule-id")
@@ -193,7 +193,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestNameTypeMapWithScheduleId,
+		searchattribute.TestEsNameTypeMapWithScheduleID(),
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.ScheduleID, "test-workflow-id")
@@ -214,7 +214,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 func (s *QueryInterceptorSuite) createMockNameInterceptor(mapper searchattribute.Mapper) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      "test-namespace",
-		searchAttributesTypeMap:        searchattribute.TestNameTypeMap,
+		searchAttributesTypeMap:        searchattribute.TestEsNameTypeMap(),
 		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(mapper),
 	}
 }

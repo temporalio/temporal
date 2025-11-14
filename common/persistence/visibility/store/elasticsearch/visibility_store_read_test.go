@@ -122,7 +122,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.visibilityStore = &VisibilityStore{
 		esClient:                       s.mockESClient,
 		index:                          testIndex,
-		searchAttributesProvider:       searchattribute.NewTestProvider(),
+		searchAttributesProvider:       searchattribute.NewTestEsProvider(),
 		searchAttributesMapperProvider: s.mockSearchAttributesMapperProvider,
 		processor:                      s.mockProcessor,
 		processorAckTimeout:            esProcessorAckTimeout,
@@ -708,6 +708,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
+	saTypeMap := searchattribute.TestEsNameTypeMap()
 	docSource := []byte(`{"ExecutionStatus": "Running",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -718,7 +719,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
 	// test for open
-	info, err := s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -742,7 +743,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
-	info, err = s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -762,7 +763,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	// test for error case
 	docSource = []byte(`corrupted data`)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	info, err = s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.Error(err)
 	s.Nil(info)
 }
@@ -770,6 +771,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 	s.visibilityStore.searchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
 
+	saTypeMap := searchattribute.TestEsNameTypeMap()
 	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
@@ -779,10 +781,10 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
           "CustomIntField": [111,222],
           "CustomBoolField": true,
           "UnknownField": "random"}`)
-	info, err := s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
-	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap, true)
+	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &saTypeMap, true)
 	s.NoError(err)
 
 	s.Len(customSearchAttributes, 7)
@@ -812,6 +814,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
+	saTypeMap := searchattribute.TestEsNameTypeMap()
 	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
@@ -822,7 +825,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
           "CustomBoolField": true,
           "UnknownField": "random"}`)
 
-	info, err := s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 
@@ -1560,6 +1563,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 	startTime := time.Now().UTC()
 	closeTime := startTime.Add(1 * time.Minute)
 	datetimeNull := json.Number(fmt.Sprintf("%d", math.MaxInt64))
+	saTypeMap := searchattribute.TestEsNameTypeMap()
 
 	testCases := []struct {
 		name         string
@@ -1678,7 +1682,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			res, err := buildPaginationQuery(tc.sorterFields, tc.searchAfter, searchattribute.TestNameTypeMap)
+			res, err := buildPaginationQuery(tc.sorterFields, tc.searchAfter, saTypeMap)
 			s.Equal(tc.err, err)
 			s.Equal(tc.res, res)
 		})
