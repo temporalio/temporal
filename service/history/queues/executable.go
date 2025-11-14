@@ -134,25 +134,26 @@ type (
 		lowestPriority ctasks.Priority // priority for emitting metrics across multiple attempts
 		attempt        int
 
-		executor          Executor
-		scheduler         Scheduler
-		rescheduler       Rescheduler
-		priorityAssigner  PriorityAssigner
-		timeSource        clock.TimeSource
-		namespaceRegistry namespace.Registry
-		clusterMetadata   cluster.Metadata
-		logger            log.Logger
-		metricsHandler    metrics.Handler
-		tracer            trace.Tracer
-		dlqWriter         *DLQWriter
+		executor            Executor
+		scheduler           Scheduler
+		rescheduler         Rescheduler
+		priorityAssigner    PriorityAssigner
+		timeSource          clock.TimeSource
+		namespaceRegistry   namespace.Registry
+		clusterMetadata     cluster.Metadata
+		taskTypeTagProvider TaskTypeTagProvider
+		logger              log.Logger
+		metricsHandler      metrics.Handler
+		tracer              trace.Tracer
+		dlqWriter           *DLQWriter
 
 		readerID                   int64
-		loadTime                   time.Time
 		scheduledTime              time.Time
 		scheduleLatency            time.Duration
 		attemptNoUserLatency       time.Duration
 		inMemoryNoUserLatency      time.Duration
 		lastActiveness             bool
+		invalidTask                bool
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
@@ -169,6 +170,8 @@ type (
 		DLQErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
+
+	TaskTypeTagProvider func(t tasks.Task, isActive bool) string
 )
 
 func NewExecutable(
@@ -181,6 +184,7 @@ func NewExecutable(
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	taskTypeTagProvider TaskTypeTagProvider,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	tracer trace.Tracer,
@@ -204,26 +208,31 @@ func NewExecutable(
 	for _, opt := range opts {
 		opt(&params)
 	}
-	executable := &executableImpl{
-		Task:              task,
-		state:             ctasks.TaskStatePending,
-		attempt:           1,
-		executor:          executor,
-		scheduler:         scheduler,
-		rescheduler:       rescheduler,
-		priorityAssigner:  priorityAssigner,
-		timeSource:        timeSource,
-		namespaceRegistry: namespaceRegistry,
-		clusterMetadata:   clusterMetadata,
-		readerID:          readerID,
-		loadTime:          util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
+	e := &executableImpl{
+		Task:                task,
+		state:               ctasks.TaskStatePending,
+		attempt:             1,
+		executor:            executor,
+		scheduler:           scheduler,
+		rescheduler:         rescheduler,
+		priorityAssigner:    priorityAssigner,
+		timeSource:          timeSource,
+		namespaceRegistry:   namespaceRegistry,
+		clusterMetadata:     clusterMetadata,
+		taskTypeTagProvider: taskTypeTagProvider,
+		readerID:            readerID,
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler:             metricsHandler,
+		metricsHandler: metricsHandler.WithTags(estimateTaskMetricTags(
+			task,
+			namespaceRegistry,
+			clusterMetadata.GetCurrentClusterName(),
+			taskTypeTagProvider,
+		)...),
 		tracer:                     tracer,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
@@ -231,8 +240,14 @@ func NewExecutable(
 		dlqInternalErrors:          params.DLQInternalErrors,
 		dlqErrorPattern:            params.DLQErrorPattern,
 	}
-	executable.updatePriority()
-	return executable
+
+	loadTime := util.MaxTime(timeSource.Now(), task.GetKey().FireTime)
+	metrics.TaskLoadLatency.With(e.metricsHandler).Record(
+		loadTime.Sub(task.GetVisibilityTime()),
+		metrics.QueueReaderIDTag(readerID),
+	)
+	e.updatePriority()
+	return e
 }
 
 func (e *executableImpl) Execute() (retErr error) {
@@ -305,10 +320,11 @@ func (e *executableImpl) Execute() (retErr error) {
 			// we need to guess the metrics tags here as we don't know which execution logic
 			// is actually used which is upto the executor implementation
 			e.metricsHandler = e.metricsHandler.WithTags(
-				estimateTaskMetricTag(
+				estimateTaskMetricTags(
 					e.GetTask(),
 					e.namespaceRegistry,
 					e.clusterMetadata.GetCurrentClusterName(),
+					e.taskTypeTagProvider,
 				)...)
 		}
 
@@ -395,7 +411,7 @@ func (e *executableImpl) isUserError(err error) bool {
 	return resourceExhaustedErr.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
 }
 
-func (e *executableImpl) isSafeToDropError(err error) bool {
+func (e *executableImpl) isInvalidTaskError(err error) bool {
 	if errors.Is(err, consts.ErrStaleReference) {
 		// The task is stale and is safe to be dropped.
 		// Even though ErrStaleReference is castable to serviceerror.NotFound, we give this error special treatment
@@ -414,13 +430,17 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 		return true
 	}
 
-	if err == consts.ErrTaskDiscarded {
-		metrics.TaskDiscarded.With(e.metricsHandler).Record(1)
+	if err == consts.ErrTaskVersionMismatch {
+		metrics.TaskVersionMisMatch.With(e.metricsHandler).Record(1)
 		return true
 	}
 
-	if err == consts.ErrTaskVersionMismatch {
-		metrics.TaskVersionMisMatch.With(e.metricsHandler).Record(1)
+	return false
+}
+
+func (e *executableImpl) isSafeToDropError(err error) bool {
+	if err == consts.ErrTaskDiscarded {
+		metrics.TaskDiscarded.With(e.metricsHandler).Record(1)
 		return true
 	}
 
@@ -531,6 +551,13 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if matchedErr := e.matchDLQErrorPattern(err); matchedErr != nil {
 		e.incAttempt()
 		return matchedErr
+	}
+
+	if e.isInvalidTaskError(err) {
+		// only consider task invalid if it's the first attempt
+		// otherwise we have no idea if it's invalid due to the (failed) write operation in previous attempts.
+		e.invalidTask = e.Attempt() == 1
+		return nil
 	}
 
 	if e.isSafeToDropError(err) {
@@ -655,10 +682,12 @@ func (e *executableImpl) Ack() {
 
 	e.state = ctasks.TaskStateAcked
 
-	metrics.TaskLoadLatency.With(e.metricsHandler).Record(
-		e.loadTime.Sub(e.GetVisibilityTime()),
-		metrics.QueueReaderIDTag(e.readerID),
-	)
+	if e.invalidTask {
+		// do not emit metrics for invalid tasks
+		// as they are expected to have to high latency due to reprocessing upon shard movement.
+		return
+	}
+
 	metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
 
 	priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
@@ -845,10 +874,11 @@ func (e *executableImpl) resetAttempt() {
 	e.attempt = 1
 }
 
-func estimateTaskMetricTag(
+func estimateTaskMetricTags(
 	task tasks.Task,
 	namespaceRegistry namespace.Registry,
 	currentClusterName string,
+	taskTypeTagProvider TaskTypeTagProvider,
 ) []metrics.Tag {
 	namespaceTag := metrics.NamespaceUnknownTag()
 	isActive := true
@@ -859,7 +889,7 @@ func estimateTaskMetricTag(
 		isActive = ns.ActiveInCluster(currentClusterName)
 	}
 
-	taskType := getTaskTypeTagValue(task, isActive)
+	taskType := taskTypeTagProvider(task, isActive)
 	return []metrics.Tag{
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),
