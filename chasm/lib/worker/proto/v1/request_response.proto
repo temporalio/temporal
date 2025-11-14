@@ -10,6 +10,7 @@ message RecordHeartbeatRequest {
     // Internal namespace ID (UUID).
     string namespace_id = 1;
 
+    // The heartbeat information.
     temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest frontend_request = 2;
 }
 

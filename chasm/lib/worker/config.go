@@ -6,13 +6,11 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-var (
-	// InactiveWorkerCleanupDelay is the time to wait before cleaning up inactive workers after their lease expires.
-	InactiveWorkerCleanupDelay = dynamicconfig.NewNamespaceDurationSetting(
-		"worker.inactiveWorkerCleanupDelay",
-		60*time.Minute,
-		`InactiveWorkerCleanupDelay is the time to wait before cleaning up inactive workers after their lease expires.`,
-	)
+// InactiveWorkerCleanupDelay is the time to wait before cleaning up inactive workers after their lease expires.
+var InactiveWorkerCleanupDelay = dynamicconfig.NewNamespaceDurationSetting(
+	"worker.inactiveWorkerCleanupDelay",
+	60*time.Minute,
+	`InactiveWorkerCleanupDelay is the time to wait before cleaning up inactive workers after their lease expires.`,
 )
 
 type Config struct {

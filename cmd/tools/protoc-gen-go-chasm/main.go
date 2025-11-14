@@ -192,7 +192,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 
 	ctorName := fmt.Sprintf("New%s", structName)
 	w.println("// %s initializes a new %s.", ctorName, structName)
-	w.println("func New%s(", ctorName)
+	w.println("func %s(", ctorName)
 	w.indent()
 	w.println("dc *dynamicconfig.Collection,")
 	w.println("rpcFactory     common.RPCFactory,")

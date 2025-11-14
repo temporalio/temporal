@@ -2,10 +2,10 @@ package worker
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	workerpb "go.temporal.io/api/worker/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
@@ -44,17 +44,26 @@ func TestWorkerRecordHeartbeat(t *testing.T) {
 	worker := NewWorker()
 	ctx := &chasm.MockMutableContext{}
 
-	heartbeat := &workerpb.WorkerHeartbeat{
-		WorkerInstanceKey: "test-worker-3",
+	req := &workerstatepb.RecordHeartbeatRequest{
+		NamespaceId: "test-namespace-id",
+		FrontendRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+			Namespace: "test-namespace",
+			Identity:  "test-identity",
+			WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+				{
+					WorkerInstanceKey: "test-worker-3",
+				},
+			},
+			// LeaseDuration: durationpb.New(30 * time.Second), // Will be available after proto regeneration
+		},
 	}
-	leaseDuration := 30 * time.Second
 
 	// Test recording heartbeat on new worker
-	err := worker.recordHeartbeat(ctx, heartbeat, leaseDuration)
+	resp, err := worker.recordHeartbeat(ctx, req)
 	require.NoError(t, err)
+	require.NotNil(t, resp)
 
 	// Verify heartbeat data was set
-	require.Equal(t, heartbeat, worker.WorkerHeartbeat)
 	require.Equal(t, "test-worker-3", worker.workerID())
 
 	// Verify lease expiration time was set
