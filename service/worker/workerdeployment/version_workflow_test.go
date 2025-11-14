@@ -24,10 +24,16 @@ type VersionWorkflowSuite struct {
 	controller             *gomock.Controller
 	env                    *testsuite.TestWorkflowEnvironment
 	workerDeploymentClient *ClientImpl
+	workflowVersion        DeploymentWorkflowVersion
 }
 
 func TestVersionWorkflowSuite(t *testing.T) {
-	suite.Run(t, new(VersionWorkflowSuite))
+	t.Run("v0", func(t *testing.T) {
+		suite.Run(t, &VersionWorkflowSuite{workflowVersion: InitialVersion})
+	})
+	t.Run("v1", func(t *testing.T) {
+		suite.Run(t, &VersionWorkflowSuite{workflowVersion: AsyncSetCurrentAndRamping})
+	})
 }
 
 func (s *VersionWorkflowSuite) SetupTest() {

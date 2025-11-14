@@ -83,7 +83,7 @@ func getWorkflowVersion(ctx workflow.Context, unsafeWorkflowVersionGetter func()
 			func(_ workflow.Context) interface{} { return unsafeWorkflowVersionGetter() },
 			func(a, b interface{}) bool { return a == b }).
 			Get(&ver)
-		if err != nil {
+		if err == nil {
 			return ver
 		}
 	}
