@@ -1204,9 +1204,14 @@ func (n *Node) Ref(
 					EntityID:    workflowKey.RunID,
 				},
 				archetype: n.Archetype(),
-				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
+				// TODO: Consider using componentLastUpdateVT for checking staleness.
 				// Using VersionedTransition of the entire tree might be too strict.
-				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
+				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(
+					node.backend.CurrentVersionedTransition(),
+				),
+				componentLastUpdateVT: transitionhistory.CopyVersionedTransition(
+					node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+				),
 				componentPath:      path,
 				componentInitialVT: node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
 			}

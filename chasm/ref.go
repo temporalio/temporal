@@ -5,7 +5,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/persistence/transitionhistory"
 )
 
 var (
@@ -38,6 +37,10 @@ type ComponentRef struct {
 
 	// entityLastUpdateVT is the consistency token for the entire entity.
 	entityLastUpdateVT *persistencespb.VersionedTransition
+
+	// componentLastUpdateVT is the VT when this component was last updated.
+	// This enables fine-grained change detection for polling specific components.
+	componentLastUpdateVT *persistencespb.VersionedTransition
 
 	// componentType is the fully qualified component type name.
 	// It is for performing partial loading more efficiently in future versions of CHASM.
@@ -125,6 +128,7 @@ func (r *ComponentRef) Serialize(
 		EntityVersionedTransition:           r.entityLastUpdateVT,
 		ComponentPath:                       r.componentPath,
 		ComponentInitialVersionedTransition: r.componentInitialVT,
+		ComponentVersionedTransition:        r.componentLastUpdateVT,
 	}
 	return pRef.Marshal()
 }
@@ -150,9 +154,10 @@ func ProtoRefToComponentRef(pRef *persistencespb.ChasmComponentRef) ComponentRef
 			BusinessID:  pRef.BusinessId,
 			EntityID:    pRef.EntityId,
 		},
-		archetype:          Archetype(pRef.Archetype),
-		entityLastUpdateVT: pRef.EntityVersionedTransition,
-		componentPath:      pRef.ComponentPath,
-		componentInitialVT: pRef.ComponentInitialVersionedTransition,
+		archetype:             Archetype(pRef.Archetype),
+		entityLastUpdateVT:    pRef.EntityVersionedTransition,
+		componentLastUpdateVT: pRef.ComponentVersionedTransition,
+		componentPath:         pRef.ComponentPath,
+		componentInitialVT:    pRef.ComponentInitialVersionedTransition,
 	}
 }

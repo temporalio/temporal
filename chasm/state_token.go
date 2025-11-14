@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/service/history/consts"
 )
 
 // HasStateAdvanced returns (entityRef, true, nil) if entity state has advanced beyond the state
@@ -25,7 +26,7 @@ func HasStateAdvanced(c Component, ctx Context, stateToken []byte) ([]byte, bool
 		return nil, false, err
 	}
 
-	switch transitionhistory.Compare(token.VersionedTransition, ref.entityLastUpdateVT) {
+	switch transitionhistory.Compare(token.VersionedTransition, ref.componentLastUpdateVT) {
 	case -1:
 		// State has advanced beyond stateToken
 		return refBytes, true, nil
@@ -34,8 +35,7 @@ func HasStateAdvanced(c Component, ctx Context, stateToken []byte) ([]byte, bool
 		return nil, false, nil
 	case 1:
 		// StateToken is ahead of current state
-		// TODO(dan): consts.ErrStaleState
-		return nil, false, serviceerror.NewFailedPrecondition("long-poll token represents a state beyond current")
+		return nil, false, consts.ErrStaleState
 	default:
 		// Impossible: Compare only returns -1, 0, or 1
 		return nil, false, serviceerror.NewInternal("unexpected transition history comparison result")
@@ -50,7 +50,7 @@ func EncodeStateToken(refBytes []byte) ([]byte, error) {
 	}
 	return proto.Marshal(&activitypb.StateToken{
 		Version:             1,
-		VersionedTransition: ref.entityLastUpdateVT,
+		VersionedTransition: ref.componentLastUpdateVT,
 	})
 }
 
