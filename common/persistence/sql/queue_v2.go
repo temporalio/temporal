@@ -38,7 +38,7 @@ func NewQueueV2(db sqlplugin.DB,
 	serializer serialization.Serializer,
 ) persistence.QueueV2 {
 	return &queueV2{
-		SqlStore: NewSqlStore(db, logger, serializer),
+		SqlStore: NewSQLStore(db, logger, serializer),
 	}
 }
 
