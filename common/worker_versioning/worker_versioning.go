@@ -576,8 +576,6 @@ func PickFinalCurrentAndRamping(
 	ramping *deploymentspb.DeploymentVersionData,
 	currentVersionRoutingConfig *deploymentpb.RoutingConfig,
 	rampingVersionRoutingConfig *deploymentpb.RoutingConfig,
-	currentUnsetTime time.Time,
-	rampingUnsetTime time.Time,
 ) (
 	finalCurrent *deploymentspb.WorkerDeploymentVersion,
 	finalCurrentRev int64,
@@ -638,13 +636,6 @@ func PickFinalCurrentAndRamping(
 		} else {
 			isRamping = true
 		}
-	}
-
-	if currentUnsetTime.After(finalCurrentUpdateTime) {
-		finalCurrentUpdateTime = currentUnsetTime
-	}
-	if rampingUnsetTime.After(finalRampingUpdateTime) {
-		finalRampingUpdateTime = rampingUnsetTime
 	}
 
 	return finalCurrent, finalCurrentRev, finalCurrentUpdateTime, finalRamping, isRamping, finalRampPercentage, finalRampingRev, finalRampingUpdateTime
@@ -712,8 +703,9 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	// preserve backwards compatibility.
 	var routingConfigLatestCurrentVersion *deploymentpb.RoutingConfig
 	var routingConfigLatestRampingVersion *deploymentpb.RoutingConfig
-	// if current or ramping unset (or unversioned ramp) is the latest event, we need to report that as the update time in versioning info of task queue.
-	var currentUnsetTime, rampingUnsetTime time.Time
+
+	isPartOfSomeCurrentVersion := false
+	isPartOfSomeRampingVersion := false
 
 	if deployments.GetDeploymentsData() != nil {
 
@@ -730,20 +722,22 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 			//
 			// When this happens, we sync to "foo" that A is no longer the current version by passing in the new routing config. However,
 			// version B should not be considered as the current version for "foo" because the task-queue is not part of version B.
-			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) &&
-				// Only consider the version as current if the task queue belongs to the version.
-				HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetCurrentDeploymentVersion()))) {
-				routingConfigLatestCurrentVersion = routingConfig
-			} else if routingConfig.GetCurrentDeploymentVersion() == nil && t.After(currentUnsetTime) {
-				currentUnsetTime = t
+			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) {
+				if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetCurrentDeploymentVersion()))) {
+					routingConfigLatestCurrentVersion = routingConfig
+					isPartOfSomeCurrentVersion = true
+				} else if !isPartOfSomeCurrentVersion && routingConfig.GetCurrentDeploymentVersion() == nil {
+					routingConfigLatestCurrentVersion = routingConfig
+				}
 			}
 
-			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) &&
-				// Only consider the version as ramping if the task queue belongs to the version.
-				HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetRampingDeploymentVersion()))) {
-				routingConfigLatestRampingVersion = routingConfig
-			} else if routingConfig.GetRampingDeploymentVersion() == nil && t.After(rampingUnsetTime) {
-				rampingUnsetTime = t
+			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
+				if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetRampingDeploymentVersion()))) {
+					routingConfigLatestRampingVersion = routingConfig
+					isPartOfSomeRampingVersion = true
+				} else if !isPartOfSomeRampingVersion && routingConfig.GetRampingDeploymentVersion() == nil {
+					routingConfigLatestRampingVersion = routingConfig
+				}
 			}
 		}
 	}
@@ -764,8 +758,6 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 		ramping,
 		routingConfigLatestCurrentVersion,
 		routingConfigLatestRampingVersion,
-		currentUnsetTime,
-		rampingUnsetTime,
 	)
 }
 
