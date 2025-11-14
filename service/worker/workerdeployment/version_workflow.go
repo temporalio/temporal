@@ -284,7 +284,7 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
 			LastChangedTime: now,
 			LastCheckedTime: now,
 		}
-		if d.hasMinVersion(ctx, AsyncSetCurrentAndRamping) {
+		if workflow.GetVersion(ctx, "no-draining-signal", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 			// this is not needed because startDrainage is called only from syncVersionState which sends the summary back to deployment.
 			// TODO: cleanup with sync mode
 			d.syncSummary(ctx)
