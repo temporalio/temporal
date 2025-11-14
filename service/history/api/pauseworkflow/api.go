@@ -31,7 +31,7 @@ func Invoke(
 	}
 
 	if !shard.GetConfig().WorkflowPauseEnabled(namespaceID.String()) {
-		return nil, serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", namespaceID.String())
+		return nil, serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", namespaceEntry.Name().String())
 	}
 
 	err = api.GetAndUpdateWorkflowWithNew(
