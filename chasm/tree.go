@@ -1184,7 +1184,7 @@ func unmarshalProto(
 
 	value := reflect.New(valueT.Elem())
 
-	if dataBlob == nil {
+	if dataBlob == nil || len(dataBlob.Data) == 0 {
 		// If the original data is the zero value of its type, the dataBlob loaded from persistence layer will be nil.
 		// But we know for component & data nodes, they won't get persisted in the first place if there's no data,
 		// so it must be a zero value.
