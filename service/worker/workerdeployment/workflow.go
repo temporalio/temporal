@@ -712,12 +712,10 @@ func (d *WorkflowRunner) setRamp(
 				return err
 			}
 			if isMissingTaskQueues {
-				currentVersionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(currentVersion)
 				newRampingVersionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(newRampingVersion)
 				return serviceerror.NewFailedPreconditionf(
 					ErrRampingVersionDoesNotHaveAllTaskQueues,
 					worker_versioning.WorkerDeploymentVersionToStringV32(newRampingVersionObj),
-					worker_versioning.WorkerDeploymentVersionToStringV32(currentVersionObj),
 				)
 			}
 		}
@@ -1009,12 +1007,10 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			return nil, err
 		}
 		if isMissingTaskQueues {
-			prevCurrentVersionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(prevCurrentVersion)
 			newCurrentVersionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(newCurrentVersion)
 			return nil, serviceerror.NewFailedPreconditionf(
 				ErrCurrentVersionDoesNotHaveAllTaskQueues,
 				worker_versioning.WorkerDeploymentVersionToStringV32(newCurrentVersionObj),
-				worker_versioning.WorkerDeploymentVersionToStringV32(prevCurrentVersionObj),
 			)
 		}
 	}

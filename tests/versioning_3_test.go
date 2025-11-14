@@ -2692,7 +2692,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || (err != nil && strings.Contains(err.Error(), workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues)) {
+		if errors.As(err, &notFound) || (err != nil && strings.Contains(err.Error(), fmt.Sprintf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()))) {
 			return false
 		}
 		s.NoError(err)
@@ -2745,7 +2745,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || errors.Is(err, serviceerror.NewFailedPrecondition(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues)) {
+		if errors.As(err, &notFound) || errors.Is(err, serviceerror.NewFailedPrecondition(fmt.Sprintf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()))) {
 			return false
 		}
 		s.NoError(err)
