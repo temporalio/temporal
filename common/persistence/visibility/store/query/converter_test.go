@@ -76,9 +76,6 @@ func TestQueryConverter_Convert(t *testing.T) {
 		setupMocks                func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr])
 		mockNamespaceDivisionExpr bool
 		mockNamespaceDivisionErr  error
-		mockParenQueryExpr        bool
-		mockParenQueryExprRes     sqlparser.Expr
-		mockParenQueryExprErr     error
 		mockBuildFinalAndExpr     bool
 		mockBuildFinalAndRes      sqlparser.Expr
 		mockBuildFinalAndErr      error
@@ -103,13 +100,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(e, nil)
 			},
 			mockNamespaceDivisionExpr: true,
-			mockParenQueryExpr:        true,
-			mockParenQueryExprRes: &sqlparser.ComparisonExpr{
-				Operator: sqlparser.EqualStr,
-				Left:     keywordCol,
-				Right:    NewUnsafeSQLString("foo"),
-			},
-			mockBuildFinalAndExpr: true,
+			mockBuildFinalAndExpr:     true,
 			mockBuildFinalAndRes: &sqlparser.AndExpr{
 				Left: namespaceDivisionExpr,
 				Right: &sqlparser.ComparisonExpr{
@@ -124,8 +115,6 @@ func TestQueryConverter_Convert(t *testing.T) {
 			name:                      "success empty",
 			in:                        "",
 			mockNamespaceDivisionExpr: true,
-			mockParenQueryExpr:        true,
-			mockParenQueryExprRes:     nil,
 			mockBuildFinalAndExpr:     true,
 			mockBuildFinalAndRes:      namespaceDivisionExpr,
 		},
@@ -167,21 +156,6 @@ func TestQueryConverter_Convert(t *testing.T) {
 					ConvertKeywordComparisonExpr(sqlparser.EqualStr, NamespaceDivisionSAColumn(), "bar").
 					Return(e2, nil)
 				storeQCMock.EXPECT().BuildAndExpr(e1, e2).Return(e1e2, nil)
-			},
-			mockParenQueryExpr: true,
-			mockParenQueryExprRes: &sqlparser.ParenExpr{
-				Expr: &sqlparser.AndExpr{
-					Left: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     keywordCol,
-						Right:    NewUnsafeSQLString("foo"),
-					},
-					Right: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     NamespaceDivisionSAColumn(),
-						Right:    NewUnsafeSQLString("bar"),
-					},
-				},
 			},
 			mockBuildFinalAndExpr: true,
 			mockBuildFinalAndRes: &sqlparser.ParenExpr{
@@ -232,30 +206,6 @@ func TestQueryConverter_Convert(t *testing.T) {
 		},
 
 		{
-			name: "fail wrap query expr parenthesis",
-			in:   "AliasForKeyword01 = 'foo'",
-			inExpr: &sqlparser.ComparisonExpr{
-				Operator: sqlparser.EqualStr,
-				Left:     keywordCol,
-				Right:    NewUnsafeSQLString("foo"),
-			},
-			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
-				e := &sqlparser.ComparisonExpr{
-					Operator: sqlparser.EqualStr,
-					Left:     keywordCol,
-					Right:    NewUnsafeSQLString("foo"),
-				}
-				storeQCMock.EXPECT().
-					ConvertKeywordComparisonExpr(sqlparser.EqualStr, keywordCol, "foo").
-					Return(e, nil)
-			},
-			mockNamespaceDivisionExpr: true,
-			mockParenQueryExpr:        true,
-			mockParenQueryExprErr:     errors.New("mock error"),
-			err:                       "mock error",
-		},
-
-		{
 			name: "fail final and expr",
 			in:   "AliasForKeyword01 = 'foo'",
 			inExpr: &sqlparser.ComparisonExpr{
@@ -274,15 +224,9 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(e, nil)
 			},
 			mockNamespaceDivisionExpr: true,
-			mockParenQueryExpr:        true,
-			mockParenQueryExprRes: &sqlparser.ComparisonExpr{
-				Operator: sqlparser.EqualStr,
-				Left:     keywordCol,
-				Right:    NewUnsafeSQLString("foo"),
-			},
-			mockBuildFinalAndExpr: true,
-			mockBuildFinalAndErr:  errors.New("mock error"),
-			err:                   "mock error",
+			mockBuildFinalAndExpr:     true,
+			mockBuildFinalAndErr:      errors.New("mock error"),
+			err:                       "mock error",
 		},
 	}
 
@@ -309,12 +253,8 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(namespaceDivisionExpr, tc.mockNamespaceDivisionErr)
 				exprs[0] = namespaceDivisionExpr
 			}
-			if tc.mockParenQueryExpr {
-				storeQCMock.EXPECT().BuildParenExpr(tc.inExpr).
-					Return(tc.mockParenQueryExprRes, tc.mockParenQueryExprErr)
-				exprs[1] = tc.mockParenQueryExprRes
-			}
 			if tc.mockBuildFinalAndExpr {
+				exprs[1] = tc.inExpr
 				storeQCMock.EXPECT().
 					BuildAndExpr(exprs...).
 					Return(tc.mockBuildFinalAndRes, tc.mockBuildFinalAndErr)
@@ -323,7 +263,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 			if tc.err != "" {
 				r.Error(err)
 				r.ErrorContains(err, tc.err)
-				if tc.mockNamespaceDivisionErr == nil && tc.mockParenQueryExprErr == nil && tc.mockBuildFinalAndErr == nil {
+				if tc.mockNamespaceDivisionErr == nil && tc.mockBuildFinalAndErr == nil {
 					var expectedErr *ConverterError
 					r.ErrorAs(err, &expectedErr)
 				}
