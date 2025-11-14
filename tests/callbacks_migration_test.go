@@ -154,9 +154,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
-	// Give the system a moment to pick up the config change
-	time.Sleep(100 * time.Millisecond)
-
 	// Unblock the workflow by sending the continue signal
 	_, err = s.FrontendClient().SignalWorkflowExecution(
 		ctx,
@@ -206,9 +203,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	// Enable CHASM for this test
 	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
-
-	// Give the system a moment to pick up the config change
-	time.Sleep(100 * time.Millisecond)
 
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
@@ -448,9 +442,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
-	// Give the system a moment to pick up the config change
-	time.Sleep(100 * time.Millisecond)
-
 	// Add a second callback using the USE_EXISTING conflict policy
 	// This should create a CHASM callback since CHASM is now enabled
 	callback2 := &commonpb.Callback{
@@ -486,7 +477,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	// Verify DescribeWorkflow shows both callbacks (1 HSM + 1 CHASM)
 	description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
 	s.NoError(err)
-	s.Equal(2, len(description.Callbacks), "should have 2 callbacks: 1 HSM + 1 CHASM")
+	s.Len(description.Callbacks, 2, "should have 2 callbacks: 1 HSM + 1 CHASM")
 
 	// Verify both callbacks are in STANDBY state (not yet triggered)
 	for _, callbackInfo := range description.Callbacks {
@@ -543,7 +534,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
 		require.NoError(t, err)
-		require.Equal(t, 2, len(description.Callbacks), "should still have 2 callbacks")
+		require.Len(t, description.Callbacks, 2, "should still have 2 callbacks")
 
 		// Both callbacks should now be in SUCCEEDED state
 		for _, callbackInfo := range description.Callbacks {
