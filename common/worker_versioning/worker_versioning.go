@@ -664,6 +664,9 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	int64, // ramping revision number
 	time.Time, // ramping update time
 ) {
+	var isTaskQueuePartOfSomeCurrentVersion bool
+	var isTaskQueuePartOfSomeRampingVersion bool
+
 	if deployments == nil {
 		return nil, 0, time.Time{}, nil, false, 0, 0, time.Time{}
 	}
@@ -680,6 +683,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 					Version:           DeploymentVersionFromDeployment(d.Deployment),
 					RoutingUpdateTime: d.Data.LastBecameCurrentTime,
 				}
+				isTaskQueuePartOfSomeCurrentVersion = true
 			}
 		}
 	}
@@ -690,11 +694,13 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 		if v.RoutingUpdateTime != nil && v.GetCurrentSinceTime() != nil {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
 				current = v
+				isTaskQueuePartOfSomeCurrentVersion = true
 			}
 		}
 		if v.RoutingUpdateTime != nil && v.GetRampingSinceTime() != nil {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(ramping.GetRoutingUpdateTime().AsTime()) {
 				ramping = v
+				isTaskQueuePartOfSomeRampingVersion = true
 			}
 		}
 	}
@@ -703,9 +709,6 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	// preserve backwards compatibility.
 	var routingConfigLatestCurrentVersion *deploymentpb.RoutingConfig
 	var routingConfigLatestRampingVersion *deploymentpb.RoutingConfig
-
-	isPartOfSomeCurrentVersion := false
-	isPartOfSomeRampingVersion := false
 
 	if deployments.GetDeploymentsData() != nil {
 
@@ -725,8 +728,10 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 			if t := routingConfig.GetCurrentVersionChangedTime().AsTime(); t.After(routingConfigLatestCurrentVersion.GetCurrentVersionChangedTime().AsTime()) {
 				if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetCurrentDeploymentVersion()))) {
 					routingConfigLatestCurrentVersion = routingConfig
-					isPartOfSomeCurrentVersion = true
-				} else if !isPartOfSomeCurrentVersion && routingConfig.GetCurrentDeploymentVersion() == nil {
+					isTaskQueuePartOfSomeCurrentVersion = true
+				} else if !isTaskQueuePartOfSomeCurrentVersion && routingConfig.GetCurrentDeploymentVersion() == nil {
+					// Current version can only be unversioned if the task queue is not part of any other version.
+					// The flag isTaskQueuePartOfSomeCurrentVersion serves the purpose of this check.
 					routingConfigLatestCurrentVersion = routingConfig
 				}
 			}
@@ -734,22 +739,14 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 			if t := routingConfig.GetRampingVersionPercentageChangedTime().AsTime(); t.After(routingConfigLatestRampingVersion.GetRampingVersionPercentageChangedTime().AsTime()) {
 				if HasDeploymentVersion(deployments, DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(routingConfig.GetRampingDeploymentVersion()))) {
 					routingConfigLatestRampingVersion = routingConfig
-					isPartOfSomeRampingVersion = true
-				} else if !isPartOfSomeRampingVersion && routingConfig.GetRampingDeploymentVersion() == nil {
+					isTaskQueuePartOfSomeRampingVersion = true
+				} else if !isTaskQueuePartOfSomeRampingVersion && routingConfig.GetRampingDeploymentVersion() == nil {
+					// Ramping version can only be unversioned if the task queue is not part of any other version that is ramping up.
+					// The flag isTaskQueuePartOfSomeRampingVersion serves the purpose of this check.
 					routingConfigLatestRampingVersion = routingConfig
 				}
 			}
 		}
-	}
-
-	if routingConfigLatestCurrentVersion.GetCurrentDeploymentVersion() == nil && current.GetVersion() != nil {
-		// The new current version is not unversioned but belongs to a versioned deployment which synced to the task-queue using the old deployment data format.
-		routingConfigLatestCurrentVersion = nil
-	}
-
-	if routingConfigLatestRampingVersion.GetRampingDeploymentVersion() == nil && ramping.GetVersion() != nil {
-		// The new ramping version is not unversioned but belongs to a versioned deployment which synced to the task-queue using the old deployment data format.
-		routingConfigLatestRampingVersion = nil
 	}
 
 	// Pick the final current and ramping version amongst the old and new deployment data formats.
