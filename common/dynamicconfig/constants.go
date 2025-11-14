@@ -2266,6 +2266,11 @@ the number of children greater than or equal to this threshold`,
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
 	)
+	EnableWorkflowTaskStampIncrementOnFailure = NewGlobalBoolSetting(
+		"history.enableWorkflowTaskStampIncrementOnFailure",
+		false,
+		`EnableWorkflowTaskStampIncrementOnFailure controls whether the workflow task stamp is incremented when a workflow task fails and is rescheduled`,
+	)
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
 		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
 		10,
