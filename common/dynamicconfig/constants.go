@@ -1292,6 +1292,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		5*time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
+		"matching.deploymentWorkflowVersion",
+		0,
+		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
+	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
 		1000,
