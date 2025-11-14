@@ -36,35 +36,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// mockNexusCompletionGetter implements CanGetNexusCompletion for testing
-type mockNexusCompletionGetter struct {
-	completion nexusrpc.OperationCompletion
-	err        error
-}
-
-func (m *mockNexusCompletionGetter) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.OperationCompletion, error) {
-	return m.completion, m.err
-}
-
-// setFieldValue is a test helper that uses reflection to set the internal value of a chasm.Field.
-// This is necessary for testing because:
-// 1. The Field API (NewComponentField, NewDataField) only supports chasm.Component and proto.Message types
-// 2. CanGetNexusCompletion is a plain interface, not a Component
-// 3. The fieldInternal struct and its fields are unexported
-//
-// In production, Fields are typically initialized through proper CHASM lifecycle methods or
-// by using NewComponentField/NewDataField with appropriate types.
-// TODO (seankane): Move this helper to the chasm/chasmtest package
-func setFieldValue[T any](field *chasm.Field[T], value T) {
-	// Get the Internal field (which is exported)
-	internalField := reflect.ValueOf(field).Elem().FieldByName("Internal")
-
-	// Get the unexported 'v' field using unsafe pointer manipulation
-	vField := internalField.FieldByName("v")
-	vField = reflect.NewAt(vField.Type(), unsafe.Pointer(vField.UnsafeAddr())).Elem()
-
-	// Set the value
-	vField.Set(reflect.ValueOf(value))
+// setMSPointerBackend is a test helper that uses reflection to set the unexported backend field of chasm.MSPointer.
+// This allows us to inject a mock NodeBackend that implements GetNexusCompletion.
+func setMSPointerBackend(msPtr *chasm.MSPointer, backend chasm.NodeBackend) {
+	// Get the unexported 'backend' field using unsafe pointer manipulation
+	backendField := reflect.ValueOf(msPtr).Elem().FieldByName("backend")
+	backendField = reflect.NewAt(backendField.Type(), unsafe.Pointer(backendField.UnsafeAddr())).Elem()
+	backendField.Set(reflect.ValueOf(backend))
 }
 
 // Test the full executeInvocationTask flow with direct executor calls
@@ -186,11 +164,14 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				},
 			}
 
-			// Set up the CompletionSource field
-			completionGetter := &mockNexusCompletionGetter{
-				completion: completion,
+			// Set up the MSPointer field with a mock backend that returns our completion
+			// We use reflection to set the unexported backend field for testing
+			mockBackend := &chasm.MockNodeBackend{
+				HandleGetNexusCompletion: func(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+					return completion, nil
+				},
 			}
-			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
+			setMSPointerBackend(&callback.MSPointer, mockBackend)
 
 			// Create task executor with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
@@ -602,11 +583,14 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				},
 			}
 
-			// Set up the CompletionSource field
-			completionGetter := &mockNexusCompletionGetter{
-				completion: tc.completion,
+			// Set up the MSPointer field with a mock backend that returns our completion
+			// We use reflection to set the unexported backend field for testing
+			mockBackend := &chasm.MockNodeBackend{
+				HandleGetNexusCompletion: func(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+					return tc.completion, nil
+				},
 			}
-			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
+			setMSPointerBackend(&callback.MSPointer, mockBackend)
 
 			// Create mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)

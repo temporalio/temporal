@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"context"
+
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -9,6 +11,8 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -290,7 +294,57 @@ func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.C
 		}
 		result = append(result, cbSpec)
 	}
+
+	// Collect CHASM callbacks
+	if msImpl, ok := ms.(*MutableStateImpl); ok {
+		if msImpl.chasmEnabled() {
+			wf, ctx, err := msImpl.getChasmWorkflowComponent(context.Background())
+			if err != nil {
+				return nil, err
+			}
+
+			for _, field := range wf.Callbacks {
+				cb, err := field.Get(ctx)
+				if err != nil {
+					return nil, err
+				}
+				// Only include callbacks in STANDBY state (not already triggered)
+				if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+					continue
+				}
+				// Convert CHASM callback to API callback
+				cbSpec, err := chasmCallbackToAPICallback(cb)
+				if err != nil {
+					return nil, err
+				}
+				result = append(result, cbSpec)
+			}
+		}
+	}
+
 	return result, nil
+}
+
+func chasmCallbackToAPICallback(cb *chasmcallback.Callback) (*commonpb.Callback, error) {
+	// Convert CHASM callback proto to API callback proto
+	chasmCB := cb.GetCallback()
+	res := &commonpb.Callback{
+		Links: chasmCB.GetLinks(),
+	}
+
+	// CHASM currently only supports Nexus callbacks
+	if variant, ok := chasmCB.Variant.(*callbackspb.Callback_Nexus_); ok {
+		res.Variant = &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: variant.Nexus.GetHeader(),
+			},
+		}
+		return res, nil
+	}
+
+	// This should not happen as CHASM only supports Nexus callbacks currently
+	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }
 
 func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Callback, error) {

@@ -2945,6 +2945,8 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 
 		// Create and add callback
 		callback := chasmcallback.NewCallback(requestID, event.EventTime, &callbackspb.CallbackState{}, chasmCB)
+		// Initialize the MSPointer field for accessing the underlying mutable state
+		callback.MSPointer = chasm.NewMSPointer(ms)
 		wf.Callbacks[id] = chasm.NewComponentField(ctx, callback)
 	}
 	return nil
