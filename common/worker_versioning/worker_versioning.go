@@ -578,13 +578,13 @@ func PickFinalCurrentAndRamping(
 	rampingVersionRoutingConfig *deploymentpb.RoutingConfig,
 ) (
 	*deploymentspb.WorkerDeploymentVersion, // final current version
-	int64,                                  // final current revision number
-	time.Time,                              // final current update time
+	int64, // final current revision number
+	time.Time, // final current update time
 	*deploymentspb.WorkerDeploymentVersion, // final ramping version
-	bool,                                   // if the version is ramping or not
-	float32,                                // final ramp percentage
-	int64,                                  // final ramping revision number
-	time.Time,                              // final ramping update time
+	bool, // if the version is ramping or not
+	float32, // final ramp percentage
+	int64, // final ramping revision number
+	time.Time, // final ramping update time
 ) {
 	// current: choose newer of old vs new format
 	var finalCurrentDep *deploymentspb.WorkerDeploymentVersion
@@ -665,13 +665,13 @@ func calcRampThreshold(id string) float64 {
 //revive:disable-next-line:cognitive-complexity,confusing-results,function-result-limit,cyclomatic
 func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) (
 	*deploymentspb.WorkerDeploymentVersion, // current version
-	int64,                                  // current revision number
-	time.Time,                              // current update time
+	int64, // current revision number
+	time.Time, // current update time
 	*deploymentspb.WorkerDeploymentVersion, // ramping version
-	bool,                                   // is ramping (ramping_since_time != nil)
-	float32,                                // ramp percentage
-	int64,                                  // ramping revision number
-	time.Time,                              // ramping update time
+	bool, // is ramping (ramping_since_time != nil)
+	float32, // ramp percentage
+	int64, // ramping revision number
+	time.Time, // ramping update time
 ) {
 	if deployments == nil {
 		return nil, 0, time.Time{}, nil, false, 0, 0, time.Time{}
