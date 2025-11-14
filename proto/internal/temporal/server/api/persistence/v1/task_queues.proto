@@ -134,6 +134,13 @@ message TaskQueueTypeUserData {
     DeploymentData deployment_data = 1;
 
     temporal.api.taskqueue.v1.TaskQueueConfig config = 2;
+
+    enum FairnessState {
+        FAIRNESS_STATE_UNSPECIFIED = 0;
+        FAIRNESS_STATE_V1 = 1;
+        FAIRNESS_STATE_V2 = 2;
+    };
+    FairnessState fairness_state = 3;
 }
 
 // Container for all persistent user provided data for a task queue family.

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -63,8 +64,11 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
+		fairnessState persistencespb.TaskQueueTypeUserData_FairnessState //Set once on initialization and read only after
+
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
+		cancelAutoEnableSub func()
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
@@ -82,6 +86,7 @@ func (pm *taskQueuePartitionManagerImpl) GetCache(key any) any {
 var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
 func newTaskQueuePartitionManager(
+	ctx context.Context,
 	e *matchingEngineImpl,
 	ns *namespace.Namespace,
 	partition tqid.Partition,
@@ -119,14 +124,40 @@ func newTaskQueuePartitionManager(
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
-	var fairness bool
-	fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
-	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
-	tqConfig.EnableFairness = fairness && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
-	if fairness {
+	pm.userDataManager.Start()
+	err := pm.userDataManager.WaitUntilInitialized(ctx)
+	if err != nil {
+		return nil, err
+	}
+	//todo(moody): do we need to be more cautious loading this? Do we need to ensure that we have PerType()? Check for a nil return?
+	data, _, err := pm.getPerTypeUserData()
+	if err != nil {
+		return nil, err
+	}
+
+	tqConfig.AutoEnable, pm.cancelAutoEnableSub = tqConfig.AutoEnableSub(unload)
+	pm.fairnessState = data.GetFairnessState()
+	switch {
+	case tqConfig.AutoEnable == false || pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
+		var fairness bool
+		fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
+		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
+		tqConfig.EnableFairness = fairness && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		if fairness {
+			tqConfig.NewMatcher = true
+		} else {
+			tqConfig.NewMatcher, pm.cancelNewMatcherSub = tqConfig.NewMatcherSub(unload)
+		}
+	case pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V1:
 		tqConfig.NewMatcher = true
-	} else {
-		tqConfig.NewMatcher, pm.cancelNewMatcherSub = tqConfig.NewMatcherSub(unload)
+		tqConfig.EnableFairness = false
+	case pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V2:
+		tqConfig.NewMatcher = true
+		if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			tqConfig.EnableFairness = false
+		} else {
+			tqConfig.EnableFairness = true
+		}
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
@@ -139,7 +170,6 @@ func newTaskQueuePartitionManager(
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
-	pm.userDataManager.Start()
 	pm.defaultQueue.Start()
 }
 
@@ -158,6 +188,9 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	}
 	if pm.cancelNewMatcherSub != nil {
 		pm.cancelNewMatcherSub()
+	}
+	if pm.cancelAutoEnableSub != nil {
+		pm.cancelAutoEnableSub()
 	}
 
 	// First, stop all queues to wrap up ongoing operations.
@@ -184,10 +217,6 @@ func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
 }
 
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
-	err := pm.userDataManager.WaitUntilInitialized(ctx)
-	if err != nil {
-		return err
-	}
 	return pm.defaultQueue.WaitUntilInitialized(ctx)
 }
 
@@ -197,6 +226,21 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 ) (buildId string, syncMatched bool, err error) {
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	directive := params.taskInfo.GetVersionDirective()
+
+	if pm.Partition().IsRoot() && pm.config.AutoEnable && pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED {
+		//TODO(moody): unsure about this check, what is the correct way to check to see if PriorityKey is set?
+		//TODO(moody): This was originally discussed to be a separate API, but is just exposing this through the generic UpdateUserData sufficient?
+		// what is the pro/cons of adding the new API and perhaps invoking that instead? We're going to unload either way...
+		if params.taskInfo.Priority != nil && (params.taskInfo.Priority.FairnessKey != "" || params.taskInfo.Priority.PriorityKey != int32(pm.config.DefaultPriorityKey)) {
+			updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+				new := common.CloneProto(old)
+				perType := new.GetPerType()[int32(pm.Partition().TaskType())]
+				perType.FairnessState = persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V2
+				return new, true, nil
+			}
+			pm.userDataManager.UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
+		}
+	}
 	// spoolQueue will be nil iff task is forwarded.
 reredirectTask:
 	spoolQueue, syncMatchQueue, _, taskDispatchRevisionNumber, err := pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId(), false)
@@ -1303,7 +1347,17 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	return perType, userDataChanged, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
+func (pm *taskQueuePartitionManagerImpl) userDataChanged(old, new *persistencespb.VersionedTaskQueueUserData) {
+	taskType := int32(pm.Partition().TaskType())
+	//TODO(moody): this stinks, do we need this more verbose, is this interface bad?
+	//TODO(moody): we get calls into this callback quite a bit with data being nil(sampled from unit tests), do we want to go through the full update
+	// even in those cases? Should we pass the inner data and avoid a callback when that is nil? I am not totally sure about the implcations....
+	if old != nil && old.GetData() != nil && old.GetData().GetPerType() != nil && new != nil && new.GetData() != nil && new.GetData().GetPerType() != nil {
+		if old.GetData().GetPerType()[taskType].FairnessState != new.GetData().GetPerType()[taskType].FairnessState {
+			pm.unloadFromEngine(unloadCauseConfigChange)
+			return
+		}
+	}
 	// Update rateLimits if any change is userData.
 	pm.rateLimitManager.UserDataChanged()
 

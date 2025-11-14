@@ -85,7 +85,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
 	s.userDataMgr = &mockUserDataManager{}
 
-	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, s.userDataMgr)
+	pm, err := newTaskQueuePartitionManager(context.Background(), engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, s.userDataMgr)
 	s.NoError(err)
 	s.partitionMgr = pm
 	engine.Start()

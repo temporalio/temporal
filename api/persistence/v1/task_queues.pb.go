@@ -86,6 +86,65 @@ func (BuildId_State) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{0, 0}
 }
 
+type TaskQueueTypeUserData_FairnessState int32
+
+const (
+	TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED TaskQueueTypeUserData_FairnessState = 0
+	TaskQueueTypeUserData_FAIRNESS_STATE_V1          TaskQueueTypeUserData_FairnessState = 1
+	TaskQueueTypeUserData_FAIRNESS_STATE_V2          TaskQueueTypeUserData_FairnessState = 2
+)
+
+// Enum value maps for TaskQueueTypeUserData_FairnessState.
+var (
+	TaskQueueTypeUserData_FairnessState_name = map[int32]string{
+		0: "FAIRNESS_STATE_UNSPECIFIED",
+		1: "FAIRNESS_STATE_V1",
+		2: "FAIRNESS_STATE_V2",
+	}
+	TaskQueueTypeUserData_FairnessState_value = map[string]int32{
+		"FAIRNESS_STATE_UNSPECIFIED": 0,
+		"FAIRNESS_STATE_V1":          1,
+		"FAIRNESS_STATE_V2":          2,
+	}
+)
+
+func (x TaskQueueTypeUserData_FairnessState) Enum() *TaskQueueTypeUserData_FairnessState {
+	p := new(TaskQueueTypeUserData_FairnessState)
+	*p = x
+	return p
+}
+
+func (x TaskQueueTypeUserData_FairnessState) String() string {
+	switch x {
+	case TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
+		return "TaskQueueTypeUserDataFairnessStateUnspecified"
+	case TaskQueueTypeUserData_FAIRNESS_STATE_V1:
+		return "TaskQueueTypeUserDataFairnessStateV1"
+	case TaskQueueTypeUserData_FAIRNESS_STATE_V2:
+		return "TaskQueueTypeUserDataFairnessStateV2"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (TaskQueueTypeUserData_FairnessState) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[1].Descriptor()
+}
+
+func (TaskQueueTypeUserData_FairnessState) Type() protoreflect.EnumType {
+	return &file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[1]
+}
+
+func (x TaskQueueTypeUserData_FairnessState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TaskQueueTypeUserData_FairnessState.Descriptor instead.
+func (TaskQueueTypeUserData_FairnessState) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{7, 0}
+}
+
 // BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
 type BuildId struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -597,9 +656,10 @@ func (x *WorkerDeploymentData) GetVersions() map[string]*v12.WorkerDeploymentVer
 
 // Container for all persistent user data that varies per task queue type within a family.
 type TaskQueueTypeUserData struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
-	Config         *v11.TaskQueueConfig   `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	state          protoimpl.MessageState              `protogen:"open.v1"`
+	DeploymentData *DeploymentData                     `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
+	Config         *v11.TaskQueueConfig                `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	FairnessState  TaskQueueTypeUserData_FairnessState `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.persistence.v1.TaskQueueTypeUserData_FairnessState" json:"fairness_state,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -646,6 +706,13 @@ func (x *TaskQueueTypeUserData) GetConfig() *v11.TaskQueueConfig {
 		return x.Config
 	}
 	return nil
+}
+
+func (x *TaskQueueTypeUserData) GetFairnessState() TaskQueueTypeUserData_FairnessState {
+	if x != nil {
+		return x.FairnessState
+	}
+	return TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED
 }
 
 // Container for all persistent user provided data for a task queue family.
@@ -872,10 +939,15 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\bversions\x18\x02 \x03(\v2F.temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntryR\bversions\x1a{\n" +
 	"\rVersionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12T\n" +
-	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01\"\xb8\x01\n" +
+	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01\"\x87\x03\n" +
 	"\x15TaskQueueTypeUserData\x12[\n" +
 	"\x0fdeployment_data\x18\x01 \x01(\v22.temporal.server.api.persistence.v1.DeploymentDataR\x0edeploymentData\x12B\n" +
-	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\"\x8e\x03\n" +
+	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\x12n\n" +
+	"\x0efairness_state\x18\x03 \x01(\x0e2G.temporal.server.api.persistence.v1.TaskQueueTypeUserData.FairnessStateR\rfairnessState\"]\n" +
+	"\rFairnessState\x12\x1e\n" +
+	"\x1aFAIRNESS_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11FAIRNESS_STATE_V1\x10\x01\x12\x15\n" +
+	"\x11FAIRNESS_STATE_V2\x10\x02\"\x8e\x03\n" +
 	"\x11TaskQueueUserData\x12F\n" +
 	"\x05clock\x18\x01 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x12[\n" +
 	"\x0fversioning_data\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.VersioningDataR\x0eversioningData\x12]\n" +
@@ -899,71 +971,73 @@ func file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP() []b
 	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescData
 }
 
-var file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
 	(BuildId_State)(0),                        // 0: temporal.server.api.persistence.v1.BuildId.State
-	(*BuildId)(nil),                           // 1: temporal.server.api.persistence.v1.BuildId
-	(*CompatibleVersionSet)(nil),              // 2: temporal.server.api.persistence.v1.CompatibleVersionSet
-	(*AssignmentRule)(nil),                    // 3: temporal.server.api.persistence.v1.AssignmentRule
-	(*RedirectRule)(nil),                      // 4: temporal.server.api.persistence.v1.RedirectRule
-	(*VersioningData)(nil),                    // 5: temporal.server.api.persistence.v1.VersioningData
-	(*DeploymentData)(nil),                    // 6: temporal.server.api.persistence.v1.DeploymentData
-	(*WorkerDeploymentData)(nil),              // 7: temporal.server.api.persistence.v1.WorkerDeploymentData
-	(*TaskQueueTypeUserData)(nil),             // 8: temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	(*TaskQueueUserData)(nil),                 // 9: temporal.server.api.persistence.v1.TaskQueueUserData
-	(*VersionedTaskQueueUserData)(nil),        // 10: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	nil,                                       // 11: temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry
-	(*DeploymentData_DeploymentDataItem)(nil), // 12: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
-	nil,                               // 13: temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
-	nil,                               // 14: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
-	(*v1.HybridLogicalClock)(nil),     // 15: temporal.server.api.clock.v1.HybridLogicalClock
-	(*v11.BuildIdAssignmentRule)(nil), // 16: temporal.api.taskqueue.v1.BuildIdAssignmentRule
-	(*v11.CompatibleBuildIdRedirectRule)(nil), // 17: temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
-	(*v12.DeploymentVersionData)(nil),         // 18: temporal.server.api.deployment.v1.DeploymentVersionData
-	(*v13.RoutingConfig)(nil),                 // 19: temporal.api.deployment.v1.RoutingConfig
-	(*v11.TaskQueueConfig)(nil),               // 20: temporal.api.taskqueue.v1.TaskQueueConfig
-	(*v13.Deployment)(nil),                    // 21: temporal.api.deployment.v1.Deployment
-	(*v12.TaskQueueData)(nil),                 // 22: temporal.server.api.deployment.v1.TaskQueueData
-	(*v12.WorkerDeploymentVersionData)(nil),   // 23: temporal.server.api.deployment.v1.WorkerDeploymentVersionData
+	(TaskQueueTypeUserData_FairnessState)(0),  // 1: temporal.server.api.persistence.v1.TaskQueueTypeUserData.FairnessState
+	(*BuildId)(nil),                           // 2: temporal.server.api.persistence.v1.BuildId
+	(*CompatibleVersionSet)(nil),              // 3: temporal.server.api.persistence.v1.CompatibleVersionSet
+	(*AssignmentRule)(nil),                    // 4: temporal.server.api.persistence.v1.AssignmentRule
+	(*RedirectRule)(nil),                      // 5: temporal.server.api.persistence.v1.RedirectRule
+	(*VersioningData)(nil),                    // 6: temporal.server.api.persistence.v1.VersioningData
+	(*DeploymentData)(nil),                    // 7: temporal.server.api.persistence.v1.DeploymentData
+	(*WorkerDeploymentData)(nil),              // 8: temporal.server.api.persistence.v1.WorkerDeploymentData
+	(*TaskQueueTypeUserData)(nil),             // 9: temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	(*TaskQueueUserData)(nil),                 // 10: temporal.server.api.persistence.v1.TaskQueueUserData
+	(*VersionedTaskQueueUserData)(nil),        // 11: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	nil,                                       // 12: temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry
+	(*DeploymentData_DeploymentDataItem)(nil), // 13: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
+	nil,                               // 14: temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
+	nil,                               // 15: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
+	(*v1.HybridLogicalClock)(nil),     // 16: temporal.server.api.clock.v1.HybridLogicalClock
+	(*v11.BuildIdAssignmentRule)(nil), // 17: temporal.api.taskqueue.v1.BuildIdAssignmentRule
+	(*v11.CompatibleBuildIdRedirectRule)(nil), // 18: temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
+	(*v12.DeploymentVersionData)(nil),         // 19: temporal.server.api.deployment.v1.DeploymentVersionData
+	(*v13.RoutingConfig)(nil),                 // 20: temporal.api.deployment.v1.RoutingConfig
+	(*v11.TaskQueueConfig)(nil),               // 21: temporal.api.taskqueue.v1.TaskQueueConfig
+	(*v13.Deployment)(nil),                    // 22: temporal.api.deployment.v1.Deployment
+	(*v12.TaskQueueData)(nil),                 // 23: temporal.server.api.deployment.v1.TaskQueueData
+	(*v12.WorkerDeploymentVersionData)(nil),   // 24: temporal.server.api.deployment.v1.WorkerDeploymentVersionData
 }
 var file_temporal_server_api_persistence_v1_task_queues_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.persistence.v1.BuildId.state:type_name -> temporal.server.api.persistence.v1.BuildId.State
-	15, // 1: temporal.server.api.persistence.v1.BuildId.state_update_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	15, // 2: temporal.server.api.persistence.v1.BuildId.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	1,  // 3: temporal.server.api.persistence.v1.CompatibleVersionSet.build_ids:type_name -> temporal.server.api.persistence.v1.BuildId
-	15, // 4: temporal.server.api.persistence.v1.CompatibleVersionSet.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	16, // 5: temporal.server.api.persistence.v1.AssignmentRule.rule:type_name -> temporal.api.taskqueue.v1.BuildIdAssignmentRule
-	15, // 6: temporal.server.api.persistence.v1.AssignmentRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	15, // 7: temporal.server.api.persistence.v1.AssignmentRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	17, // 8: temporal.server.api.persistence.v1.RedirectRule.rule:type_name -> temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
-	15, // 9: temporal.server.api.persistence.v1.RedirectRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	15, // 10: temporal.server.api.persistence.v1.RedirectRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	2,  // 11: temporal.server.api.persistence.v1.VersioningData.version_sets:type_name -> temporal.server.api.persistence.v1.CompatibleVersionSet
-	3,  // 12: temporal.server.api.persistence.v1.VersioningData.assignment_rules:type_name -> temporal.server.api.persistence.v1.AssignmentRule
-	4,  // 13: temporal.server.api.persistence.v1.VersioningData.redirect_rules:type_name -> temporal.server.api.persistence.v1.RedirectRule
-	12, // 14: temporal.server.api.persistence.v1.DeploymentData.deployments:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
-	18, // 15: temporal.server.api.persistence.v1.DeploymentData.versions:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	18, // 16: temporal.server.api.persistence.v1.DeploymentData.unversioned_ramp_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	11, // 17: temporal.server.api.persistence.v1.DeploymentData.deployments_data:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry
-	19, // 18: temporal.server.api.persistence.v1.WorkerDeploymentData.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
-	13, // 19: temporal.server.api.persistence.v1.WorkerDeploymentData.versions:type_name -> temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
-	6,  // 20: temporal.server.api.persistence.v1.TaskQueueTypeUserData.deployment_data:type_name -> temporal.server.api.persistence.v1.DeploymentData
-	20, // 21: temporal.server.api.persistence.v1.TaskQueueTypeUserData.config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
-	15, // 22: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
-	5,  // 23: temporal.server.api.persistence.v1.TaskQueueUserData.versioning_data:type_name -> temporal.server.api.persistence.v1.VersioningData
-	14, // 24: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
-	9,  // 25: temporal.server.api.persistence.v1.VersionedTaskQueueUserData.data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	7,  // 26: temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry.value:type_name -> temporal.server.api.persistence.v1.WorkerDeploymentData
-	21, // 27: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	22, // 28: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
-	23, // 29: temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionData
-	8,  // 30: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	31, // [31:31] is the sub-list for method output_type
-	31, // [31:31] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	16, // 1: temporal.server.api.persistence.v1.BuildId.state_update_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	16, // 2: temporal.server.api.persistence.v1.BuildId.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	2,  // 3: temporal.server.api.persistence.v1.CompatibleVersionSet.build_ids:type_name -> temporal.server.api.persistence.v1.BuildId
+	16, // 4: temporal.server.api.persistence.v1.CompatibleVersionSet.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	17, // 5: temporal.server.api.persistence.v1.AssignmentRule.rule:type_name -> temporal.api.taskqueue.v1.BuildIdAssignmentRule
+	16, // 6: temporal.server.api.persistence.v1.AssignmentRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	16, // 7: temporal.server.api.persistence.v1.AssignmentRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	18, // 8: temporal.server.api.persistence.v1.RedirectRule.rule:type_name -> temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
+	16, // 9: temporal.server.api.persistence.v1.RedirectRule.create_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	16, // 10: temporal.server.api.persistence.v1.RedirectRule.delete_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	3,  // 11: temporal.server.api.persistence.v1.VersioningData.version_sets:type_name -> temporal.server.api.persistence.v1.CompatibleVersionSet
+	4,  // 12: temporal.server.api.persistence.v1.VersioningData.assignment_rules:type_name -> temporal.server.api.persistence.v1.AssignmentRule
+	5,  // 13: temporal.server.api.persistence.v1.VersioningData.redirect_rules:type_name -> temporal.server.api.persistence.v1.RedirectRule
+	13, // 14: temporal.server.api.persistence.v1.DeploymentData.deployments:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem
+	19, // 15: temporal.server.api.persistence.v1.DeploymentData.versions:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	19, // 16: temporal.server.api.persistence.v1.DeploymentData.unversioned_ramp_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	12, // 17: temporal.server.api.persistence.v1.DeploymentData.deployments_data:type_name -> temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry
+	20, // 18: temporal.server.api.persistence.v1.WorkerDeploymentData.routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	14, // 19: temporal.server.api.persistence.v1.WorkerDeploymentData.versions:type_name -> temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
+	7,  // 20: temporal.server.api.persistence.v1.TaskQueueTypeUserData.deployment_data:type_name -> temporal.server.api.persistence.v1.DeploymentData
+	21, // 21: temporal.server.api.persistence.v1.TaskQueueTypeUserData.config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
+	1,  // 22: temporal.server.api.persistence.v1.TaskQueueTypeUserData.fairness_state:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData.FairnessState
+	16, // 23: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	6,  // 24: temporal.server.api.persistence.v1.TaskQueueUserData.versioning_data:type_name -> temporal.server.api.persistence.v1.VersioningData
+	15, // 25: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
+	10, // 26: temporal.server.api.persistence.v1.VersionedTaskQueueUserData.data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
+	8,  // 27: temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry.value:type_name -> temporal.server.api.persistence.v1.WorkerDeploymentData
+	22, // 28: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	23, // 29: temporal.server.api.persistence.v1.DeploymentData.DeploymentDataItem.data:type_name -> temporal.server.api.deployment.v1.TaskQueueData
+	24, // 30: temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionData
+	9,  // 31: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_task_queues_proto_init() }
@@ -976,7 +1050,7 @@ func file_temporal_server_api_persistence_v1_task_queues_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc), len(file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,

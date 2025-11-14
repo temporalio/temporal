@@ -1382,6 +1382,11 @@ second per poller by one physical queue manager`,
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is 
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
+	MatchingAutoEnable = NewTaskQueueBoolSetting(
+		"matching.autoEnable",
+		false,
+		`MatchingAutoEnable automatically enables fairness when a fairness key is seen`,
+	)
 
 	// keys for history
 
