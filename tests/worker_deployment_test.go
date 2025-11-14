@@ -3168,7 +3168,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 			s.Equal(expectedResp.GetPreviousVersion(), worker_versioning.ExternalWorkerDeploymentVersionToStringV31(resp.GetPreviousDeploymentVersion()))
 		}
 	}
-	s.InEpsilon(expectedResp.GetPreviousPercentage(), resp.GetPreviousPercentage(), 0.01)
+	s.InDelta(expectedResp.GetPreviousPercentage(), resp.GetPreviousPercentage(), 0.01)
 }
 
 func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testvars.TestVars, previousCurrent string, ignoreMissingTaskQueues bool, expectedError string) {
