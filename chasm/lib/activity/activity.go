@@ -316,7 +316,7 @@ func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.P
 	return nil, nil
 }
 
-func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context, key chasm.EntityKey) (*activity.ActivityExecutionInfo, error) {
+func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.ActivityExecutionInfo, error) {
 	if a.ActivityState == nil {
 		return nil, errors.New("activity state is nil")
 	}
@@ -361,6 +361,8 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context, key chasm.Entit
 		return nil, err
 	}
 
+	key := ctx.ExecutionKey()
+
 	info := &activity.ActivityExecutionInfo{
 		ActivityId:    key.BusinessID,
 		RunId:         key.EntityID,
@@ -394,11 +396,7 @@ func (a *Activity) buildPollActivityExecutionResponse(
 
 	var info *activity.ActivityExecutionInfo
 	if request.GetIncludeInfo() {
-		info, err = a.buildActivityExecutionInfo(ctx, chasm.EntityKey{
-			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  request.GetActivityId(),
-			EntityID:    request.GetRunId(),
-		})
+		info, err = a.buildActivityExecutionInfo(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -410,7 +408,7 @@ func (a *Activity) buildPollActivityExecutionResponse(
 		if err != nil {
 			return nil, err
 		}
-		input = activityRequest.Input
+		input = activityRequest.GetInput()
 	}
 
 	response := &workflowservice.PollActivityExecutionResponse{
