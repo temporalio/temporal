@@ -284,7 +284,11 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
 			LastChangedTime: now,
 			LastCheckedTime: now,
 		}
-		d.syncSummary(ctx)
+		if d.hasMinVersion(ctx, AsyncSetCurrentAndRamping) {
+			// this is not needed because startDrainage is called only from syncVersionState which sends the summary back to deployment.
+			// TODO: cleanup with sync mode
+			d.syncSummary(ctx)
+		}
 		d.setStateChanged()
 	}
 }
@@ -841,19 +845,15 @@ func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED
 	}
 
-	v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 0)
-	if v != workflow.DefaultVersion {
-		var err error
-		if d.hasMinVersion(ctx, AsyncSetCurrentAndRamping) {
-			err = d.syncTaskQueuesAsync(ctx, nil, d.VersionState.Status)
-		} else {
-			err = d.syncVersionStatusAfterDrainageStatusChange(ctx)
-		}
-		if err != nil {
-			d.logger.Error("failed to sync version status after drainage status change", "error", err)
-		}
+	var err error
+	if d.hasMinVersion(ctx, AsyncSetCurrentAndRamping) {
+		err = d.syncTaskQueuesAsync(ctx, nil, d.VersionState.Status)
+	} else {
+		err = d.syncVersionStatusAfterDrainageStatusChange(ctx)
 	}
-
+	if err != nil {
+		d.logger.Error("failed to sync version status after drainage status change", "error", err)
+	}
 }
 
 // syncVersionStatusAfterDrainageStatusChange syncs the current version status to all task queues.
@@ -994,11 +994,9 @@ func (d *VersionWorkflowRunner) syncTaskQueuesAsync(
 
 	// Start async propagation - DON'T WAIT
 	workflow.Go(ctx, func(gCtx workflow.Context) {
-		defer func() {
-			// Decrement counter when propagation completes
-			d.asyncPropagationsInProgress--
-		}()
 		d.executeAndTrackAsyncPropagation(gCtx, batches, routingConfig, versionData)
+		// Decrement counter when propagation completes
+		d.asyncPropagationsInProgress--
 	})
 
 	return nil
@@ -1013,15 +1011,12 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 ) {
 	taskQueueMaxVersionsToCheck := make(map[string]int64)
 
-	resultChannel := workflow.NewChannel(ctx)
-
 	for _, batch := range batches {
 		if d.cancelPropagations {
 			// Version is deleting. no need to continue propagation. Also can skip sending signal to deployment workflow.
 			return
 		}
 		result := d.executePropagationBatch(ctx, batch, routingConfig, versionData)
-		resultChannel.Send(ctx, result)
 		// Merge results into taskQueueMaxVersionsToCheck
 		for _, tqName := range workflow.DeterministicKeys(result) {
 			taskQueueMaxVersionsToCheck[tqName] = result[tqName]
@@ -1079,16 +1074,7 @@ func (d *VersionWorkflowRunner) executePropagationBatch(
 		return make(map[string]int64)
 	}
 
-	// Only check propagation for task queues where routing config actually changed
-	// Task queues with max_version = -1 indicate no routing change, skip those
-	result := make(map[string]int64)
-	for _, tqName := range workflow.DeterministicKeys(syncRes.TaskQueueMaxVersions) {
-		maxVersion := syncRes.TaskQueueMaxVersions[tqName]
-		if maxVersion != -1 {
-			result[tqName] = maxVersion
-		}
-	}
-	return result
+	return syncRes.TaskQueueMaxVersions
 }
 
 // signalPropagationComplete sends a signal to the deployment workflow when async propagation completes

@@ -1420,11 +1420,12 @@ func (d *ClientImpl) updateWithStart(
 }
 
 func isRetryableUpdateError(err error) bool {
-	if errors.Is(err, errRetry) {
+	if errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error() {
 		return true
 	}
 
 	// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
+	// The ErrWorkflowClosing could be nested.
 	var errMultiOps *serviceerror.MultiOperationExecution
 	if errors.As(err, &errMultiOps) {
 		for _, e := range errMultiOps.OperationErrors() {

@@ -842,6 +842,8 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 	}
 	// update local state
 	delete(d.State.Versions, args.Version)
+	// remove from propagating versions if it's there
+	delete(d.State.PropagatingRevisions, worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(args.GetVersion()).GetBuildId())
 	if !args.GetServerDelete() {
 		d.State.LastModifierIdentity = args.Identity
 	}
