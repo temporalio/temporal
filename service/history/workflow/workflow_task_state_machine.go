@@ -1031,7 +1031,6 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 
 	// NOTE:
 	// - do not update executionInfo.TaskQueue!
-	// - do not update executionInfo.WorkflowTaskStamp (only changed when rescheduling workflow task)
 
 	m.ms.logger.Debug("Workflow task updated",
 		tag.WorkflowScheduledEventID(workflowTask.ScheduledEventID),
