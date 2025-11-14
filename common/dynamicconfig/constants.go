@@ -2389,7 +2389,7 @@ the number of children greater than or equal to this threshold`,
 	)
 	ReplicationTaskProcessorApplyPersistenceQPS = NewGlobalFloatSetting(
 		"history.ReplicationTaskProcessorApplyPersistenceQPS",
-		0,
+		10000,
 		`ReplicationTaskProcessorApplyPersistenceQPS is the qps of task processing rate limiter on persistence level`,
 	)
 	ReplicationEnableDLQMetrics = NewGlobalBoolSetting(
