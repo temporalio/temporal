@@ -70,7 +70,7 @@ func NewSQLVisibilityStore(
 		return nil, err
 	}
 	return &VisibilityStore{
-		sqlStore:                       persistencesql.NewSqlStore(db, logger, serializer),
+		sqlStore:                       persistencesql.NewSQLStore(db, logger, serializer),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		chasmRegistry:                  chasmRegistry,

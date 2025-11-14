@@ -31,7 +31,7 @@ func NewSQLExecutionStore(
 	serializer serialization.Serializer,
 ) (p.ExecutionStore, error) {
 	return &sqlExecutionStore{
-		SqlStore:          NewSqlStore(db, logger, serializer),
+		SqlStore:          NewSQLStore(db, logger, serializer),
 		HistoryBranchUtil: p.NewHistoryBranchUtil(serializer),
 	}, nil
 }
