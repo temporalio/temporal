@@ -290,9 +290,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
 
-	// Give the system a moment to pick up the config change
-	time.Sleep(100 * time.Millisecond)
-
 	// Unblock the workflow by sending the continue signal
 	_, err = s.FrontendClient().SignalWorkflowExecution(
 		ctx,
