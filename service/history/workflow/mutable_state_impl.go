@@ -2615,9 +2615,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		root, ok := ms.chasmTree.(*chasm.Node)
 		softassert.That(ms.logger, ok, "chasmTree cast failed")
 
-		validationContext := chasm.NewContext(context.Background(), root)
-		_, err := root.Component(validationContext, chasm.ComponentRef{})
-		if common.IsNotFoundError(err) {
+		if root.Archetype() == "" {
 			mutableContext := chasm.NewMutableContext(context.Background(), root)
 			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
 		}
