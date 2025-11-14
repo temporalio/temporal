@@ -144,15 +144,7 @@ func pollActivityExecutionWaitAnyStateChange(
 			}
 
 			if lastSeenRef.EntityID != currentRef.EntityID {
-				// The runID from the token doesn't match this shard's state. We return immediately,
-				// on the basis that this constitutes a state change. If the runID from the token is
-				// ahead of this shard's state then this will be detected by shard ownership or
-				// staleness checks and the caller will receive an error.
-				response, err := a.buildPollActivityExecutionResponse(ctx, req)
-				if err != nil {
-					return nil, true, err
-				}
-				return response, true, nil
+				return nil, false, serviceerror.NewInvalidArgumentf("long-poll token runID does not match entity runID")
 			}
 
 			refComparison, err := chasm.CompareComponentRefs(&lastSeenRef, &currentRef)
@@ -172,7 +164,7 @@ func pollActivityExecutionWaitAnyStateChange(
 				return nil, false, nil
 			case 1:
 				// Impossible: PollComponent guarantees that at this point, current VT >= lastSeen VT.
-				return nil, false, serviceerror.NewFailedPrecondition("submitted long-poll token represents a state beyond current")
+				return nil, false, serviceerror.NewFailedPrecondition("long-poll token represents a state beyond current")
 			default:
 				// Impossible
 				return nil, false, serviceerror.NewInternal("unexpected transition history comparison result")
