@@ -39,7 +39,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				// EagerTask: TODO when supported, need to call the same code that would handle the RecordActivityTaskStarted API
 			}, nil
 		},
-		req.GetFrontendRequest())
+		req.GetFrontendRequest(),
+		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
+	)
 
 	if err != nil {
 		return nil, err
