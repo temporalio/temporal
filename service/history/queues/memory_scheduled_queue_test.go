@@ -9,11 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
 
@@ -22,9 +25,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller     *gomock.Controller
-		mockTimeSource *clock.EventTimeSource
-		mockScheduler  *ctasks.MockScheduler[ctasks.Task]
+		controller            *gomock.Controller
+		mockTimeSource        *clock.EventTimeSource
+		mockScheduler         *ctasks.MockScheduler[ctasks.Task]
+		mockClusterMetadata   *cluster.MockMetadata
+		mockNamespaceRegistry *namespace.MockRegistry
 
 		scheduledQueue *memoryScheduledQueue
 	}
@@ -41,6 +46,10 @@ func (s *memoryScheduledQueueSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockTimeSource.Update(time.Now().UTC())
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
 	s.mockScheduler = ctasks.NewMockScheduler[ctasks.Task](s.controller)
 	s.mockScheduler.EXPECT().Start().AnyTimes()
@@ -156,10 +165,11 @@ func (s *memoryScheduledQueueSuite) newSpeculativeWorkflowTaskTimeoutTestExecuta
 			nil,
 			NewNoopPriorityAssigner(),
 			s.mockTimeSource,
+			s.mockNamespaceRegistry,
+			s.mockClusterMetadata,
+			GetTaskTypeTagValue,
 			nil,
-			nil,
-			nil,
-			nil,
+			metrics.NoopMetricsHandler,
 			telemetry.NoopTracer,
 		),
 		wttt,

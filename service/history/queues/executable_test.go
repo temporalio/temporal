@@ -1149,6 +1149,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.timeSource,
 		s.mockNamespaceRegistry,
 		s.mockClusterMetadata,
+		queues.GetTaskTypeTagValue,
 		log.NewTestLogger(),
 		s.metricsHandler,
 		telemetry.NoopTracer,
