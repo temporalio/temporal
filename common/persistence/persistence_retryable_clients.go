@@ -914,7 +914,7 @@ func (p *metadataRetryablePersistenceClient) Close() {
 }
 
 func (p *metadataRetryablePersistenceClient) ConvertInternalGetResponse(response *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
-	return p.ConvertInternalGetResponse(response)
+	return p.persistence.ConvertInternalGetResponse(response)
 }
 
 func (p *clusterMetadataRetryablePersistenceClient) GetName() string {
