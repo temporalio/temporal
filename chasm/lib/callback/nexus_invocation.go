@@ -51,11 +51,9 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 }
 
 func (n nexusInvocation) WrapError(result invocationResult, err error) error {
-	// For retry cases, wrap in DestinationDownError for circuit breaking
 	if retry, ok := result.(invocationResultRetry); ok {
 		return queues.NewDestinationDownError(retry.err.Error(), err)
 	}
-	// For all other cases (success, permanent failure), return the save error
 	return err
 }
 

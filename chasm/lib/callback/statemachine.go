@@ -92,7 +92,6 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
-		// No task generation - callback has permanently failed
 		return nil
 	},
 )
@@ -108,7 +107,6 @@ var TransitionSucceeded = chasm.NewTransition(
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = nil
-		// No task generation - callback has succeeded
 		return nil
 	},
 )

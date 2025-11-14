@@ -36,7 +36,7 @@ func (c chasmInvocation) WrapError(result invocationResult, err error) error {
 	if resultErr := result.error(); resultErr != nil {
 		return resultErr
 	}
-	// Otherwise return the save error
+
 	return err
 }
 

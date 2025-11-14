@@ -52,6 +52,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 		caller                HTTPCaller
 		expectedMetricOutcome string
 		assertOutcome         func(*testing.T, *Callback, *chasm.MockMutableContext)
+		expectedError         bool
 	}{
 		{
 			name: "success",
@@ -61,7 +62,6 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			expectedMetricOutcome: "status:200",
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
-				// Success state is terminal - no tasks should be generated
 				require.Empty(t, mctx.Tasks)
 			},
 		},
@@ -79,6 +79,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				backoffTask := mctx.Tasks[0].Payload.(*callbackspb.BackoffTask)
 				require.Equal(t, cb.Attempt, backoffTask.Attempt)
 			},
+			expectedError: true,
 		},
 		{
 			name: "retryable-http-error",
@@ -94,6 +95,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				backoffTask := mctx.Tasks[0].Payload.(*callbackspb.BackoffTask)
 				require.Equal(t, cb.Attempt, backoffTask.Attempt)
 			},
+			expectedError: true,
 		},
 		{
 			name: "non-retryable-http-error",
@@ -103,7 +105,6 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			expectedMetricOutcome: "status:400",
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
-				// Failed state is terminal - no tasks should be generated
 				require.Empty(t, mctx.Tasks)
 			},
 		},
@@ -254,8 +255,8 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 
 			// For successful and non-retryable errors, expect no error from Invoke
 			// For retryable errors, expect an error to be returned
-			expectedError := tc.name == "network-error-retry" || tc.name == "retryable-http-error"
-			if expectedError {
+			// expectedError := tc.name == "network-error-retry" || tc.name == "retryable-http-error"
+			if tc.expectedError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
@@ -398,7 +399,6 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
-				// Success state is terminal - no tasks should be generated
 				require.Empty(t, mctx.Tasks)
 			},
 		},
@@ -434,7 +434,6 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
-				// Success state is terminal - no tasks should be generated
 				require.Empty(t, mctx.Tasks)
 			},
 		},
@@ -487,7 +486,6 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			expectsInternalError: true,
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
-				// Failed state is terminal - no tasks should be generated
 				require.Empty(t, mctx.Tasks)
 			},
 		},
@@ -509,7 +507,6 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			expectsInternalError: true,
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
-				// Failed state is terminal - no tasks should be generated
 				require.Empty(t, mctx.Tasks)
 			},
 		},
@@ -531,7 +528,6 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			expectsInternalError: true,
 			assertOutcome: func(t *testing.T, cb *Callback, mctx *chasm.MockMutableContext) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
-				// Failed state is terminal - no tasks should be generated
 				require.Empty(t, mctx.Tasks)
 			},
 		},
@@ -596,7 +592,6 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			// Create MockMutableContext to capture tasks
 			var capturedMockCtx *chasm.MockMutableContext
 
 			// Create mock engine and setup expectations

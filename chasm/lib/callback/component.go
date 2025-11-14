@@ -30,7 +30,7 @@ type Callback struct {
 	*callbackspb.CallbackState
 
 	// MSPointer is a runtime-only field for accessing the underlying mutable state to get completion data.
-	// Similar to MSPointer in the Workflow component, this is automatically set at deserialization time.
+	// Similar to MSPointer in the Workflow component, this is set at deserialization time.
 	chasm.MSPointer
 }
 
