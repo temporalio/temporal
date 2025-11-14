@@ -49,7 +49,8 @@ type (
 		// Track if async propagations are in progress (prevents CaN)
 		asyncPropagationsInProgress int
 		// When true, all the ongoing propagations should cancel themselves
-		cancelPropagations bool
+		cancelPropagations          bool
+		unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion
 	}
 )
 
@@ -62,6 +63,7 @@ type (
 // info.
 func VersionWorkflow(
 	ctx workflow.Context,
+	unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion,
 	unsafeRefreshIntervalGetter func() any,
 	unsafeVisibilityGracePeriodGetter func() any,
 	versionWorkflowArgs *deploymentspb.WorkerDeploymentVersionWorkflowArgs,
@@ -73,6 +75,7 @@ func VersionWorkflow(
 		logger:                            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
 		metrics:                           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
 		lock:                              workflow.NewMutex(ctx),
+		unsafeWorkflowVersionGetter:       unsafeWorkflowVersionGetter,
 		unsafeRefreshIntervalGetter:       unsafeRefreshIntervalGetter,
 		unsafeVisibilityGracePeriodGetter: unsafeVisibilityGracePeriodGetter,
 		signalHandler: &SignalHandler{
@@ -185,10 +188,13 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	if err := workflow.SetUpdateHandler(
+	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		UpdateVersionMetadata,
 		d.handleUpdateVersionMetadata,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateUpdateVersionMetadata,
+		},
 	); err != nil {
 		return err
 	}
@@ -232,12 +238,15 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentVersionWorkflowType, nextArgs)
 }
 
-func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
+func (d *VersionWorkflowRunner) validateUpdateVersionMetadata(args *deploymentspb.UpdateVersionMetadataArgs) error {
 	if d.deleteVersion {
 		// Deployment workflow should not call this function if version is marked for deletion, but still checking for safety.
-		return nil, temporal.NewNonRetryableApplicationError(errVersionDeleted, errVersionDeleted, nil)
+		return temporal.NewNonRetryableApplicationError(errVersionDeleted, errVersionDeleted, nil)
 	}
+	return nil
+}
 
+func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
 	if d.VersionState.Metadata == nil && args.UpsertEntries != nil {
 		d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
 		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
@@ -834,7 +843,12 @@ func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx
 
 	v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 0)
 	if v != workflow.DefaultVersion {
-		err := d.syncVersionStatusAfterDrainageStatusChange(ctx)
+		var err error
+		if d.hasMinVersion(ctx, AsyncSetCurrentAndRamping) {
+			err = d.syncTaskQueuesAsync(ctx, nil, d.VersionState.Status)
+		} else {
+			err = d.syncVersionStatusAfterDrainageStatusChange(ctx)
+		}
 		if err != nil {
 			d.logger.Error("failed to sync version status after drainage status change", "error", err)
 		}
@@ -1093,4 +1107,8 @@ func (d *VersionWorkflowRunner) signalPropagationComplete(ctx workflow.Context, 
 	if err != nil {
 		d.logger.Error("could not signal propagation completion", "error", err)
 	}
+}
+
+func (d *VersionWorkflowRunner) hasMinVersion(ctx workflow.Context, version DeploymentWorkflowVersion) bool {
+	return getWorkflowVersion(ctx, d.unsafeWorkflowVersionGetter) >= version
 }

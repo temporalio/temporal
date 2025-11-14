@@ -43,7 +43,7 @@ func (s *VersionWorkflowSuite) SetupTest() {
 	}
 
 	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
-		return VersionWorkflow(ctx, drainageRefreshGetter, visibilityGraceGetter, args)
+		return VersionWorkflow(ctx, nil, drainageRefreshGetter, visibilityGraceGetter, args)
 	}
 	s.env.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 
