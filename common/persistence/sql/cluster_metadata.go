@@ -234,6 +234,6 @@ func newClusterMetadataPersistence(
 	serializer serialization.Serializer,
 ) (p.ClusterMetadataStore, error) {
 	return &sqlClusterMetadataManager{
-		SqlStore: NewSqlStore(db, logger, serializer),
+		SqlStore: NewSQLStore(db, logger, serializer),
 	}, nil
 }
