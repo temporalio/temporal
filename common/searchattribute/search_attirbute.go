@@ -43,11 +43,11 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeM
 		if err != nil {
 			continue
 		}
-		setMetadataType(saPayload, valueType)
+		SetMetadataType(saPayload, valueType)
 	}
 }
 
-func setMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
+func SetMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 	if t == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
 		return
 	}

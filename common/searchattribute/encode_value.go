@@ -20,7 +20,7 @@ func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload
 		return nil, err
 	}
 
-	setMetadataType(valPayload, t)
+	SetMetadataType(valPayload, t)
 	return valPayload, nil
 }
 

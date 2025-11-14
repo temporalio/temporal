@@ -66,6 +66,7 @@ func (s *taskValidatorSuite) SetupTest() {
 			RunId:            s.runID,
 			ScheduledEventId: s.scheduleEventID,
 			CreateTime:       timestamp.TimeNowPtrUtc(),
+			Stamp:            rand.Int31(),
 		},
 	}
 
@@ -194,6 +195,7 @@ func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_Valid() {
 		},
 		Clock:            s.task.Data.Clock,
 		ScheduledEventId: s.task.Data.ScheduledEventId,
+		Stamp:            s.task.Data.GetStamp(),
 	}).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil)
 
 	valid, err := s.taskValidator.isTaskValid(s.task, taskType)
@@ -212,6 +214,7 @@ func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_NotFound() {
 		},
 		Clock:            s.task.Data.Clock,
 		ScheduledEventId: s.task.Data.ScheduledEventId,
+		Stamp:            s.task.Data.GetStamp(),
 	}).Return(nil, &serviceerror.NotFound{})
 
 	valid, err := s.taskValidator.isTaskValid(s.task, taskType)
@@ -230,6 +233,7 @@ func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_Error() {
 		},
 		Clock:            s.task.Data.Clock,
 		ScheduledEventId: s.task.Data.ScheduledEventId,
+		Stamp:            s.task.Data.GetStamp(),
 	}).Return(nil, &serviceerror.Unavailable{})
 
 	_, err := s.taskValidator.isTaskValid(s.task, taskType)
@@ -247,6 +251,7 @@ func (s *taskValidatorSuite) TestIsTaskValid_WorkflowTask_Valid() {
 		},
 		Clock:            s.task.Data.Clock,
 		ScheduledEventId: s.task.Data.ScheduledEventId,
+		Stamp:            s.task.Data.GetStamp(),
 	}).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil)
 
 	valid, err := s.taskValidator.isTaskValid(s.task, taskType)
@@ -265,6 +270,7 @@ func (s *taskValidatorSuite) TestIsTaskValid_WorkflowTask_NotFound() {
 		},
 		Clock:            s.task.Data.Clock,
 		ScheduledEventId: s.task.Data.ScheduledEventId,
+		Stamp:            s.task.Data.GetStamp(),
 	}).Return(nil, &serviceerror.NotFound{})
 
 	valid, err := s.taskValidator.isTaskValid(s.task, taskType)
@@ -283,6 +289,7 @@ func (s *taskValidatorSuite) TestIsTaskValid_WorkflowTask_Error() {
 		},
 		Clock:            s.task.Data.Clock,
 		ScheduledEventId: s.task.Data.ScheduledEventId,
+		Stamp:            s.task.Data.GetStamp(),
 	}).Return(nil, &serviceerror.Unavailable{})
 
 	_, err := s.taskValidator.isTaskValid(s.task, taskType)

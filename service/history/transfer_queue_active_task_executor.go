@@ -281,6 +281,10 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	if workflowTask == nil {
 		return nil
 	}
+	if transferTask.Stamp != workflowTask.Stamp {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrStaleReference
+	}
 	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, transferTask.Version, transferTask)
 	if err != nil {
 		return err

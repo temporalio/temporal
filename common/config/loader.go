@@ -12,7 +12,6 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"gopkg.in/validator.v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -112,7 +111,8 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 		}
 	}
 
-	return validator.Validate(config)
+	validate := newValidator()
+	return validate.Validate(config)
 }
 
 // Helper function for loading configuration

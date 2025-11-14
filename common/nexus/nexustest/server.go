@@ -10,6 +10,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/freeport"
 )
 
@@ -18,7 +19,7 @@ func AllocListenAddress() string {
 }
 
 func NewNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
-	hh := nexus.NewHTTPHandler(nexus.HandlerOptions{
+	hh := nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 		Handler: handler,
 	})
 	srv := &http.Server{Addr: listenAddr, Handler: hh}

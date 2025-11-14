@@ -14,7 +14,10 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-const invalidHeapIndex = -13 // use unusual value to stand out in panics
+const (
+	invalidHeapIndex      = -13     // use unusual value to stand out in panics
+	pollForwarderPriority = 1000000 // lower than any other priority. must be > maxPriorityLevels.
+)
 
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
 // is used to update ready times after a rate is changed from very low (or zero) to higher: we
@@ -101,8 +104,7 @@ func (t *taskPQ) Len() int {
 func (t *taskPQ) Less(i int, j int) bool {
 	// Overall priority key will eventually look something like:
 	// - ready time: to sort all ready tasks ahead of others, or else find the earliest ready task
-	// - isPollForwarder: forwarding polls should happen only if there are no other tasks
-	// - priority key: to sort tasks by priority
+	// - effective priority key: to sort tasks by priority (including poll forwarder flag)
 	// - fairness key pass: to arrange tasks fairly by key
 	// - ordering key: to sort tasks by ordering key
 	// - task id: last resort comparison
@@ -119,19 +121,10 @@ func (t *taskPQ) Less(i int, j int) bool {
 	// 	return false
 	// }
 
-	// poll forwarder is always last
-	if !a.isPollForwarder && b.isPollForwarder {
+	// use effective priority
+	if a.effectivePriority < b.effectivePriority {
 		return true
-	} else if a.isPollForwarder && !b.isPollForwarder {
-		return false
-	}
-
-	// try priority
-	ap, bp := a.getPriority(), b.getPriority()
-	apk, bpk := ap.GetPriorityKey(), bp.GetPriorityKey()
-	if apk < bpk {
-		return true
-	} else if apk > bpk {
+	} else if a.effectivePriority > b.effectivePriority {
 		return false
 	}
 
@@ -184,7 +177,7 @@ func (t *taskPQ) Pop() any {
 // pred and post must not make any other calls on taskPQ until ForEachTask returns!
 func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalTask)) {
 	t.heap = slices.DeleteFunc(t.heap, func(task *internalTask) bool {
-		if task.isPollForwarder || !pred(task) {
+		if task.isPollForwarder() || !pred(task) {
 			return false
 		}
 		task.matchHeapIndex = invalidHeapIndex - 1 // maintain heap/index invariant
@@ -380,15 +373,15 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// TODO(pri): this iterates over heap as slice, which isn't quite correct, but okay for now
 	for _, task := range d.tasks.heap {
-		if !allowForwarding && task.isPollForwarder {
+		if !allowForwarding && task.isPollForwarder() {
 			continue
 		}
 
 		for _, poller := range d.pollers.heap {
 			// can't match cases:
-			if poller.queryOnly && !(task.isQuery() || task.isPollForwarder) {
+			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
 				continue
-			} else if task.isPollForwarder && poller.forwardCtx == nil {
+			} else if task.isPollForwarder() && poller.forwardCtx == nil {
 				continue
 			} else if poller.isTaskForwarder && !allowForwarding {
 				continue
@@ -469,7 +462,7 @@ func (d *matcherData) findAndWakeMatches() {
 		res := &matchResult{task: task, poller: poller}
 		task.wake(d.logger, res)
 		// for poll forwarder: skip waking poller, forwarder will call finishMatchAfterPollForward
-		if !task.isPollForwarder {
+		if !task.isPollForwarder() {
 			poller.wake(d.logger, res)
 		}
 		// TODO(pri): consider having task forwarding work the same way, with a half-match,

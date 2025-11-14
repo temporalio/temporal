@@ -2,6 +2,7 @@ package headers
 
 import (
 	"context"
+	"strings"
 
 	"google.golang.org/grpc/metadata"
 )
@@ -18,6 +19,8 @@ const (
 	CallerNameHeaderName = "caller-name"
 	CallerTypeHeaderName = "caller-type"
 	CallOriginHeaderName = "call-initiation"
+
+	ExperimentHeaderName = "temporal-experiment"
 )
 
 var (
@@ -89,4 +92,26 @@ func (h GRPCHeaderGetter) Get(key string) string {
 		return values[0]
 	}
 	return ""
+}
+
+// IsExperimentRequested checks if a specific experiment is present in the temporal-experiment header.
+// Returns true if the experiment is explicitly listed or if "*" (wildcard) is present.
+// Headers exceeding a length of 100 will be skipped.
+func IsExperimentRequested(ctx context.Context, experiment string) bool {
+	experimentalValues := metadata.ValueFromIncomingContext(ctx, ExperimentHeaderName)
+
+	for _, headerValue := range experimentalValues {
+		// limit value size to prevent misuse
+		if len(headerValue) > 100 {
+			continue
+		}
+		for requested := range strings.SplitSeq(headerValue, ",") {
+			requested = strings.TrimSpace(requested)
+			if requested == "*" || requested == experiment {
+				return true
+			}
+		}
+	}
+
+	return false
 }

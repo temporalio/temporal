@@ -84,6 +84,7 @@ const (
 	HistoryService_AddTasks_FullMethodName                               = "/temporal.server.api.historyservice.v1.HistoryService/AddTasks"
 	HistoryService_ListTasks_FullMethodName                              = "/temporal.server.api.historyservice.v1.HistoryService/ListTasks"
 	HistoryService_CompleteNexusOperation_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation"
+	HistoryService_CompleteNexusOperationChasm_FullMethodName            = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperationChasm"
 	HistoryService_InvokeStateMachineMethod_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod"
 	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
 	HistoryService_SyncWorkflowState_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState"
@@ -305,7 +306,12 @@ type HistoryServiceClient interface {
 	ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error)
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
+	//
+	// Deprecated. Will be renamed to CompleteNexusOperationHsm in a future release.
 	CompleteNexusOperation(ctx context.Context, in *CompleteNexusOperationRequest, opts ...grpc.CallOption) (*CompleteNexusOperationResponse, error)
+	// Complete an async Nexus Operation using a CHASM reference. The completion
+	// state could be successful, failed, or canceled.
+	CompleteNexusOperationChasm(ctx context.Context, in *CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*CompleteNexusOperationChasmResponse, error)
 	InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error)
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
@@ -977,6 +983,15 @@ func (c *historyServiceClient) CompleteNexusOperation(ctx context.Context, in *C
 	return out, nil
 }
 
+func (c *historyServiceClient) CompleteNexusOperationChasm(ctx context.Context, in *CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*CompleteNexusOperationChasmResponse, error) {
+	out := new(CompleteNexusOperationChasmResponse)
+	err := c.cc.Invoke(ctx, HistoryService_CompleteNexusOperationChasm_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error) {
 	out := new(InvokeStateMachineMethodResponse)
 	err := c.cc.Invoke(ctx, HistoryService_InvokeStateMachineMethod_FullMethodName, in, out, opts...)
@@ -1252,7 +1267,12 @@ type HistoryServiceServer interface {
 	ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error)
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
+	//
+	// Deprecated. Will be renamed to CompleteNexusOperationHsm in a future release.
 	CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error)
+	// Complete an async Nexus Operation using a CHASM reference. The completion
+	// state could be successful, failed, or canceled.
+	CompleteNexusOperationChasm(context.Context, *CompleteNexusOperationChasmRequest) (*CompleteNexusOperationChasmResponse, error)
 	InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error)
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
@@ -1514,6 +1534,9 @@ func (UnimplementedHistoryServiceServer) ListTasks(context.Context, *ListTasksRe
 }
 func (UnimplementedHistoryServiceServer) CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) CompleteNexusOperationChasm(context.Context, *CompleteNexusOperationChasmRequest) (*CompleteNexusOperationChasmResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompleteNexusOperationChasm not implemented")
 }
 func (UnimplementedHistoryServiceServer) InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeStateMachineMethod not implemented")
@@ -2709,6 +2732,24 @@ func _HistoryService_CompleteNexusOperation_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_CompleteNexusOperationChasm_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteNexusOperationChasmRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).CompleteNexusOperationChasm(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_CompleteNexusOperationChasm_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).CompleteNexusOperationChasm(ctx, req.(*CompleteNexusOperationChasmRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_InvokeStateMachineMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(InvokeStateMachineMethodRequest)
 	if err := dec(in); err != nil {
@@ -3093,6 +3134,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteNexusOperation",
 			Handler:    _HistoryService_CompleteNexusOperation_Handler,
+		},
+		{
+			MethodName: "CompleteNexusOperationChasm",
+			Handler:    _HistoryService_CompleteNexusOperationChasm_Handler,
 		},
 		{
 			MethodName: "InvokeStateMachineMethod",

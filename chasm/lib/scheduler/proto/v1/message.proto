@@ -5,6 +5,7 @@ package temporal.server.chasm.lib.scheduler.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
 
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
 import "temporal/api/schedule/v1/message.proto";
 import "temporal/server/api/schedule/v1/message.proto";
 
@@ -15,7 +16,6 @@ message SchedulerState {
     // Scheduler request parameters and metadata. 
     temporal.api.schedule.v1.Schedule schedule = 2;
     temporal.api.schedule.v1.ScheduleInfo info = 3;
-    temporal.api.schedule.v1.SchedulePatch initial_patch = 4;
 
     // State common to all generators is stored in the top-level machine.
     string namespace = 5;
@@ -54,6 +54,12 @@ message InvokerState {
     // as after applying a replicated state (as opposed to evaluating based on
     // present time).
     google.protobuf.Timestamp last_processed_time = 5;
+
+    // A map keyed by the request ID, mapping to the workflow ID started as part
+    // of that request. Used to map received Nexus callbacks back to workflows.
+    // Invoker adds to this mapwhen buffered starts are enqueued, and removed
+    // when Invoker processes a completion.
+    map<string, string> request_id_to_workflow_id = 6;
 }
 
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
@@ -76,4 +82,13 @@ message BackfillerState {
     // Attempt count, incremented when the buffer is full and the Backfiller
     // needs to back off before retrying to fill.
     int64 attempt = 8;
+}
+
+// CHASM scheduler retains the payload data for the last completed workflow
+// (either failure or success). 
+message LastCompletionResult {
+    oneof outcome {
+        temporal.api.common.v1.Payload success = 1;
+        temporal.api.failure.v1.Failure failure = 2;
+    }
 }

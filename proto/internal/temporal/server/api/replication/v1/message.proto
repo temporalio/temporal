@@ -179,6 +179,8 @@ message HistoryTaskAttributes {
 
 message SyncWorkflowStateTaskAttributes {
     temporal.server.api.persistence.v1.WorkflowMutableState workflow_state = 1;
+    bool is_force_replication = 2;
+    bool is_close_transfer_task_acked = 3;
 }
 
 message TaskQueueUserDataAttributes {
@@ -247,4 +249,6 @@ message VersionedTransitionArtifact {
     repeated temporal.api.common.v1.DataBlob event_batches = 3;
     NewRunInfo new_run_info = 4;
     bool is_first_sync = 5;
+    bool is_close_transfer_task_acked = 6;
+    bool is_force_replication = 7;
 }

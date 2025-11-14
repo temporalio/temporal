@@ -690,10 +690,17 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 	err = s.SdkClient().TerminateWorkflow(context.Background(), initialChildExecutions[0].WorkflowId, initialChildExecutions[0].RunId, "test")
 	s.NoError(err)
 
+	// Wait until the parent has recorded the child's terminated event and a subsequent WFT completed.
+	var wftAfterChildTerminated int64
+	s.Eventually(func() bool {
+		wftAfterChildTerminated = s.getWorkflowTaskFinishEventIdAfterChild(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
+		return wftAfterChildTerminated != 0
+	}, 5*time.Second, 200*time.Millisecond)
+
 	// resetting the new workflow execution after child initiation.
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = firstRun.GetRunID()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = wftAfterChildTerminated
 	resp, err := s.SdkClient().ResetWorkflowExecution(context.Background(), resetRequest)
 	s.NoError(err)
 
@@ -707,7 +714,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 	descResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, initialChildExecutions[0].WorkflowId, initialChildExecutions[0].RunId)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.GetWorkflowExecutionInfo().GetStatus(),
-		"Child workflow should have status COMPLETED")
+		"Child workflow should have status TERMINATED")
 }
 
 func (s *WorkflowResetWithChildSuite) startWorkflowOptions(wfID string) sdkclient.StartWorkflowOptions {
@@ -793,20 +800,41 @@ func (s *WorkflowResetWithChildSuite) waitingChild(ctx workflow.Context, arg str
 	return arg, nil
 }
 
+// getWorkflowTaskFinishEventIdAfterChild gets the event ID of the first WFT completed after the child completed event.
+// It does so by scanning the history of runID for any child completed events (completed, failed, canceled, timed out, terminated) and then the first WFT completed after that.
 func (s *WorkflowResetWithChildSuite) getWorkflowTaskFinishEventIdAfterChild(ctx context.Context, wfID string, runID string, childID string) int64 {
 	iter := s.SdkClient().GetWorkflowHistory(ctx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-	childFound := false
+	childClosedSeen := false
 	for iter.HasNext() {
 		event, err := iter.Next()
 		if err != nil {
 			break
 		}
-		if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 			if event.GetChildWorkflowExecutionCompletedEventAttributes().GetWorkflowExecution().GetWorkflowId() == childID {
-				childFound = true
+				childClosedSeen = true
 			}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+			if event.GetChildWorkflowExecutionFailedEventAttributes().GetWorkflowExecution().GetWorkflowId() == childID {
+				childClosedSeen = true
+			}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+			if event.GetChildWorkflowExecutionCanceledEventAttributes().GetWorkflowExecution().GetWorkflowId() == childID {
+				childClosedSeen = true
+			}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+			if event.GetChildWorkflowExecutionTimedOutEventAttributes().GetWorkflowExecution().GetWorkflowId() == childID {
+				childClosedSeen = true
+			}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			if event.GetChildWorkflowExecutionTerminatedEventAttributes().GetWorkflowExecution().GetWorkflowId() == childID {
+				childClosedSeen = true
+			}
+		default:
+			// Do nothing and fall through.
 		}
-		if !childFound {
+		if !childClosedSeen {
 			continue
 		}
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {

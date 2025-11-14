@@ -125,7 +125,7 @@ func parseValueOrArray(valStr string, t enumspb.IndexedValueType) (*commonpb.Pay
 		return nil, err
 	}
 
-	setMetadataType(valPayload, t)
+	SetMetadataType(valPayload, t)
 	return valPayload, nil
 }
 

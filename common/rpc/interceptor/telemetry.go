@@ -2,16 +2,13 @@ package interceptor
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -19,11 +16,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -31,11 +26,12 @@ type (
 	metricsContextKey struct{}
 
 	TelemetryInterceptor struct {
-		namespaceRegistry namespace.Registry
-		metricsHandler    metrics.Handler
-		logger            log.Logger
-		workflowTags      *logtags.WorkflowTags
-		logAllReqErrors   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		namespaceRegistry   namespace.Registry
+		metricsHandler      metrics.Handler
+		logger              log.Logger
+		workflowTags        *logtags.WorkflowTags
+		logAllReqErrors     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		requestErrorHandler ErrorHandler
 	}
 )
 
@@ -101,13 +97,15 @@ func NewTelemetryInterceptor(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	logAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	requestErrorHandler ErrorHandler,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
-		namespaceRegistry: namespaceRegistry,
-		metricsHandler:    metricsHandler,
-		logger:            logger,
-		workflowTags:      logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
-		logAllReqErrors:   logAllReqErrors,
+		namespaceRegistry:   namespaceRegistry,
+		metricsHandler:      metricsHandler,
+		logger:              logger,
+		workflowTags:        logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
+		logAllReqErrors:     logAllReqErrors,
+		requestErrorHandler: requestErrorHandler,
 	}
 }
 
@@ -184,7 +182,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	}
 
 	if err != nil {
-		ti.HandleError(req, info.FullMethod, metricsHandler, logTags, err, nsName)
+		ti.requestErrorHandler.HandleError(req, info.FullMethod, metricsHandler, logTags, err, nsName)
 	} else {
 		// emit action metrics only after successful calls
 		ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
@@ -222,7 +220,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 
 	err := handler(service, serverStream)
 	if err != nil {
-		ti.HandleError(nil, info.FullMethod, metricsHandler, logTags, err, "")
+		ti.requestErrorHandler.HandleError(nil, info.FullMethod, metricsHandler, logTags, err, "")
 		return err
 	}
 	return nil
@@ -356,18 +354,29 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	}
 }
 
+// CreateUnaryMetricsHandlerLogTags creates metrics handler and log tags for unary RPC calls
+func CreateUnaryMetricsHandlerLogTags(
+	baseMetricsHandler metrics.Handler,
+	req any,
+	fullMethod string,
+	methodName string,
+	nsName namespace.Name,
+) (metrics.Handler, []tag.Tag) {
+	overridedMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
+
+	if nsName == "" {
+		return baseMetricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
+			[]tag.Tag{tag.Operation(overridedMethodName)}
+	}
+	return baseMetricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceTag(nsName.String())),
+		[]tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
+}
+
 func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(req any,
 	fullMethod string,
 	methodName string,
 	nsName namespace.Name) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
-
-	if nsName == "" {
-		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
-			[]tag.Tag{tag.Operation(overridedMethodName)}
-	}
-	return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceTag(nsName.String())),
-		[]tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
+	return CreateUnaryMetricsHandlerLogTags(ti.metricsHandler, req, fullMethod, methodName, nsName)
 }
 
 func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
@@ -379,134 +388,6 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 		metrics.OperationTag(overridedMethodName),
 		metrics.NamespaceUnknownTag(),
 	), []tag.Tag{tag.Operation(overridedMethodName)}
-}
-
-func (ti *TelemetryInterceptor) HandleError(
-	req any,
-	fullMethod string,
-	metricsHandler metrics.Handler,
-	logTags []tag.Tag,
-	err error,
-	nsName namespace.Name,
-) {
-	statusCode := serviceerror.ToStatus(err).Code()
-	if statusCode == codes.OK {
-		return
-	}
-
-	isExpectedError := isExpectedErrorByStatusCode(statusCode) || isExpectedErrorByType(err)
-
-	recordErrorMetrics(metricsHandler, err, isExpectedError)
-	ti.logError(req, fullMethod, nsName, err, statusCode, isExpectedError, logTags)
-}
-
-func (ti *TelemetryInterceptor) logError(
-	req any,
-	fullMethod string,
-	nsName namespace.Name,
-	err error,
-	statusCode codes.Code,
-	isExpectedError bool,
-	logTags []tag.Tag,
-) {
-	logAllErrors := nsName != "" && ti.logAllReqErrors(nsName.String())
-	// context errors may not be user errors, but still too noisy to log by default
-	if !logAllErrors && (isExpectedError ||
-		common.IsContextDeadlineExceededErr(err) ||
-		common.IsContextCanceledErr(err) ||
-		common.IsResourceExhausted(err)) {
-		return
-	}
-
-	logTags = append(logTags, tag.NewStringerTag("grpc_code", statusCode))
-	logTags = append(logTags, ti.workflowTags.Extract(req, fullMethod)...)
-
-	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
-}
-
-func recordErrorMetrics(metricsHandler metrics.Handler, err error, isExpectedError bool) {
-	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
-
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
-		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
-			1,
-			metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause),
-			metrics.ResourceExhaustedScopeTag(resourceExhaustedErr.Scope),
-		)
-	}
-
-	if isExpectedError {
-		return
-	}
-
-	metrics.ServiceFailures.With(metricsHandler).Record(1)
-}
-
-func isExpectedErrorByStatusCode(statusCode codes.Code) bool {
-	switch statusCode {
-	case codes.Canceled,
-		codes.InvalidArgument,
-		codes.NotFound,
-		codes.AlreadyExists,
-		codes.PermissionDenied,
-		codes.FailedPrecondition,
-		codes.OutOfRange,
-		codes.Unauthenticated:
-		return true
-	// We could just return false here, but making it explicit what codes are
-	// considered (potentially) server errors.
-	case codes.Unknown,
-		codes.DeadlineExceeded,
-		// the result for resource exhausted depends on the resource exhausted scope and
-		// will be handled by isExpectedErrorByType()
-		codes.ResourceExhausted,
-		codes.Aborted,
-		codes.Unimplemented,
-		codes.Internal,
-		codes.Unavailable,
-		codes.DataLoss:
-		return false
-	default:
-		return false
-	}
-}
-
-func isExpectedErrorByType(err error) bool {
-	// This is not a full list of service errors.
-	// Only errors with status code that fails the isExpectedErrorByStatusCode() check
-	// but are actually expected need to be explicitly handled here.
-	//
-	// Some of the errors listed below does not failed the isExpectedErrorByStatusCode() check
-	// but are listed nonetheless.
-	switch err := err.(type) {
-	case *serviceerror.ResourceExhausted:
-		return err.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
-	case *serviceerror.Canceled,
-		*serviceerror.AlreadyExists,
-		*serviceerror.CancellationAlreadyRequested,
-		*serviceerror.FailedPrecondition,
-		*serviceerror.NamespaceInvalidState,
-		*serviceerror.NamespaceNotActive,
-		*serviceerror.NamespaceNotFound,
-		*serviceerror.NamespaceAlreadyExists,
-		*serviceerror.InvalidArgument,
-		*serviceerror.WorkflowExecutionAlreadyStarted,
-		*serviceerror.WorkflowNotReady,
-		*serviceerror.NotFound,
-		*serviceerror.QueryFailed,
-		*serviceerror.ClientVersionNotSupported,
-		*serviceerror.ServerVersionNotSupported,
-		*serviceerror.PermissionDenied,
-		*serviceerror.NewerBuildExists,
-		*serviceerrors.StickyWorkerUnavailable,
-		*serviceerrors.TaskAlreadyStarted,
-		*serviceerrors.RetryReplication,
-		*serviceerrors.SyncState:
-		return true
-	default:
-		return false
-	}
 }
 
 func GetMetricsHandlerFromContext(

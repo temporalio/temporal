@@ -16,6 +16,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
+type sometimesLogger struct {
+	logger log.Logger
+}
+
 // That performs a soft assertion by logging an error if the given condition is false.
 // It is meant to indicate a condition is always expected to be true.
 // Returns true if the condition is met, otherwise false.
@@ -44,27 +48,42 @@ func Fail(logger log.Logger, staticMessage string, tags ...tag.Tag) {
 	logger.Error("failed assertion: "+staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
 }
 
-// ThatSometimes is used to conditionally log a debug message of a noteworthy but non-problematic event.
-//
-// `staticMessage` is expected to be a static string to help with grouping and searching logs.
-// Dynamic information should be passed via `tags`.
+// Sometimes is used to log a message of a noteworthy but non-problematic event.
 //
 // Example:
-// softassert.ThatSometimes(logger, object.state == "terminated", "termination event", tag.NewStringTag("state", object.state))
-func ThatSometimes(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
-	if !condition {
-		logger.Debug(staticMessage, tags...)
-	}
-	return condition
+// softassert.Sometimes(logger).Warn("termination event", tag.NewStringTag("state", object.state))
+func Sometimes(logger log.Logger) *sometimesLogger {
+	return &sometimesLogger{logger: logger}
 }
 
-// Sometimes is used to log a debug message of a noteworthy but non-problematic event.
+// Debug logs a message at debug level.
 //
 // `staticMessage` is expected to be a static string to help with grouping and searching logs.
 // Dynamic information should be passed via `tags`.
+func (s *sometimesLogger) Debug(staticMessage string, tags ...tag.Tag) {
+	s.logger.Debug(staticMessage, tags...)
+}
+
+// Info logs a message at info level.
 //
-// Example:
-// softassert.Sometimes(logger, "termination event", tag.NewStringTag("state", object.state))
-func Sometimes(logger log.Logger, staticMessage string, tags ...tag.Tag) {
-	logger.Debug(staticMessage, tags...)
+// `staticMessage` is expected to be a static string to help with grouping and searching logs.
+// Dynamic information should be passed via `tags`.
+func (s *sometimesLogger) Info(staticMessage string, tags ...tag.Tag) {
+	s.logger.Info(staticMessage, tags...)
+}
+
+// Warn logs a message at warn level.
+//
+// `staticMessage` is expected to be a static string to help with grouping and searching logs.
+// Dynamic information should be passed via `tags`.
+func (s *sometimesLogger) Warn(staticMessage string, tags ...tag.Tag) {
+	s.logger.Warn(staticMessage, tags...)
+}
+
+// Error logs a message at error level.
+//
+// `staticMessage` is expected to be a static string to help with grouping and searching logs.
+// Dynamic information should be passed via `tags`.
+func (s *sometimesLogger) Error(staticMessage string, tags ...tag.Tag) {
+	s.logger.Error(staticMessage, tags...)
 }

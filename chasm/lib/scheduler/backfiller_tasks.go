@@ -26,13 +26,19 @@ type (
 	}
 
 	BackfillerTaskExecutor struct {
-		BackfillerTaskExecutorOptions
+		config         *Config
+		metricsHandler metrics.Handler
+		baseLogger     log.Logger
+		specProcessor  SpecProcessor
 	}
 )
 
 func NewBackfillerTaskExecutor(opts BackfillerTaskExecutorOptions) *BackfillerTaskExecutor {
 	return &BackfillerTaskExecutor{
-		BackfillerTaskExecutorOptions: opts,
+		config:         opts.Config,
+		metricsHandler: opts.MetricsHandler,
+		baseLogger:     opts.BaseLogger,
+		specProcessor:  opts.SpecProcessor,
 	}
 }
 
@@ -59,7 +65,7 @@ func (b *BackfillerTaskExecutor) Execute(
 			serviceerror.NewInternal("scheduler tree missing node"),
 			err)
 	}
-	logger := newTaggedLogger(b.BaseLogger, scheduler)
+	logger := newTaggedLogger(b.baseLogger, scheduler)
 
 	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
@@ -70,7 +76,7 @@ func (b *BackfillerTaskExecutor) Execute(
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
-	tweakables := b.Config.Tweakables(scheduler.Namespace)
+	tweakables := b.config.Tweakables(scheduler.Namespace)
 	limit, err := b.allowedBufferedStarts(ctx, backfiller, scheduler, invoker, tweakables)
 	if err != nil {
 		return err
@@ -144,11 +150,12 @@ func (b *BackfillerTaskExecutor) processBackfill(
 		startTime = request.GetStartTime().AsTime().Add(-1 * time.Millisecond)
 	}
 	endTime := request.GetEndTime().AsTime()
-	specResult, err := b.SpecProcessor.ProcessTimeRange(
+	specResult, err := b.specProcessor.ProcessTimeRange(
 		scheduler,
 		startTime,
 		endTime,
 		request.GetOverlapPolicy(),
+		scheduler.WorkflowID(),
 		backfiller.GetBackfillId(),
 		true,
 		&limit,
@@ -174,7 +181,7 @@ func (b *BackfillerTaskExecutor) processBackfill(
 func (b *BackfillerTaskExecutor) backoffDelay(backfiller *Backfiller) time.Duration {
 	// Increment GetAttempt here early, to avoid needing to increment
 	// backfiller.Attempt wherever backoffDelay's result is needed.
-	return b.Config.RetryPolicy().ComputeNextDelay(0, int(backfiller.GetAttempt()+1), nil)
+	return b.config.RetryPolicy().ComputeNextDelay(0, int(backfiller.GetAttempt()+1), nil)
 }
 
 // processTrigger processes a Backfiller's TriggerImmediatelyRequest.

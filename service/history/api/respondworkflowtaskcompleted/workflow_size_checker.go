@@ -68,7 +68,7 @@ func (c *workflowSizeChecker) checkIfPayloadSizeExceedsLimit(
 		executionState.RunId,
 		c.metricsHandler.WithTags(commandTypeTag),
 		c.logger,
-		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
+		tag.BlobSizeViolationOperation(commandTypeTag.Value),
 	)
 	if err != nil {
 		return fmt.Errorf("%s", message) // nolint:err113
@@ -96,7 +96,7 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 		executionState.RunId,
 		c.metricsHandler.WithTags(commandTypeTag),
 		c.logger,
-		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
+		tag.BlobSizeViolationOperation(commandTypeTag.Value),
 	)
 	if err != nil {
 		return fmt.Errorf("%s", message) // nolint:err113

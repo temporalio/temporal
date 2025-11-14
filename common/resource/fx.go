@@ -109,6 +109,7 @@ var Module = fx.Options(
 
 var DefaultOptions = fx.Options(
 	fx.Provide(RPCFactoryProvider),
+	fx.Provide(PerServiceDialOptionsProvider),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ThrottledLoggerProvider),
@@ -153,7 +154,7 @@ func SearchAttributeMapperProviderProvider(
 		saMapper,
 		namespaceRegistry,
 		searchAttributeProvider,
-		persistenceConfig.IsSQLVisibilityStore(),
+		persistenceConfig.IsSQLVisibilityStore() || persistenceConfig.IsCustomVisibilityStore(),
 	)
 }
 
@@ -337,6 +338,10 @@ func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy 
 	return cfg.DCRedirectionPolicy
 }
 
+func PerServiceDialOptionsProvider() map[primitives.ServiceName][]grpc.DialOption {
+	return map[primitives.ServiceName][]grpc.DialOption{}
+}
+
 func RPCFactoryProvider(
 	cfg *config.Config,
 	svcName primitives.ServiceName,
@@ -345,6 +350,7 @@ func RPCFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver *membership.GRPCResolver,
 	tracingStatsHandler telemetry.ClientStatsHandler,
+	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
 ) (common.RPCFactory, error) {
@@ -370,6 +376,7 @@ func RPCFactoryProvider(
 		frontendHTTPPort,
 		frontendTLSConfig,
 		options,
+		perServiceDialOptions,
 		monitor,
 	)
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive

@@ -129,6 +129,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetAllPollerInfo() *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllPollerInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetAllPollerInfo))
 }
 
+// GetFairnessWeightOverrides mocks base method.
+func (m *MockphysicalTaskQueueManager) GetFairnessWeightOverrides() fairnessWeightOverrides {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFairnessWeightOverrides")
+	ret0, _ := ret[0].(fairnessWeightOverrides)
+	return ret0
+}
+
+// GetFairnessWeightOverrides indicates an expected call of GetFairnessWeightOverrides.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) GetFairnessWeightOverrides() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFairnessWeightOverrides", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetFairnessWeightOverrides))
+}
+
 // GetInternalTaskQueueStatus mocks base method.
 func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() []*taskqueue0.InternalTaskQueueStatus {
 	m.ctrl.T.Helper()
@@ -252,6 +266,18 @@ func (m *MockphysicalTaskQueueManager) QueueKey() *PhysicalTaskQueueKey {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
+}
+
+// SetupDraining mocks base method.
+func (m *MockphysicalTaskQueueManager) SetupDraining() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetupDraining")
+}
+
+// SetupDraining indicates an expected call of SetupDraining.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) SetupDraining() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupDraining", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).SetupDraining))
 }
 
 // SpoolTask mocks base method.

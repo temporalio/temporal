@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -16,6 +15,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
@@ -100,7 +100,7 @@ func ClientProviderFactory(
 		}, nil
 	})
 
-	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 		var url string
 		var httpClient *http.Client
 		httpCaller := httpClient.Do
@@ -134,13 +134,11 @@ func ClientProviderFactory(
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
 		// still need to override the caller
-		return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,
 			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
-			// TODO(bergundy): Remove this after the 1.27 release. It's here for compatibility with old server implementations.
-			UseOperationID: true,
 		})
 	}, nil
 }

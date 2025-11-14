@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
@@ -54,7 +53,6 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
-	visibilityManager manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
@@ -93,7 +91,6 @@ func Invoke(
 			shardContext,
 			workflowConsistencyChecker,
 			tokenSerializer,
-			visibilityManager,
 			startReq,
 			uws.workflowLeaseCallback(ctx),
 		)

@@ -389,7 +389,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
-		e.persistenceVisibilityMgr,
 		startRequest,
 		api.NewWorkflowLeaseAndContext,
 	)
@@ -411,7 +410,6 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
-		e.persistenceVisibilityMgr,
 		e.matchingClient,
 		e.testHooks,
 	)

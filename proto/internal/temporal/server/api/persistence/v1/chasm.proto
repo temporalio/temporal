@@ -4,9 +4,9 @@ package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
-
-import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 
 message ChasmNode {
     // Metadata present for all nodes. 
@@ -100,4 +100,19 @@ message ChasmComponentRef {
 
     repeated string component_path = 6;
     VersionedTransition component_initial_versioned_transition = 7;
+}
+
+// ChasmNexusCompletion includes details about a completed Nexus operation.
+message ChasmNexusCompletion {
+    oneof outcome {
+        // Result of a successful operation, only set if state == successful.
+        temporal.api.common.v1.Payload success = 1;
+        // Operation failure, only set if state != successful.
+        temporal.api.failure.v1.Failure failure = 2;
+    }
+    // Time when the operation was closed.
+    google.protobuf.Timestamp close_time = 3;
+    // Request ID embedded in the NexusOperationScheduledEvent.
+    // Allows completing a started operation after a workflow has been reset.
+    string request_id = 4;
 }

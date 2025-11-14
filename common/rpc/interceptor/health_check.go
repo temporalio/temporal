@@ -42,9 +42,11 @@ type (
 )
 
 var excludedAPIsForHealthSignal = map[string]struct{}{
-	"DeepHealthCheck":             {},
-	"PollMutableState":            {},
-	"PollWorkflowExecutionUpdate": {},
+	"DeepHealthCheck":              {},
+	"PollMutableState":             {},
+	"PollWorkflowExecutionUpdate":  {},
+	"PollWorkflowExecutionHistory": {},
+	"UpdateWorkflowExecution":      {},
 }
 var getWorkflowExecutionHistoryAPI = "GetWorkflowExecutionHistory"
 

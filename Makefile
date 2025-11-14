@@ -128,10 +128,7 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 endif
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
-# Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
 PINNED_DEPENDENCIES := \
-	modernc.org/sqlite@v1.34.1 \
-	modernc.org/libc@v1.55.3 \
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
@@ -234,6 +231,11 @@ $(STAMPDIR)/gomajor-$(GOMAJOR_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOMAJOR),github.com/icholy/gomajor,$(GOMAJOR_VER))
 	@touch $@
 $(GOMAJOR): $(STAMPDIR)/gomajor-$(GOMAJOR_VER)
+
+ERRORTYPE_VER := v0.0.7
+ERRORTYPE := $(LOCALBIN)/errortype
+$(ERRORTYPE): | $(LOCALBIN)
+	$(call go-install-tool,$(ERRORTYPE),fillmore-labs.com/errortype,$(ERRORTYPE_VER))
 
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
 MOCKGEN_VER := v0.6.0
@@ -374,9 +376,10 @@ lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
-lint-code: $(GOLANGCI_LINT)
+lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
 	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml
+	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false ./...
 
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 	@printf $(COLOR) "Formatting imports..."
@@ -530,13 +533,13 @@ install-schema-postgresql12: temporal-sql-tool
 
 install-schema-es: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup-schema
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev
 
 install-schema-es-secondary: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 setup-schema
-	./temporal-elasticsearch-tool -e http://127.0.0.1:8200 create-index --index temporal_visibility_v1_secondary
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:8200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:8200 create-index --index temporal_visibility_v1_secondary
 
 install-schema-xdc: temporal-cassandra-tool temporal-elasticsearch-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."
@@ -558,15 +561,15 @@ install-schema-xdc: temporal-cassandra-tool temporal-elasticsearch-tool
 	./temporal-cassandra-tool -k temporal_cluster_c update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR) "Install Elasticsearch schemas..."
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup-schema
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 setup-schema
 # Delete indices if they exist (drop-index fails silently if index doesn't exist)
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_a --fail
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_b --fail
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_c --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_a --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_b --fail
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 drop-index --index temporal_visibility_v1_dev_cluster_c --fail
 # Create indices
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_a
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_b
-	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_c
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_a
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_b
+	./temporal-elasticsearch-tool -ep http://127.0.0.1:9200 create-index --index temporal_visibility_v1_dev_cluster_c
 
 ##### Run server #####
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml

@@ -86,10 +86,10 @@ func (c *CaptureHandler) WithTags(tags ...metrics.Tag) metrics.Handler {
 func (c *CaptureHandler) record(name string, v any, unit metrics.MetricUnit, tags ...metrics.Tag) {
 	rec := &CapturedRecording{Value: v, Tags: make(map[string]string, len(c.tags)+len(tags)), Unit: unit}
 	for _, tag := range c.tags {
-		rec.Tags[tag.Key()] = tag.Value()
+		rec.Tags[tag.Key] = tag.Value
 	}
 	for _, tag := range tags {
-		rec.Tags[tag.Key()] = tag.Value()
+		rec.Tags[tag.Key] = tag.Value
 	}
 	c.capturesLock.RLock()
 	defer c.capturesLock.RUnlock()

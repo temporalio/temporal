@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.scheduler.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
+
+import "chasm/lib/scheduler/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+service SchedulerService {
+    rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse) {
+        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+    }
+
+    rpc UpdateSchedule(UpdateScheduleRequest) returns (UpdateScheduleResponse) {
+        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+    }
+
+    rpc PatchSchedule(PatchScheduleRequest) returns (PatchScheduleResponse) {
+        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+    }
+
+    rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {
+        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+    }
+
+    rpc DescribeSchedule(DescribeScheduleRequest) returns (DescribeScheduleResponse) {
+        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+    }
+}

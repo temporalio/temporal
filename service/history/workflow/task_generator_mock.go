@@ -302,17 +302,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateUserTimerTasks() *gomock.Call {
 }
 
 // GenerateWorkflowCloseTasks mocks base method.
-func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closedTime time.Time, deleteAfterClose bool) error {
+func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closedTime time.Time, deleteAfterClose, skipCloseTransferTask bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateWorkflowCloseTasks", closedTime, deleteAfterClose)
+	ret := m.ctrl.Call(m, "GenerateWorkflowCloseTasks", closedTime, deleteAfterClose, skipCloseTransferTask)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateWorkflowCloseTasks indicates an expected call of GenerateWorkflowCloseTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowCloseTasks(closedTime, deleteAfterClose any) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowCloseTasks(closedTime, deleteAfterClose, skipCloseTransferTask any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkflowCloseTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkflowCloseTasks), closedTime, deleteAfterClose)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkflowCloseTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkflowCloseTasks), closedTime, deleteAfterClose, skipCloseTransferTask)
 }
 
 // GenerateWorkflowResetTasks mocks base method.

@@ -63,5 +63,6 @@ type (
 		PutCache(key any, value any)
 		GetCache(key any) any
 		GetRateLimitManager() *rateLimitManager
+		GetConfig() *taskQueueConfig
 	}
 )

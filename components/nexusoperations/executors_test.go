@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/nexusoperations"
@@ -120,9 +121,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
+				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
-					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -332,11 +333,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "operation-timeout",
 			onStartOperation:      nil, // This should not be called if the operation has timed out.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
-				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
 				require.Equal(t, 1, len(events))
-				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
-				require.NotNil(t, failure.GetApplicationFailureInfo())
-				require.Equal(t, "remaining operation timeout is less than required minimum", failure.Message)
+				failure := events[0].GetNexusOperationTimedOutEventAttributes().Failure.Cause
+				require.NotNil(t, failure.GetTimeoutFailureInfo())
+				require.Equal(t, "operation timed out", failure.Message)
 			},
 		},
 		{
@@ -380,9 +381,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				input *nexus.LazyValue,
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
+				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
 					OperationToken: "op-token",
-					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -514,8 +515,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
-					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
+					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
@@ -828,8 +829,8 @@ func TestProcessCancelationTask(t *testing.T) {
 				MetricsHandler:    metricsHandler,
 				Logger:            log.NewNoopLogger(),
 				EndpointRegistry:  endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
-					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
+					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
@@ -903,7 +904,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 				return endpointEntry, nil
 			},
 		},
-		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
 		},
 	}))

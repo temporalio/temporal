@@ -114,6 +114,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard.GetTimeSource(),
 		shard.GetNamespaceRegistry(),
 		shard.GetClusterMetadata(),
+		queues.GetTaskTypeTagValue,
 		logger,
 		metricsHandler,
 		f.Tracer,

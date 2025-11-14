@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -90,7 +91,7 @@ func (s *MatcherDataSuite) newSyncTask(fwdInfo *taskqueuespb.TaskForwardInfo) *i
 	t := &persistencespb.TaskInfo{
 		CreateTime: timestamppb.New(s.now()),
 	}
-	return newInternalTaskForSyncMatch(t, fwdInfo)
+	return newInternalTaskForSyncMatch(t, fwdInfo, 0)
 }
 
 func (s *MatcherDataSuite) newQueryTask(id string) *internalTask {
@@ -313,7 +314,7 @@ func (s *MatcherDataSuite) TestTaskForward() {
 
 func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
-	s.md.rateLimitManager.UpdateSimpleRateLimitForTesting(300 * time.Millisecond)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(300 * time.Millisecond)
 
 	// register some backlog with old tasks
 	for i := range 100 {
@@ -352,7 +353,7 @@ func (s *MatcherDataSuite) TestRateLimitedBacklog() {
 
 func (s *MatcherDataSuite) TestPerKeyRateLimit() {
 	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(10.0, enumspb.RATE_LIMIT_SOURCE_API)
-	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitForTesting(300 * time.Millisecond)
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitWithBurstForTesting(300 * time.Millisecond)
 	// register some backlog with three keys
 	keys := []string{"key1", "key2", "key3"}
 	for i := range 300 {
@@ -646,6 +647,11 @@ func TestSimpleLimiterLowToHigh(t *testing.T) {
 	}
 }
 
+func TestCheckConstants(t *testing.T) {
+	// 1000 to leave room for further adjustments
+	assert.Greater(t, pollForwarderPriority, 1000*maxPriorityLevels)
+}
+
 func FuzzMatcherData(f *testing.F) {
 	f.Fuzz(func(t *testing.T, tape []byte) {
 		cfg := newTaskQueueConfig(
@@ -741,7 +747,7 @@ func FuzzMatcherData(f *testing.F) {
 					t := &persistencespb.TaskInfo{
 						CreateTime: timestamppb.New(ts.Now()),
 					}
-					md.FinishMatchAfterPollForward(res.poller, newInternalTaskForSyncMatch(t, nil))
+					md.FinishMatchAfterPollForward(res.poller, newInternalTaskForSyncMatch(t, nil, 0))
 				}()
 
 			case 6: // add task forwarder

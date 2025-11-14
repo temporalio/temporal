@@ -35,10 +35,14 @@ func TestEmitActionMetric(t *testing.T) {
 	controller := gomock.NewController(t)
 	register := namespace.NewMockRegistry(controller)
 	metricsHandler := metrics.NewMockHandler(controller)
+	logger := log.NewNoopLogger()
+	logAllReqErrors := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	requestErrorHandler := NewMockErrorHandler(controller)
 	telemetry := NewTelemetryInterceptor(register,
 		metricsHandler,
-		log.NewNoopLogger(),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
+		logger,
+		logAllReqErrors,
+		requestErrorHandler)
 
 	testCases := []struct {
 		methodName        string
@@ -278,7 +282,6 @@ func TestEmitActionMetric(t *testing.T) {
 func TestHandleError(t *testing.T) {
 	controller := gomock.NewController(t)
 	mockLogger := log.NewMockLogger(controller)
-	registry := namespace.NewMockRegistry(controller)
 	metricsHandler := metrics.NewMockHandler(controller)
 
 	testCases := []struct {
@@ -423,10 +426,7 @@ func TestHandleError(t *testing.T) {
 			metricsHandler.EXPECT().Counter(metrics.ServiceErrorWithType.Name()).Return(metrics.NoopCounterMetricFunc).Times(tt.ServiceErrorWithTypeCount)
 			metricsHandler.EXPECT().Counter(metrics.ServiceErrResourceExhaustedCounter.Name()).Return(metrics.NoopCounterMetricFunc).Times(tt.ResourceExhaustedCount)
 
-			telemetry := NewTelemetryInterceptor(registry,
-				metricsHandler,
-				mockLogger,
-				tt.logAllErrors)
+			requestErrorHandler := NewRequestErrorHandler(mockLogger, tt.logAllErrors)
 
 			if tt.expectLogging {
 				mockLogger.EXPECT().Error(gomock.Eq("service failures"), gomock.Any()).Times(1)
@@ -434,7 +434,7 @@ func TestHandleError(t *testing.T) {
 				mockLogger.EXPECT().Error(gomock.Eq("service failures"), gomock.Any()).Times(0)
 			}
 
-			telemetry.HandleError(nil,
+			requestErrorHandler.HandleError(nil,
 				"",
 				metricsHandler,
 				[]tag.Tag{},

@@ -28,6 +28,7 @@ type (
 		pqMgr      physicalTaskQueueManager
 		config     *taskQueueConfig
 		tqCtx      context.Context
+		isDraining bool
 		db         *taskQueueDB
 		taskWriter *fairTaskWriter
 
@@ -59,6 +60,7 @@ func newFairBacklogManager(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
 	counterFactory func() counter.Counter,
+	isDraining bool,
 ) *fairBacklogManagerImpl {
 	// For the purposes of taskQueueDB, call this just a TaskManager. It'll return errors if we
 	// use it incorectly. TODO(fairness): consider a cleaner way of doing this.
@@ -68,7 +70,8 @@ func newFairBacklogManager(
 		pqMgr:               pqMgr,
 		config:              config,
 		tqCtx:               tqCtx,
-		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
+		isDraining:          isDraining,
+		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining),
 		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
 		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
@@ -136,6 +139,10 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 		return
 	}
 
+	if state.otherHasTasks {
+		c.pqMgr.SetupDraining()
+	}
+
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
 
@@ -164,16 +171,7 @@ func (c *fairBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.
 }
 
 func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueIndex {
-	levels := c.config.PriorityLevels()
-	if priority == 0 {
-		priority = defaultPriorityLevel(levels)
-	}
-	if priority < 1 {
-		// this should have been rejected much earlier, but just clip it here
-		priority = 1
-	} else if priority > levels {
-		priority = levels
-	}
+	priority = c.config.clipPriority(priority)
 
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
@@ -386,4 +384,12 @@ func (c *fairBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *fairBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+func (c *fairBacklogManagerImpl) setPriority(task *internalTask) {
+	c.config.setDefaultPriority(task)
+	if c.isDraining {
+		// draining goes before active backlog so we're guaranteed to finish migration
+		task.effectivePriority -= maxPriorityLevels
+	}
 }

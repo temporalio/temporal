@@ -13,10 +13,21 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testvars"
 )
 
 // alwaysTrue predicate for convenience
 func alwaysTrue(_ *workerpb.WorkerHeartbeat) bool { return true }
+
+// enablePluginMetrics returns a config function that always returns true.
+func enablePluginMetrics() func() bool {
+	return func() bool { return true }
+}
+
+// disablePluginMetrics returns a config function that always returns false.
+func disablePluginMetrics() func() bool {
+	return func() bool { return false }
+}
 
 func TestUpdateAndListNamespace(t *testing.T) {
 	// Use capture handler to verify metrics
@@ -25,12 +36,13 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(
-		2,              // numBuckets
-		time.Hour,      // TTL
-		0,              // MinEvictAge
-		10,             // maxItems
-		time.Hour,      // evictionInterval
-		captureHandler, // metricsHandler
+		2,                     // numBuckets
+		time.Hour,             // TTL
+		0,                     // MinEvictAge
+		10,                    // maxItems
+		time.Hour,             // evictionInterval
+		captureHandler,        // metricsHandler
+		enablePluginMetrics(), // enableWorkerPluginMetrics
 	)
 	defer m.Stop()
 
@@ -60,7 +72,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 }
 
 func TestListNamespacePredicate(t *testing.T) {
-	m := newRegistryImpl(1, time.Hour, 0, 10, time.Hour, metrics.NoopMetricsHandler)
+	m := newRegistryImpl(1, time.Hour, 0, 10, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
 	defer m.Stop()
 
 	// Set up multiple entries
@@ -90,7 +102,7 @@ func TestListNamespacePredicate(t *testing.T) {
 }
 
 func TestEvictByTTL(t *testing.T) {
-	m := newRegistryImpl(1, 1*time.Second, 0, 10, time.Hour, metrics.NoopMetricsHandler)
+	m := newRegistryImpl(1, 1*time.Second, 0, 10, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
 	defer m.Stop()
 
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "oldWorker"}
@@ -117,7 +129,7 @@ func TestEvictByCapacity(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(1, time.Hour, 0, maxItems, time.Hour, captureHandler)
+	m := newRegistryImpl(1, time.Hour, 0, maxItems, time.Hour, captureHandler, enablePluginMetrics())
 	defer m.Stop()
 
 	// Insert more entries than maxItems
@@ -156,7 +168,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler)
+	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler, enablePluginMetrics())
 	defer m.Stop()
 
 	// Add 3 entries (over capacity) - all will be "new" (< minEvictAge)
@@ -198,7 +210,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		defer captureHandler.StopCapture(capture)
 
 		// Uses real time.NewTicker - synctest provides virtual time control
-		m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler)
+		m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler, enablePluginMetrics())
 		defer m.Stop()
 
 		// Add 3 entries (over capacity)
@@ -236,7 +248,7 @@ func TestMultipleNamespaces(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(2, time.Hour, 0, maxItems, time.Hour, captureHandler)
+	m := newRegistryImpl(2, time.Hour, 0, maxItems, time.Hour, captureHandler, enablePluginMetrics())
 	defer m.Stop()
 
 	// Add 3 workers to namespace1
@@ -285,7 +297,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
 
-		m := newRegistryImpl(1, time.Hour, 0, maxItems, evictionInterval, captureHandler)
+		m := newRegistryImpl(1, time.Hour, 0, maxItems, evictionInterval, captureHandler, enablePluginMetrics())
 
 		// Add some entries to create utilization
 		for i := 1; i <= 3; i++ {
@@ -320,7 +332,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 }
 
 func BenchmarkUpdate(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour, metrics.NoopMetricsHandler)
+	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
 	defer m.Stop()
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "benchWorker"}
 	b.ResetTimer()
@@ -330,7 +342,7 @@ func BenchmarkUpdate(b *testing.B) {
 }
 
 func BenchmarkListNamespace(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, 1000, time.Hour, metrics.NoopMetricsHandler)
+	m := newRegistryImpl(16, time.Hour, time.Minute, 1000, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
 	defer m.Stop()
 	// Pre-populate with entries
 	for i := 0; i < 1000; i++ {
@@ -348,7 +360,15 @@ func BenchmarkListNamespace(b *testing.B) {
 func BenchmarkRandomUpdate(b *testing.B) {
 	namespaces := []namespace.ID{"ns1", "ns2", "ns3"}
 	totalHeartbeats := 30 // Total heartbeats per namespace
-	m := newRegistryImpl(len(namespaces), time.Hour, time.Minute, int64(b.N), time.Hour, metrics.NoopMetricsHandler)
+	m := newRegistryImpl(
+		len(namespaces),
+		time.Hour,
+		time.Minute,
+		int64(b.N),
+		time.Hour,
+		metrics.NoopMetricsHandler,
+		enablePluginMetrics(),
+	)
 	defer m.Stop()
 
 	// Pre-populate heartbeats per namespace
@@ -372,4 +392,137 @@ func BenchmarkRandomUpdate(b *testing.B) {
 		p := pairs[r.Intn(len(pairs))]
 		m.upsertHeartbeats(p.ns, []*workerpb.WorkerHeartbeat{p.hb})
 	}
+}
+
+// TestPluginMetricsExported verifies that plugin metrics are correctly recorded
+// with the expected dimensions (namespace_name and plugin_name).
+func TestPluginMetricsExported(t *testing.T) {
+	tv := testvars.New(t)
+
+	// Generate test values using testvars for consistency and uniqueness
+	worker1Key := tv.WorkerIdentity() + "_1"
+	worker2Key := tv.WorkerIdentity() + "_2"
+	worker3Key := tv.WorkerIdentity() + "_3"
+
+	pluginA := "plugin-a"
+	pluginB := "plugin-b"
+	pluginC := "plugin-c"
+	pluginAVersion := "1.0.0"
+	pluginBVersion := "2.1.0"
+	pluginCVersion := "3.0.0"
+	pluginAVersion2 := "1.5.0" // Different version of plugin-a for worker2
+
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(
+		2,                     // numBuckets
+		time.Hour,             // TTL
+		0,                     // MinEvictAge
+		10,                    // maxItems
+		time.Hour,             // evictionInterval
+		captureHandler,        // metricsHandler
+		enablePluginMetrics(), // enableWorkerPluginMetrics
+	)
+	defer m.Stop()
+
+	// Test data with 3 workers (tests uniqueness logic):
+	// Worker 1: 2 plugins (plugin-a, plugin-b)
+	// Worker 2: 2 plugins (plugin-a, plugin-c) - plugin-a is shared with worker1
+	// Worker 3: 0 plugins
+
+	worker1 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: worker1Key,
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		Plugins: []*workerpb.PluginInfo{
+			{Name: pluginA, Version: pluginAVersion},
+			{Name: pluginB, Version: pluginBVersion},
+		},
+	}
+
+	worker2 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: worker2Key,
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		Plugins: []*workerpb.PluginInfo{
+			{Name: pluginA, Version: pluginAVersion2}, // Same plugin name as worker1, different version
+			{Name: pluginC, Version: pluginCVersion},
+		},
+	}
+
+	worker3 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: worker3Key,
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		// No plugins - empty array
+	}
+
+	testNamespace := tv.NamespaceID()
+	testNamespaceName := namespace.Name(testNamespace + "_name")
+	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
+
+	// Verify plugin metrics - should have exactly 3 recordings despite plugin-a being in both workers
+	snapshot := capture.Snapshot()
+	pluginMetrics := snapshot[metrics.WorkerPluginNameMetric.Name()]
+	assert.Len(t, pluginMetrics, 3, "plugin-a from both workers should be deduplicated")
+
+	// Helper function to find metric by namespace and plugin name
+	findMetric := func(namespaceName namespace.Name, pluginName string) *metricstest.CapturedRecording {
+		for _, metric := range pluginMetrics {
+			if metric.Tags["namespace_id"] == namespaceName.String() && metric.Tags[metrics.WorkerPluginNameTagName] == pluginName {
+				return metric
+			}
+		}
+		return nil
+	}
+
+	// Verify each expected plugin has a metric with correct dimensions and value
+	expectedPlugins := []string{pluginA, pluginB, pluginC}
+
+	for _, expectedPlugin := range expectedPlugins {
+		metric := findMetric(testNamespaceName, expectedPlugin)
+		assert.NotNil(t, metric, "should have metric for namespace '%s' and plugin: %s", testNamespaceName.String(), expectedPlugin)
+		assert.InEpsilon(t, float64(1), metric.Value, 0.000001, "plugin metric value should be 1 for %s", expectedPlugin)
+	}
+}
+
+// TestPluginMetricsDisabled verifies that plugin metrics are not exported when disabled via dynamic config.
+func TestPluginMetricsDisabled(t *testing.T) {
+	tv := testvars.New(t)
+
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(
+		2,                      // numBuckets
+		time.Hour,              // TTL
+		0,                      // MinEvictAge
+		10,                     // maxItems
+		time.Hour,              // evictionInterval
+		captureHandler,         // metricsHandler
+		disablePluginMetrics(), // enableWorkerPluginMetrics - DISABLED
+	)
+	defer m.Stop()
+
+	// Test data with workers having plugins
+	worker1 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: tv.WorkerIdentity() + "_1",
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		Plugins: []*workerpb.PluginInfo{
+			{Name: "plugin-a", Version: "1.0.0"},
+			{Name: "plugin-b", Version: "2.1.0"},
+		},
+	}
+
+	// Upsert heartbeats for test namespace
+	testNamespace := tv.NamespaceID()
+	testNamespaceName := namespace.Name(testNamespace + "_name")
+	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1})
+
+	// Verify no plugin metrics are recorded when disabled
+	snapshot := capture.Snapshot()
+	pluginMetrics := snapshot[metrics.WorkerPluginNameMetric.Name()]
+	assert.Empty(t, pluginMetrics, "should not record any plugin metrics when disabled")
 }

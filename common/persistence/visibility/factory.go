@@ -47,6 +47,7 @@ func NewManager(
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -66,6 +67,7 @@ func NewManager(
 		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 		serializer,
@@ -92,6 +94,7 @@ func NewManager(
 		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 		serializer,
@@ -134,8 +137,8 @@ func newVisibilityManager(
 	}
 	logger.Info(
 		"creating new visibility manager",
-		tag.NewStringTag(visibilityPluginNameTag.Key(), visibilityPluginNameTag.Value()),
-		tag.NewStringTag(visibilityIndexNameTag.Key(), visibilityIndexNameTag.Value()),
+		tag.NewStringTag(visibilityPluginNameTag.Key, visibilityPluginNameTag.Value),
+		tag.NewStringTag(visibilityIndexNameTag.Key, visibilityIndexNameTag.Value),
 	)
 	var visManager manager.VisibilityManager = newVisibilityManagerImpl(visStore, logger)
 
@@ -175,6 +178,7 @@ func newVisibilityManagerFromDataStoreConfig(
 	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -190,6 +194,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		namespaceRegistry,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 		serializer,
@@ -224,6 +229,7 @@ func newVisibilityStoreFromDataStoreConfig(
 	namespaceRegistry namespace.Registry,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -239,6 +245,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			persistenceResolver,
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
+			visibilityEnableUnifiedQueryConverter,
 			logger,
 			metricsHandler,
 			serializer,
@@ -251,6 +258,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			searchAttributesMapperProvider,
 			visibilityDisableOrderByClause,
 			visibilityEnableManualPagination,
+			visibilityEnableUnifiedQueryConverter,
 			metricsHandler,
 			logger,
 		)

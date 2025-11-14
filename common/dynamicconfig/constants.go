@@ -102,6 +102,12 @@ var (
 		`SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
 values in system search attributes.`,
 	)
+	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
+		"system.visibilityEnableUnifiedQueryConverter",
+		false,
+		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
+query.`,
+	)
 
 	HistoryArchivalState = NewGlobalStringSetting(
 		"system.historyArchivalState",
@@ -187,6 +193,11 @@ config as the other services.`,
 		"system.enableActivityEagerExecution",
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
+		"system.enableActivityRetryStampIncrement",
+		false,
+		`EnableActivityRetryStampIncrement indicates if activity retry stamp increment is enabled`,
 	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
@@ -280,6 +291,13 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		"system.deadlock.MaxWorkersPerRoot",
 		10,
 		`How many extra goroutines can be created per root.`,
+	)
+
+	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = NewNamespaceIntSetting(
+		"system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute",
+		0,
+		`NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute is the number of consecutive workflow task problems to trigger the TemporalReportedProblems search attribute.
+Setting this to 0 (the default) prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
 	)
 
 	// keys for size limit
@@ -556,6 +574,11 @@ is currently processing a task.
 	)
 
 	// keys for frontend
+	FrontendAllowedExperiments = NewNamespaceTypedSetting(
+		"frontend.allowedExperiments",
+		[]string(nil),
+		`FrontendAllowedExperiments is a list of experiment names that can be enabled via the temporal-experiment header for a specific namespace.`,
+	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
 		ConvertWildcardStringListToRegexp,
@@ -863,6 +886,11 @@ and deployment interaction in matching and history.`,
 		`EnableDeploymentVersions enables deployment versions (versioning v3) in all services,
 including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
+	)
+	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
+		"system.useRevisionNumberForWorkerVersioning",
+		false,
+		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
@@ -1264,6 +1292,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		5*time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
+		"matching.deploymentWorkflowVersion",
+		0,
+		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
+	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
 		1000,
@@ -1312,6 +1345,11 @@ second per poller by one physical queue manager`,
 		false,
 		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
 	)
+	MatchingEnableMigration = NewTaskQueueBoolSetting(
+		"matching.enableMigration",
+		false,
+		`Allows migration between v1 and v2 (fairness) task backlogs.`,
+	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,
@@ -1331,6 +1369,18 @@ second per poller by one physical queue manager`,
 		"matching.fairnessKeyRateLimitCacheSize",
 		2000,
 		"Cache size for fairness key rate limits.",
+	)
+	MatchingMaxFairnessKeyWeightOverrides = NewTaskQueueIntSetting(
+		"matching.maxFairnessKeyWeightOverrides",
+		1000,
+		"Maximum number of fairness key weight overrides that can be configured for a task queue at a time.",
+	)
+	MatchingEnableWorkerPluginMetrics = NewGlobalBoolSetting(
+		"matching.enableWorkerPluginMetrics",
+		false,
+		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics. 
+The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is 
+an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
 
 	// keys for history
@@ -2221,6 +2271,11 @@ the number of children greater than or equal to this threshold`,
 		10,
 		`If speculative workflow task shipped more than DiscardSpeculativeWorkflowTaskMaximumEventsCount events, it can't be discarded`,
 	)
+	EnableDropRepeatedWorkflowTaskFailures = NewNamespaceBoolSetting(
+		"history.enableDropRepeatedWorkflowTaskFailures",
+		false,
+		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
+	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
 		primitives.DefaultWorkflowTaskTimeout,
@@ -2568,6 +2623,12 @@ that task will be sent to DLQ.`,
 		"Use real chasm tree implementation instead of the noop one",
 	)
 
+	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
+		"history.chasmMaxInMemoryPureTasks",
+		32,
+		`ChasmMaxInMemoryPureTasks is the maximum number of physical pure tasks that can be held in memory for best effort task deletion.`,
+	)
+
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerCreation",
 		false,
@@ -2857,13 +2918,13 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	WorkerHeartbeatsEnabled = NewNamespaceBoolSetting(
 		"frontend.WorkerHeartbeatsEnabled",
-		false,
+		true,
 		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
 	)
 
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
-		false,
+		true,
 		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
 	)
 

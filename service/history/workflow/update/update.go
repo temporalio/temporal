@@ -251,7 +251,7 @@ func (u *Update) abort(
 		return
 	}
 
-	u.instrumentation.countAborted()
+	u.instrumentation.countAborted(u.id, reason)
 	prevState := u.setState(stateProvisionallyAborted)
 
 	effects.OnAfterCommit(func(context.Context) {

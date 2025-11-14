@@ -67,7 +67,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, _ workercommon.RegistrationDetails) func() {
-	registry.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
+	// Register the batch workflow with both the proto-qualified and unqualified types.
+	// TODO(spkane31): Remove the proto-qualified type and call the unqualified type from the frontend after the 1.30 release.
+	registry.RegisterWorkflowWithOptions(BatchWorkflowProtobuf, workflow.RegisterOptions{Name: BatchWFTypeName})
 	// Newer version of the batch workflow which was rewritten to accept a proto struct as input.
 	registry.RegisterWorkflowWithOptions(BatchWorkflowProtobuf, workflow.RegisterOptions{Name: BatchWFTypeProtobufName})
 	registry.RegisterActivity(s.activities(ns.Name(), ns.ID()))

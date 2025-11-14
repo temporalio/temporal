@@ -146,6 +146,7 @@ func (f *transferQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		shardContext.GetNamespaceRegistry(),
 		shardContext.GetClusterMetadata(),
+		queues.GetTaskTypeTagValue,
 		logger,
 		metricsHandler,
 		f.Tracer,

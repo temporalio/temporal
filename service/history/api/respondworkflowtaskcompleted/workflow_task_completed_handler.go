@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/protocol"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -239,7 +240,7 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 		handler.effects)
 
 	if len(rejectedUpdateIDs) > 0 {
-		handler.logger.Warn(
+		softassert.Sometimes(handler.logger).Warn(
 			"Workflow task completed w/o processing updates.",
 			tag.WorkflowNamespaceID(wfKey.NamespaceID),
 			tag.WorkflowID(wfKey.WorkflowID),
@@ -247,6 +248,7 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 			tag.WorkflowEventID(workflowTaskScheduledEventID),
 			tag.NewStringTag("worker-identity", workerIdentity),
 			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
+			tag.NewInt("rejected-count", len(rejectedUpdateIDs)),
 		)
 	}
 
@@ -372,12 +374,21 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 		}
 		if upd == nil {
 			// Update was not found in the registry and can't be resurrected.
+			softassert.Sometimes(handler.logger).Debug("update lost and cannot be resurrected",
+				tag.WorkflowID(handler.mutableState.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(handler.mutableState.GetExecutionState().RunId),
+				tag.NewStringTag("protocol-instance-id", message.ProtocolInstanceId))
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
 				serviceerror.NewNotFoundf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId))
 		}
 
 		if err := upd.OnProtocolMessage(message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
+			softassert.Sometimes(handler.logger).Debug("update failed",
+				tag.WorkflowID(handler.mutableState.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(handler.mutableState.GetExecutionState().RunId),
+				tag.NewStringTag("protocol-instance-id", message.ProtocolInstanceId),
+				tag.NewStringTag("error", err.Error()))
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 		}

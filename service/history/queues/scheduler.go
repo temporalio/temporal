@@ -224,7 +224,7 @@ func NewRateLimitedScheduler(
 		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
-		return append(estimateTaskMetricTag(e.GetTask(), namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
+		return append(estimateTaskMetricTags(e.GetTask(), namespaceRegistry, currentClusterName, GetTaskTypeTagValue), metrics.TaskPriorityTag(e.GetPriority().String()))
 	}
 
 	rateLimitedScheduler := tasks.NewRateLimitedScheduler[Executable](

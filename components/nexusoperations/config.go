@@ -40,14 +40,6 @@ var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
 Once the limit is reached, ScheduleNexusOperation commands will be rejected.`,
 )
 
-var EndpointNotFoundAlwaysNonRetryable = dynamicconfig.NewNamespaceBoolSetting(
-	"component.nexusoperations.endpointNotFoundAlwaysNonRetryable",
-	false,
-	`When set to true, if an endpoint is not found when processing a ScheduleNexusOperation command, the command will be
-	accepted and the operation will fail on the first attempt. This defaults to false to prevent endpoint registry
-	propagation delay from failing operations.`,
-)
-
 var MaxServiceNameLength = dynamicconfig.NewNamespaceIntSetting(
 	"component.nexusoperations.limit.service.name.length",
 	1000,
@@ -181,7 +173,6 @@ type Config struct {
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
-	EndpointNotFoundAlwaysNonRetryable  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
@@ -201,7 +192,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
-		EndpointNotFoundAlwaysNonRetryable:  EndpointNotFoundAlwaysNonRetryable.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(

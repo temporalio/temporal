@@ -63,32 +63,42 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 
-			if input.ForgetVersion {
-				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-					NamespaceId:    a.namespace.ID().String(),
-					TaskQueue:      syncData.Name,
-					TaskQueueTypes: syncData.Types,
-					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
-						ForgetVersion: input.Version,
-					},
-				})
-			} else {
-				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-					NamespaceId:    a.namespace.ID().String(),
-					TaskQueue:      syncData.Name,
-					TaskQueueTypes: syncData.Types,
-					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-						UpdateVersionData: syncData.Data,
-					},
-				})
+			req := &matchingservice.SyncDeploymentUserDataRequest{
+				NamespaceId:         a.namespace.ID().String(),
+				DeploymentName:      input.GetVersion().GetDeploymentName(),
+				TaskQueue:           syncData.Name,
+				TaskQueueTypes:      syncData.Types,
+				UpdateRoutingConfig: input.GetUpdateRoutingConfig(),
 			}
+
+			if input.ForgetVersion {
+				// TODO: Remove the old format once async apis are fully enabled
+				req.Operation = &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+					ForgetVersion: input.Version,
+				}
+				req.ForgetVersions = []string{input.GetVersion().GetBuildId()}
+			} else if syncData.Data != nil {
+				req.Operation = &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+					UpdateVersionData: syncData.Data,
+				}
+			}
+
+			if vd := input.GetUpsertVersionData(); vd != nil {
+				req.UpsertVersionsData = make(map[string]*deploymentspb.WorkerDeploymentVersionData, 1)
+				req.UpsertVersionsData[input.GetVersion().GetBuildId()] = vd
+			}
+
+			res, err = a.matchingClient.SyncDeploymentUserData(ctx, req)
 
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
 			} else {
-				lock.Lock()
-				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
-				lock.Unlock()
+				if syncData.GetData() != nil || res.GetRoutingConfigChanged() {
+					// No need to wait for partition propagation if it's async mode (no old-format data is provided) and routing config did not change
+					lock.Lock()
+					maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
+					lock.Unlock()
+				}
 			}
 			errs <- err
 		}(e)
@@ -162,18 +172,6 @@ func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, ar
 		}
 	}
 	return false, nil
-}
-
-func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, input *deploymentspb.AddVersionToWorkerDeploymentRequest) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("adding version to worker-deployment", "deploymentName", input.DeploymentName, "version", input.UpdateArgs.Version)
-	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	resp, err := a.deploymentClient.AddVersionToWorkerDeployment(ctx, a.namespace, input.DeploymentName, input.UpdateArgs, identity, input.RequestId)
-	var precond *serviceerror.FailedPrecondition
-	if errors.As(err, &precond) {
-		return nil, temporal.NewNonRetryableApplicationError("failed to add version to deployment", errTooManyVersions, err)
-	}
-	return resp, err
 }
 
 func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {

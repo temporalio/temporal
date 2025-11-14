@@ -51,6 +51,20 @@ func (c *metricClient) CompleteNexusOperation(
 	return c.client.CompleteNexusOperation(ctx, request, opts...)
 }
 
+func (c *metricClient) CompleteNexusOperationChasm(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationChasmRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.CompleteNexusOperationChasmResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientCompleteNexusOperationChasm")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CompleteNexusOperationChasm(ctx, request, opts...)
+}
+
 func (c *metricClient) DeepHealthCheck(
 	ctx context.Context,
 	request *historyservice.DeepHealthCheckRequest,

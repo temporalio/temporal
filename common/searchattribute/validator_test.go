@@ -209,7 +209,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 
 	err = saValidator.Validate(attr, "error-namespace")
 	s.Error(err)
-	s.EqualError(err, "mapper error")
+	s.Require().EqualError(err, "Namespace error-namespace has no mapping defined for field name InvalidKey")
 
 	fields = map[string]*commonpb.Payload{
 		"CustomTextField": payload.EncodeString("1"),

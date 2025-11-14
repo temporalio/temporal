@@ -198,7 +198,8 @@ func recordActivityTaskStarted(
 		// The workflow transition happens only if the workflow task of the same execution would go
 		// to the poller deployment. Otherwise, it means the activity is independently versioned, we
 		// allow it to start without affecting the workflow.
-		wftDepVer, err := getDeploymentVersionForWorkflowId(ctx,
+
+		wftDepVer, wftDepRevNum, err := getDeploymentVersionAndRevisionNumberForWorkflowID(ctx,
 			request.NamespaceId,
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -209,8 +210,17 @@ func recordActivityTaskStarted(
 			// Let matching retry
 			return nil, rejectCodeUndefined, err
 		}
-		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) {
-			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+
+		// We start a transition if one of the following conditions are met:
+		// 1. The workflow will be dispatching to the same deployment as the activity but has not yet.
+		// 2. The workflow TQ is lagging behind the activity TQ, with respect to the current version of a deployment.
+
+		// Note: We use > instead of >= because a non-backlogged activity task could have the same revision number as the MS and that should not commence a transition.
+		// Note: Revision number mechanics are only involved if the dynamic config is enabled.
+		useRevisionNumber := shardContext.GetConfig().UseRevisionNumberForWorkerVersioning(namespaceName)
+		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) ||
+			(useRevisionNumber && pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepRevNum) {
+			if err := mutableState.StartDeploymentTransition(pollerDeployment, request.TaskDispatchRevisionNumber); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 					// This must be a task from a time that the workflow was unpinned, but it's
 					// now pinned so can't transition. Matching can drop the task safely.
@@ -220,6 +230,7 @@ func recordActivityTaskStarted(
 				}
 				return nil, rejectCodeUndefined, err
 			}
+
 			// This activity started a transition, make sure the MS changes are written but
 			// reject the activity task.
 			return nil, rejectCodeStartedTransition, nil
@@ -269,14 +280,14 @@ func recordActivityTaskStarted(
 
 // TODO (Shahab): move this method to a better place
 // TODO: cache this result (especially if the answer is true)
-func getDeploymentVersionForWorkflowId(
+func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	ctx context.Context,
 	namespaceID string,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	matchingClient matchingservice.MatchingServiceClient,
 	workflowId string,
-) (*deploymentspb.WorkerDeploymentVersion, error) {
+) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
 	resp, err := matchingClient.GetTaskQueueUserData(ctx,
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   namespaceID,
@@ -284,15 +295,17 @@ func getDeploymentVersionForWorkflowId(
 			TaskQueueType: taskQueueType,
 		})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
 	if !ok {
 		// The TQ is unversioned
-		return nil, nil
+		return nil, 0, nil
 	}
-	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	return worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId), nil
+
+	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
+	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
 
 func processActivityWorkflowRules(

@@ -47,6 +47,7 @@ type (
 		pqMgr      physicalTaskQueueManager
 		config     *taskQueueConfig
 		tqCtx      context.Context
+		isDraining bool
 		db         *taskQueueDB
 		taskWriter *priTaskWriter
 
@@ -79,12 +80,14 @@ func newPriBacklogManager(
 	throttledLogger log.ThrottledLogger,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
+	isDraining bool,
 ) *priBacklogManagerImpl {
 	bmg := &priBacklogManagerImpl{
 		pqMgr:               pqMgr,
 		config:              config,
 		tqCtx:               tqCtx,
-		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler),
+		isDraining:          isDraining,
+		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining),
 		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
 		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
@@ -152,6 +155,10 @@ func (c *priBacklogManagerImpl) initState(state taskQueueState, err error) {
 		return
 	}
 
+	if state.otherHasTasks {
+		c.pqMgr.SetupDraining()
+	}
+
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
 
@@ -179,16 +186,7 @@ func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.S
 }
 
 func (c *priBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) subqueueIndex {
-	levels := c.config.PriorityLevels()
-	if priority == 0 {
-		priority = defaultPriorityLevel(levels)
-	}
-	if priority < 1 {
-		// this should have been rejected much earlier, but just clip it here
-		priority = 1
-	} else if priority > levels {
-		priority = levels
-	}
+	priority = c.config.clipPriority(priority)
 
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
@@ -391,4 +389,12 @@ func (c *priBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *priBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+func (c *priBacklogManagerImpl) setPriority(task *internalTask) {
+	c.config.setDefaultPriority(task)
+	if c.isDraining {
+		// draining goes before active backlog so we're guaranteed to finish migration
+		task.effectivePriority -= maxPriorityLevels
+	}
 }

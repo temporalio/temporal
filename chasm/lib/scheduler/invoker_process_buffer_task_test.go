@@ -26,8 +26,7 @@ func TestInvokerProcessBufferTaskSuite(t *testing.T) {
 }
 
 func (s *invokerProcessBufferTaskSuite) SetupTest() {
-	s.SetupSuite()
-
+	s.schedulerSuite.SetupTest()
 	s.executor = scheduler.NewInvokerProcessBufferTaskExecutor(scheduler.InvokerTaskExecutorOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,

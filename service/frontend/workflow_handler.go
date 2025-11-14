@@ -408,6 +408,25 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	return wh.convertToStartWorkflowExecutionResponse(resp, namespaceName)
+}
+
+func (wh *WorkflowHandler) convertToStartWorkflowExecutionResponse(
+	resp *historyservice.StartWorkflowExecutionResponse,
+	namespaceName namespace.Name,
+) (*workflowservice.StartWorkflowExecutionResponse, error) {
+	if resp.GetEagerWorkflowTask() != nil {
+		if err := api.ProcessOutgoingSearchAttributes(
+			wh.saProvider,
+			wh.saMapperProvider,
+			resp.GetEagerWorkflowTask().GetHistory().GetEvents(),
+			namespaceName,
+			wh.visibilityMgr,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	return &workflowservice.StartWorkflowExecutionResponse{
 		RunId:             resp.GetRunId(),
 		Started:           resp.Started,
@@ -571,7 +590,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, err
 	}
 
-	response, err := convertToMultiOperationResponse(historyResp)
+	response, err := wh.convertToMultiOperationResponse(historyResp, namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -680,33 +699,29 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 	return opReq, workflowId, nil
 }
 
-func convertToMultiOperationResponse(
+func (wh *WorkflowHandler) convertToMultiOperationResponse(
 	historyResp *historyservice.ExecuteMultiOperationResponse,
+	namespaceName namespace.Name,
 ) (*workflowservice.ExecuteMultiOperationResponse, error) {
 	resp := &workflowservice.ExecuteMultiOperationResponse{
 		Responses: make([]*workflowservice.ExecuteMultiOperationResponse_Response, len(historyResp.Responses)),
 	}
 	for i, op := range historyResp.Responses {
 		var opResp *workflowservice.ExecuteMultiOperationResponse_Response
-		if startResp := op.GetStartWorkflow(); startResp != nil {
+		if historyStartResp := op.GetStartWorkflow(); historyStartResp != nil {
+			startResp, err := wh.convertToStartWorkflowExecutionResponse(historyStartResp, namespaceName)
+			if err != nil {
+				return nil, err
+			}
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
 				Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
-						RunId:   startResp.RunId,
-						Started: startResp.Started,
-						Link:    startResp.Link,
-						Status:  startResp.Status,
-					},
+					StartWorkflow: startResp,
 				},
 			}
-		} else if updateResp := op.GetUpdateWorkflow(); updateResp != nil {
+		} else if histUpdateResp := op.GetUpdateWorkflow(); histUpdateResp != nil {
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
 				Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
-					UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{
-						UpdateRef: updateResp.Response.UpdateRef,
-						Outcome:   updateResp.Response.Outcome,
-						Stage:     updateResp.Response.Stage,
-					},
+					UpdateWorkflow: histUpdateResp.GetResponse(),
 				},
 			}
 		} else {
@@ -885,29 +900,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	pollerID := uuid.New()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
-
-	if request.WorkerHeartbeat != nil {
-		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
-		request.WorkerHeartbeat = nil // clear the heartbeat from the request to avoid sending it to matching service
-
-		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
-		go func() {
-			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-				NamespaceId: namespaceID.String(),
-				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-					Namespace:       request.Namespace,
-					Identity:        request.Identity,
-					WorkerHeartbeat: heartbeats,
-				},
-			})
-
-			if err != nil {
-				wh.logger.Error("Failed to record worker heartbeat.",
-					tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
-					tag.Error(err))
-			}
-		}()
-	}
 
 	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
@@ -3053,7 +3045,10 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 }
 
 // Creates a new schedule.
-func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflowservice.CreateScheduleRequest) (_ *workflowservice.CreateScheduleResponse, retError error) {
+func (wh *WorkflowHandler) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+) (_ *workflowservice.CreateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3084,6 +3079,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if CHASM scheduler experiment is enabled
+	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String()) {
+		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
 	}
 
 	if request.Schedule == nil {
@@ -4086,6 +4087,7 @@ func (wh *WorkflowHandler) ListSchedules(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
+			wh.config.VisibilityEnableUnifiedQueryConverter,
 			request.Query,
 		); err != nil {
 			return nil, err
@@ -5217,8 +5219,10 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 			}
 
 			headerSize := 0
+			lowerCaseHeaders := make(map[string]string, len(cb.Nexus.GetHeader()))
 			for k, v := range cb.Nexus.GetHeader() {
 				headerSize += len(k) + len(v)
+				lowerCaseHeaders[strings.ToLower(k)] = v
 			}
 			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
 				return status.Error(
@@ -5229,6 +5233,7 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 					),
 				)
 			}
+			cb.Nexus.Header = lowerCaseHeaders
 		case *commonpb.Callback_Internal_:
 			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
 			continue
@@ -6022,23 +6027,36 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	if err != nil {
 		return nil, err
 	}
-	// Validation: prohibit setting rate limit on workflow task queues
-	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+
+	// Validate rate limits
+	queueRateLimit := request.GetUpdateQueueRateLimit()
+	if queueRateLimit.GetRateLimit() != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, serviceerror.NewInvalidArgument("Setting rate limit on workflow task queues is not allowed.")
 	}
-	queueRateLimit := request.GetUpdateQueueRateLimit()
-	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
-	// Validate rate limits
 	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
 		return nil, err
+	}
+	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
+	if fairnessKeyRateLimitDefault.GetRateLimit() != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return nil, serviceerror.NewInvalidArgument("Setting fairness key rate limit on workflow task queues is not allowed.")
 	}
 	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
 		return nil, err
 	}
+
 	// Validate identity field
 	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
 		return nil, err
 	}
+
+	// Validate Fairness Weight Updates
+	setFairnessWeightOverrides := request.GetSetFairnessWeightOverrides()
+	unsetFairnessWeightOverrides := request.GetUnsetFairnessWeightOverrides()
+	limit := wh.config.MaxFairnessWeightOverrideConfigLimit(request.GetNamespace(), request.TaskQueue, request.TaskQueueType)
+	if err := validateFairnessWeightUpdate(setFairnessWeightOverrides, unsetFairnessWeightOverrides, limit); err != nil {
+		return nil, err
+	}
+
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
 		NamespaceId:           namespaceID.String(),
 		UpdateTaskqueueConfig: request,

@@ -1,6 +1,7 @@
 package tasktoken
 
 import (
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 )
 
@@ -48,4 +49,10 @@ func (s *Serializer) DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask
 	taskToken := tokenspb.NexusTask{}
 	err := taskToken.Unmarshal(data)
 	return &taskToken, err
+}
+
+func (s *Serializer) DeserializeChasmComponentRef(data []byte) (*persistencespb.ChasmComponentRef, error) {
+	token := persistencespb.ChasmComponentRef{}
+	err := token.Unmarshal(data)
+	return &token, err
 }

@@ -909,7 +909,7 @@ func (c *ContextImpl) RefreshTasks(
 		return err
 	}
 
-	if err := NewTaskRefresher(shardContext).Refresh(ctx, mutableState); err != nil {
+	if err := NewTaskRefresher(shardContext).Refresh(ctx, mutableState, false); err != nil {
 		return err
 	}
 

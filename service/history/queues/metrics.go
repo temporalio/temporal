@@ -186,7 +186,7 @@ func GetTimerStateMachineTaskTypeTagValue(taskType string, isActive bool) string
 	return prefix + "." + taskType
 }
 
-func getTaskTypeTagValue(
+func GetTaskTypeTagValue(
 	task tasks.Task,
 	isActive bool,
 ) string {

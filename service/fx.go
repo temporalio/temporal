@@ -38,14 +38,15 @@ type (
 	GrpcServerOptionsParams struct {
 		fx.In
 
-		Logger                 log.Logger
-		RpcFactory             common.RPCFactory
-		RetryableInterceptor   *interceptor.RetryableInterceptor
-		TelemetryInterceptor   *interceptor.TelemetryInterceptor
-		RateLimitInterceptor   *interceptor.RateLimitInterceptor
-		TracingStatsHandler    telemetry.ServerStatsHandler
-		MetricsStatsHandler    metrics.ServerStatsHandler
-		AdditionalInterceptors []grpc.UnaryServerInterceptor `optional:"true"`
+		Logger                       log.Logger
+		RPCFactory                   common.RPCFactory
+		RetryableInterceptor         *interceptor.RetryableInterceptor
+		TelemetryInterceptor         *interceptor.TelemetryInterceptor
+		RateLimitInterceptor         *interceptor.RateLimitInterceptor
+		TracingStatsHandler          telemetry.ServerStatsHandler
+		MetricsStatsHandler          metrics.ServerStatsHandler
+		AdditionalInterceptors       []grpc.UnaryServerInterceptor  `optional:"true"`
+		AdditionalStreamInterceptors []grpc.StreamServerInterceptor `optional:"true"`
 	}
 )
 
@@ -121,7 +122,7 @@ func GrpcServerOptionsProvider(
 	params GrpcServerOptionsParams,
 ) []grpc.ServerOption {
 
-	grpcServerOptions, err := params.RpcFactory.GetInternodeGRPCServerOptions()
+	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
@@ -137,11 +138,18 @@ func GrpcServerOptionsProvider(
 		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(multiStats))
 	}
 
+	streamInterceptors := []grpc.StreamServerInterceptor{
+		params.TelemetryInterceptor.StreamIntercept,
+		interceptor.CustomErrorStreamInterceptor,
+	}
+	if len(params.AdditionalStreamInterceptors) > 0 {
+		streamInterceptors = append(streamInterceptors, params.AdditionalStreamInterceptors...)
+	}
+
 	return append(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(getUnaryInterceptors(params)...),
-		grpc.ChainStreamInterceptor(params.TelemetryInterceptor.StreamIntercept),
-		grpc.StreamInterceptor(interceptor.CustomErrorStreamInterceptor),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
 	)
 }
 

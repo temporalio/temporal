@@ -42,14 +42,14 @@ type (
 		mockRescheduler *MockRescheduler
 
 		config         *configs.Config
-		options        *Options
+		options        Options
 		rateLimiter    quotas.RequestRateLimiter
 		logger         log.Logger
 		metricsHandler metrics.Handler
 	}
 )
 
-var testQueueOptions = &Options{
+var testQueueOptions = Options{
 	ReaderOptions: ReaderOptions{
 		BatchSize:            dynamicconfig.GetIntPropertyFn(10),
 		MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
@@ -209,6 +209,7 @@ func (s *queueBaseSuite) TestStartStop() {
 			key := NewRandomKeyInRange(paginationRange)
 			mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -552,6 +553,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(sliceRange)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
+			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			slice.(*SliceImpl).add(base.executableFactory.NewExecutable(mockTask, readerID))
 		}
 	}
@@ -654,6 +656,9 @@ func (s *queueBaseSuite) newQueueBase(
 	category tasks.Category,
 	paginationFnProvider PaginationFnProvider,
 ) *queueBase {
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
+
 	factory := NewExecutableFactory(
 		nil,
 		s.mockScheduler,
@@ -662,6 +667,7 @@ func (s *queueBaseSuite) newQueueBase(
 		mockShard.GetTimeSource(),
 		mockShard.GetNamespaceRegistry(),
 		mockShard.GetClusterMetadata(),
+		testTaskTagValueProvider,
 		s.logger,
 		s.metricsHandler,
 		telemetry.NoopTracer,
@@ -686,7 +692,7 @@ func (s *queueBaseSuite) newQueueBase(
 		s.mockScheduler,
 		s.mockRescheduler,
 		factory,
-		s.options,
+		&s.options,
 		s.rateLimiter,
 		NoopReaderCompletionFn,
 		GrouperNamespaceID{},

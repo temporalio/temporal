@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -242,20 +243,14 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
-	m.failWorkflowTask(true)
-	return nil
+	return m.failWorkflowTask(true)
 }
 
-func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
-	timeoutType enumspb.TimeoutType,
-) error {
-	incrementAttempt := true
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(timeoutType enumspb.TimeoutType) error {
 	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient.
-	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
-		incrementAttempt = false
-	}
-	m.failWorkflowTask(incrementAttempt)
-	return nil
+	incrementAttempt := timeoutType != enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+
+	return m.failWorkflowTask(incrementAttempt)
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -754,6 +749,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		metrics.FirstAttemptTag(workflowTask.Attempt),
 	)
 
+	numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
+	if numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0 {
+		if err := m.ms.RemoveReportedProblemsSearchAttribute(); err != nil {
+			return nil, err
+		}
+	}
+
 	return event, nil
 }
 
@@ -810,6 +812,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			forkEventVersion,
 			binaryChecksum,
 		)
+
+		if event != nil {
+			m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause{
+				LastWorkflowTaskFailureCause: cause,
+			}
+		}
 	}
 
 	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
@@ -864,11 +872,17 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	var event *historypb.HistoryEvent
 	// Avoid creating WorkflowTaskTimedOut history event when workflow task is transient.
 	if !m.ms.IsTransientWorkflowTask() {
+		timeoutType := enumspb.TIMEOUT_TYPE_START_TO_CLOSE
 		event = m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.StartedEventID,
-			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			timeoutType,
 		)
+
+		m.ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType{
+			LastWorkflowTaskTimedOutType: timeoutType,
+		}
+
 	}
 
 	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
@@ -895,7 +909,7 @@ func (m *workflowTaskStateMachine) recordTimeoutTasksForDeletion(workflowTask *h
 
 func (m *workflowTaskStateMachine) failWorkflowTask(
 	incrementAttempt bool,
-) {
+) error {
 	// Get current workflow task info before clearing it, to capture timeout tasks for deletion
 	currentWorkflowTask := m.getWorkflowTaskInfo()
 	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
@@ -929,6 +943,14 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
+
+	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
+	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt >= int32(consecutiveFailuresRequired) {
+		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // deleteWorkflowTask deletes a workflow task.
@@ -990,7 +1012,6 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
-
 	}
 	if !workflowTask.ScheduledTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
@@ -999,13 +1020,14 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskType = workflowTask.Type
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew = workflowTask.SuggestContinueAsNew
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
-
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
 
 	m.ms.workflowTaskUpdated = true
 
-	// NOTE: do not update task queue in execution info
+	// NOTE:
+	// - do not update executionInfo.TaskQueue!
+	// - do not update executionInfo.WorkflowTaskStamp (only changed when rescheduling workflow task)
 
 	m.ms.logger.Debug("Workflow task updated",
 		tag.WorkflowScheduledEventID(workflowTask.ScheduledEventID),
@@ -1125,6 +1147,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		BuildIdRedirectCounter:     m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
 		ScheduleToStartTimeoutTask: m.ms.GetWorkflowTaskScheduleToStartTimeoutTask(),
 		StartToCloseTimeoutTask:    m.ms.GetWorkflowTaskStartToCloseTimeoutTask(),
+		Stamp:                      m.ms.executionInfo.WorkflowTaskStamp,
 	}
 
 	return wft

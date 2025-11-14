@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,10 +15,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -32,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/replication/eventhandler"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
@@ -83,10 +92,11 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
+
 	s.setupSuite(
 		testcore.WithFxOptionsForService(primitives.AllServices,
 			fx.Decorate(
-				func() config.DCRedirectionPolicy {
+				func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
 					return config.DCRedirectionPolicy{Policy: "noop"}
 				},
 			),
@@ -128,6 +138,15 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 		s.namespaceID = nsRes.NamespaceInfo.GetId()
 		s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 	})
+}
+
+// getRecorder returns the TaskQueueRecorder for the specified cluster index.
+// Returns nil if the cluster doesn't have a recorder.
+func (s *streamBasedReplicationTestSuite) getRecorder(clusterIdx int) *testcore.TaskQueueRecorder {
+	if clusterIdx < len(s.clusters) {
+		return s.clusters[clusterIdx].GetTaskQueueRecorder()
+	}
+	return nil
 }
 
 func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplicationScenario() {
@@ -774,4 +793,416 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	},
 		time.Second*10,
 		time.Second)
+}
+
+func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication() {
+	// Test works for both SyncVersionedTransitionTask (with transition history)
+	// and SyncWorkflowStateTask (without transition history)
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	ns := s.createNamespaceInCluster0(false)
+	s.T().Logf("Created local namespace '%s' on cluster 0 (active)", ns)
+
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		recorder.Clear()
+	}
+	s.T().Log("Cleared replication stream recorders on all clusters")
+
+	workflowID := "test-replication-" + uuid.New()
+	sourceClient := s.clusters[0].FrontendClient()
+	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           ns,
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout:  durationpb.New(time.Minute),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	s.Require().NoError(err, "Failed to start workflow execution")
+	s.T().Logf("Started workflow '%s' (RunID: %s) on cluster 0", workflowID, startResp.GetRunId())
+
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
+		}}, nil
+	}
+
+	//nolint:staticcheck // TODO: replace with taskpoller.TaskPoller
+	poller := &testcore.TaskPoller{
+		Client:              sourceClient,
+		Namespace:           ns,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		Identity:            "worker-identity",
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.logger,
+		T:                   s.T(),
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.Require().NoError(err, "Failed to poll and process workflow task")
+	s.T().Log("Completed workflow execution via worker poll")
+
+	s.Eventually(func() bool {
+		resp, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      startResp.GetRunId(),
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
+	s.T().Log("Verified workflow reached COMPLETED status")
+
+	namespaceResp, err := sourceClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	})
+	s.Require().NoError(err, "Failed to describe namespace")
+	namespaceID := namespaceResp.NamespaceInfo.GetId()
+
+	historyClient := s.clusters[0].HistoryClient()
+	mutableStateResp, err := historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().NoError(err, "Failed to describe mutable state")
+	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")
+	s.T().Logf("Retrieved mutable state for workflow (NamespaceID: %s)", namespaceID)
+
+	//nolint:forbidigo // waiting for close transfer task to be acked - no alternative available
+	time.Sleep(5 * time.Second)
+	s.T().Log("Waited 5 seconds for close transfer task to be acknowledged internally")
+
+	targetClient := s.clusters[1].FrontendClient()
+	_, err = targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	})
+	s.Require().Error(err, "Namespace should not exist on target cluster before promotion")
+
+	_, err = targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().Error(err, "Workflow should not exist on target cluster before promotion")
+	s.T().Log("Verified namespace and workflow do NOT exist on cluster 1 (standby) before promotion")
+
+	_, err = sourceClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace:        ns,
+		PromoteNamespace: true,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: s.clusters[0].ClusterName()},
+				{ClusterName: s.clusters[1].ClusterName()},
+			},
+		},
+	})
+	s.Require().NoError(err, "Failed to promote namespace to global")
+	s.T().Logf("Promoted namespace '%s' from local to global (added cluster 1)", ns)
+
+	s.Eventually(func() bool {
+		_, err := targetClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: ns,
+		})
+		return err == nil
+	}, 60*time.Second, time.Second)
+	s.T().Log("Verified namespace replicated to cluster 1")
+
+	sourceAdminClient := s.clusters[0].AdminClient()
+	_, err = sourceAdminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      startResp.GetRunId(),
+		},
+	})
+	s.Require().NoError(err, "Failed to generate last history replication tasks")
+	s.T().Log("Generated last history replication tasks to force replication of completed workflow")
+
+	recorder := s.clusters[0].GetReplicationStreamRecorder()
+
+	// Check for flags based on transition history mode
+	if s.enableTransitionHistory {
+		// With transition history: check SyncVersionedTransitionTask
+		s.T().Log("Checking replication stream for close transfer task acknowledgment in versioned transition artifact...")
+		s.Eventually(func() bool {
+			for _, msg := range recorder.GetMessages() {
+				if msg.Direction != testcore.DirectionServerSend {
+					continue
+				}
+
+				resp := testcore.ExtractReplicationMessages(msg.Request)
+				if resp == nil {
+					continue
+				}
+
+				for _, task := range resp.GetReplicationTasks() {
+					if syncAttrs := task.GetSyncVersionedTransitionTaskAttributes(); syncAttrs != nil {
+						if artifact := syncAttrs.GetVersionedTransitionArtifact(); artifact != nil {
+							if artifact.GetIsCloseTransferTaskAcked() && artifact.GetIsForceReplication() {
+								return true
+							}
+						}
+					}
+				}
+			}
+			return false
+		}, 10*time.Second, 100*time.Millisecond)
+		s.T().Log("Verified IsCloseTransferTaskAcked and IsForceReplication flags in SyncVersionedTransitionTask")
+	} else {
+		// Without transition history: check SyncWorkflowStateTask
+		s.T().Log("Checking replication stream for close transfer task acknowledgment in workflow state attributes...")
+		s.Eventually(func() bool {
+			for _, msg := range recorder.GetMessages() {
+				if msg.Direction != testcore.DirectionServerSend {
+					continue
+				}
+
+				resp := testcore.ExtractReplicationMessages(msg.Request)
+				if resp == nil {
+					continue
+				}
+
+				for _, task := range resp.GetReplicationTasks() {
+					if workflowStateAttrs := task.GetSyncWorkflowStateTaskAttributes(); workflowStateAttrs != nil {
+						if workflowStateAttrs.GetIsCloseTransferTaskAcked() && workflowStateAttrs.GetIsForceReplication() {
+							return true
+						}
+					}
+				}
+			}
+			return false
+		}, 10*time.Second, 100*time.Millisecond)
+		s.T().Log("Verified IsCloseTransferTaskAcked and IsForceReplication flags in SyncWorkflowStateTask")
+	}
+
+	// Wait for replication to complete to the passive cluster
+	s.T().Log("Waiting for workflow to replicate to cluster 1 (passive)...")
+	s.Eventually(func() bool {
+		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      startResp.GetRunId(),
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 30*time.Second, time.Second)
+	s.T().Log("Verified workflow replicated to cluster 1 (passive) with COMPLETED status")
+
+	// Write captured replication messages to log files for both clusters
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		if err := recorder.WriteToLog(); err != nil {
+			s.T().Logf("Failed to write replication stream log for cluster %s: %v", cluster.ClusterName(), err)
+		}
+	}
+}
+
+// TestPassiveActivityRetryTimerReplication verifies that activity retry timers are correctly generated
+// on the active cluster and replicated to the passive/standby cluster during activity retries.
+func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplication() {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+
+	recorder0 := s.getRecorder(0) // active cluster
+	recorder1 := s.getRecorder(1) // standby cluster
+	s.Require().NotNil(recorder0)
+	s.Require().NotNil(recorder1)
+
+	workflowID := "task-recorder-test-" + uuid.New()
+	taskQueue := "task-recorder-tq"
+
+	// Get namespace ID for task filtering
+	namespaceResp, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: s.namespaceName,
+	})
+	s.NoError(err)
+	namespaceID := namespaceResp.NamespaceInfo.GetId()
+
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: s.namespaceName,
+	})
+	s.NoError(err)
+	defer sdkClient.Close()
+
+	var activityAttempts int32
+
+	// Workflow with activity that retries with 3 second intervals
+	simpleWorkflow := func(ctx workflow.Context) (string, error) {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 10 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    3 * time.Second, // 3 seconds between retries, needed to ensure tasks can replicate w/out lag
+				MaximumInterval:    3 * time.Second,
+				BackoffCoefficient: 1.0,
+				MaximumAttempts:    3, // Fail twice, succeed on 3rd attempt
+			},
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+
+		var result string
+		err := workflow.ExecuteActivity(ctx, "test-activity").Get(ctx, &result)
+		if err != nil {
+			return "", err
+		}
+		return "completed: " + result, nil
+	}
+
+	// Activity that sleeps 3 seconds and fails twice, succeeds on 3rd attempt
+	simpleActivity := func(ctx context.Context) (string, error) {
+		attempt := atomic.AddInt32(&activityAttempts, 1)
+		if attempt < 3 {
+			return "", fmt.Errorf("failed attempt %d", attempt)
+		}
+		return "success", nil
+	}
+
+	sdkWorker := worker.New(sdkClient, taskQueue, worker.Options{})
+	sdkWorker.RegisterWorkflowWithOptions(simpleWorkflow, workflow.RegisterOptions{Name: "test-workflow"})
+	sdkWorker.RegisterActivityWithOptions(simpleActivity, activity.RegisterOptions{Name: "test-activity"})
+
+	err = sdkWorker.Start()
+	s.NoError(err)
+	defer sdkWorker.Stop()
+
+	workflowRun, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskQueue,
+		WorkflowRunTimeout: 30 * time.Second,
+	}, "test-workflow")
+	s.NoError(err)
+	runID := workflowRun.GetRunID()
+
+	var workflowResult string
+	err = workflowRun.Get(ctx, &workflowResult)
+	s.NoError(err)
+
+	// Get the scheduled event ID from workflow history
+	historyIter := sdkClient.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+
+	var scheduledEventID int64
+	for historyIter.HasNext() {
+		event, err := historyIter.Next()
+		s.NoError(err)
+		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED {
+			scheduledEventID = event.GetEventId()
+			attrs := event.GetActivityTaskScheduledEventAttributes()
+			// Verify this is the activity we expect
+			s.Equal("test-activity", attrs.GetActivityType().GetName(), "Should be our test activity")
+			break
+		}
+	}
+	s.Require().NotZero(scheduledEventID, "Should have found ActivityTaskScheduled event")
+
+	// Wait for async task generation and replication to standby
+	s.Require().Eventually(func() bool {
+		standbyTasks := recorder1.CountTasksForWorkflow(
+			tasks.CategoryTimer,
+			namespaceID,
+			workflowID,
+			runID,
+			func(rt testcore.RecordedTask) bool {
+				return rt.TaskType == enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER.String()
+			},
+		)
+		return standbyTasks >= 2
+	}, 10*time.Second, 200*time.Millisecond, "Standby cluster should eventually have replicated retry timers")
+
+	// Verify active cluster generated exactly 1 TransferActivityTask with matching event ID
+	activeTransferActivityTasks := recorder0.CountTasksForWorkflow(
+		tasks.CategoryTransfer,
+		namespaceID,
+		workflowID,
+		runID,
+		func(rt testcore.RecordedTask) bool {
+			if rt.TaskType != enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK.String() {
+				return false
+			}
+			// Check if the task's event ID matches the activity's scheduled event ID
+			if activityTask, ok := rt.Task.(*tasks.ActivityTask); ok {
+				return activityTask.ScheduledEventID == scheduledEventID
+			}
+			return false
+		},
+	)
+	s.Equal(1, activeTransferActivityTasks, "Active cluster should have exactly 1 TransferActivityTask for this activity")
+
+	// Verify active cluster generated exactly 2 ActivityRetryTimer tasks (for 2 failed attempts) with matching event ID
+	activeRetryTimers := recorder0.CountTasksForWorkflow(
+		tasks.CategoryTimer,
+		namespaceID,
+		workflowID,
+		runID,
+		func(rt testcore.RecordedTask) bool {
+			if rt.TaskType != enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER.String() {
+				return false
+			}
+			// Check if the timer's event ID matches the activity's scheduled event ID
+			if timerTask, ok := rt.Task.(*tasks.ActivityRetryTimerTask); ok {
+				return timerTask.EventID == scheduledEventID
+			}
+			return false
+		},
+	)
+	s.Equal(2, activeRetryTimers, "Active cluster should have exactly 2 ActivityRetryTimer tasks for this activity")
+
+	// Verify standby cluster has exactly 1 TransferActivityTask with matching event ID (same as active)
+	standbyTransferActivityTasks := recorder1.CountTasksForWorkflow(
+		tasks.CategoryTransfer,
+		namespaceID,
+		workflowID,
+		runID,
+		func(rt testcore.RecordedTask) bool {
+			if rt.TaskType != enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK.String() {
+				return false
+			}
+			// Check if the task's event ID matches the activity's scheduled event ID
+			if activityTask, ok := rt.Task.(*tasks.ActivityTask); ok {
+				return activityTask.ScheduledEventID == scheduledEventID
+			}
+			return false
+		},
+	)
+	s.Equal(1, standbyTransferActivityTasks, "Standby cluster should have exactly 1 TransferActivityTask for this activity (same as active)")
+
+	// Verify standby cluster has exactly 2 ActivityRetryTimer tasks with matching event ID (same as active)
+	standbyRetryTimers := recorder1.CountTasksForWorkflow(
+		tasks.CategoryTimer,
+		namespaceID,
+		workflowID,
+		runID,
+		func(rt testcore.RecordedTask) bool {
+			if rt.TaskType != enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER.String() {
+				return false
+			}
+			// Check if the timer's event ID matches the activity's scheduled event ID
+			if timerTask, ok := rt.Task.(*tasks.ActivityRetryTimerTask); ok {
+				return timerTask.EventID == scheduledEventID
+			}
+			return false
+		},
+	)
+	s.Equal(2, standbyRetryTimers, "Standby cluster should have exactly 2 ActivityRetryTimer tasks for this activity (same as active)")
 }

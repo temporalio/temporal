@@ -28,11 +28,14 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if typeMap != nil {
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
-			if err != nil {
+			if err != nil && !IsChasmSearchAttribute(saName) {
 				lastErr = err
 				continue
 			}
-			setMetadataType(valPayload, saType)
+			// TODO: CHASM search attributes read from visibility stores (e.g., during queries)
+			// will not have type metadata set, which may cause issues on the decode path.
+			// This is acceptable for now as CHASM query support is not yet implemented.
+			SetMetadataType(valPayload, saType)
 		}
 	}
 	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
@@ -58,7 +61,7 @@ func Decode(
 		if typeMap != nil {
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
-			if err != nil {
+			if err != nil && !IsChasmSearchAttribute(saName) {
 				lastErr = err
 			}
 		}

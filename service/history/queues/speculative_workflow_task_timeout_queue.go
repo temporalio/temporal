@@ -83,6 +83,7 @@ func (q SpeculativeWorkflowTaskTimeoutQueue) NotifyNewTasks(ts []tasks.Task) {
 				q.timeSource,
 				q.namespaceRegistry,
 				q.clusterMetadata,
+				GetTaskTypeTagValue,
 				q.logger,
 				q.metricsHandler.WithTags(defaultExecutableMetricsTags...),
 				q.tracer,

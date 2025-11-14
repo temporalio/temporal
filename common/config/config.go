@@ -51,6 +51,8 @@ type (
 		NamespaceDefaults NamespaceDefaults `yaml:"namespaceDefaults"`
 		// ExporterConfig allows the specification of process-wide OTEL exporters
 		ExporterConfig telemetry.ExportConfig `yaml:"otel"`
+		// Visibility related config
+		Visibility Visibility `yaml:"visibility"`
 	}
 
 	// Service contains the service specific config items
@@ -434,6 +436,12 @@ type (
 	CustomDatastoreConfig struct {
 		// Name of the custom datastore
 		Name string `yaml:"name"`
+		// IndexName represents a unique identifier for the data store.
+		// The name "IndexName" inherits from the Elasticsearch config and refers to the index name.
+		// In SQL, it refers to the database name.
+		// For custom data store, you may pick any name as long as it's unique across custom data
+		// stores (Elasticsearch index names and SQL database names).
+		IndexName string `yaml:"indexName"`
 		// Options to be used by AbstractDatastoreFactory implementation
 		Options map[string]any `yaml:"options"`
 	}
@@ -571,6 +579,25 @@ type (
 		State string `yaml:"state"`
 		// URI is the namespace default URI for visibility archiver
 		URI string `yaml:"URI"`
+	}
+
+	Visibility struct {
+		// PersistenceCustomSearchAttributes is a set of key-value pairs specifying the number of
+		// pre-allocated custom search attributes for each type. Pre-allocated custom search attributes
+		// are named following the convention `<type><seq>` (eg. Keyword01) and are expected to exist in
+		// the data store (eg. SQL DB table column Keyword01 must exist). The pre-allocated custom search
+		// attributes serves as a limit for the number of custom search attributes you can create per
+		// namespace.
+		// If any type is not specified, it will pre-allocate the default number of custom search
+		// attributes for the type defined in the map defaultNumDbCustomSearchAttributes in
+		// common/searchattribute/defs.go.
+		// Modifying the number of pre-allocated custom search attributes:
+		// - if you increase a number, it will pre-allocate additional custom search attributes to match
+		//   the desired number;
+		// - if you decrease a number, it will not delete the existing custom search attributes, ie., it
+		//   is no-op.
+		// This config only applies to SQL or custom Visibility stores.
+		PersistenceCustomSearchAttributes map[string]int `yaml:"persistenceCustomSearchAttributes" validate:"persistence_custom_search_attributes"`
 	}
 
 	Authorization struct {

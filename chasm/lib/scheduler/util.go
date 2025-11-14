@@ -44,12 +44,12 @@ func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 }
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
-// current timestamp, returning ErrStaleReference for out-of-date tasks.
+// task timestamp, returning ErrStaleReference for out-of-date tasks.
 func validateTaskHighWaterMark(lastProcessedTime *timestamppb.Timestamp, scheduledAt time.Time) (bool, error) {
-	if lastProcessedTime != nil && !scheduledAt.IsZero() {
+	if lastProcessedTime != nil {
 		hwm := lastProcessedTime.AsTime()
 
-		if hwm.After(scheduledAt) {
+		if hwm.After(scheduledAt) || hwm.Equal(scheduledAt) {
 			return false, nil
 		}
 	}

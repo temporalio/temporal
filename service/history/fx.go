@@ -3,6 +3,8 @@ package history
 import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -55,6 +57,7 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
@@ -79,6 +82,8 @@ var Module = fx.Options(
 	callbacks.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
+	chasmscheduler.Module,
+	chasmworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -159,17 +164,29 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 	)
 }
 
+func ErrorHandlerProvider(
+	logger log.Logger,
+	serviceConfig *configs.Config,
+) *interceptor.RequestErrorHandler {
+	return interceptor.NewRequestErrorHandler(
+		logger,
+		serviceConfig.LogAllReqErrors,
+	)
+}
+
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	serviceConfig *configs.Config,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
 		serviceConfig.LogAllReqErrors,
+		requestErrorHandler,
 	)
 }
 
@@ -292,6 +309,7 @@ func VisibilityManagerProvider(
 		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
+		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 		serializer,

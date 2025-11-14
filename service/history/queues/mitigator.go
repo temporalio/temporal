@@ -97,7 +97,7 @@ func runAction(
 	readerGroup *ReaderGroup,
 	metricsHandler metrics.Handler,
 ) {
-	if action.Run(readerGroup) {
+	if !action.Run(readerGroup) {
 		return
 	}
 

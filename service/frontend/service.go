@@ -45,6 +45,7 @@ type Config struct {
 	VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
 	VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableUnifiedQueryConverter   dynamicconfig.BoolPropertyFn
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -77,6 +78,8 @@ type Config struct {
 	DisallowQuery                                                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration                                             dynamicconfig.DurationPropertyFn
 	ShutdownFailHealthCheckDuration                                   dynamicconfig.DurationPropertyFn
+
+	MaxFairnessWeightOverrideConfigLimit dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -168,8 +171,9 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	EnableUpdateWorkflowExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableUpdateWorkflowExecutionAsyncAccepted dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableUpdateWorkflowExecution                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableUpdateWorkflowExecutionAsyncAccepted                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	EnableExecuteMultiOperation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -212,7 +216,21 @@ type Config struct {
 	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HTTPAllowedHosts dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+}
+
+// IsExperimentAllowed checks if an experiment is enabled for a given namespace in the dynamic config.
+// Returns true if the experiment is explicitly listed or if "*" (wildcard)
+// is present in the allowed experiments list.
+func (c *Config) IsExperimentAllowed(experiment string, namespace string) bool {
+	allowedExperiments := c.AllowedExperiments(namespace)
+	for _, allowed := range allowedExperiments {
+		if allowed == "*" || allowed == experiment {
+			return true
+		}
+	}
+	return false
 }
 
 // NewConfig returns new service config with default values
@@ -238,6 +256,7 @@ func NewConfig(
 		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+		VisibilityEnableUnifiedQueryConverter:   dynamicconfig.VisibilityEnableUnifiedQueryConverter.Get(dc),
 		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
 		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
@@ -303,6 +322,8 @@ func NewConfig(
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities.Get(dc),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.DeleteNamespaceNamespaceDeleteDelay.Get(dc),
 
+		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
+
 		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
 
 		// [cleanup-wv-pre-release]
@@ -315,8 +336,9 @@ func NewConfig(
 
 		EnableExecuteMultiOperation: dynamicconfig.FrontendEnableExecuteMultiOperation.Get(dc),
 
-		EnableUpdateWorkflowExecution:              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
-		EnableUpdateWorkflowExecutionAsyncAccepted: dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),
+		EnableUpdateWorkflowExecution:                              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
+		EnableUpdateWorkflowExecutionAsyncAccepted:                 dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),
+		NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute: dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Get(dc),
 
 		EnableWorkerVersioningData:     dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Get(dc),
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
@@ -349,7 +371,8 @@ func NewConfig(
 		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
 
-		HTTPAllowedHosts: dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
+		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
+		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
 	}
 }
 

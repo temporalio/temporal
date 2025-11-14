@@ -2,8 +2,11 @@ package chasm
 
 import (
 	"context"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
 )
@@ -17,10 +20,8 @@ const (
 // allows the CHASM framework to automatically determine, at the end of
 // a transaction, if a visibility task needs to be generated to update the
 // visibility record with the returned search attributes.
-//
-// TODO: Improve this interface after support registering CHASM search attributes.
 type VisibilitySearchAttributesProvider interface {
-	SearchAttributes(Context) map[string]VisibilityValue
+	SearchAttributes(Context) []SearchAttributeKeyValue
 }
 
 // VisibilityMemoProvider if implemented by the root Component,
@@ -29,6 +30,45 @@ type VisibilitySearchAttributesProvider interface {
 // visibility record with the returned memo.
 type VisibilityMemoProvider interface {
 	Memo(Context) map[string]VisibilityValue
+}
+
+// VisibilitySearchAttributesMapper is a mapper for CHASM search attributes.
+type VisibilitySearchAttributesMapper struct {
+	aliasToField map[string]string
+	fieldToAlias map[string]string
+	saTypeMap    map[string]enumspb.IndexedValueType
+}
+
+// Alias returns the alias for a given field.
+func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
+	if v == nil {
+		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
+	}
+	alias, ok := v.fieldToAlias[field]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %q", field))
+	}
+	return alias, nil
+}
+
+// Field returns the field for a given alias.
+func (v *VisibilitySearchAttributesMapper) Field(alias string) (string, error) {
+	if v == nil {
+		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
+	}
+	field, ok := v.aliasToField[alias]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %q", alias))
+	}
+	return field, nil
+}
+
+// SATypeMap returns the type map for the CHASM search attributes.
+func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.IndexedValueType {
+	if v == nil {
+		return nil
+	}
+	return v.saTypeMap
 }
 
 type Visibility struct {

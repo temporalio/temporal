@@ -289,7 +289,7 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if previousExecutionInfo.AssignedBuildId == "" {
+	if previousExecutionInfo.AssignedBuildId == "" && GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		// TODO: only keeping this part for old versioning. The desired logic seem to be the same for both cron and
 		// retry: keep originally-inherited build ID. [cleanup-old-wv]
 		// For retry: propagate build-id version info to new workflow.

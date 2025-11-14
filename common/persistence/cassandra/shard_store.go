@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/softassert"
 )
 
 const (
@@ -145,7 +146,7 @@ func (d *ShardStore) UpdateShard(
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
-
+		softassert.Sometimes(d.Logger).Debug("ShardOwnershipLostError: Failed to update shard")
 		return &p.ShardOwnershipLostError{
 			ShardID: request.ShardID,
 			Msg: fmt.Sprintf("Failed to update shard.  previous_range_id: %v, columns: (%v)",

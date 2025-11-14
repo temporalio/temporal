@@ -99,7 +99,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 
 // NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
-	return NewExecutionStore(f.session, f.serializer), nil
+	return NewExecutionStore(f.session, f.serializer, f.logger), nil
 }
 
 // NewQueue returns a new queue backed by cassandra

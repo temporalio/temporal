@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/queues"
 )
 
@@ -28,12 +29,12 @@ var retryable4xxErrorTypes = []int{
 }
 
 type CanGetNexusCompletion interface {
-	GetNexusCompletion(ctx context.Context, requestID string) (nexus.OperationCompletion, error)
+	GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
 }
 
 type nexusInvocation struct {
 	nexus             *persistencespb.Callback_Nexus
-	completion        nexus.OperationCompletion
+	completion        nexusrpc.OperationCompletion
 	workflowID, runID string
 	attempt           int32
 }
@@ -75,7 +76,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		}
 	}
 
-	request, err := nexus.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
+	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
 		return invocationResultFail{queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),

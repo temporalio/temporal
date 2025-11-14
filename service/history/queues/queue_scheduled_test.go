@@ -114,6 +114,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetTimeSource(),
 		s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetClusterMetadata(),
+		GetTaskTypeTagValue,
 		logger,
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,
@@ -137,7 +138,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		scheduler,
 		rescheduler,
 		factory,
-		testQueueOptions,
+		&testQueueOptions,
 		NewReaderPriorityRateLimiter(
 			func() float64 { return 10 },
 			1,

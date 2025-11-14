@@ -27,6 +27,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
@@ -714,11 +715,11 @@ func (s *NexusStateReplicationSuite) waitCallback(
 }
 
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
-	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload(result), nexus.OperationCompletionSuccessfulOptions{
+	completion, err := nexusrpc.NewOperationCompletionSuccessful(s.mustToPayload(result), nexusrpc.OperationCompletionSuccessfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
-	req, err := nexus.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
+	req, err := nexusrpc.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
 	s.NoError(err)
 	if callbackToken != "" {
 		req.Header.Add(commonnexus.CallbackTokenHeader, callbackToken)
@@ -733,12 +734,12 @@ func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context,
 }
 
 func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, callbackUrl, callbackToken string) {
-	completion, err := nexus.NewOperationCompletionUnsuccessful(
+	completion, err := nexusrpc.NewOperationCompletionUnsuccessful(
 		nexus.NewOperationCanceledError("operation canceled"),
-		nexus.OperationCompletionUnsuccessfulOptions{},
+		nexusrpc.OperationCompletionUnsuccessfulOptions{},
 	)
 	s.NoError(err)
-	req, err := nexus.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
+	req, err := nexusrpc.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
 	s.NoError(err)
 	if callbackToken != "" {
 		req.Header.Add(commonnexus.CallbackTokenHeader, callbackToken)

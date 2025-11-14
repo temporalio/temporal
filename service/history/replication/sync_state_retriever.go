@@ -245,15 +245,16 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	}
 	versionedTransitionArtifact.IsFirstSync = isNewWorkflow
 
-	newRunId := mutableState.GetExecutionInfo().SuccessorRunId
-	sourceVersionHistories := versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
-	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory)
+	executionInfo := mutableState.GetExecutionInfo()
+	newRunID := executionInfo.SuccessorRunId
+	sourceVersionHistories := versionhistory.CopyVersionHistories(executionInfo.VersionHistories)
+	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(executionInfo.TransitionHistory)
 	if cacheReleaseFunc != nil {
 		cacheReleaseFunc(nil)
 	}
 
-	if len(newRunId) > 0 {
-		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunId)
+	if len(newRunID) > 0 {
+		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunID)
 		if err != nil {
 			return nil, err
 		}

@@ -560,6 +560,16 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		},
 	}).AnyTimes()
 	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED).AnyTimes()
+	// Mock for watermark check
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId:                       s.namespaceID,
+		WorkflowId:                        s.workflowID,
+		TaskGenerationShardClockTimestamp: 123,
+		CloseVisibilityTaskId:             456,
+		CloseTransferTaskId:               789,
+	}
+	s.mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+	s.mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID)).AnyTimes()
 
 	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
@@ -571,7 +581,9 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		SourceTaskId: task.TaskID,
 		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
 			SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-				WorkflowState: sanitizedMutableState,
+				WorkflowState:            sanitizedMutableState,
+				IsForceReplication:       task.IsForceReplication,
+				IsCloseTransferTaskAcked: false, // No queue state available
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
@@ -1455,10 +1467,16 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories:  versionHistories,
-		TransitionHistory: transitionHistory,
+		VersionHistories:    versionHistories,
+		TransitionHistory:   transitionHistory,
+		CloseTransferTaskId: 0,
 	}).Times(2)
 	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
+	s.mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}).Times(1)
 
 	s.progressCache.EXPECT().Get(
 		s.runID,
@@ -1582,10 +1600,16 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories:  versionHistories,
-		TransitionHistory: transitionHistory,
+		VersionHistories:    versionHistories,
+		TransitionHistory:   transitionHistory,
+		CloseTransferTaskId: 0,
 	}).Times(2)
 	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
+	s.mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}).Times(1)
 
 	s.progressCache.EXPECT().Get(
 		s.runID,
@@ -1701,4 +1725,231 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_HasBuffer
 	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
 	s.NoError(err)
 	s.Nil(result)
+}
+
+func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_ZeroTaskId() {
+	testCloseTaskID := int64(0)
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
+	}
+
+	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
+	s.False(result)
+}
+
+func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_QueueStateNotAvailable() {
+	testCloseTaskID := int64(12345)
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
+	}
+
+	// Queue state not set, so should return false
+	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
+	s.False(result)
+}
+
+func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_TaskAcked() {
+	testCloseTaskID := int64(12345)
+	testReaderID := int64(1)
+	testShardID := int32(0)
+	testRangeID := int64(1)
+
+	// Reader scopes that don't contain the close task (testCloseTaskID = 12345)
+	// Scopes represent ranges being actively processed by readers
+	scope1Min := int64(1000)
+	scope1Max := int64(5000)
+	scope2Min := int64(6000)
+	scope2Max := int64(10000)
+
+	// Create a new mock shard with queue state pre-configured
+	// Queue state has exclusive reader high watermark past the close task,
+	// meaning all readers have acknowledged past the task
+	// Also add reader scopes that do NOT contain the task to ensure
+	// the reader scope logic is exercised
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: testShardID,
+			RangeId: testRangeID,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				int32(tasks.CategoryTransfer.ID()): {
+					ReaderStates: map[int64]*persistencespb.QueueReaderState{
+						testReaderID: {
+							Scopes: []*persistencespb.QueueSliceScope{
+								{
+									Range: &persistencespb.QueueSliceRange{
+										InclusiveMin: shard.ConvertToPersistenceTaskKey(
+											tasks.NewImmediateKey(scope1Min),
+										),
+										ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+											tasks.NewImmediateKey(scope1Max),
+										),
+									},
+									Predicate: &persistencespb.Predicate{
+										PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+									},
+								},
+								{
+									Range: &persistencespb.QueueSliceRange{
+										InclusiveMin: shard.ConvertToPersistenceTaskKey(
+											tasks.NewImmediateKey(scope2Min),
+										),
+										ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+											tasks.NewImmediateKey(scope2Max),
+										),
+									},
+									Predicate: &persistencespb.Predicate{
+										PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+									},
+								},
+							},
+						},
+					},
+					ExclusiveReaderHighWatermark: shard.ConvertToPersistenceTaskKey(
+						tasks.NewImmediateKey(testCloseTaskID + 1),
+					),
+				},
+			},
+		},
+		tests.NewDynamicConfig(),
+	)
+	defer mockShard.StopForTest()
+
+	converter := newSyncVersionedTransitionTaskConverter(mockShard, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
+	}
+
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
+	s.True(result)
+}
+
+func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_TaskNotAcked() {
+	testCloseTaskID := int64(12345)
+	testShardID := int32(0)
+	testRangeID := int64(1)
+
+	// Create a new mock shard with queue state pre-configured
+	// Queue state has exclusive reader high watermark before the close task,
+	// meaning the task has not been acknowledged yet as it hasnt even been read yet
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: testShardID,
+			RangeId: testRangeID,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				int32(tasks.CategoryTransfer.ID()): {
+					ReaderStates: map[int64]*persistencespb.QueueReaderState{},
+					ExclusiveReaderHighWatermark: shard.ConvertToPersistenceTaskKey(
+						tasks.NewImmediateKey(testCloseTaskID - 100),
+					),
+				},
+			},
+		},
+		tests.NewDynamicConfig(),
+	)
+	defer mockShard.StopForTest()
+
+	converter := newSyncVersionedTransitionTaskConverter(mockShard, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
+	}
+
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
+	s.False(result)
+}
+
+func (s *rawTaskConverterSuite) TestIsCloseTransferTaskAcked_TaskNotAcked_ContainedInReaderScope() {
+	testCloseTaskID := int64(12345)
+	testReaderID := int64(1)
+	testShardID := int32(0)
+	testRangeID := int64(1)
+
+	// Reader scope that contains the close task
+	scopeMin := int64(10000)
+	scopeMax := int64(15000)
+	taskID := int64(12000)
+
+	// Create a new mock shard with queue state where:
+	// - exclusive reader high watermark is past the task
+	// - BUT a reader scope contains the task, meaning it has not been fully processed
+	// This tests the reader scope check logic in util.go lines 18-31
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: testShardID,
+			RangeId: testRangeID,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				int32(tasks.CategoryTransfer.ID()): {
+					ReaderStates: map[int64]*persistencespb.QueueReaderState{
+						testReaderID: {
+							Scopes: []*persistencespb.QueueSliceScope{
+								{
+									Range: &persistencespb.QueueSliceRange{
+										InclusiveMin: shard.ConvertToPersistenceTaskKey(
+											tasks.NewImmediateKey(scopeMin),
+										),
+										ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+											tasks.NewImmediateKey(scopeMax),
+										),
+									},
+									Predicate: &persistencespb.Predicate{
+										PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+									},
+								},
+							},
+						},
+					},
+					ExclusiveReaderHighWatermark: shard.ConvertToPersistenceTaskKey(
+						tasks.NewImmediateKey(taskID),
+					),
+				},
+			},
+		},
+		tests.NewDynamicConfig(),
+	)
+	defer mockShard.StopForTest()
+
+	converter := newSyncVersionedTransitionTaskConverter(mockShard, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	}
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: workflowKey,
+		TaskID:      testCloseTaskID,
+	}
+
+	result := converter.isCloseTransferTaskAcked(closeTransferTask)
+	s.False(result)
 }

@@ -276,6 +276,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -339,6 +340,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut_W
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -376,6 +378,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
@@ -432,6 +435,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -469,6 +473,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -532,6 +537,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed_Wit
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -569,6 +575,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -631,6 +638,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted_
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -668,6 +676,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -775,6 +784,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -825,6 +835,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		now,
 		false,
+		false, // skipCloseTransferTask
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
@@ -2161,5 +2172,6 @@ func (p *testTaskGeneratorProvider) NewTaskGenerator(
 		mutableState,
 		shardContext.GetConfig(),
 		shardContext.GetArchivalMetadata(),
+		shardContext.GetLogger(),
 	)
 }
