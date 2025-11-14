@@ -2,7 +2,6 @@ package pauseworkflow
 
 import (
 	"context"
-	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -20,7 +19,6 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.PauseWorkflowExecutionResponse, retError error) {
-	shard.GetLogger().Warn(fmt.Sprintf("Pausing workflow execution %s/%s by %s", req.GetPauseRequest().GetWorkflowId(), req.GetPauseRequest().GetRunId(), req.GetPauseRequest().GetIdentity()))
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
