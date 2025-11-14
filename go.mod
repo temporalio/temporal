@@ -173,4 +173,4 @@ require (
 )
 
 // TODO: (Chetan) Remove this once https://github.com/temporalio/api/pull/653 is merged.
-replace go.temporal.io/api => github.com/temporalio/api-go v1.57.1-0.20251106225639-11e28ba89a75
+replace go.temporal.io/api => github.com/temporalio/api-go v1.58.1-0.20251114064206-684f3d28d90a
