@@ -156,16 +156,3 @@ func ProtoRefToComponentRef(pRef *persistencespb.ChasmComponentRef) ComponentRef
 		componentInitialVT: pRef.ComponentInitialVersionedTransition,
 	}
 }
-
-// TODO(dan): is this leaking too much detail about VTs?
-//
-// Compare compares the entity versioned transition of two ComponentRefs. Returns -1 if a < b, 0 if
-// a == b, 1 if a > b, where a and b are compared according to their versioned transitions using
-// transitionhistory.Compare. Note that this implies that a component ref without a versioned
-// transition compares less than any component ref with a versioned transition.
-func CompareComponentRefs(a, b *ComponentRef) (int, error) {
-	if a.EntityKey != b.EntityKey {
-		return 0, serviceerror.NewInvalidArgument("component refs have different entity keys and cannot be compared")
-	}
-	return transitionhistory.Compare(a.entityLastUpdateVT, b.entityLastUpdateVT), nil
-}

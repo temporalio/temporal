@@ -89,85 +89,35 @@ func pollActivityExecutionWaitAnyStateChange(
 	ctx context.Context,
 	req *activitypb.PollActivityExecutionRequest,
 ) (*activitypb.PollActivityExecutionResponse, error) {
-
-	// TODO(dan): do we want to guarantee that response data will differ from that received when the
-	// token was obtained? It's potentially confusing for the server to say "there's been a change"
-	// while returning data in which the change is not apparent.
-
-	refBytesFromToken := req.GetFrontendRequest().
+	token := req.GetFrontendRequest().
 		GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
 		WaitAnyStateChange.GetLongPollToken()
 
-	var lastSeenRef chasm.ComponentRef
-	if refBytesFromToken != nil {
-		var err error
-		lastSeenRef, err = chasm.DeserializeComponentRef(refBytesFromToken)
-		if err != nil {
-			return nil, serviceerror.NewInvalidArgument("invalid long poll token")
-		}
-		if lastSeenRef.NamespaceID != req.GetNamespaceId() ||
-			lastSeenRef.BusinessID != req.GetFrontendRequest().GetActivityId() ||
-			lastSeenRef.EntityID != req.GetFrontendRequest().GetRunId() {
-			// token is inconsistent with request
-			return nil, serviceerror.NewInvalidArgument("invalid long poll token")
-		}
-	} else {
-		// This ref will compare less than currentRef in the comparison below.
-		lastSeenRef = chasm.NewComponentRef[*Activity](chasm.EntityKey{
+	response, newRef, err := chasm.PollComponent(
+		ctx,
+		chasm.NewComponentRef[*Activity](chasm.EntityKey{
 			NamespaceID: req.GetNamespaceId(),
 			BusinessID:  req.GetFrontendRequest().GetActivityId(),
 			EntityID:    req.GetFrontendRequest().GetRunId(),
-		})
-	}
-
-	// PollComponent will return an error if lastSeenRef is not consistent with the entity
-	// transition history on this shard, or if the state on this shard is behind the ref after a
-	// reload.
-	// TODO(dan): retryability of these errors
-	response, newRef, err := chasm.PollComponent(
-		ctx,
-		lastSeenRef,
+		}),
 		func(
 			a *Activity,
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
-			// TODO(dan): we're walking the tree to construct a ref when all we want here is the
-			// root/entity VT. Would it make sense for Context to provide access to root node?
-			currentRefBytes, err := ctx.Ref(a)
+			_, advanced, err := chasm.HasStateAdvanced(a, ctx, token)
 			if err != nil {
 				return nil, false, err
 			}
-			currentRef, err := chasm.DeserializeComponentRef(currentRefBytes)
-			if err != nil {
-				return nil, false, err
-			}
-
-			if lastSeenRef.EntityID != currentRef.EntityID {
-				return nil, false, serviceerror.NewInvalidArgumentf("long-poll token runID does not match entity runID")
-			}
-
-			refComparison, err := chasm.CompareComponentRefs(&lastSeenRef, &currentRef)
-			if err != nil {
-				return nil, false, err
-			}
-			switch refComparison {
-			case -1:
-				// state has advanced beyond last seen: this is what we're waiting for
+			if advanced {
+				// TODO(dan): pass ref into this?
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				if err != nil {
 					return nil, true, err
 				}
 				return response, true, nil
-			case 0:
-				// state is same as last seen: keep waiting
+			} else {
 				return nil, false, nil
-			case 1:
-				// Impossible: PollComponent guarantees that at this point, current VT >= lastSeen VT.
-				return nil, false, serviceerror.NewFailedPrecondition("long-poll token represents a state beyond current")
-			default:
-				// Impossible
-				return nil, false, serviceerror.NewInternal("unexpected transition history comparison result")
 			}
 		},
 		req,
@@ -182,7 +132,11 @@ func pollActivityExecutionWaitAnyStateChange(
 			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
 		}
 	} else {
-		response.GetFrontendResponse().StateChangeLongPollToken = newRef
+		token, err := chasm.EncodeStateToken(newRef)
+		if err != nil {
+			return nil, err
+		}
+		response.GetFrontendResponse().StateChangeLongPollToken = token
 	}
 	return response, nil
 }
@@ -228,7 +182,11 @@ func pollActivityExecutionWaitCompletion(
 			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
 		}
 	} else {
-		response.GetFrontendResponse().StateChangeLongPollToken = newRef
+		token, err := chasm.EncodeStateToken(newRef)
+		if err != nil {
+			return nil, err
+		}
+		response.GetFrontendResponse().StateChangeLongPollToken = token
 	}
 	return response, nil
 }

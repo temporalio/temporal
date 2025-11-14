@@ -387,6 +387,10 @@ func (a *Activity) buildPollActivityExecutionResponse(
 	if err != nil {
 		return nil, err
 	}
+	token, err := chasm.EncodeStateToken(ref)
+	if err != nil {
+		return nil, err
+	}
 
 	var info *activity.ActivityExecutionInfo
 	if request.GetIncludeInfo() {
@@ -413,7 +417,7 @@ func (a *Activity) buildPollActivityExecutionResponse(
 		Info:                     info,
 		RunId:                    ctx.ExecutionKey().EntityID,
 		Input:                    input,
-		StateChangeLongPollToken: ref,
+		StateChangeLongPollToken: token,
 	}
 
 	if request.GetIncludeOutcome() {
