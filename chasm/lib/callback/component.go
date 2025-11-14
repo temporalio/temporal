@@ -73,7 +73,7 @@ func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (callbackInvokable, error) {
-	completion, err := c.MSPointer.GetNexusCompletion(ctx, c.RequestId)
+	completion, err := c.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
 		return nil, err
 	}

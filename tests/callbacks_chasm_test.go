@@ -41,7 +41,7 @@ func TestCallbacksCHASMSuite(t *testing.T) {
 }
 
 func (s *CallbacksCHASMSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 			dynamicconfig.EnableChasm.Key():          true,
 			dynamicconfig.EnableCHASMCallbacks.Key(): true,
@@ -545,7 +545,7 @@ func (s *CallbacksCHASMSuite) TestNexusResetWorkflowWithCallback() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, description.WorkflowExecutionInfo.Status)
 
 	// Should not be invoked during a reset
-	s.Equal(len(cbs), len(description.Callbacks))
+	s.Len(description.Callbacks, len(cbs))
 	descCbs := make([]*commonpb.Callback, 0, len(description.Callbacks))
 	for _, callbackInfo := range description.Callbacks {
 		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
@@ -584,7 +584,7 @@ func (s *CallbacksCHASMSuite) TestNexusResetWorkflowWithCallback() {
 				description.WorkflowExecutionInfo.Status,
 			)
 
-			require.Equal(t, len(cbs), len(description.Callbacks))
+			require.Len(t, description.Callbacks, len(cbs))
 			descCbs = make([]*commonpb.Callback, 0, len(description.Callbacks))
 			for _, callbackInfo := range description.Callbacks {
 				require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
