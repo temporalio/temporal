@@ -148,8 +148,9 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionFailsWhenDisable
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
 	}, 5*time.Second, 100*time.Millisecond)
 
+	namespaceName := s.Namespace().String()
 	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
-		Namespace:  s.Namespace().String(),
+		Namespace:  namespaceName,
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Identity:   pauseIdentity,
@@ -160,7 +161,10 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionFailsWhenDisable
 	resp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
 	s.Nil(resp)
-	s.IsType(&serviceerror.Unimplemented{}, err)
+	var unimplementedErr *serviceerror.Unimplemented
+	s.ErrorAs(err, &unimplementedErr)
+	s.NotNil(unimplementedErr)
+	s.Contains(unimplementedErr.Error(), namespaceName)
 
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, testEndSignal, "test end signal")
 	s.NoError(err)
