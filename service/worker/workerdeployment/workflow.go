@@ -426,6 +426,10 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	if err != nil {
 		return err
 	}
+	var routingConfigToSync *deploymentpb.RoutingConfig
+	if d.hasMinVersion(AsyncSetCurrentAndRamping) {
+		routingConfigToSync = d.GetState().GetRoutingConfig()
+	}
 
 	// Register task-queue worker in version workflow.
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -434,7 +438,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		TaskQueueType: args.TaskQueueType,
 		MaxTaskQueues: args.MaxTaskQueues,
 		Version:       worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
-		RoutingConfig: d.State.GetRoutingConfig(),
+		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
 		var appError *temporal.ApplicationError
@@ -1051,9 +1055,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 				RampingSinceTime:  nil, // remove ramp for that version if it was ramping
 				RampPercentage:    0,   // remove ramp for that version if it was ramping
 				RoutingConfig:     routingConfigToSync,
-			}
-			if asyncMode {
-				currUpdateArgs.RoutingConfig = pendingRoutingConfig
 			}
 			if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs, true); err != nil {
 				return nil, err
