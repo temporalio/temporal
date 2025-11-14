@@ -28,7 +28,7 @@ func newQueue(
 	serializer serialization.Serializer,
 ) (persistence.Queue, error) {
 	queue := &sqlQueue{
-		SqlStore:  NewSqlStore(db, logger, serializer),
+		SqlStore:  NewSQLStore(db, logger, serializer),
 		queueType: queueType,
 		logger:    logger,
 	}

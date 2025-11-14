@@ -35,7 +35,7 @@ func newTaskManagerV1(
 	serializer serialization.Serializer,
 ) (*sqlTaskManagerV1, error) {
 	return &sqlTaskManagerV1{
-		SqlStore:       NewSqlStore(db, logger, serializer),
+		SqlStore:       NewSQLStore(db, logger, serializer),
 		userDataStore:  uds,
 		taskQueueStore: tqs,
 	}, nil

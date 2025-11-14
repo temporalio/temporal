@@ -24,7 +24,7 @@ type SqlStore struct {
 	serializer serialization.Serializer
 }
 
-func NewSqlStore(db sqlplugin.DB, logger log.Logger, serializer serialization.Serializer) SqlStore {
+func NewSQLStore(db sqlplugin.DB, logger log.Logger, serializer serialization.Serializer) SqlStore {
 	return SqlStore{
 		DB:         db,
 		logger:     logger,

@@ -26,7 +26,7 @@ func newMetadataPersistenceV2(
 	serializer serialization.Serializer,
 ) (persistence.MetadataStore, error) {
 	return &sqlMetadataManagerV2{
-		SqlStore:          NewSqlStore(db, logger, serializer),
+		SqlStore:          NewSQLStore(db, logger, serializer),
 		activeClusterName: currentClusterName,
 	}, nil
 }

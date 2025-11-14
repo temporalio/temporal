@@ -25,7 +25,7 @@ func newShardPersistence(
 	serializer serialization.Serializer,
 ) (persistence.ShardStore, error) {
 	return &sqlShardStore{
-		SqlStore:           NewSqlStore(db, logger, serializer),
+		SqlStore:           NewSQLStore(db, logger, serializer),
 		currentClusterName: currentClusterName,
 	}, nil
 }

@@ -35,7 +35,7 @@ func NewSqlNexusEndpointStore(
 	serializer serialization.Serializer,
 ) (p.NexusEndpointStore, error) {
 	return &sqlNexusEndpointStore{
-		SqlStore: NewSqlStore(db, logger, serializer),
+		SqlStore: NewSQLStore(db, logger, serializer),
 	}, nil
 }
 
