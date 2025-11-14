@@ -157,6 +157,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		shard.GetTimeSource(),
 		shard.GetNamespaceRegistry(),
 		shard.GetClusterMetadata(),
+		queues.GetTaskTypeTagValue,
 		logger,
 		metricsHandler,
 		f.Tracer,

@@ -69,21 +69,41 @@ const (
 
 type Versioning3Suite struct {
 	WorkflowUpdateBaseSuite
-	useV32               bool
+	useV32                    bool
+	deploymentWorkflowVersion workerdeployment.DeploymentWorkflowVersion
+	useRevisionNumbers        bool
+	// TODO: this is always false. clean it up.
 	useNewDeploymentData bool
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &Versioning3Suite{useV32: true})
-	suite.Run(t, &Versioning3Suite{useV32: true, useNewDeploymentData: true})
+
+	t.Run("basic", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{useV32: true})
+	})
+
+	t.Run("async_deployment", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			useV32:                    true,
+			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+		})
+	})
+
+	t.Run("async_deployment_with_revisions", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			useV32:                    true,
+			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			useRevisionNumbers:        true,
+		})
+	})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.EnableDeploymentVersions.Key():                   true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
+		dynamicconfig.MatchingDeploymentWorkflowVersion.Key():    int(s.deploymentWorkflowVersion),
+		dynamicconfig.UseRevisionNumberForWorkerVersioning.Key(): s.useRevisionNumbers,
+		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():  partitionTreeDegree,
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
@@ -356,7 +376,10 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, r
 	if !pollersPresent {
 		// simulate the pollers going away, which should make the query fail as now the version is drained + has no pollers polling it
 		time.Sleep(1 * time.Second) //nolint:forbidigo
-		versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
+		versionStr := tv.Deployment().GetBuildId()
+		if s.deploymentWorkflowVersion < workerdeployment.AsyncSetCurrentAndRamping {
+			versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
+		}
 
 		_, err := s.queryWorkflow(tv)
 		s.Error(err)
@@ -465,19 +488,18 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 
 	pollerDone := make(chan struct{})
 	go func() {
-		s.idlePollWorkflow(tv2, true, ver3MinPollTime, "new deployment should not receive query")
+		s.idlePollWorkflow(tv2, true, 5*time.Second, "new deployment should not receive query")
 		close(pollerDone)
 	}()
 	s.pollAndQueryWorkflow(tv, sticky)
 	s.WaitForChannel(ctx, pollerDone) // wait for the idle poller to complete to not interfere with the next poller
 
-	// redirect query to new deployment
-	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	s.setCurrentDeployment(tv2)
+	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf)
 
 	go s.idlePollWorkflow(tv, true, ver3MinPollTime, "old deployment should not receive query")
 	// Since the current deployment has changed, task will move to the normal queue (thus, sticky=false)
 	s.pollAndQueryWorkflow(tv2, false)
-
 }
 
 func (s *Versioning3Suite) pollAndQueryWorkflow(
@@ -640,7 +662,7 @@ func (s *Versioning3Suite) drainWorkflowTaskAfterSetCurrent(
 	return execution, runID
 }
 
-func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionstoNewDeployment() {
+func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNewDeployment() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv1)
@@ -1709,15 +1731,23 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
 }
 
-func (s *Versioning3Suite) TestIndependentActivity_Pinned() {
-	s.testIndependentActivity(vbPinned)
+func (s *Versioning3Suite) TestIndependentVersionedActivity_Pinned() {
+	s.testIndependentActivity(vbPinned, false)
 }
 
-func (s *Versioning3Suite) TestIndependentActivity_Unpinned() {
-	s.testIndependentActivity(vbUnpinned)
+func (s *Versioning3Suite) TestIndependentVersionedActivity_Unpinned() {
+	s.testIndependentActivity(vbUnpinned, false)
 }
 
-func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBehavior) {
+func (s *Versioning3Suite) TestIndependentUnversionedActivity_Pinned() {
+	s.testIndependentActivity(vbPinned, true)
+}
+
+func (s *Versioning3Suite) TestIndependentUnversionedActivity_Unpinned() {
+	s.testIndependentActivity(vbUnpinned, true)
+}
+
+func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBehavior, unversionedActivity bool) {
 	// This test starts a wf on wf-series. The workflow runs an activity that is sent to act-tq with
 	// workers on a different deployment series, act-series. We make sure that the activity is
 	// dispatched and processed properly without affecting versioning of the workflow. Note that it
@@ -1737,17 +1767,21 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 		}}, []string{}, tqTypeWf)
 
-		// Different deployment here for the activity TQ.
-		s.updateTaskQueueDeploymentDataWithRoutingConfig(tvAct, &deploymentpb.RoutingConfig{
-			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tvAct.DeploymentVersionString()),
-			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-			RevisionNumber:            1,
-		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tvAct.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
-			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeAct)
+		if !unversionedActivity {
+			// Different deployment here for the activity TQ.
+			s.updateTaskQueueDeploymentDataWithRoutingConfig(tvAct, &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tvAct.DeploymentVersionString()),
+				CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+				RevisionNumber:            1,
+			}, map[string]*deploymentspb.WorkerDeploymentVersionData{tvAct.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			}}, []string{}, tqTypeAct)
+		}
 	} else {
 		s.updateTaskQueueDeploymentData(tvWf, true, 0, false, 0, tqTypeWf)
-		s.updateTaskQueueDeploymentData(tvAct, true, 0, false, 0, tqTypeAct)
+		if !unversionedActivity {
+			s.updateTaskQueueDeploymentData(tvAct, true, 0, false, 0, tqTypeAct)
+		}
 	}
 
 	s.startWorkflow(tvWf, nil)
@@ -1761,12 +1795,21 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 		})
 	s.verifyWorkflowVersioning(tvWf, behavior, tvWf.Deployment(), nil, nil)
 
-	s.pollActivityAndHandle(tvAct, nil,
-		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			s.NotNil(task)
-			s.Logger.Info("Activity completed")
-			return respondActivity(), nil
-		})
+	if unversionedActivity {
+		s.unversionedPollActivityAndHandle(tvAct, nil,
+			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.Logger.Info("Activity completed")
+				return respondActivity(), nil
+			})
+	} else {
+		s.pollActivityAndHandle(tvAct, nil,
+			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.Logger.Info("Activity completed")
+				return respondActivity(), nil
+			})
+	}
 	s.verifyWorkflowVersioning(tvWf, behavior, tvWf.Deployment(), nil, nil)
 
 	s.pollWftAndHandle(tvWf, false, nil,
@@ -3305,7 +3348,10 @@ func (s *Versioning3Suite) idlePollWorkflow(
 	).HandleTask(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.Fail(unexpectedTaskMessage)
+			// Can't call s.Fail directly because linter will complain about unsafe assertion in another go routine.
+			// s.Assert().Fail is safe but linter automatically converts it to s.Fail if written directly!
+			a := s.Assert()
+			a.Fail(unexpectedTaskMessage)
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),
