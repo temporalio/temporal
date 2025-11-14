@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
@@ -56,7 +57,7 @@ func Invoke(
 			}
 
 			// Check if workflow is already paused
-			if mutableState.IsWorkflowExecutionStatusPaused() {
+			if mutableState.GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				// Already paused, nothing to do
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
