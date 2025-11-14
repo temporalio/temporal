@@ -1,0 +1,108 @@
+package tests
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/tests/testcore"
+)
+
+type PauseWorkflowExecutionSuite struct {
+	testcore.FunctionalTestBase
+}
+
+func TestPauseWorkflowExecutionSuite(t *testing.T) {
+	s := new(PauseWorkflowExecutionSuite)
+	suite.Run(t, s)
+}
+
+func (s *PauseWorkflowExecutionSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
+}
+
+func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
+	const (
+		testEndSignal = "test-end"
+		pauseIdentity = "functional-test"
+		pauseReason   = "pausing workflow for acceptance test"
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		signalCh := workflow.GetSignalChannel(ctx, testEndSignal)
+		var signalPayload string
+		signalCh.Receive(ctx, &signalPayload)
+		return signalPayload, nil
+	}
+
+	s.Worker().RegisterWorkflow(workflowFn)
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
+	}
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+	}, 5*time.Second, 100*time.Millisecond)
+
+	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   pauseIdentity,
+		Reason:     pauseReason,
+		RequestId:  uuid.New(),
+	}
+
+	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
+		if pauseInfo := info.GetPauseInfo(); pauseInfo != nil {
+			require.Equal(t, pauseIdentity, pauseInfo.GetIdentity())
+			require.Equal(t, pauseReason, pauseInfo.GetReason())
+		}
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// TODO: currently pause workflow execution does not intercept workflow creation. Fix the reset of this test when that is implemented.
+	// For now sending this signal will complete the workflow and finish the test.
+	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, testEndSignal, "test end signal")
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.GetStatus())
+	}, 5*time.Second, 200*time.Millisecond)
+}
