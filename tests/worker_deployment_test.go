@@ -3156,19 +3156,21 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 	}
 	s.NoError(err)
 
-	if prevVersion := expectedResp.GetPreviousDeploymentVersion(); prevVersion != nil {
-		s.Equal(prevVersion.GetBuildId(), resp.GetPreviousDeploymentVersion().GetBuildId())
-		s.Equal(prevVersion.GetDeploymentName(), resp.GetPreviousDeploymentVersion().GetDeploymentName())
-	} else {
-		// nolint:staticcheck // SA1019: version v0.31
-		if expectedResp.GetPreviousVersion() == "" {
-			s.Nil(resp.GetPreviousDeploymentVersion())
+	if expectedResp != nil {
+		if prevVersion := expectedResp.GetPreviousDeploymentVersion(); prevVersion != nil {
+			s.Equal(prevVersion.GetBuildId(), resp.GetPreviousDeploymentVersion().GetBuildId())
+			s.Equal(prevVersion.GetDeploymentName(), resp.GetPreviousDeploymentVersion().GetDeploymentName())
 		} else {
 			// nolint:staticcheck // SA1019: version v0.31
-			s.Equal(expectedResp.GetPreviousVersion(), worker_versioning.ExternalWorkerDeploymentVersionToStringV31(resp.GetPreviousDeploymentVersion()))
+			if expectedResp.GetPreviousVersion() == "" {
+				s.Nil(resp.GetPreviousDeploymentVersion())
+			} else {
+				// nolint:staticcheck // SA1019: version v0.31
+				s.Equal(expectedResp.GetPreviousVersion(), worker_versioning.ExternalWorkerDeploymentVersionToStringV31(resp.GetPreviousDeploymentVersion()))
+			}
 		}
+		s.InDelta(expectedResp.GetPreviousPercentage(), resp.GetPreviousPercentage(), 0.01)
 	}
-	s.InDelta(expectedResp.GetPreviousPercentage(), resp.GetPreviousPercentage(), 0.01)
 }
 
 func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testvars.TestVars, previousCurrent string, ignoreMissingTaskQueues bool, expectedError string) {
