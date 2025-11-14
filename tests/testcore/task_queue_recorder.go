@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -22,6 +23,7 @@ type TaskQueueRecorder struct {
 	mu       sync.RWMutex
 	tasks    map[tasks.Category][]RecordedTask // All tasks by category, in order
 	delegate persistence.ExecutionManager
+	logger   log.Logger
 }
 
 // RecordedTask wraps a task with metadata about when and where it was written
@@ -37,10 +39,11 @@ type RecordedTask struct {
 }
 
 // NewTaskQueueRecorder creates a recorder that wraps the given ExecutionManager
-func NewTaskQueueRecorder(delegate persistence.ExecutionManager) *TaskQueueRecorder {
+func NewTaskQueueRecorder(delegate persistence.ExecutionManager, logger log.Logger) *TaskQueueRecorder {
 	return &TaskQueueRecorder{
 		tasks:    make(map[tasks.Category][]RecordedTask),
 		delegate: delegate,
+		logger:   logger,
 	}
 }
 
@@ -222,7 +225,7 @@ func (r *TaskQueueRecorder) GetRecordedTasksByCategoryFiltered(category tasks.Ca
 	defer r.mu.RUnlock()
 
 	if filter.NamespaceID == "" {
-		panic("TaskFilter.NamespaceID is required - use GetRecordedTasksByCategoryFiltered to prevent accidentally checking all tasks")
+		r.logger.DPanic("TaskFilter.NamespaceID is required - use GetRecordedTasksByCategoryFiltered to prevent accidentally checking all tasks")
 	}
 
 	recordedList, ok := r.tasks[category]
