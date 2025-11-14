@@ -48,7 +48,7 @@ func (s *queryConverterSuite) SetupTest() {
 		s.pqc,
 		testNamespaceName,
 		testNamespaceID,
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 		"",
 	)
@@ -142,7 +142,7 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 				s.pqc,
 				testNamespaceName,
 				testNamespaceID,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 				"",
 			)
@@ -596,7 +596,7 @@ func (s *queryConverterSuite) TestConvertColName() {
 			),
 			err: nil,
 			setup: func() {
-				s.queryConverter.saTypeMap = searchattribute.TestNameTypeMapWithScheduleId
+				s.queryConverter.saTypeMap = searchattribute.TestEsNameTypeMapWithScheduleID()
 				s.queryConverter.saMapper = newMapper(
 					func(alias, namespace string) (string, error) {
 						return alias, nil
