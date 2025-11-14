@@ -895,6 +895,13 @@ func WorkerDeploymentVersionToStringV32(v *deploymentspb.WorkerDeploymentVersion
 	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
 }
 
+func WorkerDeploymentVersionStringV32(deploymentName, buildID string) string {
+	if deploymentName == "" || buildID == "" {
+		return ""
+	}
+	return deploymentName + WorkerDeploymentVersionIdDelimiter + buildID
+}
+
 func BuildIDToStringV32(deploymentName, buildID string) string {
 	return deploymentName + WorkerDeploymentVersionIdDelimiter + buildID
 }
