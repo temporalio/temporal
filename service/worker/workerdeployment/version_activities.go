@@ -93,14 +93,12 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
 			} else {
-				v := res.Version
-				if syncData.GetData() == nil && !res.GetRoutingConfigChanged() {
+				if syncData.GetData() != nil || res.GetRoutingConfigChanged() {
 					// No need to wait for partition propagation if it's async mode (no old-format data is provided) and routing config did not change
-					v = -1
+					lock.Lock()
+					maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
+					lock.Unlock()
 				}
-				lock.Lock()
-				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], v)
-				lock.Unlock()
 			}
 			errs <- err
 		}(e)
