@@ -1,5 +1,5 @@
 // This file implements ChasmNotifier, which allows subscribers to subscribe to notifications
-// relating to components in a specified CHASM entity. It is based on the events.Notifier
+// relating to components in a specified CHASM execution. It is based on the events.Notifier
 // implementation.
 package history
 
@@ -20,7 +20,7 @@ import (
 
 type (
 	// ChasmNotifier allows subscribers to subscribe to notifications relating to components in a
-	// specified CHASM entity.
+	// specified CHASM execution.
 	ChasmNotifier struct {
 		timeSource      clock.TimeSource
 		metricsHandler  metrics.Handler
@@ -40,7 +40,7 @@ type (
 )
 
 // NewChasmNotifier creates a new instance of ChasmNotifier allowing subscribers to subscribe to
-// notifications relating to components in a specified CHASM entity.
+// notifications relating to components in a specified CHASM execution.
 func NewChasmNotifier(
 	timeSource clock.TimeSource,
 	metricsHandler metrics.Handler,
@@ -53,11 +53,11 @@ func NewChasmNotifier(
 		stopCh:          make(chan bool),
 		notificationsCh: make(chan *ChasmComponentNotification, 1000),
 		subscribers: collection.NewShardedConcurrentTxMap(1024, func(key any) uint32 {
-			entityKey, ok := key.(chasm.EntityKey)
+			executionKey, ok := key.(chasm.EntityKey)
 			if !ok {
 				return 0
 			}
-			return farm.Fingerprint32([]byte(entityKey.NamespaceID + "_" + entityKey.BusinessID))
+			return farm.Fingerprint32([]byte(executionKey.NamespaceID + "_" + executionKey.BusinessID))
 		}),
 	}
 }
@@ -83,8 +83,10 @@ func (n *ChasmNotifier) Notify(notification *ChasmComponentNotification) {
 	n.enqueue(notification)
 }
 
-// Subscribe returns a channel that will receive notifications relating to the entity,
-// along with a subscriber ID that can be passed to UnsubscribeNotification.
+// Subscribe returns a channel that will receive notifications relating to the execution, along with
+// a subscriber ID that can be passed to UnsubscribeNotification.
+//
+// TODO(dan): support subscribing to notifications for a specific component only?
 func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (chan *ChasmComponentNotification, string, error) {
 	channel := make(chan *ChasmComponentNotification, 1)
 	subscriberID := uuid.NewString()
@@ -112,7 +114,7 @@ func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (chan *ChasmComponentNoti
 	return channel, subscriberID, nil
 }
 
-// Unsubscribe unsubscribes the subscriber from notifications relating to the entity.
+// Unsubscribe unsubscribes the subscriber from notifications relating to the execution.
 func (n *ChasmNotifier) Unsubscribe(key chasm.EntityKey, subscriberID string) error {
 	success := true
 	n.subscribers.RemoveIf(key, func(key any, value any) bool {

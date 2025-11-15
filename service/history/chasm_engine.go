@@ -184,7 +184,7 @@ func (e *ChasmEngine) UpdateWithNewEntity(
 
 // UpdateComponent applies updateFn to the component identified by the supplied component reference,
 // returning the new component reference corresponding to the transition. An error is returned if
-// the state transition specified by the supplied component reference is inconsistent with entity
+// the state transition specified by the supplied component reference is inconsistent with execution
 // transition history.
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
@@ -245,7 +245,7 @@ func (e *ChasmEngine) UpdateComponent(
 
 // ReadComponent evaluates readFn against the current state of the component identified by the
 // supplied component reference. An error is returned if the state transition specified by the
-// component reference is not interpretable as part of the entity transition history.
+// component reference is inconsistent with execution transition history.
 func (e *ChasmEngine) ReadComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -284,9 +284,9 @@ func (e *ChasmEngine) ReadComponent(
 // component identified by the supplied component reference. If it times out due to the
 // server-imposed long-poll timeout then it returns (nil, nil). Otherwise if there is no error, it
 // returns (ref, nil) where ref is a component reference identifying the state at which the
-// predicate was satisfied. It is an error if entity transition history is (after reloading from
-// persistence) behind the requested ref, or if the ref is not consistent with entity transition
-// history. Thus when the predicate function is evaluated, it is guaranteed that the entity VT >=
+// predicate was satisfied. It is an error if execution transition history is (after reloading from
+// persistence) behind the requested ref, or if the ref is inconsistent with execution transition
+// history. Thus when the predicate function is evaluated, it is guaranteed that the execution VT >=
 // requestRef VT.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
@@ -294,9 +294,9 @@ func (e *ChasmEngine) PollComponent(
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) ([]byte, error) {
 	// 1. Acquire lock
-	// 2. Error if shard entity VT < requestRef VT ('stale state')
+	// 2. Error if shard execution VT < requestRef VT ('stale state')
 	// 3. If predicate satisfied, release lock and return
-	// 4. Subscribe to notifications for this entity
+	// 4. Subscribe to notifications for this execution
 	// 5. Release lock
 	// 6. On notification repeat (1) and (2)
 
@@ -751,9 +751,9 @@ func (e *ChasmEngine) getShardContext(
 	return e.shardController.GetShardByID(shardID)
 }
 
-// getExecutionLease returns shard context and mutable state for the entity identified by the
+// getExecutionLease returns shard context and mutable state for the execution identified by the
 // supplied component reference, with the lock held. An error is returned if the state transition
-// specified by the component reference is not consistent with mutable state transition history. If
+// specified by the component reference is inconsistent with mutable state transition history. If
 // the state transition specified by the component reference is consistent with mutable state being
 // stale, then mutable state is reloaded from persistence before returning. It does not check that
 // mutable state is non-stale after reload.
