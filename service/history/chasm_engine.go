@@ -344,7 +344,7 @@ func (e *ChasmEngine) PollComponent(
 	released = true
 
 	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
-		namespace.ID(requestRef.EntityKey.NamespaceID),
+		namespace.ID(requestRef.NamespaceID),
 	)
 	if err != nil {
 		return nil, err

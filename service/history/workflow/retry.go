@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -19,8 +18,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
+	commonfailure "go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -41,7 +40,7 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
-	if !isRetryable(failure, nonRetryableTypes) {
+	if !commonfailure.IsRetryable(failure, nonRetryableTypes) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
@@ -110,45 +109,6 @@ func nextBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
 	return interval, enumspb.RETRY_STATE_IN_PROGRESS
-}
-
-func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
-	if failure == nil {
-		return true
-	}
-
-	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
-		return false
-	}
-
-	if failure.GetTimeoutFailureInfo() != nil {
-		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
-		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return !slices.Contains(
-				nonRetryableTypes,
-				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
-			)
-		}
-
-		return false
-	}
-
-	if failure.GetServerFailureInfo() != nil {
-		return !failure.GetServerFailureInfo().GetNonRetryable()
-	}
-
-	if failure.GetApplicationFailureInfo() != nil {
-		if failure.GetApplicationFailureInfo().GetNonRetryable() {
-			return false
-		}
-
-		return !slices.Contains(
-			nonRetryableTypes,
-			failure.GetApplicationFailureInfo().GetType(),
-		)
-	}
-	return true
 }
 
 // Helpers for creating new retry/cron workflows:

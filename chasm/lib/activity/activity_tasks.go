@@ -163,7 +163,7 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 
 	// Retry task if we have remaining attempts and time. A retry involves transitioning the activity back to scheduled state.
 	if enoughAttempts && enoughTime {
-		return TransitionRescheduled.Apply(activity, ctx, nil)
+		return TransitionRescheduled.Apply(activity, ctx, activity.createStartToCloseTimeoutFailure())
 	}
 
 	// Reached maximum attempts, timeout the activity

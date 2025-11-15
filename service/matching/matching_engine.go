@@ -1332,8 +1332,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					if v.GetVersion() == nil || v.GetVersion().GetDeploymentName() == "" || v.GetVersion().GetBuildId() == "" {
 						continue
 					}
-					buildId := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
-					buildIds = append(buildIds, buildId)
+					buildID := worker_versioning.WorkerDeploymentVersionToStringV32(v.GetVersion())
+					buildIds = append(buildIds, buildID)
 				}
 			}
 
@@ -2774,7 +2774,6 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
 	metricsHandler metrics.Handler,
 ) *matchingservice.PollActivityTaskQueueResponse {
-
 	scheduledEvent := historyResponse.ScheduledEvent
 	if scheduledEvent.GetActivityTaskScheduledEventAttributes() == nil {
 		panic("GetActivityTaskScheduledEventAttributes is not set")
@@ -2799,6 +2798,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		historyResponse.GetClock(),
 		historyResponse.GetVersion(),
 		historyResponse.GetStartVersion(),
+		task.event.GetData().GetComponentRef(),
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 

@@ -1,9 +1,12 @@
 package failure
 
 import (
+	"slices"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 )
 
@@ -88,4 +91,44 @@ func TruncateWithDepth(f *failurepb.Failure, maxSize, maxDepth int) *failurepb.F
 	}
 
 	return newFailure
+}
+
+// IsRetryable determines if a failure is retryable based on its type and non-retryable types list.
+func IsRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
+	if failure == nil {
+		return true
+	}
+
+	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
+		return false
+	}
+
+	if failure.GetTimeoutFailureInfo() != nil {
+		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
+		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+			return !slices.Contains(
+				nonRetryableTypes,
+				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
+			)
+		}
+
+		return false
+	}
+
+	if failure.GetServerFailureInfo() != nil {
+		return !failure.GetServerFailureInfo().GetNonRetryable()
+	}
+
+	if failure.GetApplicationFailureInfo() != nil {
+		if failure.GetApplicationFailureInfo().GetNonRetryable() {
+			return false
+		}
+
+		return !slices.Contains(
+			nonRetryableTypes,
+			failure.GetApplicationFailureInfo().GetType(),
+		)
+	}
+	return true
 }

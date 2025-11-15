@@ -180,7 +180,7 @@ func TestTransitionRescheduled(t *testing.T) {
 				Outcome: chasm.NewDataField(ctx, outcome),
 			}
 
-			err := TransitionRescheduled.Apply(activity, ctx, nil)
+			err := TransitionRescheduled.Apply(activity, ctx, activity.createStartToCloseTimeoutFailure())
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, activity.Status)
 			require.Equal(t, tc.startingAttemptCount+1, attemptState.Count)

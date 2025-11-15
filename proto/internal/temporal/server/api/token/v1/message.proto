@@ -49,6 +49,8 @@ message Task {
     int64 version = 11;
     google.protobuf.Timestamp started_time = 12;
     int64 start_version = 13;
+    // Reference to the associated Chasm component, if provided.
+    bytes component_ref = 14;
 }
 
 message QueryTask {
