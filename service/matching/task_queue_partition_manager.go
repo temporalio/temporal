@@ -64,7 +64,7 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
-		fairnessState persistencespb.TaskQueueTypeUserData_FairnessState //Set once on initialization and read only after
+		fairnessState persistencespb.TaskQueueTypeUserData_FairnessState // Set once on initialization and read only after
 
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
@@ -129,7 +129,7 @@ func newTaskQueuePartitionManager(
 	if err != nil {
 		return nil, err
 	}
-	//todo(moody): do we need to be more cautious loading this? Do we need to ensure that we have PerType()? Check for a nil return?
+	// todo(moody): do we need to be more cautious loading this? Do we need to ensure that we have PerType()? Check for a nil return?
 	data, _, err := pm.getPerTypeUserData()
 	if err != nil {
 		return nil, err
@@ -138,7 +138,7 @@ func newTaskQueuePartitionManager(
 	tqConfig.AutoEnable, pm.cancelAutoEnableSub = tqConfig.AutoEnableSub(unload)
 	pm.fairnessState = data.GetFairnessState()
 	switch {
-	case tqConfig.AutoEnable == false || pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
+	case !tqConfig.AutoEnable || pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
 		var fairness bool
 		fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
@@ -158,6 +158,8 @@ func newTaskQueuePartitionManager(
 		} else {
 			tqConfig.EnableFairness = true
 		}
+	default:
+		return nil, serviceerror.NewInternal("Unknown FairnessState in UserData")
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
@@ -228,17 +230,20 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	directive := params.taskInfo.GetVersionDirective()
 
 	if pm.Partition().IsRoot() && pm.config.AutoEnable && pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED {
-		//TODO(moody): unsure about this check, what is the correct way to check to see if PriorityKey is set?
-		//TODO(moody): This was originally discussed to be a separate API, but is just exposing this through the generic UpdateUserData sufficient?
+		// TODO(moody): unsure about this check, what is the correct way to check to see if PriorityKey is set?
+		// TODO(moody): This was originally discussed to be a separate API, but is just exposing this through the generic UpdateUserData sufficient?
 		// what is the pro/cons of adding the new API and perhaps invoking that instead? We're going to unload either way...
 		if params.taskInfo.Priority != nil && (params.taskInfo.Priority.FairnessKey != "" || params.taskInfo.Priority.PriorityKey != int32(pm.config.DefaultPriorityKey)) {
 			updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-				new := common.CloneProto(old)
-				perType := new.GetPerType()[int32(pm.Partition().TaskType())]
+				data := common.CloneProto(old)
+				perType := data.GetPerType()[int32(pm.Partition().TaskType())]
 				perType.FairnessState = persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V2
-				return new, true, nil
+				return data, true, nil
 			}
-			pm.userDataManager.UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
+			_, err := pm.userDataManager.UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
+			if err != nil {
+				pm.logger.Error("could not update userdata for autoenable: " + err.Error())
+			}
 		}
 	}
 	// spoolQueue will be nil iff task is forwarded.
@@ -1347,15 +1352,17 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	return perType, userDataChanged, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) userDataChanged(old, new *persistencespb.VersionedTaskQueueUserData) {
-	taskType := int32(pm.Partition().TaskType())
-	//TODO(moody): this stinks, do we need this more verbose, is this interface bad?
-	//TODO(moody): we get calls into this callback quite a bit with data being nil(sampled from unit tests), do we want to go through the full update
+func (pm *taskQueuePartitionManagerImpl) userDataChanged(from, to *persistencespb.VersionedTaskQueueUserData) {
+	// TODO(moody): this stinks, do we need this more verbose, is this interface bad?
+	// TODO(moody): we get calls into this callback quite a bit with data being nil(sampled from unit tests), do we want to go through the full update
 	// even in those cases? Should we pass the inner data and avoid a callback when that is nil? I am not totally sure about the implcations....
-	if old != nil && old.GetData() != nil && old.GetData().GetPerType() != nil && new != nil && new.GetData() != nil && new.GetData().GetPerType() != nil {
-		if old.GetData().GetPerType()[taskType].FairnessState != new.GetData().GetPerType()[taskType].FairnessState {
-			pm.unloadFromEngine(unloadCauseConfigChange)
-			return
+	if from != nil && from.GetData() != nil && from.GetData().GetPerType() != nil && to != nil && to.GetData() != nil && to.GetData().GetPerType() != nil {
+		taskType := int32(pm.Partition().TaskType())
+		if from.GetData().GetPerType()[taskType] != nil && to.GetData().GetPerType()[taskType] != nil {
+			if from.GetData().GetPerType()[taskType].FairnessState != to.GetData().GetPerType()[taskType].FairnessState {
+				pm.unloadFromEngine(unloadCauseConfigChange)
+				return
+			}
 		}
 	}
 	// Update rateLimits if any change is userData.

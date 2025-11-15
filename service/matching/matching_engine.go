@@ -431,9 +431,9 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
 	done := make(chan struct{})
-	onUserDataChanged := func(old, new *persistencespb.VersionedTaskQueueUserData) {
+	onUserDataChanged := func(from, to *persistencespb.VersionedTaskQueueUserData) {
 		<-done
-		newPM.userDataChanged(old, new)
+		newPM.userDataChanged(from, to)
 	}
 	userDataManager := newUserDataManager(
 		e.taskManager,

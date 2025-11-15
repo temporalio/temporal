@@ -75,7 +75,7 @@ type (
 	userDataManagerImpl struct {
 		lock              sync.Mutex
 		onFatalErr        func(unloadCause)
-		onUserDataChanged func(old, new *persistencespb.VersionedTaskQueueUserData) // if set, call this in new goroutine when user data changes
+		onUserDataChanged func(from, to *persistencespb.VersionedTaskQueueUserData) // if set, call this in new goroutine when user data changes
 		partition         tqid.Partition
 		userData          *persistencespb.VersionedTaskQueueUserData
 		userDataChanged   chan struct{}
@@ -110,7 +110,7 @@ func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	onFatalErr func(unloadCause),
-	onUserDataChanged func(old, new *persistencespb.VersionedTaskQueueUserData),
+	onUserDataChanged func(from, to *persistencespb.VersionedTaskQueueUserData),
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
