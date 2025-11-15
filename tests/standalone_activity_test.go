@@ -237,7 +237,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 	// Manipulate the token to verify token staleness checks (simulate ErrStaleReference). To do so
 	// we make use of the internal implementation detail that the bytes are a serialized ref.
 	token := firstPollResp.StateChangeLongPollToken
-	var tokenProto chasmactivitypb.StateToken
+	var tokenProto chasmactivitypb.ComponentStateToken
 	err = tokenProto.Unmarshal(token)
 	require.NoError(t, err)
 	if tokenProto.VersionedTransition != nil {

@@ -389,7 +389,7 @@ func (a *Activity) buildPollActivityExecutionResponse(
 	if err != nil {
 		return nil, err
 	}
-	token, err := chasm.EncodeStateToken(ref)
+	token, err := chasm.EncodeComponentStateToken(ref)
 	if err != nil {
 		return nil, err
 	}

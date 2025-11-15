@@ -5,35 +5,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type StateToken to the protobuf v3 wire format
-func (val *StateToken) Marshal() ([]byte, error) {
+// Marshal an object of type ComponentStateToken to the protobuf v3 wire format
+func (val *ComponentStateToken) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type StateToken from the protobuf v3 wire format
-func (val *StateToken) Unmarshal(buf []byte) error {
+// Unmarshal an object of type ComponentStateToken from the protobuf v3 wire format
+func (val *ComponentStateToken) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *StateToken) Size() int {
+func (val *ComponentStateToken) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two StateToken values are equivalent by recursively
+// Equal returns whether two ComponentStateToken values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *StateToken) Equal(that interface{}) bool {
+func (this *ComponentStateToken) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *StateToken
+	var that1 *ComponentStateToken
 	switch t := that.(type) {
-	case *StateToken:
+	case *ComponentStateToken:
 		that1 = t
-	case StateToken:
+	case ComponentStateToken:
 		that1 = &t
 	default:
 		return false

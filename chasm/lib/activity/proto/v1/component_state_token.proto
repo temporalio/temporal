@@ -7,9 +7,12 @@ option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;act
 
 import "temporal/server/api/persistence/v1/hsm.proto";
 
-message StateToken {
+// ComponentStateToken is a token identifying a component versioned transition. It is intended as a
+// token that component long-poll API callers can submit in order to communicate their last-seen
+// state.
+message ComponentStateToken {
   // Token schema version
   int32 version = 1;
-  // Entity versioned transition
+  // Component versioned transition
   temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 2;
 }

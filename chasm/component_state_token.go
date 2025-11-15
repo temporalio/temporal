@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// HasStateAdvanced returns (entityRef, true, nil) if entity state has advanced beyond the state
+// HasStateAdvanced returns a ref for the component if component state has advanced beyond the state
 // encoded in stateToken.
 func HasStateAdvanced(c Component, ctx Context, stateToken []byte) ([]byte, bool, error) {
 	refBytes, err := ctx.Ref(c)
@@ -20,7 +20,7 @@ func HasStateAdvanced(c Component, ctx Context, stateToken []byte) ([]byte, bool
 		return nil, false, err
 	}
 
-	token, err := decodeStateToken(stateToken)
+	token, err := decodeComponentStateToken(stateToken)
 	if err != nil {
 		return nil, false, err
 	}
@@ -42,22 +42,22 @@ func HasStateAdvanced(c Component, ctx Context, stateToken []byte) ([]byte, bool
 
 }
 
-func EncodeStateToken(refBytes []byte) ([]byte, error) {
+func EncodeComponentStateToken(refBytes []byte) ([]byte, error) {
 	ref, err := DeserializeComponentRef(refBytes)
 	if err != nil {
 		return nil, err
 	}
-	return proto.Marshal(&activitypb.StateToken{
+	return proto.Marshal(&activitypb.ComponentStateToken{
 		Version:             1,
 		VersionedTransition: ref.componentLastUpdateVT,
 	})
 }
 
-func decodeStateToken(tokenBytes []byte) (*activitypb.StateToken, error) {
+func decodeComponentStateToken(tokenBytes []byte) (*activitypb.ComponentStateToken, error) {
 	if len(tokenBytes) == 0 {
-		return &activitypb.StateToken{}, nil
+		return &activitypb.ComponentStateToken{}, nil
 	}
-	var token activitypb.StateToken
+	var token activitypb.ComponentStateToken
 	if err := proto.Unmarshal(tokenBytes, &token); err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid state token")
 	}
