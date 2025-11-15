@@ -236,7 +236,7 @@ func (e *ChasmEngine) UpdateComponent(
 	}
 
 	e.notifier.Notify(&ChasmComponentNotification{
-		Key: ref.EntityKey,
+		Key: ref.ComponentKey(),
 		Ref: newSerializedRef,
 	})
 
@@ -330,12 +330,17 @@ func (e *ChasmEngine) PollComponent(
 
 	// Wait condition not satisfied; long-poll
 
-	channel, subscriberID, err := e.notifier.Subscribe(requestRef.EntityKey)
+	// TODO(dan): currently, UpdateComponent is only emitting notifications for the component
+	// referenced. Suppose there exists a component tree rooted at component A with child component
+	// B. As things stand, someone could subscribe to notifications for B and miss an update to B
+	// which was made during an UpdateComponent(A) call.
+	componentKey := requestRef.ComponentKey()
+	channel, subscriberID, err := e.notifier.Subscribe(componentKey)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = e.notifier.Unsubscribe(requestRef.EntityKey, subscriberID)
+		_ = e.notifier.Unsubscribe(componentKey, subscriberID)
 	}()
 
 	// Release the lock, now that we are subscribed
