@@ -33,7 +33,7 @@ type (
 	// ChasmComponentNotification is a notification relating to a CHASM component.
 	ChasmComponentNotification struct {
 		// TODO(dan): confirm that we want Key in addition to the key in serialized ref
-		Key       chasm.EntityKey
+		Key       chasm.ComponentKey
 		Ref       []byte
 		timestamp time.Time
 	}
@@ -53,11 +53,15 @@ func NewChasmNotifier(
 		stopCh:          make(chan bool),
 		notificationsCh: make(chan *ChasmComponentNotification, 1000),
 		subscribers: collection.NewShardedConcurrentTxMap(1024, func(key any) uint32 {
-			executionKey, ok := key.(chasm.EntityKey)
+			componentKey, ok := key.(chasm.ComponentKey)
 			if !ok {
 				return 0
 			}
-			return farm.Fingerprint32([]byte(executionKey.NamespaceID + "_" + executionKey.BusinessID))
+			// TODO(dan): accesses to a map shard are serialized. Workflow uses (namespace,
+			// workflowID) here, hence different runs of the same execution map to the same map
+			// shard. Do we want to include the component path & initialVT in the hash key in order
+			// to improve concurrent access to components within the same execution?
+			return farm.Fingerprint32([]byte(componentKey.NamespaceID + "_" + componentKey.BusinessID + "_" + componentKey.Path))
 		}),
 	}
 }
@@ -83,11 +87,9 @@ func (n *ChasmNotifier) Notify(notification *ChasmComponentNotification) {
 	n.enqueue(notification)
 }
 
-// Subscribe returns a channel that will receive notifications relating to the execution, along with
+// Subscribe returns a channel that will receive notifications relating to the component, along with
 // a subscriber ID that can be passed to UnsubscribeNotification.
-//
-// TODO(dan): support subscribing to notifications for a specific component only?
-func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (chan *ChasmComponentNotification, string, error) {
+func (n *ChasmNotifier) Subscribe(key chasm.ComponentKey) (chan *ChasmComponentNotification, string, error) {
 	channel := make(chan *ChasmComponentNotification, 1)
 	subscriberID := uuid.NewString()
 
@@ -114,8 +116,8 @@ func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (chan *ChasmComponentNoti
 	return channel, subscriberID, nil
 }
 
-// Unsubscribe unsubscribes the subscriber from notifications relating to the execution.
-func (n *ChasmNotifier) Unsubscribe(key chasm.EntityKey, subscriberID string) error {
+// Unsubscribe unsubscribes the subscriber from notifications relating to the component.
+func (n *ChasmNotifier) Unsubscribe(key chasm.ComponentKey, subscriberID string) error {
 	success := true
 	n.subscribers.RemoveIf(key, func(key any, value any) bool {
 		subscribers := value.(map[string]chan *ChasmComponentNotification)

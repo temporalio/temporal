@@ -236,7 +236,7 @@ func (e *ChasmEngine) UpdateComponent(
 	}
 
 	e.notifier.Notify(&ChasmComponentNotification{
-		Key: ref.EntityKey,
+		Key: ref.ComponentKey(),
 		Ref: newSerializedRef,
 	})
 
@@ -330,12 +330,13 @@ func (e *ChasmEngine) PollComponent(
 
 	// Wait condition not satisfied; long-poll
 
-	channel, subscriberID, err := e.notifier.Subscribe(requestRef.EntityKey)
+	componentKey := requestRef.ComponentKey()
+	channel, subscriberID, err := e.notifier.Subscribe(componentKey)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = e.notifier.Unsubscribe(requestRef.EntityKey, subscriberID)
+		_ = e.notifier.Unsubscribe(componentKey, subscriberID)
 	}()
 
 	// Release the lock, now that we are subscribed
