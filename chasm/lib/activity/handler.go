@@ -93,7 +93,7 @@ func pollActivityExecutionWaitAnyStateChange(
 		GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
 		WaitAnyStateChange.GetLongPollToken()
 
-	response, newRef, err := chasm.PollComponent(
+	response, _, err := chasm.PollComponent(
 		ctx,
 		chasm.NewComponentRef[*Activity](chasm.EntityKey{
 			NamespaceID: req.GetNamespaceId(),
@@ -128,15 +128,18 @@ func pollActivityExecutionWaitAnyStateChange(
 	if response == nil {
 		// nil response indicates server-imposed long-poll timeout. Communicate this to callers by
 		// returning a non-error empty response.
+
+		// TODO(dan): the definition of "empty" is unclear, since callers can currently choose to
+		// exclude info, outcome, and input from the result. Currently, a caller can infer that the
+		// long-poll timed out due to a server-imposed timeout from the absence of the long-poll
+		// token. However, this is not a clear API. We are considering splitting the public API into
+		// two methods: one that returns info (optionally with input), and one that returns result,
+		// both with long-poll options. An empty response will then be more obvious to the caller.
+		// However, we may want to consider a more explicit way of saying to the caller "timed out
+		// due to internal long-poll timeout; please resubmit your long-poll request".
 		response = &activitypb.PollActivityExecutionResponse{
 			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
 		}
-	} else {
-		token, err := chasm.EncodeStateToken(newRef)
-		if err != nil {
-			return nil, err
-		}
-		response.GetFrontendResponse().StateChangeLongPollToken = token
 	}
 	return response, nil
 }
@@ -147,7 +150,7 @@ func pollActivityExecutionWaitCompletion(
 	req *activitypb.PollActivityExecutionRequest,
 ) (*activitypb.PollActivityExecutionResponse, error) {
 	// TODO(dan): implement functional test when RecordActivityTaskCompleted is implemented
-	response, newRef, err := chasm.PollComponent(
+	response, _, err := chasm.PollComponent(
 		ctx,
 		chasm.NewComponentRef[*Activity](chasm.EntityKey{
 			NamespaceID: req.GetNamespaceId(),
@@ -178,15 +181,18 @@ func pollActivityExecutionWaitCompletion(
 	if response == nil {
 		// nil response indicates server-imposed long-poll timeout. Communicate this to callers by
 		// returning a non-error empty response.
+
+		// TODO(dan): the definition of "empty" is unclear, since callers can currently choose to
+		// exclude info, outcome, and input from the result. Currently, a caller can infer that the
+		// long-poll timed out due to a server-imposed timeout from the absence of the long-poll
+		// token. However, this is not a clear API. We are considering splitting the public API into
+		// two methods: one that returns info (optionally with input), and one that returns result,
+		// both with long-poll options. An empty response will then be more obvious to the caller.
+		// However, we may want to consider a more explicit way of saying to the caller "timed out
+		// due to internal long-poll timeout; please resubmit your long-poll request".
 		response = &activitypb.PollActivityExecutionResponse{
 			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
 		}
-	} else {
-		token, err := chasm.EncodeStateToken(newRef)
-		if err != nil {
-			return nil, err
-		}
-		response.GetFrontendResponse().StateChangeLongPollToken = token
 	}
 	return response, nil
 }
