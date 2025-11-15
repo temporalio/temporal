@@ -90,8 +90,9 @@ type (
 
 const (
 	errCountLogThreshold = 1000
-	// After this many constraints, switch to a cached lookup.
-	constraintsCacheThreshold = 16
+	// After this many constraints, switch to a cached lookup. This value was determined
+	// empirically on my machine using BenchmarkCollectionIndexed.
+	constraintsCacheThreshold = 32
 )
 
 var (
