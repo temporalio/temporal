@@ -110,7 +110,7 @@ func pollActivityExecutionWaitAnyStateChange(
 				return nil, false, err
 			}
 			if advanced {
-				// TODO(dan): pass ref into this?
+				// TODO(dan): pass ref returned by HasStateAdvanced into this?
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				if err != nil {
 					return nil, true, err

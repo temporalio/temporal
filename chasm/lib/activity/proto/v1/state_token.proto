@@ -1,3 +1,4 @@
+// TODO(dan): this is not specific to activity and should go in a general CHASM location
 syntax = "proto3";
 
 package temporal.server.chasm.lib.activity.proto.v1;

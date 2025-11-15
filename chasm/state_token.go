@@ -1,12 +1,11 @@
 package chasm
 
 import (
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/proto"
 )
 
 // HasStateAdvanced returns (entityRef, true, nil) if entity state has advanced beyond the state
@@ -54,12 +53,12 @@ func EncodeStateToken(refBytes []byte) ([]byte, error) {
 	})
 }
 
-func decodeStateToken(stateToken []byte) (*activitypb.StateToken, error) {
-	if len(stateToken) == 0 {
+func decodeStateToken(tokenBytes []byte) (*activitypb.StateToken, error) {
+	if len(tokenBytes) == 0 {
 		return &activitypb.StateToken{}, nil
 	}
 	var token activitypb.StateToken
-	if err := proto.Unmarshal(stateToken, &token); err != nil {
+	if err := proto.Unmarshal(tokenBytes, &token); err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid state token")
 	}
 	return &token, nil
