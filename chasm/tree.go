@@ -1209,7 +1209,7 @@ func (n *Node) Ref(
 				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(
 					node.backend.CurrentVersionedTransition(),
 				),
-				componentLastUpdateVT: transitionhistory.CopyVersionedTransition(
+				componentVT: transitionhistory.CopyVersionedTransition(
 					node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 				),
 				componentPath:      path,

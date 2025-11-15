@@ -25,7 +25,7 @@ func HasStateAdvanced(c Component, ctx Context, stateToken []byte) ([]byte, bool
 		return nil, false, err
 	}
 
-	switch transitionhistory.Compare(token.VersionedTransition, ref.componentLastUpdateVT) {
+	switch transitionhistory.Compare(token.VersionedTransition, ref.componentVT) {
 	case -1:
 		// State has advanced beyond stateToken
 		return refBytes, true, nil
@@ -49,7 +49,7 @@ func EncodeComponentStateToken(refBytes []byte) ([]byte, error) {
 	}
 	return proto.Marshal(&activitypb.ComponentStateToken{
 		Version:             1,
-		VersionedTransition: ref.componentLastUpdateVT,
+		VersionedTransition: ref.componentVT,
 	})
 }
 

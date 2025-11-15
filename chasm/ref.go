@@ -38,10 +38,6 @@ type ComponentRef struct {
 	// entityLastUpdateVT is the consistency token for the entire entity.
 	entityLastUpdateVT *persistencespb.VersionedTransition
 
-	// componentLastUpdateVT is the VT when this component was last updated.
-	// This enables fine-grained change detection for polling specific components.
-	componentLastUpdateVT *persistencespb.VersionedTransition
-
 	// componentType is the fully qualified component type name.
 	// It is for performing partial loading more efficiently in future versions of CHASM.
 	//
@@ -55,6 +51,7 @@ type ComponentRef struct {
 
 	// componentPath and componentInitialVT are used to identify a component.
 	componentPath      []string
+	componentVT        *persistencespb.VersionedTransition
 	componentInitialVT *persistencespb.VersionedTransition
 
 	validationFn func(NodeBackend, Context, Component) error
@@ -128,7 +125,7 @@ func (r *ComponentRef) Serialize(
 		EntityVersionedTransition:           r.entityLastUpdateVT,
 		ComponentPath:                       r.componentPath,
 		ComponentInitialVersionedTransition: r.componentInitialVT,
-		ComponentVersionedTransition:        r.componentLastUpdateVT,
+		ComponentVersionedTransition:        r.componentVT,
 	}
 	return pRef.Marshal()
 }
@@ -154,10 +151,10 @@ func ProtoRefToComponentRef(pRef *persistencespb.ChasmComponentRef) ComponentRef
 			BusinessID:  pRef.BusinessId,
 			EntityID:    pRef.EntityId,
 		},
-		archetype:             Archetype(pRef.Archetype),
-		entityLastUpdateVT:    pRef.EntityVersionedTransition,
-		componentLastUpdateVT: pRef.ComponentVersionedTransition,
-		componentPath:         pRef.ComponentPath,
-		componentInitialVT:    pRef.ComponentInitialVersionedTransition,
+		archetype:          Archetype(pRef.Archetype),
+		entityLastUpdateVT: pRef.EntityVersionedTransition,
+		componentVT:        pRef.ComponentVersionedTransition,
+		componentPath:      pRef.ComponentPath,
+		componentInitialVT: pRef.ComponentInitialVersionedTransition,
 	}
 }
