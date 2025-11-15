@@ -59,53 +59,29 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 func (h *handler) PollActivityExecution(
 	ctx context.Context,
 	req *activitypb.PollActivityExecutionRequest,
-) (*activitypb.PollActivityExecutionResponse, error) {
-	switch req.GetFrontendRequest().GetWaitPolicy().(type) {
-	case nil:
-		return chasm.ReadComponent(
-			ctx,
-			chasm.NewComponentRef[*Activity](chasm.EntityKey{
-				NamespaceID: req.GetNamespaceId(),
-				BusinessID:  req.GetFrontendRequest().GetActivityId(),
-				EntityID:    req.GetFrontendRequest().GetRunId(),
-			}),
-			(*Activity).buildPollActivityExecutionResponse,
-			req,
-			nil,
-		)
-	case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
-		return pollActivityExecutionWaitAnyStateChange(ctx, req)
-	case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
-		return pollActivityExecutionWaitCompletion(ctx, req)
-	default:
-		return nil, serviceerror.NewInvalidArgumentf("unexpected wait policy type: %T", req.GetFrontendRequest().GetWaitPolicy())
+) (response *activitypb.PollActivityExecutionResponse, err error) {
+	ref := chasm.NewComponentRef[*Activity](chasm.EntityKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFrontendRequest().GetActivityId(),
+		EntityID:    req.GetFrontendRequest().GetRunId(),
+	})
+	waitPolicy := req.GetFrontendRequest().GetWaitPolicy()
+
+	if waitPolicy == nil {
+		return chasm.ReadComponent(ctx, ref, (*Activity).buildPollActivityExecutionResponse, req, nil)
 	}
-}
 
-// pollActivityExecutionWaitAnyStateChange waits until the activity state has advanced beyond that
-// specified by the submitted token. If no token was submitted, it returns the current state without
-// waiting.
-func pollActivityExecutionWaitAnyStateChange(
-	ctx context.Context,
-	req *activitypb.PollActivityExecutionRequest,
-) (*activitypb.PollActivityExecutionResponse, error) {
-	token := req.GetFrontendRequest().
-		GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
-		WaitAnyStateChange.GetLongPollToken()
-
-	response, _, err := chasm.PollComponent(
-		ctx,
-		chasm.NewComponentRef[*Activity](chasm.EntityKey{
-			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  req.GetFrontendRequest().GetActivityId(),
-			EntityID:    req.GetFrontendRequest().GetRunId(),
-		}),
-		func(
+	switch waitPolicy.(type) {
+	case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
+		stateToken := req.GetFrontendRequest().
+			GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
+			WaitAnyStateChange.GetLongPollToken()
+		response, _, err = chasm.PollComponent(ctx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
-			_, advanced, err := chasm.HasStateAdvanced(a, ctx, token)
+			_, advanced, err := chasm.HasStateAdvanced(a, ctx, stateToken)
 			if err != nil {
 				return nil, false, err
 			}
@@ -119,50 +95,16 @@ func pollActivityExecutionWaitAnyStateChange(
 			} else {
 				return nil, false, nil
 			}
-		},
-		req,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if response == nil {
-		// nil response indicates server-imposed long-poll timeout. Communicate this to callers by
-		// returning a non-error empty response.
-
-		// TODO(dan): the definition of "empty" is unclear, since callers can currently choose to
-		// exclude info, outcome, and input from the result. Currently, a caller can infer that the
-		// long-poll timed out due to a server-imposed timeout from the absence of the long-poll
-		// token. However, this is not a clear API. We are considering splitting the public API into
-		// two methods: one that returns info (optionally with input), and one that returns result,
-		// both with long-poll options. An empty response will then be more obvious to the caller.
-		// However, we may want to consider a more explicit way of saying to the caller "timed out
-		// due to internal long-poll timeout; please resubmit your long-poll request".
-		response = &activitypb.PollActivityExecutionResponse{
-			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
-		}
-	}
-	return response, nil
-}
-
-// pollActivityExecutionWaitCompletion waits until the activity is completed.
-func pollActivityExecutionWaitCompletion(
-	ctx context.Context,
-	req *activitypb.PollActivityExecutionRequest,
-) (*activitypb.PollActivityExecutionResponse, error) {
-	// TODO(dan): implement functional test when RecordActivityTaskCompleted is implemented
-	response, _, err := chasm.PollComponent(
-		ctx,
-		chasm.NewComponentRef[*Activity](chasm.EntityKey{
-			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  req.GetFrontendRequest().GetActivityId(),
-			EntityID:    req.GetFrontendRequest().GetRunId(),
-		}),
-		func(
+		}, req)
+	case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
+		// TODO(dan): add functional test when RecordActivityTaskCompleted is implemented
+		response, _, err = chasm.PollComponent(ctx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
-			panic("TODO(dan): pollActivityExecutionWaitCompletion is not implemented")
+			// TODO(dan): check for terminal activity states
+			panic("pollActivityExecutionWaitCompletion is not implemented")
 			completed := false
 			if completed {
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
@@ -172,9 +114,10 @@ func pollActivityExecutionWaitCompletion(
 				return response, true, nil
 			}
 			return nil, false, nil
-		},
-		req,
-	)
+		}, req)
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("unexpected wait policy type: %T", waitPolicy)
+	}
 	if err != nil {
 		return nil, err
 	}
