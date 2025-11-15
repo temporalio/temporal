@@ -47,7 +47,7 @@ type (
 		convertCache sync.Map // map[weak.Pointer[ConstrainedValue]]any
 
 		// index by constraints
-		indexCache sync.Map // map[weak.Pointer[ConstrainedValue]]map[Constraints]*ConstrainedValue
+		indexCache sync.Map // map[weak.Pointer[ConstrainedValue]]map[Constraints]int
 	}
 
 	subscription[T any] struct {
@@ -253,18 +253,14 @@ func findMatchWithCache(
 	cvs []ConstrainedValue,
 	precedence []Constraints,
 ) (*ConstrainedValue, error) {
-	var cached map[Constraints]*ConstrainedValue
+	var cached map[Constraints]int
 	weakcvp := weak.Make(&cvs[0])
 	if v, ok := cache.Load(weakcvp); ok {
-		cached = v.(map[Constraints]*ConstrainedValue)
+		cached = v.(map[Constraints]int)
 	} else {
-		cached = make(map[Constraints]*ConstrainedValue, len(cvs))
+		cached = make(map[Constraints]int, len(cvs))
 		for i := range cvs {
-			// Note: cvs here is the slice returned by Client.GetValue. We want to return a
-			// pointer into that slice so that the converted value is cached as long as the
-			// Client keeps the []ConstrainedValue alive. See the comment on
-			// Client.GetValue.
-			cached[cvs[i].Constraints] = &cvs[i]
+			cached[cvs[i].Constraints] = i
 		}
 		cache.Store(weakcvp, cached)
 		runtime.AddCleanup(&cvs[0], func(w weak.Pointer[ConstrainedValue]) {
@@ -273,8 +269,12 @@ func findMatchWithCache(
 	}
 
 	for _, m := range precedence {
-		if cvp, ok := cached[m]; ok {
-			return cvp, nil
+		if i, ok := cached[m]; ok {
+			// Note: cvs here is the slice returned by Client.GetValue. We want to return a
+			// pointer into that slice so that the converted value is cached as long as the
+			// Client keeps the []ConstrainedValue alive. See the comment on
+			// Client.GetValue.
+			return &cvs[i], nil
 		}
 	}
 	// key is present but no constraint section matches
