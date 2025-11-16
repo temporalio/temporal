@@ -7,8 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/payloads"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -332,4 +334,82 @@ func TestTransitionTimedout(t *testing.T) {
 			require.Empty(t, ctx.Tasks)
 		})
 	}
+}
+
+func TestTransitionCompleted(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	outcome := &activitypb.ActivityOutcome{}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		Attempt: chasm.NewDataField(ctx, attemptState),
+		Outcome: chasm.NewDataField(ctx, outcome),
+	}
+
+	payload := payloads.EncodeString("Done")
+
+	err := TransitionCompleted.Apply(activity, ctx, RecordActivityCompletedParams{
+		Payload:        payload,
+		WorkerIdentity: "worker",
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
+	require.EqualValues(t, 1, attemptState.Count)
+	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
+	require.NotNil(t, attemptState.GetLastAttemptCompleteTime())
+	require.True(t, proto.Equal(payload, outcome.GetSuccessful().GetOutput()))
+}
+
+func TestTransitionFailed(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	heartbeatState := &activitypb.ActivityHeartbeatState{}
+	outcome := &activitypb.ActivityOutcome{}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		Attempt:       chasm.NewDataField(ctx, attemptState),
+		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
+		Outcome:       chasm.NewDataField(ctx, outcome),
+	}
+
+	heartbeatDetails := payloads.EncodeString("Heartbeat")
+	failure := &failurepb.Failure{
+		Message: "Failed Activity",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "Test",
+			NonRetryable: true,
+		}},
+	}
+
+	err := TransitionFailed.Apply(activity, ctx, RecordActivityFailedParams{
+		Failure:              failure,
+		LastHeartbeatDetails: heartbeatDetails,
+		WorkerIdentity:       "worker",
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, activity.Status)
+	require.EqualValues(t, 1, attemptState.Count)
+	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
+	require.NotNil(t, attemptState.GetLastAttemptCompleteTime())
+	require.True(t, proto.Equal(heartbeatDetails, heartbeatState.GetDetails()))
+	require.NotNil(t, heartbeatState.GetRecordedTime())
+	require.True(t, proto.Equal(failure, attemptState.GetLastFailureDetails().GetFailure()))
+	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
+	require.Nil(t, outcome.GetFailed())
 }
