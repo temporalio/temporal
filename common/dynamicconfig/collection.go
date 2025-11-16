@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -47,7 +48,7 @@ type (
 		convertCache sync.Map // map[weak.Pointer[ConstrainedValue]]any
 
 		// index by constraints
-		indexCache sync.Map // map[weak.Pointer[ConstrainedValue]]map[Constraints]int
+		indexCache sync.Map // map[weak.Pointer[ConstrainedValue]]map[Constraints]int32
 	}
 
 	subscription[T any] struct {
@@ -229,7 +230,7 @@ func findMatch(
 ) (*ConstrainedValue, error) {
 	if len(cvs) == 0 {
 		return nil, errKeyNotPresent
-	} else if len(cvs) > constraintsCacheThreshold {
+	} else if len(cvs) > constraintsCacheThreshold && len(cvs) <= math.MaxInt32 {
 		return findMatchWithCache(cache, cvs, precedence)
 	}
 
@@ -253,14 +254,14 @@ func findMatchWithCache(
 	cvs []ConstrainedValue,
 	precedence []Constraints,
 ) (*ConstrainedValue, error) {
-	var cached map[Constraints]int
+	var cached map[Constraints]int32
 	weakcvp := weak.Make(&cvs[0])
 	if v, ok := cache.Load(weakcvp); ok {
-		cached = v.(map[Constraints]int)
+		cached = v.(map[Constraints]int32)
 	} else {
-		cached = make(map[Constraints]int, len(cvs))
+		cached = make(map[Constraints]int32, len(cvs))
 		for i := range cvs {
-			cached[cvs[i].Constraints] = i
+			cached[cvs[i].Constraints] = int32(i)
 		}
 		cache.Store(weakcvp, cached)
 		runtime.AddCleanup(&cvs[0], func(w weak.Pointer[ConstrainedValue]) {
