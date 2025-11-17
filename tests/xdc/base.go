@@ -158,7 +158,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 						FrontendAddress:               remoteC.Host().RemoteFrontendGRPCAddress(),
 						FrontendHttpAddress:           remoteC.Host().FrontendHTTPAddress(),
 						EnableRemoteClusterConnection: true,
-						EnableReplication:             true,
+						IsReplicationEnabled:          true,
 					})
 				s.Require().NoError(err)
 			}

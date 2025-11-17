@@ -2361,10 +2361,10 @@ type AddOrUpdateRemoteClusterRequest struct {
 	EnableRemoteClusterConnection bool                   `protobuf:"varint,2,opt,name=enable_remote_cluster_connection,json=enableRemoteClusterConnection,proto3" json:"enable_remote_cluster_connection,omitempty"`
 	// Deprecated: Marked as deprecated in temporal/server/api/adminservice/v1/request_response.proto.
 	FrontendHttpAddress string `protobuf:"bytes,3,opt,name=frontend_http_address,json=frontendHttpAddress,proto3" json:"frontend_http_address,omitempty"`
-	// enable_replication controls whether replication streams are active.
-	EnableReplication bool `protobuf:"varint,4,opt,name=enable_replication,json=enableReplication,proto3" json:"enable_replication,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// is_replication_enabled controls whether replication streams are active.
+	IsReplicationEnabled bool `protobuf:"varint,4,opt,name=is_replication_enabled,json=isReplicationEnabled,proto3" json:"is_replication_enabled,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *AddOrUpdateRemoteClusterRequest) Reset() {
@@ -2419,9 +2419,9 @@ func (x *AddOrUpdateRemoteClusterRequest) GetFrontendHttpAddress() string {
 	return ""
 }
 
-func (x *AddOrUpdateRemoteClusterRequest) GetEnableReplication() bool {
+func (x *AddOrUpdateRemoteClusterRequest) GetIsReplicationEnabled() bool {
 	if x != nil {
-		return x.EnableReplication
+		return x.IsReplicationEnabled
 	}
 	return false
 }
@@ -5506,12 +5506,12 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\x8f\x01\n" +
 	"\x14ListClustersResponse\x12O\n" +
 	"\bclusters\x18\x01 \x03(\v23.temporal.server.api.persistence.v1.ClusterMetadataR\bclusters\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\xfc\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\x83\x02\n" +
 	"\x1fAddOrUpdateRemoteClusterRequest\x12)\n" +
 	"\x10frontend_address\x18\x01 \x01(\tR\x0ffrontendAddress\x12G\n" +
 	" enable_remote_cluster_connection\x18\x02 \x01(\bR\x1denableRemoteClusterConnection\x126\n" +
-	"\x15frontend_http_address\x18\x03 \x01(\tB\x02\x18\x01R\x13frontendHttpAddress\x12-\n" +
-	"\x12enable_replication\x18\x04 \x01(\bR\x11enableReplication\"\"\n" +
+	"\x15frontend_http_address\x18\x03 \x01(\tB\x02\x18\x01R\x13frontendHttpAddress\x124\n" +
+	"\x16is_replication_enabled\x18\x04 \x01(\bR\x14isReplicationEnabled\"\"\n" +
 	" AddOrUpdateRemoteClusterResponse\"?\n" +
 	"\x1aRemoveRemoteClusterRequest\x12!\n" +
 	"\fcluster_name\x18\x01 \x01(\tR\vclusterName\"\x1d\n" +
