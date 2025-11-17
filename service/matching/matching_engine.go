@@ -439,8 +439,9 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		logger,
 		e.namespaceRegistry,
 	)
+	child, cancel := context.WithCancel(ctx)
 	newPM, err = newTaskQueuePartitionManager(
-		ctx,
+		child,
 		e,
 		namespaceEntry,
 		partition,
@@ -451,22 +452,28 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		userDataManager,
 	)
 	if err != nil {
+		cancel()
 		return nil, false, err
 	}
-	userDataManager.SetOnChange(newPM.userDataChanged)
 
 	// If it gets here, write lock and check again in case a task queue is created between the two locks
 	e.partitionsLock.Lock()
 	pm, ok = e.partitions[key]
 	if ok {
 		e.partitionsLock.Unlock()
+		cancel()
 		return pm, false, nil
 	}
 
 	e.partitions[key] = newPM
 	e.partitionsLock.Unlock()
 
-	newPM.Start()
+	err = newPM.Start()
+	cancel()
+	if err != nil {
+		return nil, false, err
+	}
+	userDataManager.SetOnChange(newPM.userDataChanged)
 	return newPM, true, nil
 }
 

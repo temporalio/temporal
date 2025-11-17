@@ -90,7 +90,11 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	prtnMgr, err := newTaskQueuePartitionManager(ctx, engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
 	s.NoError(err)
+	// Bit of a hack, we need to wait until the initialization is done but
+	// we don't want to start the default queue that it sets because we overwrite it later
+	err = prtnMgr.initGroup.Wait()
 	cancel()
+	s.NoError(err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
@@ -336,7 +340,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	s.tqMgr.namespaceRegistry = mockNamespaceCache
 
 	s.tqMgr.Start()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	s.tqMgr.WaitUntilInitialized(ctx)
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
+	cancel()
 
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test

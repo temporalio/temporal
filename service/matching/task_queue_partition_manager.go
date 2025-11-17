@@ -25,6 +25,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -65,6 +66,7 @@ type (
 		cache cache.Cache // non-nil for root-partition
 
 		fairnessState persistencespb.TaskQueueTypeUserData_FairnessState // Set once on initialization and read only after
+		initGroup     *errgroup.Group
 
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
@@ -112,6 +114,7 @@ func newTaskQueuePartitionManager(
 		versionedQueues:  make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
 		userDataManager:  userDataManager,
 		rateLimitManager: rateLimitManager,
+		initGroup:        &errgroup.Group{},
 	}
 
 	if pm.partition.IsRoot() {
@@ -120,6 +123,14 @@ func newTaskQueuePartitionManager(
 		)
 	}
 
+	pm.initGroup.Go(func() error {
+		return pm.initialize(ctx)
+	})
+
+	return pm, nil
+}
+
+func (pm *taskQueuePartitionManagerImpl) initialize(ctx context.Context) error {
 	unload := func(bool) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
@@ -127,52 +138,57 @@ func newTaskQueuePartitionManager(
 	pm.userDataManager.Start()
 	err := pm.userDataManager.WaitUntilInitialized(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// todo(moody): do we need to be more cautious loading this? Do we need to ensure that we have PerType()? Check for a nil return?
 	data, _, err := pm.getPerTypeUserData()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	tqConfig.AutoEnable, pm.cancelAutoEnableSub = tqConfig.AutoEnableSub(unload)
+	pm.config.AutoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableSub(unload)
 	pm.fairnessState = data.GetFairnessState()
 	switch {
-	case !tqConfig.AutoEnable || pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
+	case !pm.config.AutoEnable || pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
 		var fairness bool
-		fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
+		fairness, pm.cancelFairnessSub = pm.config.EnableFairnessSub(unload)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
-		tqConfig.EnableFairness = fairness && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		pm.config.EnableFairness = fairness && pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
 		if fairness {
-			tqConfig.NewMatcher = true
+			pm.config.NewMatcher = true
 		} else {
-			tqConfig.NewMatcher, pm.cancelNewMatcherSub = tqConfig.NewMatcherSub(unload)
+			pm.config.NewMatcher, pm.cancelNewMatcherSub = pm.config.NewMatcherSub(unload)
 		}
 	case pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V1:
-		tqConfig.NewMatcher = true
-		tqConfig.EnableFairness = false
+		pm.config.NewMatcher = true
+		pm.config.EnableFairness = false
 	case pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V2:
-		tqConfig.NewMatcher = true
-		if partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-			tqConfig.EnableFairness = false
+		pm.config.NewMatcher = true
+		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			pm.config.EnableFairness = false
 		} else {
-			tqConfig.EnableFairness = true
+			pm.config.EnableFairness = true
 		}
 	default:
-		return nil, serviceerror.NewInternal("Unknown FairnessState in UserData")
+		return serviceerror.NewInternal("Unknown FairnessState in UserData")
 	}
 
-	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
+	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	pm.defaultQueue = defaultQ
-	return pm, nil
+	return nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) Start() {
+func (pm *taskQueuePartitionManagerImpl) Start() error {
+	err := pm.initGroup.Wait()
+	if err != nil {
+		return err
+	}
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.defaultQueue.Start()
+	return nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
@@ -219,6 +235,10 @@ func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
 }
 
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
+	err := pm.initGroup.Wait()
+	if err != nil {
+		return err
+	}
 	return pm.defaultQueue.WaitUntilInitialized(ctx)
 }
 

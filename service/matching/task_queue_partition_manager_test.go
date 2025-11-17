@@ -91,7 +91,8 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	s.partitionMgr = pm
 	cancel()
 	engine.Start()
-	pm.Start()
+	err = pm.Start()
+	s.NoError(err)
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	err = pm.WaitUntilInitialized(ctx)
