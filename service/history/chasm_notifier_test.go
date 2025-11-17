@@ -24,13 +24,10 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	notifier.Start()
 	defer notifier.Stop()
 
-	componentKey := chasm.ComponentKey{
-		EntityKey: chasm.EntityKey{
-			NamespaceID: tv.NamespaceID().String(),
-			BusinessID:  tv.WorkflowID(),
-			EntityID:    tv.RunID(),
-		},
-		Path: "",
+	entityKey := chasm.EntityKey{
+		NamespaceID: tv.NamespaceID().String(),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    tv.RunID(),
 	}
 
 	// Multiple subscribers
@@ -41,7 +38,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	}, subscriberCount)
 
 	for i := range subscriberCount {
-		ch, id, err := notifier.Subscribe(componentKey)
+		ch, id, err := notifier.Subscribe(entityKey)
 		require.NoError(t, err)
 		subscribers[i].channel = ch
 		subscribers[i].id = id
@@ -50,7 +47,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	// Single notification
 	expectedRef := []byte("test-ref")
 	notifier.Notify(&ChasmComponentNotification{
-		Key: componentKey,
+		Key: entityKey,
 		Ref: expectedRef,
 	})
 
@@ -59,7 +56,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 		select {
 		case received := <-sub.channel:
 			require.NotNil(t, received, "subscriber %d", i)
-			require.Equal(t, componentKey, received.Key, "subscriber %d", i)
+			require.Equal(t, entityKey, received.Key, "subscriber %d", i)
 			require.Equal(t, expectedRef, received.Ref, "subscriber %d", i)
 		case <-time.After(time.Second):
 			t.Fatalf("subscriber %d: timeout waiting for notification", i)
@@ -67,7 +64,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	}
 
 	for _, sub := range subscribers {
-		err := notifier.Unsubscribe(componentKey, sub.id)
+		err := notifier.Unsubscribe(entityKey, sub.id)
 		require.NoError(t, err)
 	}
 }
@@ -83,24 +80,21 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 	notifier.Start()
 	defer notifier.Stop()
 
-	entityKey := chasm.EntityKey{
+	entityKey1 := chasm.EntityKey{
 		NamespaceID: tv.NamespaceID().String(),
 		BusinessID:  tv.WorkflowID(),
 		EntityID:    tv.RunID(),
 	}
-	componentKey1 := chasm.ComponentKey{
-		EntityKey: entityKey,
-		Path:      "component1",
-	}
-	componentKey2 := chasm.ComponentKey{
-		EntityKey: entityKey,
-		Path:      "component2",
+	entityKey2 := chasm.EntityKey{
+		NamespaceID: "different-namespace-id",
+		BusinessID:  "different-workflow-id",
+		EntityID:    "different-run-id",
 	}
 
-	channel, subscriberID, err := notifier.Subscribe(componentKey1)
+	channel, subscriberID, err := notifier.Subscribe(entityKey1)
 	require.NoError(t, err)
 	notifier.Notify(&ChasmComponentNotification{
-		Key: componentKey2,
+		Key: entityKey2,
 		Ref: []byte("wrong-entity"),
 	})
 	select {
@@ -109,7 +103,7 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	err = notifier.Unsubscribe(componentKey1, subscriberID)
+	err = notifier.Unsubscribe(entityKey1, subscriberID)
 	require.NoError(t, err)
 }
 
@@ -124,20 +118,17 @@ func TestChasmNotifier_UnsubscribeStopsDelivery(t *testing.T) {
 	notifier.Start()
 	defer notifier.Stop()
 
-	componentKey := chasm.ComponentKey{
-		EntityKey: chasm.EntityKey{
-			NamespaceID: tv.NamespaceID().String(),
-			BusinessID:  tv.WorkflowID(),
-			EntityID:    tv.RunID(),
-		},
-		Path: "",
+	entityKey := chasm.EntityKey{
+		NamespaceID: tv.NamespaceID().String(),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    tv.RunID(),
 	}
 
 	// First notification should arrive
-	channel, subscriberID, err := notifier.Subscribe(componentKey)
+	channel, subscriberID, err := notifier.Subscribe(entityKey)
 	require.NoError(t, err)
 	notifier.Notify(&ChasmComponentNotification{
-		Key: componentKey,
+		Key: entityKey,
 		Ref: []byte("before-unsubscribe"),
 	})
 	select {
@@ -148,10 +139,10 @@ func TestChasmNotifier_UnsubscribeStopsDelivery(t *testing.T) {
 	}
 
 	// Notification after unsubscribe should not arrive
-	err = notifier.Unsubscribe(componentKey, subscriberID)
+	err = notifier.Unsubscribe(entityKey, subscriberID)
 	require.NoError(t, err)
 	notifier.Notify(&ChasmComponentNotification{
-		Key: componentKey,
+		Key: entityKey,
 		Ref: []byte("after-unsubscribe"),
 	})
 	select {
