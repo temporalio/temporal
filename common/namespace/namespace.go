@@ -40,14 +40,10 @@ type (
 
 	// Namespace contains the info and config for a namespace
 	Namespace struct {
-		info                        *persistencespb.NamespaceInfo
-		config                      *persistencespb.NamespaceConfig
-		replicationConfig           *persistencespb.NamespaceReplicationConfig
-		configVersion               int64
-		failoverVersion             int64
-		isGlobalNamespace           bool
-		failoverNotificationVersion int64
-		notificationVersion         int64
+		info            *persistencespb.NamespaceInfo
+		config          *persistencespb.NamespaceConfig
+		configVersion   int64
+		notificationVersion int64
 
 		customSearchAttributesMapper CustomSearchAttributesMapper
 		replicationResolver          ReplicationResolver
@@ -64,8 +60,9 @@ type (
 )
 
 const (
-	EmptyName Name = ""
-	EmptyID   ID   = ""
+	EmptyName     Name = ""
+	EmptyID       ID   = ""
+	EmptyEntityId      = ""
 
 	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
 	// applicable to local namespace & global namespace with one cluster
@@ -83,16 +80,15 @@ func FromPersistentState(
 	mutations ...Mutation,
 ) *Namespace {
 	ns := &Namespace{
-		info:                        detail.Info,
-		config:                      detail.Config,
-		replicationConfig:           detail.ReplicationConfig,
-		configVersion:               detail.ConfigVersion,
-		failoverVersion:             detail.FailoverVersion,
-		failoverNotificationVersion: detail.FailoverNotificationVersion,
+		info:          detail.Info,
+		config:        detail.Config,
+		configVersion: detail.ConfigVersion,
 		customSearchAttributesMapper: CustomSearchAttributesMapper{
 			fieldToAlias: detail.Config.CustomSearchAttributeAliases,
 			aliasToField: util.InverseMap(detail.Config.CustomSearchAttributeAliases),
 		},
+		// Create a default resolver that will be replaced if WithReplicationResolver is called
+		replicationResolver: NewDefaultReplicationResolverFactory()(detail),
 	}
 
 	for _, m := range mutations {
@@ -106,13 +102,13 @@ func (ns *Namespace) Clone(mutations ...Mutation) *Namespace {
 	detail := &persistencespb.NamespaceDetail{
 		Info:                        common.CloneProto(ns.info),
 		Config:                      common.CloneProto(ns.config),
-		ReplicationConfig:           common.CloneProto(ns.replicationConfig),
+		ReplicationConfig:           common.CloneProto(ns.replicationResolver.GetReplicationConfig()),
 		ConfigVersion:               ns.configVersion,
-		FailoverNotificationVersion: ns.failoverNotificationVersion,
-		FailoverVersion:             ns.failoverVersion,
+		FailoverNotificationVersion: ns.replicationResolver.FailoverNotificationVersion(),
+		FailoverVersion:             ns.replicationResolver.FailoverVersion(),
 	}
 	defaultMutations := []Mutation{
-		WithGlobalFlag(ns.isGlobalNamespace),
+		WithGlobalFlag(ns.replicationResolver.IsGlobalNamespace()),
 		WithNotificationVersion(ns.notificationVersion),
 	}
 	return FromPersistentState(detail, append(defaultMutations, mutations...)...)
@@ -180,25 +176,19 @@ func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
 func (ns *Namespace) ActiveClusterName() string {
-	if ns.replicationConfig == nil {
-		return ""
-	}
-	return ns.replicationConfig.ActiveClusterName
+	return ns.replicationResolver.ActiveClusterName(EmptyEntityId)
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
 // replicated.
 func (ns *Namespace) ClusterNames() []string {
-	// copy slice to preserve immutability
-	out := make([]string, len(ns.replicationConfig.Clusters))
-	copy(out, ns.replicationConfig.Clusters)
-	return out
+	return ns.replicationResolver.ClusterNames(EmptyEntityId)
 }
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.
 func (ns *Namespace) IsOnCluster(clusterName string) bool {
-	for _, namespaceCluster := range ns.replicationConfig.Clusters {
-		if namespaceCluster == clusterName {
+	for _, cluster := range ns.ClusterNames() {
+		if cluster == clusterName {
 			return true
 		}
 	}
@@ -212,19 +202,19 @@ func (ns *Namespace) ConfigVersion() int64 {
 
 // FailoverVersion return the namespace failover version
 func (ns *Namespace) FailoverVersion() int64 {
-	return ns.failoverVersion
+	return ns.replicationResolver.FailoverVersion()
 }
 
 // IsGlobalNamespace returns whether the namespace is a global namespace.
 // Being a global namespace doesn't necessarily mean that there are multiple registered clusters for it, only that it
 // has a failover version. To determine whether operations should be replicated for a namespace, see ReplicationPolicy.
 func (ns *Namespace) IsGlobalNamespace() bool {
-	return ns.isGlobalNamespace
+	return ns.replicationResolver.IsGlobalNamespace()
 }
 
 // FailoverNotificationVersion return the global notification version of when failover happened
 func (ns *Namespace) FailoverNotificationVersion() int64 {
-	return ns.failoverNotificationVersion
+	return ns.replicationResolver.FailoverNotificationVersion()
 }
 
 // NotificationVersion return the global notification version of when namespace changed
@@ -235,7 +225,7 @@ func (ns *Namespace) NotificationVersion() int64 {
 // ActiveInCluster returns whether the namespace is active, i.e. non global
 // namespace or global namespace which active cluster is the provided cluster
 func (ns *Namespace) ActiveInCluster(clusterName string) bool {
-	if !ns.isGlobalNamespace {
+	if !ns.replicationResolver.IsGlobalNamespace() {
 		// namespace is not a global namespace, meaning namespace is always
 		// "active" within each cluster
 		return true
@@ -248,7 +238,7 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 	// frontend guarantee that the clusters always contains the active
 	// namespace, so if the # of clusters is 1 then we do not need to send out
 	// any events for replication
-	if ns.isGlobalNamespace && len(ns.replicationConfig.Clusters) > 1 {
+	if ns.replicationResolver.IsGlobalNamespace() && len(ns.ClusterNames()) > 1 {
 		return ReplicationPolicyMultiCluster
 	}
 	return ReplicationPolicyOneCluster

@@ -18,7 +18,11 @@ func (f mutationFunc) apply(ns *Namespace) {
 func WithActiveCluster(name string) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			ns.replicationConfig.ActiveClusterName = name
+			// Get the current config and update it
+			config := ns.replicationResolver.GetReplicationConfig()
+			if config != nil {
+				config.ActiveClusterName = name
+			}
 		})
 }
 
@@ -47,7 +51,11 @@ func WithID(id string) Mutation {
 func WithGlobalFlag(b bool) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			ns.isGlobalNamespace = b
+			// We need to update the resolver's isGlobalNamespace field
+			// Since we can't access it directly, we need a setter method or recreate the resolver
+			if resolver, ok := ns.replicationResolver.(*defaultReplicationResolver); ok {
+				resolver.isGlobalNamespace = b
+			}
 		})
 }
 
@@ -82,12 +90,14 @@ func WithData(key, value string) Mutation {
 func WithPretendLocalNamespace(localClusterName string) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			ns.isGlobalNamespace = false
-			ns.replicationConfig = &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: localClusterName,
-				Clusters:          []string{localClusterName},
+			if resolver, ok := ns.replicationResolver.(*defaultReplicationResolver); ok {
+				resolver.isGlobalNamespace = false
+				resolver.replicationConfig = &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: localClusterName,
+					Clusters:          []string{localClusterName},
+				}
+				resolver.failoverVersion = common.EmptyVersion
 			}
-			ns.failoverVersion = common.EmptyVersion
 		})
 
 }

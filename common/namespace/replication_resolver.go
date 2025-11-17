@@ -10,17 +10,28 @@ type ReplicationResolver interface {
 	ClusterNames(entityId string) []string
 	WorkflowReplicationState(entityId string) enumspb.ReplicationState
 	NamespaceReplicationState() enumspb.ReplicationState
+	IsGlobalNamespace() bool
+	FailoverVersion() int64
+	FailoverNotificationVersion() int64
+	// GetReplicationConfig returns the replication config for cloning purposes
+	GetReplicationConfig() *persistencespb.NamespaceReplicationConfig
 }
 
 type ReplicationResolverFactory func(*persistencespb.NamespaceDetail) ReplicationResolver
 type defaultReplicationResolver struct {
-	replicationConfig *persistencespb.NamespaceReplicationConfig
+	replicationConfig           *persistencespb.NamespaceReplicationConfig
+	isGlobalNamespace           bool
+	failoverVersion             int64
+	failoverNotificationVersion int64
 }
 
 func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
 	return func(detail *persistencespb.NamespaceDetail) ReplicationResolver {
 		return &defaultReplicationResolver{
-			replicationConfig: detail.ReplicationConfig,
+			replicationConfig:           detail.ReplicationConfig,
+			isGlobalNamespace:           false, // Will be set by WithGlobalFlag mutation
+			failoverVersion:             detail.FailoverVersion,
+			failoverNotificationVersion: detail.FailoverNotificationVersion,
 		}
 	}
 }
@@ -54,4 +65,20 @@ func (r *defaultReplicationResolver) NamespaceReplicationState() enumspb.Replica
 		return enumspb.REPLICATION_STATE_UNSPECIFIED
 	}
 	return r.replicationConfig.State
+}
+
+func (r *defaultReplicationResolver) IsGlobalNamespace() bool {
+	return r.isGlobalNamespace
+}
+
+func (r *defaultReplicationResolver) FailoverVersion() int64 {
+	return r.failoverVersion
+}
+
+func (r *defaultReplicationResolver) FailoverNotificationVersion() int64 {
+	return r.failoverNotificationVersion
+}
+
+func (r *defaultReplicationResolver) GetReplicationConfig() *persistencespb.NamespaceReplicationConfig {
+	return r.replicationConfig
 }
