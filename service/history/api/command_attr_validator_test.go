@@ -195,7 +195,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	saPayload, err := searchattribute.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
-		"CustomKeywordField": saPayload,
+		"Keyword01": saPayload,
 	}
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)

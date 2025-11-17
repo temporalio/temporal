@@ -247,6 +247,7 @@ type Config struct {
 	WorkflowTaskHeartbeatTimeout                     dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	WorkflowTaskCriticalAttempts                     dynamicconfig.IntPropertyFn
 	WorkflowTaskRetryMaxInterval                     dynamicconfig.DurationPropertyFn
+	EnableWorkflowTaskStampIncrementOnFailure        dynamicconfig.BoolPropertyFn
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 	EnableDropRepeatedWorkflowTaskFailures           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -624,6 +625,7 @@ func NewConfig(
 		WorkflowTaskHeartbeatTimeout:                     dynamicconfig.WorkflowTaskHeartbeatTimeout.Get(dc),
 		WorkflowTaskCriticalAttempts:                     dynamicconfig.WorkflowTaskCriticalAttempts.Get(dc),
 		WorkflowTaskRetryMaxInterval:                     dynamicconfig.WorkflowTaskRetryMaxInterval.Get(dc),
+		EnableWorkflowTaskStampIncrementOnFailure:        dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Get(dc),
 		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 		EnableDropRepeatedWorkflowTaskFailures:           dynamicconfig.EnableDropRepeatedWorkflowTaskFailures.Get(dc),
 

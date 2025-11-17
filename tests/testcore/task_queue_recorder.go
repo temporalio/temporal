@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -22,6 +23,7 @@ type TaskQueueRecorder struct {
 	mu       sync.RWMutex
 	tasks    map[tasks.Category][]RecordedTask // All tasks by category, in order
 	delegate persistence.ExecutionManager
+	logger   log.Logger
 }
 
 // RecordedTask wraps a task with metadata about when and where it was written
@@ -37,10 +39,11 @@ type RecordedTask struct {
 }
 
 // NewTaskQueueRecorder creates a recorder that wraps the given ExecutionManager
-func NewTaskQueueRecorder(delegate persistence.ExecutionManager) *TaskQueueRecorder {
+func NewTaskQueueRecorder(delegate persistence.ExecutionManager, logger log.Logger) *TaskQueueRecorder {
 	return &TaskQueueRecorder{
 		tasks:    make(map[tasks.Category][]RecordedTask),
 		delegate: delegate,
+		logger:   logger,
 	}
 }
 
@@ -180,67 +183,6 @@ func (r *TaskQueueRecorder) GetAllRecordedTasks() map[tasks.Category][]RecordedT
 	return result
 }
 
-// GetTransferTasks returns all transfer tasks (unwrapped)
-func (r *TaskQueueRecorder) GetTransferTasks() []tasks.Task {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getTasksByCategory(tasks.CategoryTransfer)
-}
-
-// GetTimerTasks returns all timer tasks (unwrapped)
-func (r *TaskQueueRecorder) GetTimerTasks() []tasks.Task {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getTasksByCategory(tasks.CategoryTimer)
-}
-
-// GetReplicationTasks returns all replication tasks (unwrapped)
-func (r *TaskQueueRecorder) GetReplicationTasks() []tasks.Task {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getTasksByCategory(tasks.CategoryReplication)
-}
-
-// GetVisibilityTasks returns all visibility tasks (unwrapped)
-func (r *TaskQueueRecorder) GetVisibilityTasks() []tasks.Task {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getTasksByCategory(tasks.CategoryVisibility)
-}
-
-// GetTasksByCategory returns all tasks of a specific category (unwrapped)
-func (r *TaskQueueRecorder) GetTasksByCategory(category tasks.Category) []tasks.Task {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.getTasksByCategory(category)
-}
-
-// GetRecordedTasksByCategory returns all recorded tasks WITH metadata for a specific category
-func (r *TaskQueueRecorder) GetRecordedTasksByCategory(category tasks.Category) []RecordedTask {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if recordedList, ok := r.tasks[category]; ok {
-		result := make([]RecordedTask, len(recordedList))
-		copy(result, recordedList)
-		return result
-	}
-	return nil
-}
-
-// getTasksByCategory is the internal version without locking (caller must hold lock)
-// Returns unwrapped tasks only
-func (r *TaskQueueRecorder) getTasksByCategory(category tasks.Category) []tasks.Task {
-	if recordedList, ok := r.tasks[category]; ok {
-		result := make([]tasks.Task, len(recordedList))
-		for i, recorded := range recordedList {
-			result[i] = recorded.Task
-		}
-		return result
-	}
-	return nil
-}
-
 // TaskMatcher is a function that tests whether a RecordedTask matches some criteria
 type TaskMatcher func(RecordedTask) bool
 
@@ -266,6 +208,52 @@ func (r *TaskQueueRecorder) MatchTasks(category tasks.Category, matcher TaskMatc
 // CountMatchingTasks returns the count of tasks in a category that match the given matcher
 func (r *TaskQueueRecorder) CountMatchingTasks(category tasks.Category, matcher TaskMatcher) int {
 	return len(r.MatchTasks(category, matcher))
+}
+
+// TaskFilter specifies criteria for filtering recorded tasks
+type TaskFilter struct {
+	NamespaceID string // Required: namespace ID to filter by
+	WorkflowID  string // Optional: workflow ID to filter by (empty string means no filter)
+	RunID       string // Optional: run ID to filter by (empty string means no filter)
+}
+
+// GetRecordedTasksByCategoryFiltered returns recorded tasks WITH metadata for a specific category,
+// filtered by namespace (required) and optionally by workflow ID and run ID.
+// This is the preferred API for tests to ensure tasks are properly scoped.
+func (r *TaskQueueRecorder) GetRecordedTasksByCategoryFiltered(category tasks.Category, filter TaskFilter) []RecordedTask {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if filter.NamespaceID == "" {
+		r.logger.DPanic("TaskFilter.NamespaceID is required - use GetRecordedTasksByCategoryFiltered to prevent accidentally checking all tasks")
+	}
+
+	recordedList, ok := r.tasks[category]
+	if !ok {
+		return nil
+	}
+
+	var filtered []RecordedTask
+	for _, recorded := range recordedList {
+		// Namespace ID is required
+		if recorded.NamespaceID != filter.NamespaceID {
+			continue
+		}
+
+		// WorkflowID is optional - if specified, must match
+		if filter.WorkflowID != "" && recorded.WorkflowID != filter.WorkflowID {
+			continue
+		}
+
+		// RunID is optional - if specified, must match
+		if filter.RunID != "" && recorded.RunID != filter.RunID {
+			continue
+		}
+
+		filtered = append(filtered, recorded)
+	}
+
+	return filtered
 }
 
 // MatchTasksForWorkflow returns all tasks in a category for a specific workflow
