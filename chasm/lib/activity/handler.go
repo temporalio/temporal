@@ -81,7 +81,7 @@ func (h *handler) PollActivityExecution(
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
-			_, advanced, err := chasm.HasStateAdvanced(a, ctx, stateToken)
+			_, advanced, err := chasm.ComponentStateChanged(a, ctx, stateToken)
 			if err != nil {
 				return nil, false, err
 			}
