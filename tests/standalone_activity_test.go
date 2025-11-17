@@ -14,6 +14,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	chasmactivitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/tests/testcore"
@@ -263,6 +264,60 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion() {
 	t := s.T()
 	t.Skip("TODO(dan): implement test when RecordActivityTaskCompleted is implemented")
+}
+
+func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateChange_Success_UpdateComponent() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	ctx = chasm.NewEngineContext(ctx, s.chasmEngine)
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := uuid.New().String()
+
+	startResp, err := s.startActivity(ctx, activityID, taskQueue)
+	require.NoError(t, err)
+	entityKey := chasm.EntityKey{
+		NamespaceID: s.NamespaceID().String(),
+		BusinessID:  activityID,
+		EntityID:    startResp.RunId,
+	}
+
+	// Test PollActivityExecution(WaitAnyStateChange) without a long-poll token.
+	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pollResp.GetStateChangeLongPollToken())
+	require.Equal(t, startResp.GetRunId(), pollResp.GetRunId())
+
+	_, _, err = chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*activity.Activity](entityKey),
+		func(a *activity.Activity, ctx chasm.MutableContext, _ any) (any, error) {
+			// Don't actually mutate; just trigger the notification
+			return nil, nil
+		}, nil)
+	require.NoError(t, err)
+
+	// Test PollActivityExecution(WaitAnyStateChange) with a long-poll token.
+	secondPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+				LongPollToken: pollResp.GetStateChangeLongPollToken(),
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, secondPollResp.StateChangeLongPollToken)
 }
 
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
