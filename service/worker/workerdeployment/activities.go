@@ -36,7 +36,9 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 		return nil, err
 	}
 	return &deploymentspb.SyncVersionStateActivityResult{
-		VersionState: res.VersionState,
+		//nolint:staticcheck // SA1019
+		VersionState: res.GetVersionState(),
+		Summary:      res.GetSummary(),
 	}, nil
 }
 
@@ -148,6 +150,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		identity,
 		args.RequestId,
 		args.SkipDrainage,
+		args.AsyncPropagation,
 	)
 	if err != nil {
 		return err

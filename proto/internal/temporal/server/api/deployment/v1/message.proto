@@ -146,6 +146,14 @@ message WorkerDeploymentLocalState {
     // Number of task queues which will be synced in a single batch.
     int32 sync_batch_size = 6;
     string manager_identity = 7;
+    // Track async propagations in progress per build ID. Map: build_id -> revision numbers.
+    // Used to track which propagations are still pending across continue-as-new.
+    map<string, PropagatingRevisions> propagating_revisions = 8;
+}
+
+// Tracks revision numbers that are currently propagating for a specific build ID
+message PropagatingRevisions {
+    repeated int64 revision_numbers = 1;
 }
 
 message WorkerDeploymentVersionSummary {
@@ -183,6 +191,7 @@ message RegisterWorkerInVersionArgs {
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     int32 max_task_queues = 3;
     string version = 4;
+    temporal.api.deployment.v1.RoutingConfig routing_config = 5;
 }
 
 // used as Worker Deployment workflow update input:
@@ -203,30 +212,35 @@ message DescribeVersionFromWorkerDeploymentActivityResult {
     repeated temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo task_queue_infos = 1;
 }
 
-
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 message SyncVersionStateUpdateArgs {
     // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
-    google.protobuf.Timestamp routing_update_time = 1;
+    google.protobuf.Timestamp routing_update_time = 1 [deprecated = true];
 
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not current.
-    google.protobuf.Timestamp current_since_time = 2;
+    google.protobuf.Timestamp current_since_time = 2 [deprecated = true];
 
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
-    google.protobuf.Timestamp ramping_since_time = 3;
+    google.protobuf.Timestamp ramping_since_time = 3 [deprecated = true];
 
     // Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
     // Can be in the range [0, 100] if the version is ramping.
-    float ramp_percentage = 4;
+    float ramp_percentage = 4 [deprecated = true];
+
+    // Full routing config for async propagation mode. When present, the version workflow
+    // will propagate the entire routing config asynchronously. When absent, sync mode is used.
+    temporal.api.deployment.v1.RoutingConfig routing_config = 5;
 }
 
 // used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
 message SyncVersionStateResponse {
-    VersionLocalState version_state = 1;
+    // Deprecated. State could be so large, no need to send it to the deployment workflow.
+    VersionLocalState version_state = 1 [deprecated = true];
+    WorkerDeploymentVersionSummary summary = 2;
 }
 
 // Sent from Version workflow to Worker Deployment workflow
@@ -244,6 +258,12 @@ message SyncDrainageInfoSignalArgs {
 message SyncDrainageStatusSignalArgs {
     string version = 1;
     temporal.api.enums.v1.VersionDrainageStatus drainage_status = 2;
+}
+
+// Sent from Version workflow to Worker Deployment workflow when async propagation completes
+message PropagationCompletionInfo {
+    int64 revision_number = 1;
+    string build_id = 2;
 }
 
 
@@ -276,7 +296,11 @@ message SyncDeploymentVersionUserDataRequest {
     WorkerDeploymentVersion version = 1;
     repeated SyncUserData sync = 2;
     // if true, the version will be forgotten from the task queue user data.
-    bool forget_version = 3; 
+    bool forget_version = 3;
+    // Async mode: full routing config to propagate (includes revision_number)
+    temporal.api.deployment.v1.RoutingConfig update_routing_config = 5;
+    // Async mode: version-specific data to upsert
+    WorkerDeploymentVersionData upsert_version_data = 6;
 
     message SyncUserData {
         string name = 1;
@@ -339,9 +363,11 @@ message DeleteVersionArgs {
     string version = 2;
     bool skip_drainage = 3;
     // If true, it would mean that the delete operation is initiated by the server internally. This is done on the
-    // event that the addition of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions). 
+    // event that the addition of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions).
     // False elsewhere.
     bool server_delete = 4;
+    // version workflow does not block the update for tq propagation
+    bool async_propagation = 5;
 }
 
 // used as Worker Deployment Activity input:
@@ -351,6 +377,7 @@ message DeleteVersionActivityArgs {
     string version = 3;
     string request_id = 4;
     bool skip_drainage = 5;
+    bool async_propagation = 6;
 }
 
 // used as Worker Deployment Activity input:
@@ -413,7 +440,8 @@ message SyncVersionStateActivityArgs {
 
 // used as Worker Deployment activity result:
 message SyncVersionStateActivityResult {
-    VersionLocalState version_state = 1;
+    VersionLocalState version_state = 1 [deprecated = true];
+    WorkerDeploymentVersionSummary summary = 2;
 }
 
 // used as Worker Deployment activity input:

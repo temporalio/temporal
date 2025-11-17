@@ -22,40 +22,47 @@ import (
 
 // TestReplays tests workflow logic backwards compatibility from previous versions.
 func TestReplays(t *testing.T) {
-	replayer := worker.NewWorkflowReplayer()
+	// For each workflow implementation version we run all the replay tests for snapshots created by that version or older versions
+	for wv := workerdeployment.InitialVersion; wv <= workerdeployment.AsyncSetCurrentAndRamping; wv++ {
+		replayer := worker.NewWorkflowReplayer()
 
-	// Create version workflow wrapper to match production registration
-	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
-		refreshIntervalGetter := func() any {
-			return 5 * time.Minute // default value for testing
+		// Create version workflow wrapper to match production registration
+		versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
+			refreshIntervalGetter := func() any {
+				return 5 * time.Minute // default value for testing
+			}
+			visibilityGracePeriodGetter := func() any {
+				return 3 * time.Minute // default value for testing
+			}
+			return workerdeployment.VersionWorkflow(ctx, nil, refreshIntervalGetter, visibilityGracePeriodGetter, args)
 		}
-		visibilityGracePeriodGetter := func() any {
-			return 3 * time.Minute // default value for testing
+
+		// Create deployment workflow wrapper to match production registration
+		deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+			workflowVersionGetter := func() workerdeployment.DeploymentWorkflowVersion {
+				return wv
+			}
+			maxVersionsGetter := func() int {
+				return 100
+			}
+			return workerdeployment.Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
 		}
-		return workerdeployment.VersionWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
+
+		replayer.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentVersionWorkflowType})
+		replayer.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentWorkflowType})
+
+		logger := log.NewSdkLogger(log.NewTestLogger())
+
+		// Test all run directories (default behavior for comprehensive replay testing)
+		testAllRunDirectories(t, replayer, logger, wv)
 	}
-
-	// Create deployment workflow wrapper to match production registration
-	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
-		maxVersionsGetter := func() int {
-			return 100
-		}
-		return workerdeployment.Workflow(ctx, maxVersionsGetter, args)
-	}
-
-	replayer.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentVersionWorkflowType})
-	replayer.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentWorkflowType})
-
-	logger := log.NewSdkLogger(log.NewTestLogger())
-
-	// Test all run directories (default behavior for comprehensive replay testing)
-	testAllRunDirectories(t, replayer, logger)
-
 }
 
-// testAllRunDirectories tests all directories prepended with "run_" since they contain replay test data
-func testAllRunDirectories(t *testing.T, replayer worker.WorkflowReplayer, logger *log.SdkLogger) {
-	runDirs, err := filepath.Glob("testdata/run_*")
+// testAllRunDirectories tests all directories prepended with "run_" since they contain replay test data.
+// For each workflow implementation version we run all the replay tests for snapshots created by that version or older versions
+func testAllRunDirectories(t *testing.T, replayer worker.WorkflowReplayer, logger *log.SdkLogger, workflowImplementationVersion workerdeployment.DeploymentWorkflowVersion) {
+	// Warning: the pattern here might not work if workflowImplementationVersion grow more than 9. But by then we should be in CHASM!
+	runDirs, err := filepath.Glob(fmt.Sprintf("testdata/v[0-%d]/run_*", workflowImplementationVersion))
 	require.NoError(t, err)
 
 	if len(runDirs) == 0 {
@@ -65,7 +72,7 @@ func testAllRunDirectories(t *testing.T, replayer worker.WorkflowReplayer, logge
 	fmt.Printf("Testing %d run directories\n", len(runDirs))
 
 	for _, runDir := range runDirs {
-		t.Run(filepath.Base(runDir), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s on v%d", filepath.Base(runDir), workflowImplementationVersion), func(t *testing.T) {
 			fmt.Printf("Testing run: %s\n", runDir)
 			testRunDirectory(t, replayer, logger, runDir)
 		})

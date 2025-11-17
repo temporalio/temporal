@@ -31,7 +31,7 @@ func TestWithSearchAttributeInterceptor(t *testing.T) {
 	c := NewQueryConverter(
 		storeQCMock,
 		testNamespaceName,
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 	)
 	r.Equal(nopSearchAttributeInterceptor, c.saInterceptor)
@@ -40,7 +40,7 @@ func TestWithSearchAttributeInterceptor(t *testing.T) {
 	c = NewQueryConverter(
 		storeQCMock,
 		testNamespaceName,
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 	).WithSearchAttributeInterceptor(nil)
 	r.Equal(nopSearchAttributeInterceptor, c.saInterceptor)
@@ -50,7 +50,7 @@ func TestWithSearchAttributeInterceptor(t *testing.T) {
 	c = NewQueryConverter(
 		storeQCMock,
 		testNamespaceName,
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 	).WithSearchAttributeInterceptor(i)
 	r.Equal(i, c.saInterceptor)
@@ -294,7 +294,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -432,7 +432,7 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -590,7 +590,7 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -860,7 +860,7 @@ func TestQueryConverter_ConvertWhereExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -950,7 +950,7 @@ func TestQueryConverter_ConvertParenExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1030,7 +1030,7 @@ func TestQueryConverter_ConvertNotExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1139,7 +1139,7 @@ func TestQueryConverter_ConvertAndExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1248,7 +1248,7 @@ func TestQueryConverter_ConvertOrExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1370,7 +1370,7 @@ func TestQueryConverter_ConvertComparisonExprStoreQueryConverterCalled(t *testin
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
@@ -1463,7 +1463,7 @@ func TestQueryConverter_ConvertComparisonExprFail(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1558,7 +1558,7 @@ func TestQueryConverter_ConvertRangeCond(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1695,7 +1695,7 @@ func TestQueryConverter_ConvertIsExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1812,7 +1812,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1922,8 +1922,7 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			name:                 "success custom ScheduleId",
 			in:                   "ScheduleId",
 			withCustomScheduleID: true,
-			useNoopMapper:        true,
-			outFn:                "ScheduleId",
+			outFn:                searchattribute.TestScheduleIDFieldName,
 			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 
@@ -1931,7 +1930,6 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			name:                 "success custom ScheduleId reserved TemporalScheduleId",
 			in:                   "TemporalScheduleId",
 			withCustomScheduleID: true,
-			useNoopMapper:        true,
 			outFn:                "WorkflowId",
 			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
@@ -1940,7 +1938,6 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			name:                 "success noop mapper ScheduleId",
 			in:                   "ScheduleId",
 			withCustomScheduleID: false,
-			useNoopMapper:        true,
 			outFn:                "WorkflowId",
 			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
@@ -1949,7 +1946,6 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			name:                 "success noop mapper TemporalScheduleId",
 			in:                   "TemporalScheduleId",
 			withCustomScheduleID: false,
-			useNoopMapper:        true,
 			outFn:                "WorkflowId",
 			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
@@ -1972,13 +1968,12 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
-				&searchattribute.TestMapper{},
+				searchattribute.TestNameTypeMap(),
+				&searchattribute.TestMapper{
+					WithCustomScheduleID: tc.withCustomScheduleID,
+				},
 			)
 
-			if tc.withCustomScheduleID {
-				queryConverter.saTypeMap = searchattribute.TestNameTypeMapWithScheduleId
-			}
 			if tc.useNoopMapper {
 				queryConverter.saMapper = searchattribute.NewNoopMapper()
 			}
@@ -2127,7 +2122,7 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -2232,7 +2227,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
@@ -2449,7 +2444,7 @@ func TestQueryConverter_ValidateValueType(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()

@@ -2,6 +2,7 @@ package searchattribute
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -9,10 +10,13 @@ import (
 )
 
 type (
-	TestProvider struct{}
+	TestProvider struct {
+		es bool
+	}
 
 	TestMapper struct {
-		Namespace string
+		Namespace            string
+		WithCustomScheduleID bool
 	}
 )
 
@@ -20,52 +24,20 @@ var _ Provider = (*TestProvider)(nil)
 var _ Mapper = (*TestMapper)(nil)
 
 var (
-	TestNameTypeMap = NameTypeMap{
-		customSearchAttributes: map[string]enumspb.IndexedValueType{
-			"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
-			"CustomTextField":     enumspb.INDEXED_VALUE_TYPE_TEXT,
-			"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
-
-			"Int01":         enumspb.INDEXED_VALUE_TYPE_INT,
-			"Int02":         enumspb.INDEXED_VALUE_TYPE_INT,
-			"Int03":         enumspb.INDEXED_VALUE_TYPE_INT,
-			"Text01":        enumspb.INDEXED_VALUE_TYPE_TEXT,
-			"Keyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"Keyword02":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"Keyword03":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"Datetime01":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			"Double01":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			"Bool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
-			"KeywordList01": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		},
+	esCustomSearchAttributes = map[string]enumspb.IndexedValueType{
+		"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
+		"CustomTextField":     enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}
 
-	TestNameTypeMapWithScheduleId = NameTypeMap{
-		customSearchAttributes: map[string]enumspb.IndexedValueType{
-			"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
-			"CustomTextField":     enumspb.INDEXED_VALUE_TYPE_TEXT,
-			"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+	// default custom search attributes definition for SQL databases
+	sqlCustomSearchAttributes = GetDBIndexSearchAttributes(nil).CustomSearchAttributes
 
-			"Int01":         enumspb.INDEXED_VALUE_TYPE_INT,
-			"Int02":         enumspb.INDEXED_VALUE_TYPE_INT,
-			"Int03":         enumspb.INDEXED_VALUE_TYPE_INT,
-			"Text01":        enumspb.INDEXED_VALUE_TYPE_TEXT,
-			"Keyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"Keyword02":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"Keyword03":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"Datetime01":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			"Double01":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			"Bool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
-			"KeywordList01": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-			ScheduleID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-	}
+	// ScheduleId is mapped to Keyword10 for tests
+	TestScheduleIDFieldName = "Keyword10"
 
 	TestAliases = map[string]string{
 		"Int01":         "CustomIntField",
@@ -78,12 +50,41 @@ var (
 	}
 )
 
+func TestNameTypeMap() NameTypeMap {
+	csa := maps.Clone(sqlCustomSearchAttributes)
+	return NameTypeMap{
+		customSearchAttributes: csa,
+	}
+}
+
+func TestEsNameTypeMap() NameTypeMap {
+	csa := maps.Clone(esCustomSearchAttributes)
+	return NameTypeMap{
+		customSearchAttributes: csa,
+	}
+}
+
+func TestEsNameTypeMapWithScheduleID() NameTypeMap {
+	res := TestEsNameTypeMap()
+	res.customSearchAttributes[ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
+	return res
+}
+
 func NewTestProvider() *TestProvider {
 	return &TestProvider{}
 }
 
+func NewTestEsProvider() *TestProvider {
+	return &TestProvider{
+		es: true,
+	}
+}
+
 func (s *TestProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
-	return TestNameTypeMap, nil
+	if s.es {
+		return TestEsNameTypeMap(), nil
+	}
+	return TestNameTypeMap(), nil
 }
 
 func (t *TestMapper) GetAlias(fieldName string, namespace string) (string, error) {
@@ -99,6 +100,9 @@ func (t *TestMapper) GetAlias(fieldName string, namespace string) (string, error
 	if namespace == "test-namespace" || namespace == t.Namespace {
 		if fieldName == "pass-through" {
 			return fieldName, nil
+		}
+		if t.WithCustomScheduleID && fieldName == TestScheduleIDFieldName {
+			return ScheduleID, nil
 		}
 		return "AliasFor" + fieldName, nil
 	}
@@ -119,6 +123,9 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 	} else if namespace == "test-namespace" || namespace == t.Namespace {
 		if alias == "pass-through" {
 			return alias, nil
+		}
+		if t.WithCustomScheduleID && alias == ScheduleID {
+			return TestScheduleIDFieldName, nil
 		}
 		if strings.HasPrefix(alias, "AliasFor") {
 			return strings.TrimPrefix(alias, "AliasFor"), nil
