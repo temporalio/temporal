@@ -223,7 +223,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	s.Require().NoError(err)
 	s.Require().Equal("workflow completed successfully", result)
 
-	// Verify workflow is in completed state
+	// Verify workflow is in completed state on active cluster
 	descResp, err := activeCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: activeNamespace,
 		Execution: &commonpb.WorkflowExecution{
@@ -233,6 +233,17 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	})
 	s.Require().NoError(err)
 	s.Require().Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+
+	// Verify workflow did NOT replicate to standby cluster (replication is disabled)
+	time.Sleep(2 * time.Second) //nolint:forbidigo
+	_, err = standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: activeNamespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID1,
+		},
+	})
+	s.Require().Error(err, "Workflow should NOT replicate to standby when replication is disabled")
+	s.Require().Contains(err.Error(), "not found", "Expected workflow not found error")
 
 	s.logger.Info("Step 5: Enable replication on both clusters")
 
