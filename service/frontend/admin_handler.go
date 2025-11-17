@@ -1204,8 +1204,6 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 
 	// Use explicit replication enabled state from request
 	// enable_replication must be explicitly set to true to enable replication
-	replicationEnabled := request.GetEnableReplication()
-
 	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
@@ -1217,7 +1215,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
-			IsReplicationEnabled:     replicationEnabled,
+			IsReplicationEnabled:     request.GetEnableReplication(),
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
