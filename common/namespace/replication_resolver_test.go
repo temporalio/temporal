@@ -1,0 +1,278 @@
+package namespace_test
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/namespace"
+)
+
+func TestNewDefaultReplicationResolverFactory(t *testing.T) {
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	require.NotNil(t, factory)
+
+	detail := &persistencespb.NamespaceDetail{
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "active-cluster",
+			Clusters:          []string{"cluster1", "cluster2", "cluster3"},
+			State:             enumspb.REPLICATION_STATE_NORMAL,
+		},
+	}
+
+	resolver := factory(detail)
+	require.NotNil(t, resolver)
+	assert.Equal(t, "active-cluster", resolver.ActiveClusterName(""))
+	assert.Equal(t, []string{"cluster1", "cluster2", "cluster3"}, resolver.ClusterNames(""))
+	assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.WorkflowReplicationState(""))
+	assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.NamespaceReplicationState())
+}
+
+func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
+	tests := []struct {
+		name              string
+		replicationConfig *persistencespb.NamespaceReplicationConfig
+		entityId          string
+		want              string
+	}{
+		{
+			name: "returns active cluster name",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-a",
+				Clusters:          []string{"cluster-a", "cluster-b"},
+			},
+			entityId: "",
+			want:     "cluster-a",
+		},
+		{
+			name: "returns active cluster name with entity ID",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-b",
+				Clusters:          []string{"cluster-a", "cluster-b"},
+			},
+			entityId: "workflow-123",
+			want:     "cluster-b",
+		},
+		{
+			name:              "returns empty string when replication config is nil",
+			replicationConfig: nil,
+			entityId:          "",
+			want:              "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				ReplicationConfig: tt.replicationConfig,
+			}
+			resolver := factory(detail)
+
+			got := resolver.ActiveClusterName(tt.entityId)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
+	tests := []struct {
+		name              string
+		replicationConfig *persistencespb.NamespaceReplicationConfig
+		entityId          string
+		want              []string
+	}{
+		{
+			name: "returns cluster names",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-a",
+				Clusters:          []string{"cluster-a", "cluster-b", "cluster-c"},
+			},
+			entityId: "",
+			want:     []string{"cluster-a", "cluster-b", "cluster-c"},
+		},
+		{
+			name: "returns cluster names with entity ID",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-a",
+				Clusters:          []string{"cluster-1", "cluster-2"},
+			},
+			entityId: "workflow-456",
+			want:     []string{"cluster-1", "cluster-2"},
+		},
+		{
+			name:              "returns nil when replication config is nil",
+			replicationConfig: nil,
+			entityId:          "",
+			want:              nil,
+		},
+		{
+			name: "returns empty slice when clusters is empty",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-a",
+				Clusters:          []string{},
+			},
+			entityId: "",
+			want:     []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				ReplicationConfig: tt.replicationConfig,
+			}
+			resolver := factory(detail)
+
+			got := resolver.ClusterNames(tt.entityId)
+			assert.Equal(t, tt.want, got)
+
+			// Verify immutability - modifying returned slice shouldn't affect subsequent calls
+			if got != nil && len(got) > 0 {
+				got[0] = "modified"
+				got2 := resolver.ClusterNames(tt.entityId)
+				if tt.want != nil && len(tt.want) > 0 {
+					assert.Equal(t, tt.want[0], got2[0], "ClusterNames should return a copy to preserve immutability")
+				}
+			}
+		})
+	}
+}
+
+func TestDefaultReplicationResolver_WorkflowReplicationState(t *testing.T) {
+	tests := []struct {
+		name              string
+		replicationConfig *persistencespb.NamespaceReplicationConfig
+		entityId          string
+		want              enumspb.ReplicationState
+	}{
+		{
+			name: "returns normal state",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-a",
+				Clusters:          []string{"cluster-a", "cluster-b"},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
+			},
+			entityId: "",
+			want:     enumspb.REPLICATION_STATE_NORMAL,
+		},
+		{
+			name: "returns handover state",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-a",
+				Clusters:          []string{"cluster-a", "cluster-b"},
+				State:             enumspb.REPLICATION_STATE_HANDOVER,
+			},
+			entityId: "workflow-789",
+			want:     enumspb.REPLICATION_STATE_HANDOVER,
+		},
+		{
+			name:              "returns unspecified when replication config is nil",
+			replicationConfig: nil,
+			entityId:          "",
+			want:              enumspb.REPLICATION_STATE_UNSPECIFIED,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				ReplicationConfig: tt.replicationConfig,
+			}
+			resolver := factory(detail)
+
+			got := resolver.WorkflowReplicationState(tt.entityId)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestDefaultReplicationResolver_NamespaceReplicationState(t *testing.T) {
+	tests := []struct {
+		name              string
+		replicationConfig *persistencespb.NamespaceReplicationConfig
+		want              enumspb.ReplicationState
+	}{
+		{
+			name: "returns normal state",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-a",
+				Clusters:          []string{"cluster-a", "cluster-b"},
+				State:             enumspb.REPLICATION_STATE_NORMAL,
+			},
+			want: enumspb.REPLICATION_STATE_NORMAL,
+		},
+		{
+			name: "returns handover state",
+			replicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "cluster-a",
+				Clusters:          []string{"cluster-a", "cluster-b"},
+				State:             enumspb.REPLICATION_STATE_HANDOVER,
+			},
+			want: enumspb.REPLICATION_STATE_HANDOVER,
+		},
+		{
+			name:              "returns unspecified when replication config is nil",
+			replicationConfig: nil,
+			want:              enumspb.REPLICATION_STATE_UNSPECIFIED,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				ReplicationConfig: tt.replicationConfig,
+			}
+			resolver := factory(detail)
+
+			got := resolver.NamespaceReplicationState()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestDefaultReplicationResolver_MultipleCalls(t *testing.T) {
+	// Test that resolver state is consistent across multiple calls
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "primary",
+			Clusters:          []string{"primary", "secondary", "tertiary"},
+			State:             enumspb.REPLICATION_STATE_NORMAL,
+		},
+	}
+	resolver := factory(detail)
+
+	// Call multiple times and verify consistency
+	for i := 0; i < 5; i++ {
+		assert.Equal(t, "primary", resolver.ActiveClusterName(""))
+		assert.Equal(t, []string{"primary", "secondary", "tertiary"}, resolver.ClusterNames(""))
+		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.WorkflowReplicationState(""))
+		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.NamespaceReplicationState())
+	}
+}
+
+func TestDefaultReplicationResolver_DifferentEntityIds(t *testing.T) {
+	// Test that different entity IDs don't affect the default resolver behavior
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "cluster-x",
+			Clusters:          []string{"cluster-x", "cluster-y"},
+			State:             enumspb.REPLICATION_STATE_NORMAL,
+		},
+	}
+	resolver := factory(detail)
+
+	entityIds := []string{"", "workflow-1", "workflow-2", "activity-1", "some-other-entity"}
+	for _, entityId := range entityIds {
+		assert.Equal(t, "cluster-x", resolver.ActiveClusterName(entityId))
+		assert.Equal(t, []string{"cluster-x", "cluster-y"}, resolver.ClusterNames(entityId))
+		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.WorkflowReplicationState(entityId))
+	}
+}
