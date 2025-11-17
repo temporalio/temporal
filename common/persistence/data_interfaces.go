@@ -1191,7 +1191,6 @@ type (
 		ListNamespaces(ctx context.Context, request *ListNamespacesRequest) (*ListNamespacesResponse, error)
 		GetMetadata(ctx context.Context) (*GetMetadataResponse, error)
 		InitializeSystemNamespaces(ctx context.Context, currentClusterName string) error
-		ConvertInternalGetResponse(response *InternalGetNamespaceResponse) (*GetNamespaceResponse, error)
 	}
 
 	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration
