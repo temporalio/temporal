@@ -42,23 +42,11 @@ func TestReplicationEnableTestSuite(t *testing.T) {
 func (s *ReplicationEnableTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
-	// Dynamic config overrides (same as TestStartTwoClustersForever)
+	// Minimal dynamic config overrides required for replication enable/disable testing
 	dynamicConfigOverrides := map[dynamicconfig.Key]interface{}{
-		dynamicconfig.ClusterMetadataRefreshInterval.Key():            time.Second * 5,
-		dynamicconfig.NamespaceCacheRefreshInterval.Key():             testcore.NamespaceCacheRefreshInterval,
-		dynamicconfig.EnableReplicationStream.Key():                   true,
-		dynamicconfig.EnableReplicationTaskBatching.Key():             true,
-		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
-		dynamicconfig.SendRawHistoryBetweenInternalServices.Key():     true,
-		dynamicconfig.TransferProcessorUpdateAckInterval.Key():        time.Second * 3,
-		dynamicconfig.TimerProcessorUpdateAckInterval.Key():           time.Second * 3,
-		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key():      time.Second * 3,
-		dynamicconfig.OutboundProcessorUpdateAckInterval.Key():        time.Second * 3,
-		dynamicconfig.ArchivalProcessorUpdateAckInterval.Key():        time.Second * 3,
-		dynamicconfig.TransferProcessorMaxPollInterval.Key():          time.Second * 3,
-		dynamicconfig.TimerProcessorMaxPollInterval.Key():             time.Second * 3,
-		dynamicconfig.VisibilityProcessorMaxPollInterval.Key():        time.Second * 3,
-		dynamicconfig.OutboundProcessorMaxPollInterval.Key():          time.Second * 3,
+		dynamicconfig.ClusterMetadataRefreshInterval.Key():        time.Second * 5,
+		dynamicconfig.EnableReplicationStream.Key():               true,
+		dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
 	}
 
 	clusterConfigs := []*testcore.TestClusterConfig{
@@ -134,6 +122,8 @@ func (s *ReplicationEnableTestSuite) clusterReplicationConfig() []*replicationpb
 // 3. Start and complete workflow - workflow does NOT replicate yet (workflow replication disabled)
 // 4. Enable workflow replication
 // 5. Start new workflow - verify it DOES replicate
+// 6. Disable replication again
+// 7. Start another workflow - verify it does NOT replicate
 func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	ctx := context.Background()
 	tv := testvars.New(s.T())
@@ -286,5 +276,55 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 		})
 		return descErr == nil && descResp2 != nil && descResp2.WorkflowExecutionInfo.Execution.WorkflowId == workflowID2
 	}, 30*time.Second, 1*time.Second, "Workflow started after enabling replication should replicate to standby")
+
+	s.logger.Info("Step 8: Disable replication on both clusters")
+
+	// Disable replication active -> standby
+	_, err = activeCluster.AdminClient().AddOrUpdateRemoteCluster(
+		ctx,
+		&adminservice.AddOrUpdateRemoteClusterRequest{
+			FrontendAddress:               standbyCluster.Host().RemoteFrontendGRPCAddress(),
+			FrontendHttpAddress:           standbyCluster.Host().FrontendHTTPAddress(),
+			EnableRemoteClusterConnection: true,
+			EnableReplication:             false, // Disable replication
+		})
+	s.Require().NoError(err)
+
+	// Disable replication standby -> active
+	_, err = standbyCluster.AdminClient().AddOrUpdateRemoteCluster(
+		ctx,
+		&adminservice.AddOrUpdateRemoteClusterRequest{
+			FrontendAddress:               activeCluster.Host().RemoteFrontendGRPCAddress(),
+			FrontendHttpAddress:           activeCluster.Host().FrontendHTTPAddress(),
+			EnableRemoteClusterConnection: true,
+			EnableReplication:             false, // Disable replication
+		})
+	s.Require().NoError(err)
+
+	// Wait for cluster metadata to refresh and replication streams to stop
+	time.Sleep(6 * time.Second)
+
+	s.logger.Info("Step 9: Start another workflow on active cluster (after disabling replication)")
+
+	tv3 := tv.WithWorkflowIDNumber(3)
+	workflowID3 := tv3.WorkflowID()
+
+	_, err = activeSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue: taskQueueName,
+		ID:        workflowID3,
+	}, toyWorkflow)
+	s.Require().NoError(err)
+
+	s.logger.Info("Step 10: Verify third workflow does NOT replicate to standby")
+
+	// Wait a bit to ensure replication would have happened if it was enabled
+	time.Sleep(5 * time.Second)
+
+	// Verify workflow does NOT exist on standby
+	_, descErr := standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: activeNamespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID3},
+	})
+	s.Require().Error(descErr, "Workflow should NOT replicate when replication is disabled")
 }
 
