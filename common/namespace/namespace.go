@@ -174,25 +174,25 @@ func (ns *Namespace) State() enumspb.NamespaceState {
 }
 
 func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
-	return ns.replicationResolver.NamespaceReplicationState(ns)
+	return ns.replicationResolver.NamespaceReplicationState()
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
-//
-// Deprecated: use ActiveClusterNameForEntity instead
 func (ns *Namespace) ActiveClusterName() string {
-	return ns.replicationResolver.ActiveClusterName(ns, "")
-}
-
-func (ns *Namespace) ActiveClusterNameForEntity(entityId string) string {
-	return ns.replicationResolver.ActiveClusterName(ns, entityId)
+	if ns.replicationConfig == nil {
+		return ""
+	}
+	return ns.replicationConfig.ActiveClusterName
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
 // replicated.
 func (ns *Namespace) ClusterNames() []string {
-	return ns.replicationResolver.ClusterNames(ns, "")
+	// copy slice to preserve immutability
+	out := make([]string, len(ns.replicationConfig.Clusters))
+	copy(out, ns.replicationConfig.Clusters)
+	return out
 }
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.

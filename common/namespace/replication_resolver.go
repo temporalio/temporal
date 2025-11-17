@@ -2,48 +2,56 @@ package namespace
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 type ReplicationResolver interface {
-	ActiveClusterName(ns *Namespace, workflowID string) string
-	ClusterNames(ns *Namespace, workflowID string) []string
-	WorkflowReplicationState(ns *Namespace, workflowID string) enumspb.ReplicationState
-	NamespaceReplicationState(ns *Namespace) enumspb.ReplicationState
-}
-type defaultReplicationResolver struct{}
-
-var (
-	DefaultReplicationResolver ReplicationResolver = &defaultReplicationResolver{}
-)
-
-func NewDefaultReplicationResolver() ReplicationResolver {
-	return DefaultReplicationResolver
+	ActiveClusterName(entityId string) string
+	ClusterNames(entityId string) []string
+	WorkflowReplicationState(entityId string) enumspb.ReplicationState
+	NamespaceReplicationState() enumspb.ReplicationState
 }
 
-func (r *defaultReplicationResolver) ActiveClusterName(ns *Namespace, workflowID string) string {
-	if ns.replicationConfig == nil {
+type ReplicationResolverFactory func(*persistencespb.NamespaceDetail) ReplicationResolver
+type defaultReplicationResolver struct {
+	replicationConfig *persistencespb.NamespaceReplicationConfig
+}
+
+func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
+	return func(detail *persistencespb.NamespaceDetail) ReplicationResolver {
+		return &defaultReplicationResolver{
+			replicationConfig: detail.ReplicationConfig,
+		}
+	}
+}
+
+func (r *defaultReplicationResolver) ActiveClusterName(entityId string) string {
+	if r.replicationConfig == nil {
 		return ""
 	}
-	return ns.replicationConfig.ActiveClusterName
+	return r.replicationConfig.ActiveClusterName
 }
 
-func (r *defaultReplicationResolver) ClusterNames(ns *Namespace, workflowID string) []string {
+func (r *defaultReplicationResolver) ClusterNames(entityId string) []string {
+	if r.replicationConfig == nil {
+		return nil
+	}
 	// copy slice to preserve immutability
-	out := make([]string, len(ns.replicationConfig.Clusters))
-	copy(out, ns.replicationConfig.Clusters)
+	out := make([]string, len(r.replicationConfig.Clusters))
+	copy(out, r.replicationConfig.Clusters)
 	return out
 }
 
-func (r *defaultReplicationResolver) WorkflowReplicationState(ns *Namespace, workflowID string) enumspb.ReplicationState {
-	if ns.replicationConfig == nil {
+func (r *defaultReplicationResolver) WorkflowReplicationState(entityId string) enumspb.ReplicationState {
+	if r.replicationConfig == nil {
 		return enumspb.REPLICATION_STATE_UNSPECIFIED
 	}
-	return ns.replicationConfig.State
+	return r.replicationConfig.State
 }
 
-func (r *defaultReplicationResolver) NamespaceReplicationState(ns *Namespace) enumspb.ReplicationState {
-	if ns.replicationConfig == nil {
+func (r *defaultReplicationResolver) NamespaceReplicationState() enumspb.ReplicationState {
+	if r.replicationConfig == nil {
 		return enumspb.REPLICATION_STATE_UNSPECIFIED
 	}
-	return ns.replicationConfig.State
+	return r.replicationConfig.State
 }

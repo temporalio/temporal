@@ -53,7 +53,7 @@ func (s *registrySuite) SetupTest() {
 		dynamicconfig.GetBoolPropertyFn(false),
 		metrics.NoopMetricsHandler,
 		log.NewTestLogger(),
-		namespace.DefaultReplicationResolver,
+		namespace.NewDefaultReplicationResolverFactory(),
 	)
 }
 
