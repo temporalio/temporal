@@ -20,6 +20,12 @@ import (
 
 type PauseWorkflowExecutionSuite struct {
 	testcore.FunctionalTestBase
+
+	testEndSignal string
+	pauseIdentity string
+	pauseReason   string
+
+	workflowFn func(ctx workflow.Context) (string, error)
 }
 
 func TestPauseWorkflowExecutionSuite(t *testing.T) {
@@ -30,33 +36,31 @@ func TestPauseWorkflowExecutionSuite(t *testing.T) {
 func (s *PauseWorkflowExecutionSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
-}
 
-func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
-	const (
-		testEndSignal = "test-end"
-		pauseIdentity = "functional-test"
-		pauseReason   = "pausing workflow for acceptance test"
-	)
+	s.testEndSignal = "test-end"
+	s.pauseIdentity = "functional-test"
+	s.pauseReason = "pausing workflow for acceptance test"
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	workflowFn := func(ctx workflow.Context) (string, error) {
-		signalCh := workflow.GetSignalChannel(ctx, testEndSignal)
+	s.workflowFn = func(ctx workflow.Context) (string, error) {
+		signalCh := workflow.GetSignalChannel(ctx, s.testEndSignal)
 		var signalPayload string
 		signalCh.Receive(ctx, &signalPayload)
 		return signalPayload, nil
 	}
+}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.Worker().RegisterWorkflow(s.workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowFn)
 	s.NoError(err)
 	workflowID := workflowRun.GetID()
 	runID := workflowRun.GetRunID()
@@ -73,8 +77,8 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		RunId:      runID,
-		Identity:   pauseIdentity,
-		Reason:     pauseReason,
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
 		RequestId:  uuid.New(),
 	}
 
@@ -89,14 +93,14 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
 		require.NotNil(t, info)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
 		if pauseInfo := info.GetPauseInfo(); pauseInfo != nil {
-			require.Equal(t, pauseIdentity, pauseInfo.GetIdentity())
-			require.Equal(t, pauseReason, pauseInfo.GetReason())
+			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
+			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// TODO: currently pause workflow execution does not intercept workflow creation. Fix the reset of this test when that is implemented.
 	// For now sending this signal will complete the workflow and finish the test.
-	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, testEndSignal, "test end signal")
+	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -110,32 +114,19 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
 
 // TestPauseWorkflowExecutionFailsWhenDisabled tests that pause workflow execution fails when the dynamic config is disabled.
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionFailsWhenDisabled() {
-	const (
-		testEndSignal = "test-end"
-		pauseIdentity = "functional-test"
-		pauseReason   = "pausing workflow for acceptance test"
-	)
-
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, false)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	workflowFn := func(ctx workflow.Context) (string, error) {
-		signalCh := workflow.GetSignalChannel(ctx, testEndSignal)
-		var signalPayload string
-		signalCh.Receive(ctx, &signalPayload)
-		return signalPayload, nil
-	}
-
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(s.workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-disabled-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowFn)
 	s.NoError(err)
 	workflowID := workflowRun.GetID()
 	runID := workflowRun.GetRunID()
@@ -153,8 +144,8 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionFailsWhenDisable
 		Namespace:  namespaceName,
 		WorkflowId: workflowID,
 		RunId:      runID,
-		Identity:   pauseIdentity,
-		Reason:     pauseReason,
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
 		RequestId:  uuid.New(),
 	}
 
@@ -166,7 +157,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionFailsWhenDisable
 	s.NotNil(unimplementedErr)
 	s.Contains(unimplementedErr.Error(), namespaceName)
 
-	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, testEndSignal, "test end signal")
+	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
