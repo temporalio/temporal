@@ -40,8 +40,11 @@ type ClusterMetadata struct {
 	IsConnectionEnabled      bool                              `protobuf:"varint,10,opt,name=is_connection_enabled,json=isConnectionEnabled,proto3" json:"is_connection_enabled,omitempty"`
 	UseClusterIdMembership   bool                              `protobuf:"varint,11,opt,name=use_cluster_id_membership,json=useClusterIdMembership,proto3" json:"use_cluster_id_membership,omitempty"`
 	Tags                     map[string]string                 `protobuf:"bytes,12,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// is_replication_enabled controls whether replication streams (namespace and workflow replication) are active.
+	// This is independent of is_connection_enabled which controls general cluster connectivity.
+	IsReplicationEnabled bool `protobuf:"varint,14,opt,name=is_replication_enabled,json=isReplicationEnabled,proto3" json:"is_replication_enabled,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ClusterMetadata) Reset() {
@@ -165,6 +168,13 @@ func (x *ClusterMetadata) GetTags() map[string]string {
 	return nil
 }
 
+func (x *ClusterMetadata) GetIsReplicationEnabled() bool {
+	if x != nil {
+		return x.IsReplicationEnabled
+	}
+	return false
+}
+
 type IndexSearchAttributes struct {
 	state                  protoimpl.MessageState          `protogen:"open.v1"`
 	CustomSearchAttributes map[string]v11.IndexedValueType `protobuf:"bytes,1,rep,name=custom_search_attributes,json=customSearchAttributes,proto3" json:"custom_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=temporal.api.enums.v1.IndexedValueType"`
@@ -213,7 +223,7 @@ var File_temporal_server_api_persistence_v1_cluster_metadata_proto protoreflect.
 
 const file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/api/persistence/v1/cluster_metadata.proto\x12\"temporal.server.api.persistence.v1\x1a\"temporal/api/enums/v1/common.proto\x1a%temporal/api/version/v1/message.proto\"\xd9\a\n" +
+	"9temporal/server/api/persistence/v1/cluster_metadata.proto\x12\"temporal.server.api.persistence.v1\x1a\"temporal/api/enums/v1/common.proto\x1a%temporal/api/version/v1/message.proto\"\x8f\b\n" +
 	"\x0fClusterMetadata\x12!\n" +
 	"\fcluster_name\x18\x01 \x01(\tR\vclusterName\x12.\n" +
 	"\x13history_shard_count\x18\x02 \x01(\x05R\x11historyShardCount\x12\x1d\n" +
@@ -229,7 +239,8 @@ const file_temporal_server_api_persistence_v1_cluster_metadata_proto_rawDesc = "
 	"\x15is_connection_enabled\x18\n" +
 	" \x01(\bR\x13isConnectionEnabled\x129\n" +
 	"\x19use_cluster_id_membership\x18\v \x01(\bR\x16useClusterIdMembership\x12Q\n" +
-	"\x04tags\x18\f \x03(\v2=.temporal.server.api.persistence.v1.ClusterMetadata.TagsEntryR\x04tags\x1a\x83\x01\n" +
+	"\x04tags\x18\f \x03(\v2=.temporal.server.api.persistence.v1.ClusterMetadata.TagsEntryR\x04tags\x124\n" +
+	"\x16is_replication_enabled\x18\x0e \x01(\bR\x14isReplicationEnabled\x1a\x83\x01\n" +
 	"\x1aIndexSearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.api.persistence.v1.IndexSearchAttributesR\x05value:\x028\x01\x1a7\n" +

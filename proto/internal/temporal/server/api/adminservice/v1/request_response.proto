@@ -284,6 +284,10 @@ message AddOrUpdateRemoteClusterRequest {
   string frontend_address = 1;
   bool enable_remote_cluster_connection = 2;
   string frontend_http_address = 3 [deprecated = true];
+  // enable_replication controls whether replication streams (namespace and workflow replication) are active.
+  // This is independent of enable_remote_cluster_connection which controls general cluster connectivity.
+  // Defaults to false. Set to true to enable replication.
+  bool enable_replication = 4;
 }
 
 message AddOrUpdateRemoteClusterResponse {

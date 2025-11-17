@@ -173,7 +173,7 @@ func (m *StreamReceiverMonitorImpl) generateInboundStreamKeys() map[ClusterShard
 	for _, clusterInfo := range allClusterInfo {
 		clusterIDToShardCount[int32(clusterInfo.InitialFailoverVersion)] = clusterInfo.ShardCount
 
-		if !clusterInfo.Enabled || int32(clusterInfo.InitialFailoverVersion) == serverClusterID {
+		if !clusterInfo.Enabled || !clusterInfo.ReplicationEnabled || int32(clusterInfo.InitialFailoverVersion) == serverClusterID {
 			continue
 		}
 		clientClusterIDs[int32(clusterInfo.InitialFailoverVersion)] = struct{}{}
@@ -210,7 +210,7 @@ func (m *StreamReceiverMonitorImpl) generateOutboundStreamKeys() map[ClusterShar
 	for _, clusterInfo := range allClusterInfo {
 		clusterIDToShardCount[int32(clusterInfo.InitialFailoverVersion)] = clusterInfo.ShardCount
 
-		if !clusterInfo.Enabled || int32(clusterInfo.InitialFailoverVersion) == clientClusterID {
+		if !clusterInfo.Enabled || !clusterInfo.ReplicationEnabled || int32(clusterInfo.InitialFailoverVersion) == clientClusterID {
 			continue
 		}
 		serverClusterIDs[int32(clusterInfo.InitialFailoverVersion)] = struct{}{}

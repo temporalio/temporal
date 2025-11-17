@@ -2295,7 +2295,7 @@ func trimShardInfo(
 		for readerID := range shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates {
 			clusterID, _ := ReplicationReaderIDToClusterShardID(readerID)
 			_, clusterInfo, found := clusterNameInfoFromClusterID(allClusterInfo, clusterID)
-			if !found || !clusterInfo.Enabled {
+			if !found || !clusterInfo.Enabled || !clusterInfo.ReplicationEnabled {
 				delete(shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates, readerID)
 			}
 		}

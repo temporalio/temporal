@@ -94,6 +94,9 @@ type (
 		ClusterID  string            `yaml:"-"`
 		ShardCount int32             `yaml:"-"` // Ignore this field when loading config.
 		Tags       map[string]string `yaml:"-"` // Ignore this field. Use cluster.Config.Tags for customized tags.
+		// ReplicationEnabled controls whether replication streams (namespace and workflow replication) are active.
+		// This is independent of Enabled which controls general cluster connectivity.
+		ReplicationEnabled bool `yaml:"-"`
 		// private field to track cluster information updates
 		version int64
 	}
@@ -428,6 +431,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 			newEntries[clusterName] = ShallowCopyClusterInformation(newClusterInfo)
 		} else if newClusterInfo.version > oldClusterInfo.version {
 			if newClusterInfo.Enabled == oldClusterInfo.Enabled &&
+				newClusterInfo.ReplicationEnabled == oldClusterInfo.ReplicationEnabled &&
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
 				newClusterInfo.HTTPAddress == oldClusterInfo.HTTPAddress &&
 				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
@@ -556,6 +560,7 @@ func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResp
 		ClusterID:              getClusterResp.GetClusterId(),
 		ShardCount:             getClusterResp.GetHistoryShardCount(),
 		Tags:                   getClusterResp.GetTags(),
+		ReplicationEnabled:     getClusterResp.GetIsReplicationEnabled(),
 		version:                getClusterResp.Version,
 	}
 }

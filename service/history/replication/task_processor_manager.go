@@ -181,7 +181,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 		if clusterName == currentClusterName {
 			continue
 		}
-		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo == nil || !clusterInfo.Enabled {
+		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo == nil || !clusterInfo.Enabled || !clusterInfo.ReplicationEnabled {
 			continue
 		}
 		sourceShardIds, err := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
@@ -354,7 +354,7 @@ func targetReaderIDs(
 	currentShardCount := allClusterInfo[currentClusterName].ShardCount
 	var readerIDs []int64
 	for clusterName, clusterInfo := range allClusterInfo {
-		if clusterName == currentClusterName || !clusterInfo.Enabled {
+		if clusterName == currentClusterName || !clusterInfo.Enabled || !clusterInfo.ReplicationEnabled {
 			continue
 		}
 
