@@ -430,16 +430,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
-	done := make(chan struct{})
-	onUserDataChanged := func(from, to *persistencespb.VersionedTaskQueueUserData) {
-		<-done
-		newPM.userDataChanged(from, to)
-	}
 	userDataManager := newUserDataManager(
 		e.taskManager,
 		e.matchingRawClient,
 		onFatalErr,
-		onUserDataChanged,
 		partition,
 		tqConfig,
 		logger,
@@ -456,10 +450,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		metricsHandler,
 		userDataManager,
 	)
-	close(done)
 	if err != nil {
 		return nil, false, err
 	}
+	userDataManager.SetOnChange(newPM.userDataChanged)
 
 	// If it gets here, write lock and check again in case a task queue is created between the two locks
 	e.partitionsLock.Lock()

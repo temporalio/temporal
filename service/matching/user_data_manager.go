@@ -50,6 +50,7 @@ type (
 		// Handles the maybe-long-poll GetUserData RPC.
 		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 		CheckTaskQueueUserDataPropagation(context.Context, int64, int, int) error
+		SetOnChange(fn UserDataChangedFunc)
 	}
 
 	UserDataUpdateOptions struct {
@@ -65,6 +66,8 @@ type (
 	// Extra care should be taken to avoid mutating the current user data to avoid keeping uncommitted data in memory.
 	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
 
+	UserDataChangedFunc func(from, to *persistencespb.VersionedTaskQueueUserData)
+
 	// userDataManager is responsible for fetching and keeping user data up-to-date in-memory
 	// for a given TQ partition.
 	//
@@ -75,7 +78,7 @@ type (
 	userDataManagerImpl struct {
 		lock              sync.Mutex
 		onFatalErr        func(unloadCause)
-		onUserDataChanged func(from, to *persistencespb.VersionedTaskQueueUserData) // if set, call this in new goroutine when user data changes
+		onUserDataChanged UserDataChangedFunc // if set, call this in new goroutine when user data changes
 		partition         tqid.Partition
 		userData          *persistencespb.VersionedTaskQueueUserData
 		userDataChanged   chan struct{}
@@ -110,7 +113,6 @@ func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	onFatalErr func(unloadCause),
-	onUserDataChanged func(from, to *persistencespb.VersionedTaskQueueUserData),
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
@@ -118,7 +120,6 @@ func newUserDataManager(
 ) *userDataManagerImpl {
 	m := &userDataManagerImpl{
 		onFatalErr:        onFatalErr,
-		onUserDataChanged: onUserDataChanged,
 		partition:         partition,
 		userDataChanged:   make(chan struct{}),
 		config:            config,
@@ -133,6 +134,12 @@ func newUserDataManager(
 	}
 
 	return m
+}
+
+func (m *userDataManagerImpl) SetOnChange(fn UserDataChangedFunc) {
+	m.lock.Lock()
+	m.onUserDataChanged = fn
+	m.lock.Unlock()
 }
 
 func (m *userDataManagerImpl) Start() {

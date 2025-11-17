@@ -607,6 +607,10 @@ type mockUserDataManager struct {
 	data *persistencespb.VersionedTaskQueueUserData
 }
 
+func (m *mockUserDataManager) SetOnChange(fn UserDataChangedFunc) {
+	// noop
+}
+
 func (m *mockUserDataManager) Start() {
 	// noop
 }
