@@ -39,6 +39,7 @@ func TestReplicationEnableTestSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+// SetupSuite sets up two clusters with minimal config required for replication enable/disable testing
 func (s *ReplicationEnableTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
@@ -119,11 +120,14 @@ func (s *ReplicationEnableTestSuite) clusterReplicationConfig() []*replicationpb
 // TestReplicationEnableFlow tests the complete flow of:
 // 1. Connect clusters with connection enabled but replication disabled
 // 2. Create namespace - verify it DOES replicate (namespace replication happens when clusters connected)
-// 3. Start and complete workflow - workflow does NOT replicate yet (workflow replication disabled)
-// 4. Enable workflow replication
-// 5. Start new workflow - verify it DOES replicate
-// 6. Disable replication again
-// 7. Start another workflow - verify it does NOT replicate
+// 3. Verify namespace replicated to standby
+// 4. Start and complete workflow - workflow does NOT replicate yet (workflow replication disabled)
+// 5. Enable workflow replication
+// 6. Start new workflow - verify it DOES replicate
+// 7. Verify workflow replicated to standby
+// 8. Disable replication again
+// 9. Start another workflow - verify it does NOT replicate
+// 10. Verify workflow does NOT exist on standby
 func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	ctx := context.Background()
 	tv := testvars.New(s.T())
@@ -131,10 +135,20 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	activeCluster := s.clusters[0]
 	standbyCluster := s.clusters[1]
 
+	// Simple toy workflow that completes immediately
+	toyWorkflow := func(ctx workflow.Context) (string, error) {
+		return "workflow completed successfully", nil
+	}
+
+	workflowID1 := tv.WorkflowID()
+	taskQueueName := tv.TaskQueue().Name
+	activeNamespace := tv.NamespaceName().String()
+
 	s.logger.Info("Step 1: Connect clusters with connection enabled but replication disabled")
 
 	// Connect clusters to each other with replication disabled
-	_, err := activeCluster.AdminClient().AddOrUpdateRemoteCluster(
+	var err error
+	_, err = activeCluster.AdminClient().AddOrUpdateRemoteCluster(
 		ctx,
 		&adminservice.AddOrUpdateRemoteClusterRequest{
 			FrontendAddress:               standbyCluster.Host().RemoteFrontendGRPCAddress(),
@@ -157,9 +171,8 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	// Wait for cluster metadata to refresh (ClusterMetadataRefreshInterval is 5 seconds)
 	time.Sleep(6 * time.Second)
 
-	s.logger.Info("Step 2: Create namespace and setup SDK worker")
+	s.logger.Info("Step 2: Create namespace")
 
-	activeNamespace := tv.NamespaceName().String()
 	_, err = activeCluster.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        activeNamespace,
 		IsGlobalNamespace:                true,
@@ -169,10 +182,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	})
 	s.Require().NoError(err)
 
-	// Create SDK client for active cluster
-	workflowID1 := tv.WorkflowID()
-	taskQueueName := tv.TaskQueue().Name
-
+	// Create SDK client and worker after namespace is created
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  activeCluster.Host().FrontendGRPCAddress(),
 		Namespace: activeNamespace,
@@ -181,12 +191,6 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	s.Require().NoError(err)
 	defer activeSDKClient.Close()
 
-	// Simple toy workflow that completes immediately
-	toyWorkflow := func(ctx workflow.Context) (string, error) {
-		return "workflow completed successfully", nil
-	}
-
-	// Start SDK worker (will keep running throughout the test)
 	worker := sdkworker.New(activeSDKClient, taskQueueName, sdkworker.Options{})
 	worker.RegisterWorkflow(toyWorkflow)
 	s.Require().NoError(worker.Start())
@@ -327,4 +331,3 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	})
 	s.Require().Error(descErr, "Workflow should NOT replicate when replication is disabled")
 }
-
