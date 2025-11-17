@@ -43,8 +43,8 @@ func Invoke(
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
-			(*activity.Activity).RecordActivityCompleted,
-			activity.RecordActivityCompletedParams{
+			(*activity.Activity).HandleCompleted,
+			activity.RecordCompletedParams{
 				Payload:        request.GetResult(),
 				WorkerIdentity: request.GetIdentity(),
 			},

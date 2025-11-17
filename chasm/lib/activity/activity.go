@@ -26,8 +26,8 @@ import (
 )
 
 type ActivityStore interface {
-	// PopulateRecordActivityTaskStartedResponse populates the response for RecordActivityTaskStarted
-	PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error
+	// PopulateRecordActivityTaskStartedResponse populates the response for RecordStarted
+	PopulateRecordStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error
 
 	// RecordCompletion applies the provided function to record activity completion
 	RecordCompletion(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
@@ -134,14 +134,14 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 	}, nil
 }
 
-// RecordActivityTaskStartedParams holds parameters for RecordActivityTaskStarted
-type RecordActivityTaskStartedParams struct {
+// RecordStartedParams holds parameters for RecordStarted
+type RecordStartedParams struct {
 	VersionDirective *taskqueuespb.TaskVersionDirective
 	WorkerIdentity   string
 }
 
-// RecordActivityTaskStarted updates the activity on recording activity task started and populates the response.
-func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params RecordActivityTaskStartedParams) (*historyservice.RecordActivityTaskStartedResponse, error) {
+// RecordStarted updates the activity on recording activity task started and populates the response.
+func (a *Activity) RecordStarted(ctx chasm.MutableContext, params RecordStartedParams) (*historyservice.RecordActivityTaskStartedResponse, error) {
 	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
 		return nil, err
 	}
@@ -168,11 +168,11 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	if store == nil {
-		if err := a.PopulateRecordActivityTaskStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
+		if err := a.PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := store.PopulateRecordActivityTaskStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
+		if err := store.PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
 			return nil, err
 		}
 	}
@@ -180,7 +180,7 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 	return response, nil
 }
 
-func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {
+func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {
 	attempt, err := a.Attempt.Get(ctx)
 	if err != nil {
 		return err
@@ -227,14 +227,14 @@ func (a *Activity) RecordCompletion(ctx chasm.MutableContext, applyFn func(ctx c
 	return applyFn(ctx)
 }
 
-// RecordActivityCompletedParams holds parameters for RecordActivityCompleted
-type RecordActivityCompletedParams struct {
+// RecordCompletedParams holds parameters for HandleCompleted
+type RecordCompletedParams struct {
 	Payload        *commonpb.Payloads
 	WorkerIdentity string
 }
 
-// RecordActivityCompleted updates the activity on activity completion.
-func (a *Activity) RecordActivityCompleted(ctx chasm.MutableContext, params RecordActivityCompletedParams) (*historyservice.RespondActivityTaskCompletedResponse, error) {
+// HandleCompleted updates the activity on activity completion.
+func (a *Activity) HandleCompleted(ctx chasm.MutableContext, params RecordCompletedParams) (*historyservice.RespondActivityTaskCompletedResponse, error) {
 	if err := TransitionCompleted.Apply(a, ctx, params); err != nil {
 		return nil, err
 	}
@@ -242,15 +242,16 @@ func (a *Activity) RecordActivityCompleted(ctx chasm.MutableContext, params Reco
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
 
-// RecordActivityFailedParams holds parameters for HandleActivityFailed
-type RecordActivityFailedParams struct {
+// RecordFailedParams holds parameters for HandleFailed
+type RecordFailedParams struct {
 	Failure              *failurepb.Failure
 	LastHeartbeatDetails *commonpb.Payloads
 	WorkerIdentity       string
 }
 
-// HandleActivityFailed updates the activity on activity failure. if the activity is retriable, it will be rescheduled for retry instead.
-func (a *Activity) HandleActivityFailed(ctx chasm.MutableContext, params RecordActivityFailedParams) (*historyservice.RespondActivityTaskFailedResponse, error) {
+// HandleFailed updates the activity on activity failure. if the activity is retryable, it will be rescheduled
+// for retry instead.
+func (a *Activity) HandleFailed(ctx chasm.MutableContext, params RecordFailedParams) (*historyservice.RespondActivityTaskFailedResponse, error) {
 	shouldRetry, err := a.shouldRetryOnFailure(ctx, params.Failure)
 	if err != nil {
 		return nil, err
@@ -293,9 +294,9 @@ func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Fa
 	return enoughAttempts && enoughTime, nil
 }
 
-// recordTimeoutFromScheduledStatus records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
+// recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
 // set the outcome failure directly and leave the attempt failure as is.
-func (a *Activity) recordTimeoutFromScheduledStatus(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
+func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
 	outcome, err := a.Outcome.Get(ctx)
 	if err != nil {
 		return err
@@ -320,8 +321,8 @@ func (a *Activity) recordTimeoutFromScheduledStatus(ctx chasm.MutableContext, ti
 }
 
 // recordFailedAttempt records any failures resulting from a tried attempt, including worker application failures and
-// start-to-close timeouts. Since the calls come from retried attempts so we update the attempt failure info but leave
-// the outcome failure empty to avoid duplication
+// start-to-close timeouts. Since the calls come from retried attempts we update the attempt failure info but leave
+// the outcome failure empty to avoid duplication.
 func (a *Activity) recordFailedAttempt(
 	ctx chasm.MutableContext,
 	retryInterval time.Duration,

@@ -44,8 +44,8 @@ func Invoke(
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
-			(*activity.Activity).HandleActivityFailed,
-			activity.RecordActivityFailedParams{
+			(*activity.Activity).HandleFailed,
+			activity.RecordFailedParams{
 				Failure:              request.GetFailure(),
 				LastHeartbeatDetails: request.GetLastHeartbeatDetails(),
 				WorkerIdentity:       request.GetIdentity(),

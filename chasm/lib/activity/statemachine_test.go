@@ -356,7 +356,7 @@ func TestTransitionCompleted(t *testing.T) {
 
 	payload := payloads.EncodeString("Done")
 
-	err := TransitionCompleted.Apply(activity, ctx, RecordActivityCompletedParams{
+	err := TransitionCompleted.Apply(activity, ctx, RecordCompletedParams{
 		Payload:        payload,
 		WorkerIdentity: "worker",
 	})
@@ -397,7 +397,7 @@ func TestTransitionFailed(t *testing.T) {
 		}},
 	}
 
-	err := TransitionFailed.Apply(activity, ctx, RecordActivityFailedParams{
+	err := TransitionFailed.Apply(activity, ctx, RecordFailedParams{
 		Failure:              failure,
 		LastHeartbeatDetails: heartbeatDetails,
 		WorkerIdentity:       "worker",

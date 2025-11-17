@@ -158,7 +158,7 @@ var TransitionCompleted = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-	func(a *Activity, ctx chasm.MutableContext, params RecordActivityCompletedParams) error {
+	func(a *Activity, ctx chasm.MutableContext, params RecordCompletedParams) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
@@ -206,7 +206,7 @@ var TransitionFailed = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-	func(a *Activity, ctx chasm.MutableContext, params RecordActivityFailedParams) error {
+	func(a *Activity, ctx chasm.MutableContext, params RecordFailedParams) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
@@ -274,7 +274,7 @@ var TransitionTimedOut = chasm.NewTransition(
 				switch timeoutType {
 				case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-					return a.recordTimeoutFromScheduledStatus(ctx, timeoutType)
+					return a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
 				case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 					failure := a.createStartToCloseTimeoutFailure()
 					return a.recordFailedAttempt(ctx, 0, failure, true)

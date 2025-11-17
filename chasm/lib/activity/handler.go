@@ -37,7 +37,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 			return newActivity, &workflowservice.StartActivityExecutionResponse{
 				Started: true,
-				// EagerTask: TODO when supported, need to call the same code that would handle the RecordActivityTaskStarted API
+				// EagerTask: TODO when supported, need to call the same code that would handle the RecordStarted API
 			}, nil
 		},
 		req.GetFrontendRequest())
