@@ -157,18 +157,8 @@ type Client interface {
 		identity string,
 		requestID string,
 		skipDrainage bool,
+		asyncPropagation bool,
 	) error
-
-	// Used internally by the Worker Deployment Version workflow in its AddVersionToWorkerDeployment Activity
-	// to-be-deprecated
-	AddVersionToWorkerDeployment(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		deploymentName string,
-		args *deploymentspb.AddVersionUpdateArgs,
-		identity string,
-		requestID string,
-	) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error)
 
 	// Used internally by the Drainage workflow (child of Worker Deployment Version workflow)
 	// in its GetVersionDrainageStatus Activity
@@ -195,9 +185,6 @@ type Client interface {
 	) error
 }
 
-type ErrMaxTaskQueuesInVersion struct{ error }
-type ErrMaxVersionsInDeployment struct{ error }
-type ErrMaxDeploymentsInNamespace struct{ error }
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -332,17 +319,23 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 }
 
 func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {
-	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
-		// translate to client-side error type
-		return ErrMaxTaskQueuesInVersion{error: errors.New(failure.Message)}
-	} else if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-		return ErrMaxVersionsInDeployment{error: errors.New(failure.Message)}
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType ||
+		failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		return newResourceExhaustedError(failure.GetMessage())
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {
 		return ErrRegister{error: errors.New(failure.Message)}
 	}
 	return nil
+}
+
+func newResourceExhaustedError(message string) *serviceerror.ResourceExhausted {
+	return &serviceerror.ResourceExhausted{
+		Message: message,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS,
+	}
 }
 
 func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome) error {
@@ -395,8 +388,7 @@ func (d *ClientImpl) DescribeVersion(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
-			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
-			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
 		},
 	}
 
@@ -406,12 +398,20 @@ func (d *ClientImpl) DescribeVersion(
 		if errors.As(err, &notFound) {
 			return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
+		var queryFailed *serviceerror.QueryFailed
+		if errors.As(err, &queryFailed) && queryFailed.Error() == errVersionDeleted {
+			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
+		}
 		return nil, nil, err
 	}
 
-	// on closed workflows, the response is empty.
+	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
+		// This should not happen
+		return nil, nil, serviceerror.NewInternalf("describe deployment query rejected with status %s", rej.GetStatus())
+	}
+
 	if res.GetResponse().GetQueryResult() == nil {
-		return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
+		return nil, nil, serviceerror.NewInternal("Did not receive deployment info")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeVersionResponse
@@ -465,7 +465,10 @@ func (d *ClientImpl) UpdateVersionMetadata(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		return nil, errors.New(failure.Message)
+		if failure.GetApplicationFailureInfo().GetType() == errVersionDeleted {
+			return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, versionObj.GetBuildId(), versionObj.GetDeploymentName())
+		}
+		return nil, serviceerror.NewInternal(failure.Message)
 	}
 	success := outcome.GetSuccess()
 	if success == nil {
@@ -503,8 +506,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
-			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
 		},
 	}
 
@@ -512,22 +514,27 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
+		}
+		var queryFailed *serviceerror.QueryFailed
+		if errors.As(err, &queryFailed) && queryFailed.Error() == errDeploymentDeleted {
+			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 		}
 		return nil, nil, err
 	}
 
+	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
+		// This should not happen
+		return nil, nil, serviceerror.NewInternalf("describe deployment query rejected with status %s", rej.GetStatus())
+	}
+
 	if res.GetResponse().GetQueryResult() == nil {
-		return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+		return nil, nil, serviceerror.NewInternal("Did not receive deployment info")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
-		}
 		return nil, nil, err
 	}
 
@@ -1111,6 +1118,7 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	identity string,
 	requestID string,
 	skipDrainage bool,
+	asyncPropagation bool,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity, skipDrainage)()
@@ -1122,9 +1130,10 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 
 	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
-		Identity:     identity,
-		Version:      version,
-		SkipDrainage: skipDrainage,
+		Identity:         identity,
+		Version:          version,
+		SkipDrainage:     skipDrainage,
+		AsyncPropagation: asyncPropagation,
 	})
 	if err != nil {
 		return err
@@ -1180,10 +1189,6 @@ func (d *ClientImpl) update(
 	}
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	isRetryable := func(err error) bool {
-		// All updates that are admitted as the workflow is closing are considered retryable.
-		return errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error()
-	}
 
 	var outcome *updatepb.Outcome
 	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
@@ -1206,7 +1211,7 @@ func (d *ClientImpl) update(
 
 		outcome = res.GetResponse().GetOutcome()
 		return nil
-	}, policy, isRetryable)
+	}, policy, isRetryableUpdateError)
 
 	return outcome, err
 }
@@ -1243,7 +1248,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		}
 		limit := d.maxDeployments(namespaceEntry.Name().String())
 		if count >= int64(limit) {
-			return nil, ErrMaxDeploymentsInNamespace{error: errors.New(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))}
+			return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 		}
 	}
 
@@ -1328,58 +1333,6 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	)
 }
 
-func (d *ClientImpl) AddVersionToWorkerDeployment(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-	args *deploymentspb.AddVersionUpdateArgs,
-	identity string,
-	requestID string,
-) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
-	if err != nil {
-		return nil, err
-	}
-
-	updateRequest := &updatepb.Request{
-		Input: &updatepb.Input{Name: AddVersionToWorkerDeployment, Args: updatePayload},
-		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
-	}
-
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
-
-	outcome, err := d.updateWithStart(
-		ctx,
-		namespaceEntry,
-		WorkerDeploymentWorkflowType,
-		workflowID,
-		nil,
-		nil,
-		updateRequest,
-		identity,
-		requestID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyExistsType {
-		// pretend this is a success
-		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
-	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-		return nil, serviceerror.NewFailedPrecondition(failure.Message)
-	} else if failure != nil {
-		return nil, serviceerror.NewInternalf("failed to add version %v to worker deployment %v with error %v", args.Version, deploymentName, failure.Message)
-	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternalf("outcome missing success and failure while adding version %v to worker deployment %v", args.Version, deploymentName)
-	}
-
-	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
-}
-
 func (d *ClientImpl) updateWithStart(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -1428,10 +1381,6 @@ func (d *ClientImpl) updateWithStart(
 	}
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	isRetryable := func(err error) bool {
-		// All updates that are admitted as the workflow is closing are considered retryable.
-		return errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error()
-	}
 	var outcome *updatepb.Outcome
 
 	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
@@ -1465,9 +1414,27 @@ func (d *ClientImpl) updateWithStart(
 
 		outcome = updateRes.GetOutcome()
 		return nil
-	}, policy, isRetryable)
+	}, policy, isRetryableUpdateError)
 
 	return outcome, err
+}
+
+func isRetryableUpdateError(err error) bool {
+	if errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error() {
+		return true
+	}
+
+	// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
+	// The ErrWorkflowClosing could be nested.
+	var errMultiOps *serviceerror.MultiOperationExecution
+	if errors.As(err, &errMultiOps) {
+		for _, e := range errMultiOps.OperationErrors() {
+			if e.Error() == consts.ErrWorkflowClosing.Error() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
@@ -1636,6 +1603,11 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
 	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
 	workerDeploymentInfo.ManagerIdentity = state.ManagerIdentity
+	if len(state.PropagatingRevisions) > 0 {
+		workerDeploymentInfo.RoutingConfigUpdateState = enumspb.ROUTING_CONFIG_UPDATE_STATE_IN_PROGRESS
+	} else {
+		workerDeploymentInfo.RoutingConfigUpdateState = enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+	}
 
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
@@ -1826,11 +1798,7 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 		return serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
 
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInVersionArgs{
-		TaskQueueName: args.TaskQueueName,
-		TaskQueueType: args.TaskQueueType,
-		MaxTaskQueues: args.MaxTaskQueues,
-	})
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
 	}

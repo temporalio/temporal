@@ -176,7 +176,7 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 //   - consider remove ComponentRef from the return value and allow components to get
 //     the ref in the transition function. There are some caveats there, check the
 //     comment of the NewRef method in MutableContext.
-func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
+func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
 	updateFn func(C, MutableContext, I) (O, error),
@@ -207,7 +207,7 @@ func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 	return output, newSerializedRef, err
 }
 
-func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
+func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
 	readFn func(C, Context, I) (O, error),
@@ -234,14 +234,7 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 	return output, err
 }
 
-type PollComponentRequest[C Component, I any, O any] struct {
-	Ref         ComponentRef
-	PredicateFn func(C, Context, I) bool
-	OperationFn func(C, MutableContext, I) (O, error)
-	Input       I
-}
-
-func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
+func PollComponent[C any, R []byte | ComponentRef, I any, O any, T any](
 	ctx context.Context,
 	r R,
 	predicateFn func(C, Context, I) (T, bool, error),

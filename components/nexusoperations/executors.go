@@ -453,8 +453,8 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		// operation if the response's operation token is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
 	case errors.Is(callErr, ErrOperationTimeoutBelowMin):
-		// Operation timeout is not retryable
-		return handleNonRetryableStartOperationError(node, operation, callErr)
+		// Not enough time to execute another request, resolve the operation with a timeout.
+		return e.recordOperationTimeout(node)
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		// If timed out, we don't leak internal info to the user
 		callErr = errRequestTimedOut
@@ -513,6 +513,10 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 }
 
 func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
+	return e.recordOperationTimeout(node)
+}
+
+func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {

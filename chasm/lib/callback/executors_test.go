@@ -42,7 +42,7 @@ type mockNexusCompletionGetter struct {
 	err        error
 }
 
-func (m *mockNexusCompletionGetter) GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+func (m *mockNexusCompletionGetter) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.OperationCompletion, error) {
 	return m.completion, m.err
 }
 
@@ -229,21 +229,19 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			})
 
 			executor := InvocationTaskExecutor{
-				InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
-					Config: &Config{
-						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-						RetryPolicy: func() backoff.RetryPolicy {
-							return backoff.NewExponentialRetryPolicy(time.Second)
-						},
+				config: &Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
-					NamespaceRegistry: nsRegistry,
-					MetricsHandler:    metricsHandler,
-					Logger:            logger,
-					HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) HTTPCaller {
-						return tc.caller
-					},
-					ChasmEngine: mockEngine,
 				},
+				namespaceRegistry: nsRegistry,
+				metricsHandler:    metricsHandler,
+				logger:            logger,
+				httpCallerProvider: func(nid queues.NamespaceIDAndDestination) HTTPCaller {
+					return tc.caller
+				},
+				chasmEngine: mockEngine,
 			}
 
 			// Create ComponentRef
@@ -318,15 +316,13 @@ func TestProcessBackoffTask(t *testing.T) {
 	}
 
 	executor := BackoffTaskExecutor{
-		BackoffTaskExecutorOptions: BackoffTaskExecutorOptions{
-			Config: &Config{
-				RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-				RetryPolicy: func() backoff.RetryPolicy {
-					return backoff.NewExponentialRetryPolicy(time.Second)
-				},
+		config: &Config{
+			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+			RetryPolicy: func() backoff.RetryPolicy {
+				return backoff.NewExponentialRetryPolicy(time.Second)
 			},
-			Logger: logger,
 		},
+		logger: logger,
 	}
 
 	// Execute the backoff task
@@ -644,19 +640,17 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			})
 
 			executor := InvocationTaskExecutor{
-				InvocationTaskExecutorOptions: InvocationTaskExecutorOptions{
-					Config: &Config{
-						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-						RetryPolicy: func() backoff.RetryPolicy {
-							return backoff.NewExponentialRetryPolicy(time.Second)
-						},
+				config: &Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
-					NamespaceRegistry: nsRegistry,
-					MetricsHandler:    metrics.NoopMetricsHandler,
-					Logger:            logger,
-					HistoryClient:     historyClient,
-					ChasmEngine:       mockEngine,
 				},
+				namespaceRegistry: nsRegistry,
+				metricsHandler:    metrics.NoopMetricsHandler,
+				logger:            logger,
+				historyClient:     historyClient,
+				chasmEngine:       mockEngine,
 			}
 
 			// Create ComponentRef

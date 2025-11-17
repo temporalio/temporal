@@ -279,6 +279,18 @@ func IsPreallocatedCSAFieldName(name string, valueType enumspb.IndexedValueType)
 	return re != nil && re.MatchString(name)
 }
 
+var chasmSearchAttributePattern = regexp.MustCompile(`^Temporal(Bool|Datetime|Int|Double|Text|Keyword|KeywordList)(0[1-9]|[1-9][0-9])$`)
+
+// IsChasmSearchAttribute checks if a field name matches the pattern for CHASM search attributes.
+// CHASM search attributes follow the pattern: Temporal<Type><NN> where NN is 01-99
+// Examples: TemporalInt01, TemporalDatetime02, TemporalDouble01, etc.
+func IsChasmSearchAttribute(name string) bool {
+	if !strings.HasPrefix(name, ReservedPrefix) {
+		return false
+	}
+	return chasmSearchAttributePattern.MatchString(name)
+}
+
 // QueryWithAnyNamespaceDivision returns a modified workflow visibility query that disables
 // special handling of namespace division and so matches workflows in all namespace divisions.
 // Normally a query that didn't explicitly mention TemporalNamespaceDivision would be limited

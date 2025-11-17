@@ -89,6 +89,7 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				ForwardInfo:            f.getForwardInfo(task),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
 				Priority:               task.event.Data.GetPriority(),
+				Stamp:                  task.event.Data.GetStamp(),
 			},
 		)
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
