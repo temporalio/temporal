@@ -571,3 +571,15 @@ func ShallowCopyClusterInformation(information *ClusterInformation) *ClusterInfo
 	tmp := *information
 	return &tmp
 }
+
+// IsReplicationEnabledForCluster checks if replication is enabled for a cluster, considering the feature flag.
+// When enableSeparateReplicationFlag is false, it falls back to only checking the Enabled flag.
+// This is a shared helper function used across history service components.
+func IsReplicationEnabledForCluster(clusterInfo ClusterInformation, enableSeparateReplicationFlag bool) bool {
+	if enableSeparateReplicationFlag {
+		// New behavior: check both Enabled (for connectivity) and ReplicationEnabled (for replication streams)
+		return clusterInfo.Enabled && clusterInfo.ReplicationEnabled
+	}
+	// Old behavior: only check Enabled flag
+	return clusterInfo.Enabled
+}

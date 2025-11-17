@@ -47,6 +47,7 @@ func (s *ReplicationEnableTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]interface{}{
 		dynamicconfig.ClusterMetadataRefreshInterval.Key():        time.Second * 5,
 		dynamicconfig.EnableReplicationStream.Key():               true,
+		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():   true,
 		dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
 	}
 
@@ -169,7 +170,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	s.Require().NoError(err)
 
 	// Wait for cluster metadata to refresh (ClusterMetadataRefreshInterval is 5 seconds)
-	time.Sleep(6 * time.Second)
+	time.Sleep(6 * time.Second) //nolint:forbidigo
 
 	s.logger.Info("Step 2: Create namespace")
 
@@ -258,7 +259,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	s.Require().NoError(err)
 
 	// Wait for cluster metadata to refresh and replication streams to establish
-	time.Sleep(5 * time.Second)
+	time.Sleep(5 * time.Second) //nolint:forbidigo
 
 	s.logger.Info("Step 6: Start new workflow on active cluster (after replication enabled)")
 
@@ -306,7 +307,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	s.Require().NoError(err)
 
 	// Wait for cluster metadata to refresh and replication streams to stop
-	time.Sleep(6 * time.Second)
+	time.Sleep(6 * time.Second) //nolint:forbidigo
 
 	s.logger.Info("Step 9: Start another workflow on active cluster (after disabling replication)")
 
@@ -322,7 +323,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	s.logger.Info("Step 10: Verify third workflow does NOT replicate to standby")
 
 	// Wait a bit to ensure replication would have happened if it was enabled
-	time.Sleep(5 * time.Second)
+	time.Sleep(5 * time.Second) //nolint:forbidigo
 
 	// Verify workflow does NOT exist on standby
 	_, descErr := standbyCluster.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{

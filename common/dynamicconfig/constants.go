@@ -1390,6 +1390,11 @@ an optional feature and also requires a metrics collection system that can handl
 		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
+	EnableSeparateReplicationEnableFlag = NewGlobalBoolSetting(
+		"history.enableSeparateReplicationEnableFlag",
+		false,
+		`EnableSeparateReplicationEnableFlag controls whether to use the new ReplicationEnabled flag to control replication streams separately from cluster connectivity. When false, falls back to using only the Enabled flag for both connectivity and replication.`,
+	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",
 		true,
