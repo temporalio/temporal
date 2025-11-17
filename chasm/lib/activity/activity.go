@@ -26,11 +26,11 @@ import (
 )
 
 type ActivityStore interface {
-	// PopulateRecordActivityTaskStartedResponse populates the response for RecordStarted
+	// PopulateRecordStartedResponse populates the response for RecordStarted
 	PopulateRecordStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error
 
-	// RecordCompletion applies the provided function to record activity completion
-	RecordCompletion(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
+	// RecordCompleted applies the provided function to record activity completion
+	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
 }
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
@@ -223,7 +223,7 @@ func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.En
 	return nil
 }
 
-func (a *Activity) RecordCompletion(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
+func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
 	return applyFn(ctx)
 }
 

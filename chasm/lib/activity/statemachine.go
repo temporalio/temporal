@@ -165,7 +165,7 @@ var TransitionCompleted = chasm.NewTransition(
 		}
 
 		if store == nil {
-			err = a.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
+			err = a.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 				attempt, err := a.Attempt.Get(ctx)
 				if err != nil {
 					return err
@@ -190,9 +190,9 @@ var TransitionCompleted = chasm.NewTransition(
 				return nil
 			})
 		} else {
-			err = store.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
+			err = store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 				// Implement workflow activity completion handling here, including logic to rebuild the workflow state from history if needed.
-				return status.Errorf(codes.Unimplemented, "workflow activity completion handling is not implemented")
+				return status.Errorf(codes.Unimplemented, "workflow activity completed handling is not implemented")
 			})
 		}
 
@@ -213,7 +213,7 @@ var TransitionFailed = chasm.NewTransition(
 		}
 
 		if store == nil {
-			return a.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
+			return a.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 				if params.LastHeartbeatDetails != nil {
 					heartbeatDetails, err := a.LastHeartbeat.Get(ctx)
 					if err != nil {
@@ -237,7 +237,7 @@ var TransitionFailed = chasm.NewTransition(
 			})
 		}
 
-		return store.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
+		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			// Implement workflow failure handling here, including logic to rebuild the workflow state from history if needed.
 			return status.Errorf(codes.Unimplemented, "workflow failure handling is not implemented")
 		})
@@ -270,7 +270,7 @@ var TransitionTimedOut = chasm.NewTransition(
 		}
 
 		if store == nil {
-			return a.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
+			return a.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 				switch timeoutType {
 				case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
@@ -284,7 +284,7 @@ var TransitionTimedOut = chasm.NewTransition(
 			})
 		}
 
-		return store.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
+		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			// Implement workflow timeout handling here, including logic to rebuild the workflow state from history if needed.
 			return status.Errorf(codes.Unimplemented, "workflow timeout handling is not implemented")
 		})
