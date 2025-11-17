@@ -2,7 +2,6 @@ package chasm
 
 import (
 	"reflect"
-	"strings"
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -20,13 +19,6 @@ type EntityKey struct {
 	BusinessID string
 	// TODO: Rename to RunID.
 	EntityID string
-}
-
-// ComponentKey uniquely identifies a CHASM component in the system.
-// TODO(dan): include componentInitialVT
-type ComponentKey struct {
-	EntityKey
-	Path string
 }
 
 type ComponentRef struct {
@@ -111,15 +103,6 @@ func (r *ComponentRef) ShardingKey(
 	}
 
 	return rc.shardingFn(r.EntityKey), nil
-}
-
-// ComponentKey returns the component key for the referenced component.
-func (r *ComponentRef) ComponentKey() ComponentKey {
-	return ComponentKey{
-		EntityKey: r.EntityKey,
-		// TODO(dan): we would need to use a separator that is guaranteed not present in the path
-		Path: strings.Join(r.componentPath, "/"),
-	}
 }
 
 func (r *ComponentRef) Serialize(

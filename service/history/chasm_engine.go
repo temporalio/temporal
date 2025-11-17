@@ -235,8 +235,13 @@ func (e *ChasmEngine) UpdateComponent(
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
 	}
 
+	// TODO(dan) For now, UpdateComponent emits execution-level notifications, and PollComponent
+	// subscribes to execution-level notifications. This means that PollComponent may be woken up
+	// unnecessarily, but it will not miss notifications. In the future we may want to change
+	// PollComponent to subscribe to component-level notifications, and change UpdateComponent so
+	// that notifications are emitted only for nodes that were mutated in the transaction.
 	e.notifier.Notify(&ChasmComponentNotification{
-		Key: ref.ComponentKey(),
+		Key: ref.EntityKey,
 		Ref: newSerializedRef,
 	})
 
@@ -330,17 +335,17 @@ func (e *ChasmEngine) PollComponent(
 
 	// Wait condition not satisfied; long-poll
 
-	// TODO(dan): currently, UpdateComponent is only emitting notifications for the component
-	// referenced. Suppose there exists a component tree rooted at component A with child component
-	// B. As things stand, someone could subscribe to notifications for B and miss an update to B
-	// which was made during an UpdateComponent(A) call.
-	componentKey := requestRef.ComponentKey()
-	channel, subscriberID, err := e.notifier.Subscribe(componentKey)
+	// TODO(dan) For now, UpdateComponent emits execution-level notifications, and PollComponent
+	// subscribes to execution-level notifications. This means that PollComponent may be woken up
+	// unnecessarily, but it will not miss notifications. In the future we may want to change
+	// PollComponent to subscribe to component-level notifications, and change UpdateComponent so
+	// that notifications are emitted only for nodes that were mutated in the transaction.
+	channel, subscriberID, err := e.notifier.Subscribe(requestRef.EntityKey)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		_ = e.notifier.Unsubscribe(componentKey, subscriberID)
+		_ = e.notifier.Unsubscribe(requestRef.EntityKey, subscriberID)
 	}()
 
 	// Release the lock, now that we are subscribed
