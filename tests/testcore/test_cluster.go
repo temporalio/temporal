@@ -295,7 +295,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 				ClusterName:              clusterName,
 				ClusterId:                clusterInfo.ClusterID,
 				IsConnectionEnabled:      clusterInfo.Enabled,
-				IsReplicationEnabled:     clusterInfo.Enabled, // For backward compatibility, enable replication when connection is enabled
+				IsReplicationEnabled:     clusterInfo.Enabled,
 				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
 				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
 				ClusterAddress:           clusterInfo.RPCAddress,

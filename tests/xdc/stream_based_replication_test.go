@@ -91,6 +91,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationStream.Key():                   true,
 		dynamicconfig.EnableReplicationTaskBatching.Key():             true,
 		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
+		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():       true,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
