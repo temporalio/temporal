@@ -21,8 +21,7 @@ message ClusterMetadata {
     bool is_connection_enabled = 10;
     bool use_cluster_id_membership = 11;
     map<string,string> tags = 12;
-    // is_replication_enabled controls whether replication streams (namespace and workflow replication) are active.
-    // This is independent of is_connection_enabled which controls general cluster connectivity.
+    // is_replication_enabled controls whether replication streams are active.
     bool is_replication_enabled = 14;
 }
 

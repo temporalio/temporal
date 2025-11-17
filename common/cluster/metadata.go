@@ -94,8 +94,7 @@ type (
 		ClusterID  string            `yaml:"-"`
 		ShardCount int32             `yaml:"-"` // Ignore this field when loading config.
 		Tags       map[string]string `yaml:"-"` // Ignore this field. Use cluster.Config.Tags for customized tags.
-		// ReplicationEnabled controls whether replication streams (namespace and workflow replication) are active.
-		// This is independent of Enabled which controls general cluster connectivity.
+		// ReplicationEnabled controls whether replication streams are active.
 		ReplicationEnabled bool `yaml:"-"`
 		// private field to track cluster information updates
 		version int64

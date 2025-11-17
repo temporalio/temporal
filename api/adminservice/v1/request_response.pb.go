@@ -2361,9 +2361,7 @@ type AddOrUpdateRemoteClusterRequest struct {
 	EnableRemoteClusterConnection bool                   `protobuf:"varint,2,opt,name=enable_remote_cluster_connection,json=enableRemoteClusterConnection,proto3" json:"enable_remote_cluster_connection,omitempty"`
 	// Deprecated: Marked as deprecated in temporal/server/api/adminservice/v1/request_response.proto.
 	FrontendHttpAddress string `protobuf:"bytes,3,opt,name=frontend_http_address,json=frontendHttpAddress,proto3" json:"frontend_http_address,omitempty"`
-	// enable_replication controls whether replication streams (namespace and workflow replication) are active.
-	// This is independent of enable_remote_cluster_connection which controls general cluster connectivity.
-	// Defaults to false. Set to true to enable replication.
+	// enable_replication controls whether replication streams are active.
 	EnableReplication bool `protobuf:"varint,4,opt,name=enable_replication,json=enableReplication,proto3" json:"enable_replication,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache

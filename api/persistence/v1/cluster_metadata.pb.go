@@ -40,8 +40,7 @@ type ClusterMetadata struct {
 	IsConnectionEnabled      bool                              `protobuf:"varint,10,opt,name=is_connection_enabled,json=isConnectionEnabled,proto3" json:"is_connection_enabled,omitempty"`
 	UseClusterIdMembership   bool                              `protobuf:"varint,11,opt,name=use_cluster_id_membership,json=useClusterIdMembership,proto3" json:"use_cluster_id_membership,omitempty"`
 	Tags                     map[string]string                 `protobuf:"bytes,12,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// is_replication_enabled controls whether replication streams (namespace and workflow replication) are active.
-	// This is independent of is_connection_enabled which controls general cluster connectivity.
+	// is_replication_enabled controls whether replication streams are active.
 	IsReplicationEnabled bool `protobuf:"varint,14,opt,name=is_replication_enabled,json=isReplicationEnabled,proto3" json:"is_replication_enabled,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache

@@ -1202,8 +1202,6 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		return nil, err
 	}
 
-	// Use explicit replication enabled state from request
-	// enable_replication must be explicitly set to true to enable replication
 	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
