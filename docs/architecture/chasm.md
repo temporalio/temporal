@@ -4,7 +4,7 @@
 
 - Each of these abstractions is an `Archetype`.
 
-- An instance of an `Archetype` is an `Execution` (e.g. a workflow execution, an activity execution, a semaphore instance, a running worker).
+- An instance of an `Archetype` is an `Execution` (e.g. a workflow execution, an activity execution).
 
 - An execution possesses a `BusinessID` that should typically be meaningful in the user’s own systems. It is guaranteed to be unique among executions within a namespace that are in a non-terminal state.
 
