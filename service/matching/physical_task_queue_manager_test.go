@@ -91,6 +91,13 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	s.NoError(err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
+	if s.fairness {
+		prtnMgr.config.NewMatcher = true
+		prtnMgr.config.EnableFairness = true
+	} else if s.newMatcher {
+		prtnMgr.config.NewMatcher = true
+	}
+
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
 	prtnMgr.defaultQueue = s.tqMgr
