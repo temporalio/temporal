@@ -328,3 +328,158 @@ func TestActivityInfoMatchEvaluator_SupportedTimeFields(t *testing.T) {
 		})
 	}
 }
+
+func TestActivityInfoMatchEvaluator_Metrics(t *testing.T) {
+	tests := []struct {
+		name          string
+		query         string
+		expectedMatch bool
+	}{
+		{
+			name:          "metric, == , true",
+			query:         "%s = 1",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, == , false",
+			query:         "%s = 2",
+			expectedMatch: false,
+		},
+		{
+			name:          "metric, != , true",
+			query:         "%s != 2",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, != , false",
+			query:         "%s != 1",
+			expectedMatch: false,
+		},
+		{
+			name:          "metric, <> , true",
+			query:         "%s != 2",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, <> , false",
+			query:         "%s != 1",
+			expectedMatch: false,
+		},
+		{
+			name:          "metric, >, true",
+			query:         "%s > 0",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, >, false",
+			query:         "%s = 2",
+			expectedMatch: false,
+		},
+		{
+			name:          "metric, >=, true",
+			query:         "%s >= 1",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, >=, false",
+			query:         "%s >= 2",
+			expectedMatch: false,
+		},
+		{
+			name:          "metric, <, true",
+			query:         "%s < 2",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, <, false",
+			query:         "%s < 1",
+			expectedMatch: false,
+		},
+		{
+			name:          "metric, <=, true",
+			query:         "%s <= 1",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, <=, false",
+			query:         "%s <= 0",
+			expectedMatch: false,
+		},
+	}
+
+	hb := &workerpb.WorkerHeartbeat{
+		HostInfo: &workerpb.WorkerHostInfo{
+			CurrentHostCpuUsage: 1.0,
+		},
+		WorkflowTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+			CurrentUsedSlots: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			for _, colName := range []string{workerCPUUsageColName, workerWorkflowTaskSlotUsedColName} {
+				query := fmt.Sprintf(tt.query, colName)
+				engine, err := newWorkerQueryEngine("nsID", query)
+				assert.NoError(t, err)
+
+				match, err := engine.EvaluateWorker(hb)
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedMatch, match)
+			}
+		})
+	}
+}
+
+func TestActivityInfoMatchEvaluator_MetricsFail(t *testing.T) {
+	tests := []struct {
+		name          string
+		query         string
+		expectedMatch bool
+	}{
+		{
+			name:          "metric, == ,fail parse, hex",
+			query:         "%s = 0x0d",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, == , fail parse, string number",
+			query:         "%s = '1'",
+			expectedMatch: false,
+		},
+		{
+			name:          "metric, != , fail parse, string",
+			query:         "%s != 'Hello'",
+			expectedMatch: true,
+		},
+		{
+			name:          "metric, != , fail parse, float instead integer",
+			query:         "%s != 1.1",
+			expectedMatch: true,
+		},
+	}
+
+	hb := &workerpb.WorkerHeartbeat{
+		HostInfo: &workerpb.WorkerHostInfo{
+			CurrentHostCpuUsage: 1.0,
+		},
+		WorkflowTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+			CurrentUsedSlots: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, colName := range []string{workerWorkflowTaskSlotUsedColName} {
+				query := fmt.Sprintf(tt.query, colName)
+				engine, err := newWorkerQueryEngine("nsID", query)
+				assert.NoError(t, err)
+
+				_, err = engine.EvaluateWorker(hb)
+				assert.Error(t, err)
+			}
+		})
+	}
+
+}
