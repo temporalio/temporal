@@ -48,7 +48,7 @@ type CallbacksSuite struct {
 	chasmEnabled bool
 }
 
-func TestCallbacksSuite(t *testing.T) {
+func TestCallbacksSuiteHSM(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(CallbacksSuite))
 }
