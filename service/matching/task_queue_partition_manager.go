@@ -17,6 +17,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -25,7 +26,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -66,7 +66,7 @@ type (
 		cache cache.Cache // non-nil for root-partition
 
 		fairnessState persistencespb.TaskQueueTypeUserData_FairnessState // Set once on initialization and read only after
-		initGroup     *errgroup.Group
+		managerReady  *future.FutureImpl[struct{}]
 
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
@@ -88,7 +88,6 @@ func (pm *taskQueuePartitionManagerImpl) GetCache(key any) any {
 var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
 func newTaskQueuePartitionManager(
-	ctx context.Context,
 	e *matchingEngineImpl,
 	ns *namespace.Namespace,
 	partition tqid.Partition,
@@ -114,7 +113,7 @@ func newTaskQueuePartitionManager(
 		versionedQueues:  make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
 		userDataManager:  userDataManager,
 		rateLimitManager: rateLimitManager,
-		initGroup:        &errgroup.Group{},
+		managerReady:     future.NewFuture[struct{}](),
 	}
 
 	if pm.partition.IsRoot() {
@@ -123,27 +122,23 @@ func newTaskQueuePartitionManager(
 		)
 	}
 
-	pm.initGroup.Go(func() error {
-		return pm.initialize(ctx)
-	})
-
 	return pm, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) initialize(ctx context.Context) error {
+func (pm *taskQueuePartitionManagerImpl) initialize(ctx context.Context) {
 	unload := func(bool) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
-	pm.userDataManager.Start()
 	err := pm.userDataManager.WaitUntilInitialized(ctx)
 	if err != nil {
-		return err
+		pm.managerReady.Set(struct{}{}, err)
+		return
 	}
-	// todo(moody): do we need to be more cautious loading this? Do we need to ensure that we have PerType()? Check for a nil return?
 	data, _, err := pm.getPerTypeUserData()
 	if err != nil {
-		return err
+		pm.managerReady.Set(struct{}{}, err)
+		return
 	}
 
 	pm.config.AutoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableSub(unload)
@@ -170,25 +165,24 @@ func (pm *taskQueuePartitionManagerImpl) initialize(ctx context.Context) error {
 			pm.config.EnableFairness = true
 		}
 	default:
-		return serviceerror.NewInternal("Unknown FairnessState in UserData")
+		pm.managerReady.Set(struct{}{}, serviceerror.NewInternal("Unknown FairnessState in UserData"))
+		return
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
 	if err != nil {
-		return err
+		pm.managerReady.Set(struct{}{}, err)
+		return
 	}
 	pm.defaultQueue = defaultQ
-	return nil
+	pm.defaultQueue.Start()
+	pm.managerReady.Set(struct{}{}, nil)
 }
 
-func (pm *taskQueuePartitionManagerImpl) Start() error {
-	err := pm.initGroup.Wait()
-	if err != nil {
-		return err
-	}
+func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
-	pm.defaultQueue.Start()
-	return nil
+	pm.userDataManager.Start()
+	go pm.initialize(context.Background())
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
@@ -235,7 +229,7 @@ func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
 }
 
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
-	err := pm.initGroup.Wait()
+	_, err := pm.managerReady.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -250,10 +244,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	directive := params.taskInfo.GetVersionDirective()
 
 	if pm.Partition().IsRoot() && pm.config.AutoEnable && pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED {
-		// TODO(moody): unsure about this check, what is the correct way to check to see if PriorityKey is set?
-		// TODO(moody): This was originally discussed to be a separate API, but is just exposing this through the generic UpdateUserData sufficient?
-		// what is the pro/cons of adding the new API and perhaps invoking that instead? We're going to unload either way...
-		if params.taskInfo.Priority != nil && (params.taskInfo.Priority.FairnessKey != "" || params.taskInfo.Priority.PriorityKey != int32(pm.config.DefaultPriorityKey)) {
+		if params.taskInfo.Priority != nil && (params.taskInfo.Priority.FairnessKey != "" || params.taskInfo.Priority.PriorityKey != int32(0)) {
 			updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 				data := common.CloneProto(old)
 				perType := data.GetPerType()[int32(pm.Partition().TaskType())]
@@ -1372,21 +1363,17 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	return perType, userDataChanged, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) userDataChanged(from, to *persistencespb.VersionedTaskQueueUserData) {
-	// TODO(moody): this stinks, do we need this more verbose, is this interface bad?
-	// TODO(moody): we get calls into this callback quite a bit with data being nil(sampled from unit tests), do we want to go through the full update
-	// even in those cases? Should we pass the inner data and avoid a callback when that is nil? I am not totally sure about the implcations....
-	if from != nil && from.GetData() != nil && from.GetData().GetPerType() != nil && to != nil && to.GetData() != nil && to.GetData().GetPerType() != nil {
-		taskType := int32(pm.Partition().TaskType())
-		if from.GetData().GetPerType()[taskType] != nil && to.GetData().GetPerType()[taskType] != nil {
-			if from.GetData().GetPerType()[taskType].FairnessState != to.GetData().GetPerType()[taskType].FairnessState {
-				pm.unloadFromEngine(unloadCauseConfigChange)
-				return
-			}
-		}
-	}
+func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.VersionedTaskQueueUserData) {
 	// Update rateLimits if any change is userData.
 	pm.rateLimitManager.UserDataChanged()
+
+	if !pm.managerReady.Ready() {
+		return
+	}
+	taskType := int32(pm.Partition().TaskType())
+	if to.GetData().GetPerType()[taskType].GetFairnessState() != pm.fairnessState {
+		pm.unloadFromEngine(unloadCauseConfigChange)
+	}
 
 	// Notify all queues so they can re-evaluate their backlog.
 	pm.versionedQueuesLock.RLock()

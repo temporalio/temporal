@@ -15,7 +15,7 @@ import (
 type (
 	// TODO: adopt interface/mock combo in tests for looser coupling between MatchingEngine and PartitionManagers
 	taskQueuePartitionManager interface {
-		Start() error
+		Start()
 		Stop(unloadCause)
 		Namespace() *namespace.Namespace
 		WaitUntilInitialized(context.Context) error

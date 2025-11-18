@@ -85,15 +85,12 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
 	s.userDataMgr = &mockUserDataManager{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	pm, err := newTaskQueuePartitionManager(ctx, engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, s.userDataMgr)
+	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, s.userDataMgr)
 	s.NoError(err)
 	s.partitionMgr = pm
-	cancel()
 	engine.Start()
-	err = pm.Start()
-	s.NoError(err)
-	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Millisecond)
+	pm.Start()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	err = pm.WaitUntilInitialized(ctx)
 	s.NoError(err)
@@ -606,10 +603,6 @@ func createVersionSet(buildId string) *persistencespb.CompatibleVersionSet {
 type mockUserDataManager struct {
 	sync.Mutex
 	data *persistencespb.VersionedTaskQueueUserData
-}
-
-func (m *mockUserDataManager) SetOnChange(fn UserDataChangedFunc) {
-	// noop
 }
 
 func (m *mockUserDataManager) Start() {

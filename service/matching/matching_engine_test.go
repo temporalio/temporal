@@ -267,10 +267,8 @@ func newMatchingEngine(
 func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *Config) taskQueuePartitionManager {
 	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
 	logger, _, metricsHandler := s.matchingEngine.loggerAndMetricsForPartition(s.ns, prtn, tqConfig)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	pm, err := newTaskQueuePartitionManager(ctx, s.matchingEngine, s.ns, prtn, tqConfig, logger, logger, metricsHandler, &mockUserDataManager{})
+	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, logger, logger, metricsHandler, &mockUserDataManager{})
 	s.Require().NoError(err)
-	cancel()
 	return pm
 }
 
@@ -1024,8 +1022,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	mgr.GetRateLimitManager().SetAdminRateForTesting(25000.0)
 
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
-	err := mgr.Start()
-	s.NoError(err)
+	mgr.Start()
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
@@ -1212,8 +1209,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	s.True(ok)
 
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
-	err := mgr.Start()
-	s.NoError(err)
+	mgr.Start()
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
@@ -1285,7 +1281,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	// Independent activity tasks are those if the task queue the task is scheduled on is not part of the workflow's pinned
 	// deployment.
 	updateOptions := UserDataUpdateOptions{Source: "SyncDeploymentUserData"}
-	_, err = tqPTM.GetUserDataManager().UpdateUserData(context.Background(), updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	_, err := tqPTM.GetUserDataManager().UpdateUserData(context.Background(), updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 
 		newData := &persistencespb.TaskQueueUserData{
 			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -1416,8 +1412,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
-	err := mgr.Start()
-	s.NoError(err)
+	mgr.Start()
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
@@ -2196,8 +2191,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		prevGetTasksCount := s.taskManager.getGetTasksCount(dbq)
 
 		mgr := s.newPartitionManager(dbq.partition, config)
-		err := mgr.Start()
-		s.NoError(err)
+		mgr.Start()
 
 		// tlMgr.taskWriter startup is async so give it time to complete
 		time.Sleep(100 * time.Millisecond)

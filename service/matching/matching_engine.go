@@ -430,18 +430,18 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
+	onUserDataChanged := func(to *persistencespb.VersionedTaskQueueUserData) { newPM.userDataChanged(to) }
 	userDataManager := newUserDataManager(
 		e.taskManager,
 		e.matchingRawClient,
 		onFatalErr,
+		onUserDataChanged,
 		partition,
 		tqConfig,
 		logger,
 		e.namespaceRegistry,
 	)
-	child, cancel := context.WithCancel(ctx)
 	newPM, err = newTaskQueuePartitionManager(
-		child,
 		e,
 		namespaceEntry,
 		partition,
@@ -452,7 +452,6 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		userDataManager,
 	)
 	if err != nil {
-		cancel()
 		return nil, false, err
 	}
 
@@ -461,19 +460,13 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	pm, ok = e.partitions[key]
 	if ok {
 		e.partitionsLock.Unlock()
-		cancel()
 		return pm, false, nil
 	}
 
 	e.partitions[key] = newPM
 	e.partitionsLock.Unlock()
 
-	err = newPM.Start()
-	cancel()
-	if err != nil {
-		return nil, false, err
-	}
-	userDataManager.SetOnChange(newPM.userDataChanged)
+	newPM.Start()
 	return newPM, true, nil
 }
 

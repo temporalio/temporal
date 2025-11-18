@@ -50,7 +50,6 @@ type (
 		// Handles the maybe-long-poll GetUserData RPC.
 		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 		CheckTaskQueueUserDataPropagation(context.Context, int64, int, int) error
-		SetOnChange(fn UserDataChangedFunc)
 	}
 
 	UserDataUpdateOptions struct {
@@ -64,9 +63,8 @@ type (
 	// UserDataUpdateFunc accepts the current user data for a task queue and returns the updated user data, a boolean
 	// indicating whether this data should be replicated, and an error.
 	// Extra care should be taken to avoid mutating the current user data to avoid keeping uncommitted data in memory.
-	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
-
-	UserDataChangedFunc func(from, to *persistencespb.VersionedTaskQueueUserData)
+	UserDataUpdateFunc   func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
+	UserDataOnChangeFunc func(to *persistencespb.VersionedTaskQueueUserData)
 
 	// userDataManager is responsible for fetching and keeping user data up-to-date in-memory
 	// for a given TQ partition.
@@ -78,7 +76,7 @@ type (
 	userDataManagerImpl struct {
 		lock              sync.Mutex
 		onFatalErr        func(unloadCause)
-		onUserDataChanged UserDataChangedFunc // if set, call this in new goroutine when user data changes
+		onUserDataChanged UserDataOnChangeFunc // if set, call this in new goroutine when user data changes
 		partition         tqid.Partition
 		userData          *persistencespb.VersionedTaskQueueUserData
 		userDataChanged   chan struct{}
@@ -113,6 +111,7 @@ func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	onFatalErr func(unloadCause),
+	onUserDataChanged UserDataOnChangeFunc,
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
@@ -120,6 +119,7 @@ func newUserDataManager(
 ) *userDataManagerImpl {
 	m := &userDataManagerImpl{
 		onFatalErr:        onFatalErr,
+		onUserDataChanged: onUserDataChanged,
 		partition:         partition,
 		userDataChanged:   make(chan struct{}),
 		config:            config,
@@ -134,12 +134,6 @@ func newUserDataManager(
 	}
 
 	return m
-}
-
-func (m *userDataManagerImpl) SetOnChange(fn UserDataChangedFunc) {
-	m.lock.Lock()
-	m.onUserDataChanged = fn
-	m.lock.Unlock()
 }
 
 func (m *userDataManagerImpl) Start() {
@@ -183,12 +177,11 @@ func (m *userDataManagerImpl) getUserDataLocked() (*persistencespb.VersionedTask
 }
 
 func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.VersionedTaskQueueUserData) {
-	old := m.userData
 	m.userData = userData
 	close(m.userDataChanged)
 	m.userDataChanged = make(chan struct{})
 	if m.onUserDataChanged != nil {
-		go m.onUserDataChanged(old, userData)
+		go m.onUserDataChanged(m.userData)
 	}
 }
 

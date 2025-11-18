@@ -344,10 +344,9 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) PutCache(key, value any) *g
 }
 
 // Start mocks base method.
-func (m *MocktaskQueuePartitionManager) Start() error {
+func (m *MocktaskQueuePartitionManager) Start() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Start")
-	return nil
 }
 
 // Start indicates an expected call of Start.
