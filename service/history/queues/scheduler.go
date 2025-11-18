@@ -227,7 +227,7 @@ func NewRateLimitedScheduler(
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
 		return append(
-			estimateTaskMetricTag(e.GetTask(), namespaceRegistry, currentClusterName, chasmRegistry),
+			estimateTaskMetricTags(e.GetTask(), namespaceRegistry, currentClusterName, chasmRegistry, GetTaskTypeTagValue),
 			metrics.TaskPriorityTag(e.GetPriority().String()),
 		)
 	}

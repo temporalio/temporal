@@ -1324,6 +1324,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		s.mockNamespaceCache,
 		s.mockClusterMetadata,
 		s.mockShard.ChasmRegistry(),
+		queues.GetTaskTypeTagValue,
 		nil,
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,

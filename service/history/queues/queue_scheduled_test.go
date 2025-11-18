@@ -116,6 +116,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetClusterMetadata(),
 		s.mockShard.ChasmRegistry(),
+		GetTaskTypeTagValue,
 		logger,
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,

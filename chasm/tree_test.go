@@ -452,7 +452,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		ctx := NewMutableContext(context.Background(), rootNode)
 
 		rootComponent := &TestComponent{
-			MSPointer:                    s.nodeBackend,
+			MSPointer:                    NewMSPointer(s.nodeBackend),
 			SubComponent1:                NewComponentField(nil, sc1),
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
 			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
@@ -825,7 +825,7 @@ func (s *nodeSuite) TestApplyMutation() {
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
 
 	// Manually deserialize some tasks to populate the taskValueCache
@@ -898,10 +898,11 @@ func (s *nodeSuite) TestApplyMutation() {
 	// Validate root node got updated.
 	s.Equal(updatedRoot, root.serializedNode)
 	s.NotNil(root.value)
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
-	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+	s.Contains(root.currentSA, "TemporalDatetime01")
+	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+	s.True(root.currentMemo[TestComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
 
 	// Validate the "child" node got updated.
 	nodeSC1, ok := root.children["SubComponent1"]
@@ -1032,10 +1033,11 @@ func (s *nodeSuite) TestApplySnapshot() {
 	s.Equal(expectedMutation, root.mutation)
 
 	// Validate visibility search attributes and memo are updated as well.
-	s.Len(root.currentSA, 1)
+	s.Len(root.currentSA, 3)
 	s.Len(root.currentMemo, 1)
-	s.True(root.currentSA[testComponentStartTimeSAKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
-	s.True(root.currentMemo[testComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.Contains(root.currentSA, "TemporalDatetime01")
+	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
+	s.True(root.currentMemo[TestComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 }
 
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
@@ -1099,6 +1101,7 @@ func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 
 func (s *nodeSuite) TestRefreshTasks() {
 	now := s.timeSource.Now()
+	pureTaskScheduledTime := now.Add(time.Second).UTC()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -1130,7 +1133,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
 							{
 								TypeId:                    testPureTaskTypeID,
-								ScheduledTime:             timestamppb.New(now.Add(time.Second)),
+								ScheduledTime:             timestamppb.New(pureTaskScheduledTime),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 2,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
@@ -1174,6 +1177,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 	s.NoError(err)
 	s.Len(mutation.UpdatedNodes, 2) // TaskStatus for the root node is not reset, so no need to persist it.
 	s.Equal(2, s.nodeBackend.NumTasksAdded())
+	s.Equal(pureTaskScheduledTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
 func (s *nodeSuite) TestCarryOverTaskStatus() {
@@ -1475,10 +1479,8 @@ func (s *nodeSuite) TestValidateAccess() {
 }
 
 func (s *nodeSuite) TestGetComponent() {
-	root, err := s.newTestTree(testComponentSerializedNodes())
-	s.NoError(err)
-
 	errValidation := errors.New("some random validation error")
+
 	expectedTestComponent := &TestComponent{}
 	setTestComponentFields(expectedTestComponent, s.nodeBackend)
 	assertTestComponent := func(component Component) {
@@ -1492,23 +1494,27 @@ func (s *nodeSuite) TestGetComponent() {
 
 	testCases := []struct {
 		name            string
-		chasmContext    Context
+		chasmContextFn  func(root *Node) Context
 		ref             ComponentRef
 		expectedErr     error
-		valueState      valueState
+		nodeDirty       bool
 		assertComponent func(Component)
 	}{
 		{
-			name:         "path not found",
-			chasmContext: NewContext(context.Background(), root),
+			name: "path not found",
+			chasmContextFn: func(root *Node) Context {
+				return NewContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{"unknownComponent"},
 			},
 			expectedErr: errComponentNotFound,
 		},
 		{
-			name:         "initialVT mismatch",
-			chasmContext: NewContext(context.Background(), root),
+			name: "initialVT mismatch",
+			chasmContextFn: func(root *Node) Context {
+				return NewMutableContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{"SubComponent1", "SubComponent11"},
 				// should be (1, 1) but we set it to (2, 2)
@@ -1520,8 +1526,10 @@ func (s *nodeSuite) TestGetComponent() {
 			expectedErr: errComponentNotFound,
 		},
 		{
-			name:         "validation failure",
-			chasmContext: NewContext(context.Background(), root),
+			name: "validation failure",
+			chasmContextFn: func(root *Node) Context {
+				return NewMutableContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{"SubComponent1"},
 				componentInitialVT: &persistencespb.VersionedTransition{
@@ -1535,8 +1543,10 @@ func (s *nodeSuite) TestGetComponent() {
 			expectedErr: errValidation,
 		},
 		{
-			name:         "success readonly access",
-			chasmContext: NewContext(context.Background(), root),
+			name: "success readonly access",
+			chasmContextFn: func(root *Node) Context {
+				return NewContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{}, // root
 				componentInitialVT: &persistencespb.VersionedTransition{
@@ -1548,32 +1558,42 @@ func (s *nodeSuite) TestGetComponent() {
 				},
 			},
 			expectedErr:     nil,
-			valueState:      valueStateSynced,
 			assertComponent: assertTestComponent,
 		},
 		{
-			name:         "success mutable access",
-			chasmContext: NewMutableContext(context.Background(), root),
+			name: "success mutable access",
+			chasmContextFn: func(root *Node) Context {
+				return NewMutableContext(context.Background(), root)
+			},
 			ref: ComponentRef{
 				componentPath: []string{}, // root
 			},
 			expectedErr:     nil,
-			valueState:      valueStateNeedSyncStructure,
+			nodeDirty:       true,
 			assertComponent: assertTestComponent,
 		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			component, err := root.Component(tc.chasmContext, tc.ref)
-			s.Equal(tc.expectedErr, err)
-			if tc.expectedErr == nil {
-				// s.Equal(tc.expectedComponent, component)
+			root, err := s.newTestTree(testComponentSerializedNodes())
+			s.NoError(err)
 
-				node, ok := root.findNode(tc.ref.componentPath)
+			component, err := root.Component(tc.chasmContextFn(root), tc.ref)
+			s.Equal(tc.expectedErr, err)
+
+			node, ok := root.findNode(tc.ref.componentPath)
+			if tc.expectedErr == nil {
 				s.True(ok)
-				s.Equal(component, node.value)
-				s.Equal(tc.valueState, node.valueState)
+				tc.assertComponent(component)
+			}
+
+			if ok {
+				if tc.nodeDirty {
+					s.Greater(node.valueState, valueStateSynced)
+				} else {
+					s.LessOrEqual(node.valueState, valueStateSynced)
+				}
 			}
 		})
 	}
@@ -2012,6 +2032,8 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	err = root.closeTransactionUpdateComponentTasks(&persistencespb.VersionedTransition{TransitionCount: 2})
 	s.NoError(err)
 
+	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+
 	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
 	s.Empty(componentAttr.PureTasks)
 	s.Len(componentAttr.SideEffectTasks, 1)
@@ -2124,6 +2146,8 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
+
+	s.Equal(s.timeSource.Now().UTC(), s.nodeBackend.LastDeletePureTaskCall())
 
 	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.SideEffectTasks, 1) // Only one valid side effect task.
@@ -2270,7 +2294,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 }
 
 func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
-	now := s.timeSource.Now()
+	now := s.timeSource.Now().UTC()
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -2347,6 +2371,8 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
+
+	s.Equal(now.Add(time.Minute), s.nodeBackend.LastDeletePureTaskCall())
 
 	// Although only root is mutated in ApplyMutation, we generated a pure task for the child node,
 	// and need to persist that as well.
@@ -2527,6 +2553,9 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	s.NoError(err)
 	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
 	s.Empty(mutations.DeletedNodes)
+
+	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
+	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
 func (s *nodeSuite) TestEachPureTask() {
@@ -2721,30 +2750,38 @@ func (s *nodeSuite) TestExecutePureTask() {
 	}
 
 	// Succeed task execution and validation (happy case).
+	root.setValueState(valueStateSynced)
 	expectExecute(nil)
 	expectValidate(true, nil)
 	executed, err := root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.True(executed)
+	s.Equal(valueStateNeedSyncStructure, root.valueState)
 
 	expectedErr := errors.New("dummy")
 
 	// Succeed validation, fail execution.
+	root.setValueState(valueStateSynced)
 	expectExecute(expectedErr)
 	expectValidate(true, nil)
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
+	s.Equal(valueStateNeedSyncStructure, root.valueState)
 
 	// Fail task validation (no execution occurs).
+	root.setValueState(valueStateSynced)
 	expectValidate(false, nil)
 	executed, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.False(executed)
+	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
 
 	// Error during task validation (no execution occurs).
+	root.setValueState(valueStateSynced)
 	expectValidate(false, expectedErr)
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
+	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {

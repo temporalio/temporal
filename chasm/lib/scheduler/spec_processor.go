@@ -104,11 +104,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	}
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
-	lastAction := start
+	lastAction := end
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
 	for next, err = s.getNextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
+		lastAction = next.Next
+
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
@@ -134,7 +136,6 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
 			WorkflowId:    fmt.Sprintf("%s-%s", workflowID, nominalTimeSec.Format(time.RFC3339)),
 		})
-		lastAction = next.Next
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
@@ -151,7 +152,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 }
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
-	cw := s.Schedule.Policies.CatchupWindow
+	cw := s.Schedule.GetPolicies().GetCatchupWindow()
 	if cw == nil {
 		return tweakables.DefaultCatchupWindow
 	}

@@ -109,6 +109,17 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		config,
 	)
 
+	// Set up expectations on the SearchAttributesMapper mocks created by NewTestContext
+	mockMapper := searchattribute.NewMockMapper(s.controller)
+	mockMapper.EXPECT().GetFieldName(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(alias string, _ string) (string, error) {
+			return alias, nil
+		},
+	).AnyTimes()
+
+	mockMapperProvider := s.mockShard.Resource.SearchAttributesMapperProvider
+	mockMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(mockMapper, nil).AnyTimes()
+
 	reg := hsm.NewRegistry()
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
@@ -623,7 +634,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 			s.Equal(strconv.FormatUint(uint64(expectedArchetypeID), 10), actualArchetypeIDStr)
 
 			var paused bool
-			err = payload.Decode(request.SearchAttributes.IndexedFields[testComponentPausedSAName], &paused)
+			// SearchAttribute now uses field name (TemporalBool01) instead of alias (PausedSA)
+			err = payload.Decode(request.SearchAttributes.IndexedFields["TemporalBool01"], &paused)
 			s.NoError(err)
 			s.True(paused)
 
@@ -920,6 +932,7 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetClusterMetadata(),
 		s.mockShard.ChasmRegistry(),
+		queues.GetTaskTypeTagValue,
 		nil,
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,

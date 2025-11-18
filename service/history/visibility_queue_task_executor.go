@@ -390,13 +390,33 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return serviceerror.NewInternalf("expected visibility component, but got %T", visComponent)
 	}
 
-	searchattributes, err := visComponent.GetSearchAttributes(visTaskContext)
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
+		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err != nil {
 		return err
 	}
-	if searchattributes == nil {
-		searchattributes = make(map[string]*commonpb.Payload)
+
+	searchattributesMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
+	searchAttributesMapper, err := searchattributesMapperProvider.GetMapper(namespaceEntry.Name())
+	if err != nil {
+		return err
 	}
+
+	searchattributes := make(map[string]*commonpb.Payload)
+
+	aliasedSearchAttributes, err := visComponent.GetSearchAttributes(visTaskContext)
+	if err != nil {
+		return err
+	}
+
+	for alias, value := range aliasedSearchAttributes {
+		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
+		if err != nil {
+			return err
+		}
+		searchattributes[fieldName] = value
+	}
+
 	memo, err := visComponent.GetMemo(visTaskContext)
 	if err != nil {
 		return err
@@ -410,8 +430,8 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
-		for key, value := range saProvider.SearchAttributes(visTaskContext) {
-			searchattributes[key] = value.MustEncode()
+		for _, sa := range saProvider.SearchAttributes(visTaskContext) {
+			searchattributes[sa.Field] = sa.Value.MustEncode()
 		}
 	}
 	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
@@ -420,11 +440,6 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		}
 	}
 
-	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
-		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-	if err != nil {
-		return err
-	}
 	requestBase := t.getVisibilityRequestBase(
 		task,
 		namespaceEntry,

@@ -39,7 +39,10 @@ func (l *TestLibrary) Name() string {
 
 func (l *TestLibrary) Components() []*RegistrableComponent {
 	return []*RegistrableComponent{
-		NewRegistrableComponent[*TestComponent](testComponentName),
+		NewRegistrableComponent[*TestComponent](
+			testComponentName,
+			WithSearchAttributes(TestComponentStartTimeSearchAttribute),
+		),
 		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),
 		NewRegistrableComponent[*TestSubComponent11](testSubComponent11Name),
 		NewRegistrableComponent[*TestSubComponent2](testSubComponent2Name),

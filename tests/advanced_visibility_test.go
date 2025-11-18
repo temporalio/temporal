@@ -77,6 +77,8 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.BuildIdScavengerEnabled.Key():                    true,
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
+		// Enable the unified query converter
+		dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
@@ -429,19 +431,15 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	tl := "es-functional-list-workflow-keyword-query-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	searchAttr, err := searchattribute.Encode(
-		map[string]any{
-			"CustomKeywordField": "justice for all",
-		},
-		&searchattribute.TestNameTypeMap,
-	)
+	searchAttr := map[string]any{
+		"CustomKeywordField": "justice for all",
+	}
+	encodedSearchAttr, err := searchattribute.Encode(searchAttr, nil)
 	s.NoError(err)
 
-	request.SearchAttributes = searchAttr
+	request.SearchAttributes = encodedSearchAttr
 	we1, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
-
-	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// Exact match Keyword (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
@@ -450,15 +448,16 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomKeywordField = "justice for all"`,
 	}
-	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
-		s.NoError(err)
-		if len(resp.GetExecutions()) == 1 {
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
+			require.NoError(c, err)
+			require.Len(c, resp.GetExecutions(), 1)
 			openExecution = resp.GetExecutions()[0]
-			break
-		}
-		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
-	}
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
 	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
@@ -499,7 +498,10 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.Len(resp.GetExecutions(), 1)
 	s.Equal(id, resp.Executions[0].GetExecution().GetWorkflowId())
 	s.Equal(wt, resp.Executions[0].GetType().GetName())
-	s.ProtoEqual(searchAttr, resp.Executions[0].GetSearchAttributes())
+
+	decodedSearchAttr, err := searchattribute.Decode(resp.Executions[0].GetSearchAttributes(), nil, false)
+	s.NoError(err)
+	s.Equal(searchAttr, decodedSearchAttr)
 
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
@@ -977,13 +979,13 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(err.Error(), "'group by' clause is only supported for ExecutionStatus search attribute")
+	s.Contains(err.Error(), "'GROUP BY' clause is only supported for search attributes")
 
 	query = `GROUP BY ExecutionStatus, WorkflowType`
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(err.Error(), "'group by' clause supports only a single field")
+	s.Contains(err.Error(), "'GROUP BY' clause supports only a single field")
 }
 
 func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {

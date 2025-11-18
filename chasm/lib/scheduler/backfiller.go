@@ -41,6 +41,10 @@ func newBackfiller(
 		},
 		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
+
+	// Immediately schedule the first backfiller task.
+	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+
 	return backfiller
 }
 

@@ -991,6 +991,58 @@ StartNewExecutionLoop:
 	s.True(newExecutionStarted)
 }
 
+func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
+	tv := testvars.New(s.T())
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	}
+
+	testContext := testcore.NewContext()
+
+	// start workflow execution
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testContext, request)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.NoError(err0)
+
+	// start workflow task, but do not respond to it
+	res, err := s.FrontendClient().PollWorkflowTaskQueue(testContext, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+	})
+	s.Logger.Info("PollWorkflowTaskQueue", tag.Error(err))
+	s.NoError(err)
+
+	// respond workflow task as failed with grpc message too large error
+	_, err = s.FrontendClient().RespondWorkflowTaskFailed(testContext, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: res.TaskToken,
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_GRPC_MESSAGE_TOO_LARGE,
+	})
+	s.NoError(err)
+
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      we.RunId,
+	})
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionTerminated`, // verify that workflow is terminated
+		historyEvents)
+}
+
 func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{

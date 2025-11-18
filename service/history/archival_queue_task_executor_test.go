@@ -341,6 +341,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			shardContext.EXPECT().GetConfig().Return(cfg).AnyTimes()
 			mockMetadata := cluster.NewMockMetadata(p.Controller)
 			mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+			mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 			shardContext.EXPECT().GetClusterMetadata().Return(mockMetadata).AnyTimes()
 			shardContext.EXPECT().ChasmRegistry().Return(chasm.NewRegistry(logger)).AnyTimes()
 
@@ -515,6 +516,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				namespaceRegistry,
 				mockMetadata,
 				shardContext.ChasmRegistry(),
+				queues.GetTaskTypeTagValue,
 				logger,
 				metrics.NoopMetricsHandler,
 				telemetry.NoopTracer,

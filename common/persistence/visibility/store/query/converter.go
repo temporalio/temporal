@@ -1,528 +1,548 @@
-// Package query is inspired and partially copied from by github.com/cch123/elasticsql.
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination converter_mock.go
+
 package query
 
 import (
-	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
-	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/sqlquery"
 )
 
 type (
-	ExprConverter interface {
-		Convert(expr sqlparser.Expr) (elastic.Query, error)
+	// StoreQueryConverter interface abstracts the Visibility store expression builder.
+	// The Convert* functions are the base comparison expressions builders, while the Build* functions
+	// build the logical operators expressions.
+	//
+	// For example, for SQL databases, ExprT can be sqlparser.Expr which can be converted to string as
+	// a standard SQL query. Check the following implementations for reference:
+	// - SQL database: common/persistence/visibility/store/sql/query_converter.go
+	// - Elasticsearch: common/persistence/visibility/store/elasticsearch/query_converter.go
+	StoreQueryConverter[ExprT any] interface {
+		GetDatetimeFormat() string
+
+		BuildParenExpr(expr ExprT) (ExprT, error)
+
+		BuildNotExpr(expr ExprT) (ExprT, error)
+
+		BuildAndExpr(exprs ...ExprT) (ExprT, error)
+
+		BuildOrExpr(exprs ...ExprT) (ExprT, error)
+
+		ConvertComparisonExpr(operator string, col *SAColumn, value any) (ExprT, error)
+
+		ConvertKeywordComparisonExpr(operator string, col *SAColumn, value any) (ExprT, error)
+
+		ConvertKeywordListComparisonExpr(operator string, col *SAColumn, value any) (ExprT, error)
+
+		ConvertTextComparisonExpr(operator string, col *SAColumn, value any) (ExprT, error)
+
+		ConvertRangeExpr(operator string, col *SAColumn, from, to any) (ExprT, error)
+
+		ConvertIsExpr(operator string, col *SAColumn) (ExprT, error)
 	}
 
-	Converter struct {
-		fnInterceptor  FieldNameInterceptor
-		whereConverter ExprConverter
+	QueryConverter[ExprT any] struct {
+		storeQC       StoreQueryConverter[ExprT]
+		saInterceptor SearchAttributeInterceptor
+
+		namespaceName namespace.Name
+		saTypeMap     searchattribute.NameTypeMap
+		saMapper      searchattribute.Mapper
+
+		seenNamespaceDivision bool
 	}
 
-	WhereConverter struct {
-		And            ExprConverter
-		Or             ExprConverter
-		RangeCond      ExprConverter
-		ComparisonExpr ExprConverter
-		Is             ExprConverter
-	}
+	QueryConverterOptionFunc[ExprT any] func(*QueryConverter[ExprT])
 
-	andConverter struct {
-		where ExprConverter
-	}
-
-	orConverter struct {
-		where ExprConverter
-	}
-
-	rangeCondConverter struct {
-		fnInterceptor       FieldNameInterceptor
-		fvInterceptor       FieldValuesInterceptor
-		notBetweenSupported bool
-	}
-
-	comparisonExprConverter struct {
-		fnInterceptor    FieldNameInterceptor
-		fvInterceptor    FieldValuesInterceptor
-		allowedOperators map[string]struct{}
-		saNameType       searchattribute.NameTypeMap
-	}
-
-	isConverter struct {
-		fnInterceptor FieldNameInterceptor
-	}
-
-	notSupportedExprConverter struct{}
-
-	QueryParams struct {
-		Query   elastic.Query
-		Sorter  []elastic.Sorter
-		GroupBy []string
+	QueryParams[ExprT any] struct {
+		QueryExpr ExprT
+		OrderBy   sqlparser.OrderBy
+		// List of search attributes to group by (field name).
+		GroupBy []*SAColumn
 	}
 )
 
-func NewConverter(fnInterceptor FieldNameInterceptor, whereConverter ExprConverter) *Converter {
-	if fnInterceptor == nil {
-		fnInterceptor = &NopFieldNameInterceptor{}
+var (
+	groupByFieldWhitelist = []string{
+		searchattribute.ExecutionStatus,
 	}
-	return &Converter{
-		fnInterceptor:  fnInterceptor,
-		whereConverter: whereConverter,
+
+	supportedComparisonOperators = []string{
+		sqlparser.EqualStr,
+		sqlparser.NotEqualStr,
+		sqlparser.LessThanStr,
+		sqlparser.GreaterThanStr,
+		sqlparser.LessEqualStr,
+		sqlparser.GreaterEqualStr,
+		sqlparser.InStr,
+		sqlparser.NotInStr,
 	}
+
+	supportedKeywordOperators = []string{
+		sqlparser.EqualStr,
+		sqlparser.NotEqualStr,
+		sqlparser.LessThanStr,
+		sqlparser.GreaterThanStr,
+		sqlparser.LessEqualStr,
+		sqlparser.GreaterEqualStr,
+		sqlparser.InStr,
+		sqlparser.NotInStr,
+		sqlparser.StartsWithStr,
+		sqlparser.NotStartsWithStr,
+	}
+
+	supportedKeywordListOperators = []string{
+		sqlparser.EqualStr,
+		sqlparser.NotEqualStr,
+		sqlparser.InStr,
+		sqlparser.NotInStr,
+	}
+
+	supportedTextOperators = []string{
+		sqlparser.EqualStr,
+		sqlparser.NotEqualStr,
+	}
+
+	supportedTypesRangeCond = []enumspb.IndexedValueType{
+		enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		enumspb.INDEXED_VALUE_TYPE_INT,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	}
+)
+
+func NewQueryConverter[ExprT any](
+	storeQC StoreQueryConverter[ExprT],
+	namespaceName namespace.Name,
+	saTypeMap searchattribute.NameTypeMap,
+	saMapper searchattribute.Mapper,
+) *QueryConverter[ExprT] {
+	c := &QueryConverter[ExprT]{
+		storeQC:       storeQC,
+		saInterceptor: nopSearchAttributeInterceptor,
+
+		namespaceName: namespaceName,
+		saTypeMap:     saTypeMap,
+		saMapper:      saMapper,
+
+		seenNamespaceDivision: false,
+	}
+	return c
 }
 
-func NewWhereConverter(
-	and ExprConverter,
-	or ExprConverter,
-	rangeCond ExprConverter,
-	comparisonExpr ExprConverter,
-	is ExprConverter) ExprConverter {
-	if and == nil {
-		and = &notSupportedExprConverter{}
+func (c *QueryConverter[ExprT]) WithSearchAttributeInterceptor(
+	saInterceptor SearchAttributeInterceptor,
+) *QueryConverter[ExprT] {
+	if saInterceptor == nil {
+		saInterceptor = nopSearchAttributeInterceptor
 	}
-
-	if or == nil {
-		or = &notSupportedExprConverter{}
-	}
-
-	if rangeCond == nil {
-		rangeCond = &notSupportedExprConverter{}
-	}
-
-	if comparisonExpr == nil {
-		comparisonExpr = &notSupportedExprConverter{}
-	}
-
-	if is == nil {
-		is = &notSupportedExprConverter{}
-	}
-
-	return &WhereConverter{
-		And:            and,
-		Or:             or,
-		RangeCond:      rangeCond,
-		ComparisonExpr: comparisonExpr,
-		Is:             is,
-	}
+	c.saInterceptor = saInterceptor
+	return c
 }
 
-func NewAndConverter(whereConverter ExprConverter) ExprConverter {
-	return &andConverter{
-		where: whereConverter,
-	}
+func (c *QueryConverter[ExprT]) SeenNamespaceDivision() bool {
+	return c.seenNamespaceDivision
 }
 
-func NewOrConverter(whereConverter ExprConverter) ExprConverter {
-	return &orConverter{
-		where: whereConverter,
-	}
-}
-
-func NewRangeCondConverter(
-	fnInterceptor FieldNameInterceptor,
-	fvInterceptor FieldValuesInterceptor,
-	notBetweenSupported bool,
-) ExprConverter {
-	if fnInterceptor == nil {
-		fnInterceptor = &NopFieldNameInterceptor{}
-	}
-	if fvInterceptor == nil {
-		fvInterceptor = &NopFieldValuesInterceptor{}
-	}
-	return &rangeCondConverter{
-		fnInterceptor:       fnInterceptor,
-		fvInterceptor:       fvInterceptor,
-		notBetweenSupported: notBetweenSupported,
-	}
-}
-
-func NewComparisonExprConverter(
-	fnInterceptor FieldNameInterceptor,
-	fvInterceptor FieldValuesInterceptor,
-	allowedOperators map[string]struct{},
-	saNameType searchattribute.NameTypeMap,
-) ExprConverter {
-	if fnInterceptor == nil {
-		fnInterceptor = &NopFieldNameInterceptor{}
-	}
-	if fvInterceptor == nil {
-		fvInterceptor = &NopFieldValuesInterceptor{}
-	}
-	return &comparisonExprConverter{
-		fnInterceptor:    fnInterceptor,
-		fvInterceptor:    fvInterceptor,
-		allowedOperators: allowedOperators,
-		saNameType:       saNameType,
-	}
-}
-
-func NewIsConverter(fnInterceptor FieldNameInterceptor) ExprConverter {
-	return &isConverter{
-		fnInterceptor: fnInterceptor,
-	}
-}
-
-func NewNotSupportedExprConverter() ExprConverter {
-	return &notSupportedExprConverter{}
-}
-
-// ConvertWhereOrderBy transforms WHERE SQL statement to Elasticsearch query.
-// It also supports ORDER BY clause.
-func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (*QueryParams, error) {
-	whereOrderBy = strings.TrimSpace(whereOrderBy)
-
-	if whereOrderBy != "" &&
-		!strings.HasPrefix(strings.ToLower(whereOrderBy), "order by ") &&
-		!strings.HasPrefix(strings.ToLower(whereOrderBy), "group by ") {
-		whereOrderBy = "where " + whereOrderBy
-	}
-	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
-	sql := fmt.Sprintf("select * from table1 %s", whereOrderBy)
-	return c.ConvertSql(sql)
-}
-
-// ConvertSql transforms SQL to Elasticsearch query.
-func (c *Converter) ConvertSql(sql string) (*QueryParams, error) {
-	stmt, err := sqlparser.Parse(sql)
+func (c *QueryConverter[ExprT]) Convert(
+	queryString string,
+) (*QueryParams[ExprT], error) {
+	queryParams, err := c.convertWhereString(queryString)
 	if err != nil {
-		return nil, NewConverterError("%s: %v", MalformedSqlQueryErrMessage, err)
+		return nil, err
 	}
 
-	selectStmt, isSelect := stmt.(*sqlparser.Select)
-	if !isSelect {
-		return nil, NewConverterError("%s: statement must be 'select' not %T", NotSupportedErrMessage, stmt)
-	}
-
-	return c.convertSelect(selectStmt)
-}
-
-func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
-	if sel.Limit != nil {
-		return nil, NewConverterError("%s: 'limit' clause", NotSupportedErrMessage)
-	}
-
-	queryParams := &QueryParams{}
-	if sel.Where != nil {
-		query, err := c.whereConverter.Convert(sel.Where.Expr)
-		if err != nil {
-			return nil, wrapConverterError("unable to convert filter expression", err)
+	// If the query did not explicitly filter on TemporalNamespaceDivision,
+	// then add "is null" query to it.
+	var namespaceDivisionExpr ExprT
+	if !c.seenNamespaceDivision {
+		nsDivisionCol := NamespaceDivisionSAColumn()
+		if err := c.saInterceptor.Intercept(nsDivisionCol); err != nil {
+			return nil, err
 		}
-		// Result must be BoolQuery.
-		if _, isBoolQuery := query.(*elastic.BoolQuery); !isBoolQuery {
-			query = elastic.NewBoolQuery().Filter(query)
-		}
-		queryParams.Query = query
-	}
-
-	if len(sel.GroupBy) > 1 {
-		return nil, NewConverterError("%s: 'group by' clause supports only a single field", NotSupportedErrMessage)
-	}
-	for _, groupByExpr := range sel.GroupBy {
-		_, colName, err := convertColName(c.fnInterceptor, groupByExpr, FieldNameGroupBy)
-		if err != nil {
-			return nil, wrapConverterError("unable to convert 'group by' column name", err)
-		}
-		queryParams.GroupBy = append(queryParams.GroupBy, colName)
-	}
-
-	for _, orderByExpr := range sel.OrderBy {
-		_, colName, err := convertColName(c.fnInterceptor, orderByExpr.Expr, FieldNameSorter)
-		if err != nil {
-			return nil, wrapConverterError("unable to convert 'order by' column name", err)
-		}
-		fieldSort := elastic.NewFieldSort(colName)
-		if orderByExpr.Direction == sqlparser.DescScr {
-			fieldSort = fieldSort.Desc()
-		}
-		queryParams.Sorter = append(queryParams.Sorter, fieldSort)
-	}
-
-	if len(queryParams.GroupBy) > 0 && len(queryParams.Sorter) > 0 {
-		return nil, NewConverterError(
-			"%s: 'order by' clause is not supported with 'group by' clause",
-			NotSupportedErrMessage,
+		namespaceDivisionExpr, err = c.storeQC.ConvertIsExpr(
+			sqlparser.IsNullStr,
+			nsDivisionCol,
 		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	queryExpr, err := c.storeQC.BuildParenExpr(queryParams.QueryExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryExpr)
+	if err != nil {
+		return nil, err
 	}
 
 	return queryParams, nil
 }
 
-func (w *WhereConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
-	if expr == nil {
-		return nil, errors.New("cannot be nil")
+func (c *QueryConverter[ExprT]) convertWhereString(queryString string) (*QueryParams[ExprT], error) {
+	where := strings.TrimSpace(queryString)
+	if where != "" &&
+		!strings.HasPrefix(strings.ToLower(where), "order by") &&
+		!strings.HasPrefix(strings.ToLower(where), "group by") {
+		where = "where " + where
+	}
+	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
+	sql := "select * from table1 " + where
+	stmt, err := sqlparser.Parse(sql)
+	if err != nil {
+		return nil, NewConverterError("%s: %v", MalformedSqlQueryErrMessage, err)
 	}
 
-	switch e := (expr).(type) {
-	case *sqlparser.AndExpr:
-		return w.And.Convert(e)
-	case *sqlparser.OrExpr:
-		return w.Or.Convert(e)
-	case *sqlparser.ComparisonExpr:
-		return w.ComparisonExpr.Convert(e)
-	case *sqlparser.RangeCond:
-		return w.RangeCond.Convert(e)
-	case *sqlparser.ParenExpr:
-		return w.Convert(e.Expr)
-	case *sqlparser.IsExpr:
-		return w.Is.Convert(e)
-	case *sqlparser.NotExpr:
-		return nil, NewConverterError("%s: 'not' expression", NotSupportedErrMessage)
-	case *sqlparser.FuncExpr:
-		return nil, NewConverterError("%s: function expression", NotSupportedErrMessage)
-	case *sqlparser.ColName:
-		return nil, NewConverterError("incomplete expression")
-	default:
-		return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
-	}
+	//nolint:revive // type cast is guaranteed to be a *sqlparser.Select
+	selectStmt, _ := stmt.(*sqlparser.Select)
+	return c.convertSelectStmt(selectStmt)
 }
 
-func (a *andConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
-	andExpr, ok := expr.(*sqlparser.AndExpr)
-	if !ok {
-		return nil, NewConverterError("%v is not an 'and' expression", sqlparser.String(expr))
+func (c *QueryConverter[ExprT]) convertSelectStmt(
+	sel *sqlparser.Select,
+) (*QueryParams[ExprT], error) {
+	// TODO: Forbid ORDER BY clause. It's currently allowed only with Elasticsearch for backwards
+	// compatibility. Support for ORDER BY will be completely removed in a future release.
+	// if sel.OrderBy != nil {
+	// 	return nil, NewConverterError("%s: 'ORDER BY' clause", NotSupportedErrMessage)
+	// }
+
+	if sel.Limit != nil {
+		return nil, NewConverterError("%s: 'LIMIT' clause", NotSupportedErrMessage)
 	}
 
-	leftExpr := andExpr.Left
-	rightExpr := andExpr.Right
-	leftQuery, err := a.where.Convert(leftExpr)
-	if err != nil {
-		return nil, err
-	}
-	rightQuery, err := a.where.Convert(rightExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// If left or right is a BoolQuery built from AndExpr then reuse it w/o creating new BoolQuery.
-	lqBool, isLQBool := leftQuery.(*elastic.BoolQuery)
-	_, isLEAnd := leftExpr.(*sqlparser.AndExpr)
-	if isLQBool && isLEAnd {
-		return lqBool.Filter(rightQuery), nil
-	}
-
-	rqBool, isRQBool := rightQuery.(*elastic.BoolQuery)
-	_, isREAnd := rightExpr.(*sqlparser.AndExpr)
-	if isRQBool && isREAnd {
-		return rqBool.Filter(leftQuery), nil
-	}
-
-	return elastic.NewBoolQuery().Filter(leftQuery, rightQuery), nil
-}
-
-func (o *orConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
-	orExpr, ok := expr.(*sqlparser.OrExpr)
-	if !ok {
-		return nil, NewConverterError("%v is not an 'or' expression", sqlparser.String(expr))
-	}
-
-	leftExpr := orExpr.Left
-	rightExpr := orExpr.Right
-	leftQuery, err := o.where.Convert(leftExpr)
-	if err != nil {
-		return nil, err
-	}
-	rightQuery, err := o.where.Convert(rightExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// If left or right is a BoolQuery built from OrExpr then reuse it w/o creating new BoolQuery.
-	lqBool, isLQBool := leftQuery.(*elastic.BoolQuery)
-	_, isLEOr := leftExpr.(*sqlparser.OrExpr)
-	if isLQBool && isLEOr {
-		return lqBool.Should(rightQuery), nil
-	}
-
-	rqBool, isRQBool := rightQuery.(*elastic.BoolQuery)
-	_, isREOr := rightExpr.(*sqlparser.OrExpr)
-	if isRQBool && isREOr {
-		return rqBool.Should(leftQuery), nil
-	}
-
-	return elastic.NewBoolQuery().Should(leftQuery, rightQuery), nil
-}
-
-func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
-	rangeCond, ok := expr.(*sqlparser.RangeCond)
-	if !ok {
-		return nil, NewConverterError("%v is not a range condition", sqlparser.String(expr))
-	}
-
-	alias, colName, err := convertColName(r.fnInterceptor, rangeCond.Left, FieldNameFilter)
-	if err != nil {
-		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
-	}
-
-	fromValue, err := sqlquery.ParseValue(sqlparser.String(rangeCond.From))
-	if err != nil {
-		return nil, err
-	}
-	toValue, err := sqlquery.ParseValue(sqlparser.String(rangeCond.To))
-	if err != nil {
-		return nil, err
-	}
-
-	values, err := r.fvInterceptor.Values(alias, colName, fromValue, toValue)
-	if err != nil {
-		return nil, wrapConverterError("unable to convert values of 'between' expression", err)
-	}
-	fromValue = values[0]
-	toValue = values[1]
-
-	var query elastic.Query
-	switch rangeCond.Operator {
-	case "between":
-		query = elastic.NewRangeQuery(colName).Gte(fromValue).Lte(toValue)
-	case "not between":
-		if !r.notBetweenSupported {
-			return nil, NewConverterError("%s: 'not between' expression", NotSupportedErrMessage)
+	if sel.Where == nil {
+		sel.Where = &sqlparser.Where{
+			Type: sqlparser.WhereStr,
+			Expr: nil,
 		}
-		query = elastic.NewBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(fromValue).Lte(toValue))
-	default:
-		return nil, NewConverterError("%s: range condition operator must be 'between' or 'not between'", InvalidExpressionErrMessage)
-	}
-	return query, nil
-}
-
-func (i *isConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
-	isExpr, ok := expr.(*sqlparser.IsExpr)
-	if !ok {
-		return nil, NewConverterError("%v is not an 'is' expression", sqlparser.String(expr))
 	}
 
-	_, colName, err := convertColName(i.fnInterceptor, isExpr.Expr, FieldNameFilter)
-	if err != nil {
-		return nil, wrapConverterError("unable to convert left part of 'is' expression", err)
-	}
-
-	var query elastic.Query
-	switch isExpr.Operator {
-	case "is null":
-		query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName))
-	case "is not null":
-		query = elastic.NewExistsQuery(colName)
-	default:
-		return nil, NewConverterError("%s: 'is' operator can be used with 'null' and 'not null' only", InvalidExpressionErrMessage)
-	}
-
-	return query, nil
-}
-
-func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
-	comparisonExpr, ok := expr.(*sqlparser.ComparisonExpr)
-	if !ok {
-		return nil, NewConverterError("%v is not a comparison expression", sqlparser.String(expr))
-	}
-
-	alias, colName, err := convertColName(c.fnInterceptor, comparisonExpr.Left, FieldNameFilter)
-	if err != nil {
-		return nil, wrapConverterError(
-			fmt.Sprintf("unable to convert left side of %q", sqlparser.String(expr)),
-			err,
-		)
-	}
-
-	colValue, err := convertComparisonExprValue(comparisonExpr.Right)
-	if err != nil {
-		return nil, wrapConverterError(
-			fmt.Sprintf("unable to convert right side of %q", sqlparser.String(expr)),
-			err,
-		)
-	}
-
-	colValues, isArray := colValue.([]interface{})
-	// colValue should be an array only for "in (1,2,3)" queries.
-	if !isArray {
-		colValues = []interface{}{colValue}
-	}
-
-	colValues, err = c.fvInterceptor.Values(alias, colName, colValues...)
-	if err != nil {
-		return nil, wrapConverterError("unable to convert values of comparison expression", err)
-	}
-
-	if _, ok := c.allowedOperators[comparisonExpr.Operator]; !ok {
-		return nil, NewConverterError("operator '%v' not allowed in comparison expression", comparisonExpr.Operator)
-	}
-
-	tp, err := c.saNameType.GetType(colName)
-	if err != nil {
-		return nil, err
-	}
-
-	var query elastic.Query
-	switch comparisonExpr.Operator {
-	case sqlparser.GreaterEqualStr:
-		query = elastic.NewRangeQuery(colName).Gte(colValues[0])
-	case sqlparser.LessEqualStr:
-		query = elastic.NewRangeQuery(colName).Lte(colValues[0])
-	case sqlparser.GreaterThanStr:
-		query = elastic.NewRangeQuery(colName).Gt(colValues[0])
-	case sqlparser.LessThanStr:
-		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
-	case sqlparser.EqualStr:
-		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
-		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD || tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
-			query = elastic.NewTermQuery(colName, colValues[0])
-		} else {
-			query = elastic.NewMatchQuery(colName, colValues[0])
-		}
-	case sqlparser.NotEqualStr:
-		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
-		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD || tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
-			query = elastic.NewBoolQuery().MustNot(elastic.NewTermQuery(colName, colValues[0]))
-		} else {
-			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, colValues[0]))
-		}
-	case sqlparser.InStr:
-		query = elastic.NewTermsQuery(colName, colValues...)
-	case sqlparser.NotInStr:
-		query = elastic.NewBoolQuery().MustNot(elastic.NewTermsQuery(colName, colValues...))
-	case sqlparser.StartsWithStr:
-		v, ok := colValues[0].(string)
-		if !ok {
-			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
-		}
-		query = elastic.NewPrefixQuery(colName, v)
-	case sqlparser.NotStartsWithStr:
-		v, ok := colValues[0].(string)
-		if !ok {
-			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
-		}
-		query = elastic.NewBoolQuery().MustNot(elastic.NewPrefixQuery(colName, v))
-	}
-
-	return query, nil
-}
-
-// convertComparisonExprValue returns a string, int64, float64, bool or
-// a slice with each value of one of those types.
-func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
-	switch e := expr.(type) {
-	case *sqlparser.SQLVal:
-		v, err := sqlquery.ParseValue(sqlparser.String(e))
+	res := &QueryParams[ExprT]{}
+	if sel.Where.Expr != nil {
+		queryExpr, err := c.convertWhereExpr(sel.Where.Expr)
 		if err != nil {
 			return nil, err
 		}
-		return v, nil
+		res.QueryExpr = queryExpr
+	}
+
+	if len(sel.GroupBy) > 1 {
+		return nil, NewConverterError(
+			"%s: 'GROUP BY' clause supports only a single field",
+			NotSupportedErrMessage,
+		)
+	}
+	for k := range sel.GroupBy {
+		colName, err := c.convertColName(sel.GroupBy[k])
+		if err != nil {
+			return nil, err
+		}
+		if !slices.Contains(groupByFieldWhitelist, colName.FieldName) {
+			return nil, NewConverterError(
+				"%s: 'GROUP BY' clause is only supported for search attributes [%v]",
+				NotSupportedErrMessage,
+				strings.Join(groupByFieldWhitelist, ", "),
+			)
+		}
+		res.GroupBy = append(res.GroupBy, colName)
+	}
+
+	for k := range sel.OrderBy {
+		colName, err := c.convertColName(sel.OrderBy[k].Expr)
+		if err != nil {
+			return nil, err
+		}
+		if colName.ValueType == enumspb.INDEXED_VALUE_TYPE_TEXT {
+			return nil, NewConverterError(
+				"%s: unable to sort by search attribute type %s",
+				NotSupportedErrMessage,
+				colName.ValueType,
+			)
+		}
+		sel.OrderBy[k].Expr = colName
+	}
+	res.OrderBy = sel.OrderBy
+
+	return res, nil
+}
+
+func (c *QueryConverter[ExprT]) convertWhereExpr(expr sqlparser.Expr) (ExprT, error) {
+	var out ExprT
+	if expr == nil {
+		// this should never happen
+		return out, serviceerror.NewInternal("where expression is nil")
+	}
+
+	switch e := expr.(type) {
+	case *sqlparser.ParenExpr:
+		return c.convertParenExpr(e)
+	case *sqlparser.NotExpr:
+		return c.convertNotExpr(e)
+	case *sqlparser.AndExpr:
+		return c.convertAndExpr(e)
+	case *sqlparser.OrExpr:
+		return c.convertOrExpr(e)
+	case *sqlparser.ComparisonExpr:
+		return c.convertComparisonExpr(e)
+	case *sqlparser.RangeCond:
+		return c.convertRangeCond(e)
+	case *sqlparser.IsExpr:
+		return c.convertIsExpr(e)
+	case *sqlparser.FuncExpr:
+		return out, NewConverterError("%s: function expression", NotSupportedErrMessage)
+	case *sqlparser.ColName:
+		return out, NewConverterError("%s: incomplete expression", InvalidExpressionErrMessage)
+	default:
+		return out, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, e)
+	}
+}
+
+func (c *QueryConverter[ExprT]) convertParenExpr(expr *sqlparser.ParenExpr) (ExprT, error) {
+	var out ExprT
+	newExpr, err := c.convertWhereExpr(expr.Expr)
+	if err != nil {
+		return out, err
+	}
+	return c.storeQC.BuildParenExpr(newExpr)
+}
+
+func (c *QueryConverter[ExprT]) convertNotExpr(expr *sqlparser.NotExpr) (ExprT, error) {
+	var out ExprT
+	newExpr, err := c.convertWhereExpr(expr.Expr)
+	if err != nil {
+		return out, err
+	}
+	return c.storeQC.BuildNotExpr(newExpr)
+}
+
+func (c *QueryConverter[ExprT]) convertAndExpr(expr *sqlparser.AndExpr) (ExprT, error) {
+	var out ExprT
+	left, err := c.convertWhereExpr(expr.Left)
+	if err != nil {
+		return out, err
+	}
+	right, err := c.convertWhereExpr(expr.Right)
+	if err != nil {
+		return out, err
+	}
+	return c.storeQC.BuildAndExpr(left, right)
+}
+
+func (c *QueryConverter[ExprT]) convertOrExpr(expr *sqlparser.OrExpr) (ExprT, error) {
+	var out ExprT
+	left, err := c.convertWhereExpr(expr.Left)
+	if err != nil {
+		return out, err
+	}
+	right, err := c.convertWhereExpr(expr.Right)
+	if err != nil {
+		return out, err
+	}
+	return c.storeQC.BuildOrExpr(left, right)
+}
+
+func (c *QueryConverter[ExprT]) convertComparisonExpr(
+	expr *sqlparser.ComparisonExpr,
+) (out ExprT, err error) {
+	colName, err := c.convertColName(expr.Left)
+	if err != nil {
+		return out, err
+	}
+
+	values, err := c.parseValueExpr(expr.Right, colName.Alias, colName.FieldName, colName.ValueType)
+	if err != nil {
+		return out, err
+	}
+
+	switch colName.ValueType {
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+		if !isSupportedKeywordOperator(expr.Operator) {
+			return out, NewOperatorNotSupportedError(colName.Alias, colName.ValueType, expr.Operator)
+		}
+		return c.storeQC.ConvertKeywordComparisonExpr(expr.Operator, colName, values)
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
+		if !isSupportedKeywordListOperator(expr.Operator) {
+			return out, NewOperatorNotSupportedError(colName.Alias, colName.ValueType, expr.Operator)
+		}
+		return c.storeQC.ConvertKeywordListComparisonExpr(expr.Operator, colName, values)
+	case enumspb.INDEXED_VALUE_TYPE_TEXT:
+		if !isSupportedTextOperator(expr.Operator) {
+			return out, NewOperatorNotSupportedError(colName.Alias, colName.ValueType, expr.Operator)
+		}
+		return c.storeQC.ConvertTextComparisonExpr(expr.Operator, colName, values)
+	default:
+		if !isSupportedComparisonOperator(expr.Operator) {
+			return out, NewOperatorNotSupportedError(colName.Alias, colName.ValueType, expr.Operator)
+		}
+		return c.storeQC.ConvertComparisonExpr(expr.Operator, colName, values)
+	}
+}
+
+func (c *QueryConverter[ExprT]) convertRangeCond(expr *sqlparser.RangeCond) (ExprT, error) {
+	var out ExprT
+	colName, err := c.convertColName(expr.Left)
+	if err != nil {
+		return out, err
+	}
+
+	if !isSupportedTypeRangeCond(colName.ValueType) {
+		return out, NewConverterError(
+			"%s: cannot do range condition on search attribute '%s' of type %s",
+			InvalidExpressionErrMessage,
+			colName.Alias,
+			colName.ValueType.String(),
+		)
+	}
+
+	from, err := c.parseValueExpr(expr.From, colName.Alias, colName.FieldName, colName.ValueType)
+	if err != nil {
+		return out, err
+	}
+
+	to, err := c.parseValueExpr(expr.To, colName.Alias, colName.FieldName, colName.ValueType)
+	if err != nil {
+		return out, err
+	}
+
+	return c.storeQC.ConvertRangeExpr(expr.Operator, colName, from, to)
+}
+
+func (c *QueryConverter[ExprT]) convertIsExpr(expr *sqlparser.IsExpr) (ExprT, error) {
+	var out ExprT
+	colName, err := c.convertColName(expr.Expr)
+	if err != nil {
+		return out, err
+	}
+
+	switch expr.Operator {
+	case sqlparser.IsNullStr, sqlparser.IsNotNullStr:
+		return c.storeQC.ConvertIsExpr(expr.Operator, colName)
+	default:
+		return out, NewConverterError(
+			"%s: 'IS' operator can only be used as 'IS NULL' or 'IS NOT NULL'",
+			InvalidExpressionErrMessage,
+		)
+	}
+}
+
+func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, error) {
+	expr, ok := in.(*sqlparser.ColName)
+	if !ok {
+		return nil, NewConverterError(
+			"%s: must be a column name but was %T",
+			InvalidExpressionErrMessage,
+			in,
+		)
+	}
+	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
+	saFieldName, saType, err := c.resolveSearchAttributeAlias(saAlias)
+	if err != nil {
+		return nil, err
+	}
+
+	if saFieldName == searchattribute.TemporalNamespaceDivision {
+		c.seenNamespaceDivision = true
+	}
+
+	colName := NewSAColumn(saAlias, saFieldName, saType)
+	if err := c.saInterceptor.Intercept(colName); err != nil {
+		return nil, err
+	}
+	return colName, nil
+}
+
+func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
+	alias string,
+) (fieldName string, fieldType enumspb.IndexedValueType, retErr error) {
+	// resolveCSA only returns true if `alias` is a custom search attribute.
+	resolveCSA := func(alias string) bool {
+		fn, err := c.saMapper.GetFieldName(alias, c.namespaceName.String())
+		if err != nil {
+			return false
+		}
+		ft, err := c.saTypeMap.GetType(fn)
+		if err != nil {
+			return false
+		}
+		fieldName, fieldType = fn, ft
+		return true
+	}
+
+	var err error
+	fieldName = alias
+	// First, check if it's a custom search attribute.
+	if searchattribute.IsMappable(alias) && resolveCSA(alias) {
+		return
+	}
+	// Second, check if it's a system/reserved search attribute.
+	fieldType, err = c.saTypeMap.GetType(fieldName)
+	if err == nil {
+		return
+	}
+	// Third, check for special aliases or adding/removing the `Temporal` prefix.
+	if strings.TrimPrefix(alias, searchattribute.ReservedPrefix) == searchattribute.ScheduleID {
+		fieldName = searchattribute.WorkflowID
+	} else if strings.HasPrefix(fieldName, searchattribute.ReservedPrefix) {
+		fieldName = fieldName[len(searchattribute.ReservedPrefix):]
+	} else {
+		fieldName = searchattribute.ReservedPrefix + fieldName
+	}
+	fieldType, err = c.saTypeMap.GetType(fieldName)
+	if err == nil {
+		return
+	}
+
+	retErr = NewConverterError(
+		"%s: column name '%s' is not a valid search attribute",
+		InvalidExpressionErrMessage,
+		alias,
+	)
+	return
+}
+
+func (c *QueryConverter[ExprT]) parseValueExpr(
+	expr sqlparser.Expr,
+	saName string,
+	saFieldName string,
+	saType enumspb.IndexedValueType,
+) (any, error) {
+	switch e := expr.(type) {
+	case *sqlparser.SQLVal:
+		value, err := c.parseSQLVal(e, saName, saType)
+		if err != nil {
+			return nil, err
+		}
+		if saName == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
+			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
+		}
+		return value, nil
 	case sqlparser.BoolVal:
+		// no-op: no validation needed
 		return bool(e), nil
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
-		exprs := []sqlparser.Expr(e)
-		var result []interface{}
-		for _, expr := range exprs {
-			v, err := convertComparisonExprValue(expr)
+		values := make([]any, 0, len(e))
+		for i := range e {
+			item, err := c.parseValueExpr(e[i], saName, saFieldName, saType)
 			if err != nil {
 				return nil, err
 			}
-			result = append(result, v)
+			values = append(values, item)
 		}
-		return result, nil
+		return values, nil
 	case *sqlparser.GroupConcatExpr:
 		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
@@ -534,26 +554,188 @@ func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 			sqlparser.String(expr),
 		)
 	default:
-		return nil, NewConverterError("%s: unexpected value type %T", InvalidExpressionErrMessage, expr)
+		return nil, NewConverterError(
+			"%s: unexpected value type %T",
+			InvalidExpressionErrMessage,
+			expr,
+		)
 	}
 }
 
-func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
-	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
-}
-
-func convertColName(fnInterceptor FieldNameInterceptor, colNameExpr sqlparser.Expr, usage FieldNameUsage) (alias string, fieldName string, err error) {
-	colName, isColName := colNameExpr.(*sqlparser.ColName)
-	if !isColName {
-		return "", "", NewConverterError("%s: must be a column name but was %T", InvalidExpressionErrMessage, colNameExpr)
+// parseSQLVal handles values for specific search attributes.
+// Returns a string, an int64 or a float64 if there are no errors.
+// For datetime, converts to UTC.
+// For execution status, converts string to enum value.
+// For execution duration, converts to nanoseconds.
+func (c *QueryConverter[ExprT]) parseSQLVal(
+	expr *sqlparser.SQLVal,
+	saName string,
+	saType enumspb.IndexedValueType,
+) (any, error) {
+	// Using expr.Val instead of sqlparser.String(expr) because the latter escapes chars using MySQL
+	// conventions which is incompatible with SQLite.
+	var sqlValue string
+	switch expr.Type {
+	case sqlparser.StrVal:
+		sqlValue = fmt.Sprintf(`'%s'`, expr.Val)
+	default:
+		sqlValue = string(expr.Val)
 	}
-
-	colNameStr := sqlparser.String(colName)
-	colNameStr = strings.ReplaceAll(colNameStr, "`", "")
-	fieldName, err = fnInterceptor.Name(colNameStr, usage)
+	value, err := sqlquery.ParseValue(sqlValue)
 	if err != nil {
-		return "", "", err
+		return nil, NewConverterError(
+			"%s: unable to parse value %q",
+			InvalidExpressionErrMessage,
+			sqlparser.String(expr),
+		)
 	}
 
-	return colNameStr, fieldName, nil
+	switch saName {
+	case searchattribute.ExecutionStatus:
+		return parseExecutionStatusValue(value)
+	case searchattribute.ExecutionDuration:
+		return parseExecutionDurationValue(value)
+	default:
+		return c.validateValueType(saName, saType, value)
+	}
+}
+
+func (c *QueryConverter[ExprT]) validateValueType(
+	saName string,
+	saType enumspb.IndexedValueType,
+	value any,
+) (any, error) {
+	valueTypeErr := NewConverterError(
+		"%s: invalid value type for search attribute %s of type %s: %#v (type: %T)",
+		InvalidExpressionErrMessage,
+		saName,
+		saType.String(),
+		value,
+		value,
+	)
+	switch saType {
+	case enumspb.INDEXED_VALUE_TYPE_INT, enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+		switch value.(type) {
+		case int64, float64:
+			// nothing to do
+			return value, nil
+		default:
+			return nil, valueTypeErr
+		}
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
+		if _, ok := value.(bool); !ok {
+			return nil, valueTypeErr
+		}
+		return value, nil
+	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
+		var tm time.Time
+		switch v := value.(type) {
+		case int64:
+			tm = time.Unix(0, v)
+		case string:
+			var err error
+			tm, err = time.Parse(time.RFC3339Nano, v)
+			if err != nil {
+				return nil, NewConverterError(
+					"%s: unable to parse datetime '%s'",
+					InvalidExpressionErrMessage,
+					v,
+				)
+			}
+		default:
+			return nil, valueTypeErr
+		}
+		return tm.UTC().Format(c.storeQC.GetDatetimeFormat()), nil
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		enumspb.INDEXED_VALUE_TYPE_TEXT:
+		if _, ok := value.(string); !ok {
+			return nil, valueTypeErr
+		}
+		return value, nil
+	default:
+		return nil, NewConverterError(
+			"%s: unknown search attribute type %s for %s",
+			InvalidExpressionErrMessage,
+			saType.String(),
+			saName,
+		)
+	}
+}
+
+func parseExecutionStatusValue(value any) (string, error) {
+	switch v := value.(type) {
+	case int64:
+		if _, ok := enumspb.WorkflowExecutionStatus_name[int32(v)]; ok {
+			return enumspb.WorkflowExecutionStatus(v).String(), nil
+		}
+		return "", NewConverterError(
+			"%s: invalid %s value %v",
+			InvalidExpressionErrMessage,
+			searchattribute.ExecutionStatus,
+			v,
+		)
+	case string:
+		if _, err := enumspb.WorkflowExecutionStatusFromString(v); err == nil {
+			return v, nil
+		}
+		return "", NewConverterError(
+			"%s: invalid %s value '%s'",
+			InvalidExpressionErrMessage,
+			searchattribute.ExecutionStatus,
+			v,
+		)
+	default:
+		return "", NewConverterError(
+			"%s: unexpected value type %T for search attribute %s",
+			InvalidExpressionErrMessage,
+			v,
+			searchattribute.ExecutionStatus,
+		)
+	}
+}
+
+func parseExecutionDurationValue(value any) (int64, error) {
+	switch v := value.(type) {
+	case int64:
+		return v, nil
+	case string:
+		duration, err := ParseExecutionDurationStr(v)
+		if err != nil {
+			return 0, NewConverterError(
+				"%s: invalid duration value for search attribute %s: %v",
+				InvalidExpressionErrMessage,
+				searchattribute.ExecutionDuration,
+				value,
+			)
+		}
+		return duration.Nanoseconds(), nil
+	default:
+		return 0, NewConverterError(
+			"%s: unexpected value type %T for search attribute %s",
+			InvalidExpressionErrMessage,
+			v,
+			searchattribute.ExecutionDuration,
+		)
+	}
+}
+
+func isSupportedComparisonOperator(operator string) bool {
+	return slices.Contains(supportedComparisonOperators, operator)
+}
+
+func isSupportedKeywordOperator(operator string) bool {
+	return slices.Contains(supportedKeywordOperators, operator)
+}
+
+func isSupportedKeywordListOperator(operator string) bool {
+	return slices.Contains(supportedKeywordListOperators, operator)
+}
+
+func isSupportedTextOperator(operator string) bool {
+	return slices.Contains(supportedTextOperators, operator)
+}
+
+func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
+	return slices.Contains(supportedTypesRangeCond, saType)
 }

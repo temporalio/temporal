@@ -174,6 +174,10 @@ func (r *Registry) registerComponent(
 		return fmt.Errorf("component %s is already registered", fqn)
 	}
 
+	if id == UnspecifiedArchetypeID {
+		return fmt.Errorf("component %s maps to a reserved archetype id %d, please use a different name", fqn, UnspecifiedArchetypeID)
+	}
+
 	if existingComponentFqn, ok := r.componentFqnByID[id]; ok {
 		return fmt.Errorf("component ID %d collision between %s and %s", id, fqn, existingComponentFqn)
 	}
