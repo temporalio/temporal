@@ -27,9 +27,12 @@ type defaultReplicationResolver struct {
 
 func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
 	return func(detail *persistencespb.NamespaceDetail) ReplicationResolver {
+		// By convention, a namespace with non-zero failover version is a global namespace
+		// This can be overridden by WithGlobalFlag mutation if needed
+		isGlobal := detail.FailoverVersion != 0
 		return &defaultReplicationResolver{
 			replicationConfig:           detail.ReplicationConfig,
-			isGlobalNamespace:           false, // Will be set by WithGlobalFlag mutation
+			isGlobalNamespace:           isGlobal,
 			failoverVersion:             detail.FailoverVersion,
 			failoverNotificationVersion: detail.FailoverNotificationVersion,
 		}
