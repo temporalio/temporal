@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -190,6 +191,9 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+
+		// Notify CHASM about component updates
+		NotifyChasmExecutions(engine, currentWorkflowMutation, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, 0, err
@@ -590,6 +594,50 @@ func NotifyWorkflowMutationTasks(
 		return
 	}
 	engine.NotifyNewTasks(workflowMutation.Tasks)
+}
+
+func NotifyChasmExecutions(
+	engine historyi.Engine,
+	workflowMutation *persistence.WorkflowMutation,
+	workflowSnapshot *persistence.WorkflowSnapshot,
+) {
+	// Track unique executions to avoid duplicate notifications
+	notified := make(map[string]bool)
+
+	// Helper to process tasks and collect unique executions
+	processTasks := func(taskMap map[tasks.Category][]tasks.Task) {
+		if taskMap == nil {
+			return
+		}
+		for _, taskList := range taskMap {
+			for _, task := range taskList {
+				chasmTask, ok := task.(*tasks.ChasmTask)
+				if ok && chasmTask != nil {
+					// Create a unique key for deduplication
+					key := chasmTask.NamespaceID + ":" + chasmTask.WorkflowID + ":" + chasmTask.RunID
+
+					if !notified[key] {
+						notified[key] = true
+						// Send one notification per unique execution
+						engine.NotifyChasmExecution(
+							chasmTask.NamespaceID,
+							chasmTask.WorkflowID,
+							chasmTask.RunID,
+							nil, // Component ref not available in ChasmTaskInfo
+						)
+					}
+				}
+			}
+		}
+	}
+
+	// Process both mutation and snapshot tasks
+	if workflowMutation != nil {
+		processTasks(workflowMutation.Tasks)
+	}
+	if workflowSnapshot != nil {
+		processTasks(workflowSnapshot.Tasks)
+	}
 }
 
 func NotifyNewHistorySnapshotEvent(
