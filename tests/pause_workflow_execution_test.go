@@ -191,3 +191,75 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	s.NotNil(unimplementedErr)
 	s.Contains(unimplementedErr.Error(), namespaceName)
 }
+
+func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.Worker().RegisterWorkflow(s.workflowFn)
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
+	}
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// 1st pause request should succeed.
+	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
+		RequestId:  uuid.New(),
+	}
+	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
+		if pauseInfo := info.GetPauseInfo(); pauseInfo != nil {
+			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
+			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
+		}
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// 2nd pause request should fail with failed precondition error.
+	pauseRequest.RequestId = uuid.New()
+	pauseResp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
+	s.Error(err)
+	s.Nil(pauseResp)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionErr)
+	s.NotNil(failedPreconditionErr)
+	s.Contains(failedPreconditionErr.Error(), "workflow is already paused.")
+
+	// For now sending this signal will complete the workflow and finish the test.
+	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.GetStatus())
+	}, 5*time.Second, 200*time.Millisecond)
+}
