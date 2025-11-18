@@ -22,7 +22,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/testing/protoassert"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -336,8 +336,8 @@ func (s *workflowSuite) TestStart() {
 		s.Equal("mytq", req.Request.TaskQueue.Name)
 		s.Equal(`"value"`, payload.ToString(req.Request.Memo.Fields["mymemo"]))
 		s.Equal(`"value"`, payload.ToString(req.Request.SearchAttributes.IndexedFields["myfield"]))
-		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById]))
-		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime]))
+		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[defs.TemporalScheduledById]))
+		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[defs.TemporalScheduledStartTime]))
 		protoassert.ProtoEqual(s.T(), userMetadata, req.Request.GetUserMetadata())
 
 		return nil, nil

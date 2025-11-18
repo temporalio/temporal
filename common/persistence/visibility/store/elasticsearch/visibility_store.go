@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/util"
 )
 
@@ -81,8 +82,8 @@ var (
 	// It is indirectly built so buildPaginationQuery can have access to
 	// the field names to build the page query from the token.
 	defaultSorterFields = []fieldSort{
-		{searchattribute.CloseTime, true, true},
-		{searchattribute.StartTime, true, true},
+		{defs.CloseTime, true, true},
+		{defs.StartTime, true, true},
 	}
 
 	defaultSorter = func() []elastic.Sorter {
@@ -623,7 +624,7 @@ func (s *VisibilityStore) convertQuery(
 	}
 
 	queryParams.QueryExpr = elastic.NewBoolQuery().Filter(
-		elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID.String()),
+		elastic.NewTermQuery(defs.NamespaceID, namespaceID.String()),
 		queryParams.QueryExpr,
 	)
 
@@ -683,12 +684,12 @@ func (s *VisibilityStore) convertQueryLegacy(
 	}
 
 	// Create a new bool query because a request query might have only "should" (="or") queries.
-	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID.String()))
+	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(defs.NamespaceID, namespaceID.String()))
 
 	// If the query did not explicitly filter on TemporalNamespaceDivision somehow, then add a
 	// "must not exist" (i.e. "is null") query for it.
 	if !nameInterceptor.seenNamespaceDivision {
-		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
+		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(defs.TemporalNamespaceDivision))
 	}
 
 	if queryParams.Query != nil {
@@ -708,7 +709,7 @@ func (s *VisibilityStore) GetListFieldSorter(fieldSorts []elastic.Sorter) ([]ela
 		res[i] = fs
 	}
 	// RunID is explicit tiebreaker.
-	res[len(res)-1] = elastic.NewFieldSort(searchattribute.RunID).Desc()
+	res[len(res)-1] = elastic.NewFieldSort(defs.RunID).Desc()
 
 	return res, nil
 }
@@ -786,29 +787,29 @@ func (s *VisibilityStore) GenerateESDoc(
 	visibilityTaskKey string,
 ) (map[string]interface{}, error) {
 	doc := map[string]interface{}{
-		searchattribute.VisibilityTaskKey: visibilityTaskKey,
-		searchattribute.NamespaceID:       request.NamespaceID,
-		searchattribute.WorkflowID:        request.WorkflowID,
-		searchattribute.RunID:             request.RunID,
-		searchattribute.WorkflowType:      request.WorkflowTypeName,
-		searchattribute.StartTime:         request.StartTime,
-		searchattribute.ExecutionTime:     request.ExecutionTime,
-		searchattribute.ExecutionStatus:   request.Status.String(),
-		searchattribute.TaskQueue:         request.TaskQueue,
-		searchattribute.RootWorkflowID:    request.RootWorkflowID,
-		searchattribute.RootRunID:         request.RootRunID,
+		defs.VisibilityTaskKey: visibilityTaskKey,
+		defs.NamespaceID:       request.NamespaceID,
+		defs.WorkflowID:        request.WorkflowID,
+		defs.RunID:             request.RunID,
+		defs.WorkflowType:      request.WorkflowTypeName,
+		defs.StartTime:         request.StartTime,
+		defs.ExecutionTime:     request.ExecutionTime,
+		defs.ExecutionStatus:   request.Status.String(),
+		defs.TaskQueue:         request.TaskQueue,
+		defs.RootWorkflowID:    request.RootWorkflowID,
+		defs.RootRunID:         request.RootRunID,
 	}
 
 	if request.ParentWorkflowID != nil {
-		doc[searchattribute.ParentWorkflowID] = *request.ParentWorkflowID
+		doc[defs.ParentWorkflowID] = *request.ParentWorkflowID
 	}
 	if request.ParentRunID != nil {
-		doc[searchattribute.ParentRunID] = *request.ParentRunID
+		doc[defs.ParentRunID] = *request.ParentRunID
 	}
 
 	if len(request.Memo.GetData()) > 0 {
-		doc[searchattribute.Memo] = request.Memo.GetData()
-		doc[searchattribute.MemoEncoding] = request.Memo.GetEncodingType().String()
+		doc[defs.Memo] = request.Memo.GetData()
+		doc[defs.MemoEncoding] = request.Memo.GetEncodingType().String()
 	}
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
@@ -851,11 +852,11 @@ func (s *VisibilityStore) GenerateClosedESDoc(
 		return nil, err
 	}
 
-	doc[searchattribute.CloseTime] = request.CloseTime
-	doc[searchattribute.ExecutionDuration] = request.ExecutionDuration
-	doc[searchattribute.HistoryLength] = request.HistoryLength
-	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
-	doc[searchattribute.HistorySizeBytes] = request.HistorySizeBytes
+	doc[defs.CloseTime] = request.CloseTime
+	doc[defs.ExecutionDuration] = request.ExecutionDuration
+	doc[defs.HistoryLength] = request.HistoryLength
+	doc[defs.StateTransitionCount] = request.StateTransitionCount
+	doc[defs.HistorySizeBytes] = request.HistorySizeBytes
 
 	return doc, nil
 }
@@ -890,11 +891,11 @@ func (s *VisibilityStore) ParseESDoc(
 	record := &store.InternalWorkflowExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
 		switch fieldName {
-		case searchattribute.NamespaceID,
-			searchattribute.VisibilityTaskKey:
+		case defs.NamespaceID,
+			defs.VisibilityTaskKey:
 			// Ignore these fields.
 			continue
-		case searchattribute.Memo:
+		case defs.Memo:
 			var memoStr string
 			if memoStr, isValidType = fieldValue.(string); !isValidType {
 				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), docID)
@@ -904,7 +905,7 @@ func (s *VisibilityStore) ParseESDoc(
 				return nil, logParseError(fieldName, memoStr[:10], err, docID)
 			}
 			continue
-		case searchattribute.MemoEncoding:
+		case defs.MemoEncoding:
 			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
 				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), docID)
 			}
@@ -927,41 +928,41 @@ func (s *VisibilityStore) ParseESDoc(
 		}
 
 		switch fieldName {
-		case searchattribute.WorkflowID:
+		case defs.WorkflowID:
 			record.WorkflowID = fieldValueParsed.(string)
-		case searchattribute.RunID:
+		case defs.RunID:
 			record.RunID = fieldValueParsed.(string)
-		case searchattribute.WorkflowType:
+		case defs.WorkflowType:
 			record.TypeName = fieldValue.(string)
-		case searchattribute.StartTime:
+		case defs.StartTime:
 			record.StartTime = fieldValueParsed.(time.Time)
-		case searchattribute.ExecutionTime:
+		case defs.ExecutionTime:
 			record.ExecutionTime = fieldValueParsed.(time.Time)
-		case searchattribute.CloseTime:
+		case defs.CloseTime:
 			record.CloseTime = fieldValueParsed.(time.Time)
-		case searchattribute.ExecutionDuration:
+		case defs.ExecutionDuration:
 			record.ExecutionDuration = time.Duration(fieldValueParsed.(int64))
-		case searchattribute.TaskQueue:
+		case defs.TaskQueue:
 			record.TaskQueue = fieldValueParsed.(string)
-		case searchattribute.ExecutionStatus:
+		case defs.ExecutionStatus:
 			status, err := enumspb.WorkflowExecutionStatusFromString(fieldValueParsed.(string))
 			if err != nil {
 				return nil, logParseError(fieldName, fieldValueParsed.(string), err, docID)
 			}
 			record.Status = status
-		case searchattribute.HistoryLength:
+		case defs.HistoryLength:
 			record.HistoryLength = fieldValueParsed.(int64)
-		case searchattribute.StateTransitionCount:
+		case defs.StateTransitionCount:
 			record.StateTransitionCount = fieldValueParsed.(int64)
-		case searchattribute.HistorySizeBytes:
+		case defs.HistorySizeBytes:
 			record.HistorySizeBytes = fieldValueParsed.(int64)
-		case searchattribute.ParentWorkflowID:
+		case defs.ParentWorkflowID:
 			record.ParentWorkflowID = fieldValueParsed.(string)
-		case searchattribute.ParentRunID:
+		case defs.ParentRunID:
 			record.ParentRunID = fieldValueParsed.(string)
-		case searchattribute.RootWorkflowID:
+		case defs.RootWorkflowID:
 			record.RootWorkflowID = fieldValueParsed.(string)
-		case searchattribute.RootRunID:
+		case defs.RootRunID:
 			record.RootRunID = fieldValueParsed.(string)
 		default:
 			// All custom and predefined search attributes are handled here.
@@ -1003,7 +1004,7 @@ func (s *VisibilityStore) ParseESDoc(
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf(
 			"%q field is missing in Elasticsearch document(%s)",
-			searchattribute.MemoEncoding,
+			defs.MemoEncoding,
 			docID,
 		)
 	}

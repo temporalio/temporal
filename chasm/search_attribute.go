@@ -5,7 +5,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 // CHASM Search Attribute User Guide:
@@ -48,20 +48,20 @@ var (
 	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 
-	SearchAttributeTemporalChangeVersion              = newSearchAttributeKeywordListByField(searchattribute.TemporalChangeVersion)
-	SearchAttributeBinaryChecksums                    = newSearchAttributeKeywordListByField(searchattribute.BinaryChecksums)
-	SearchAttributeBuildIds                           = newSearchAttributeKeywordListByField(searchattribute.BuildIds)
-	SearchAttributeBatcherNamespace                   = newSearchAttributeKeywordByField(searchattribute.BatcherNamespace)
-	SearchAttributeBatcherUser                        = newSearchAttributeKeywordByField(searchattribute.BatcherUser)
-	SearchAttributeTemporalScheduledStartTime         = newSearchAttributeDateTimeByField(searchattribute.TemporalScheduledStartTime)
-	SearchAttributeTemporalScheduledByID              = newSearchAttributeKeywordByField(searchattribute.TemporalScheduledById)
-	SearchAttributeTemporalSchedulePaused             = newSearchAttributeBoolByField(searchattribute.TemporalSchedulePaused)
-	SearchAttributeTemporalNamespaceDivision          = newSearchAttributeKeywordByField(searchattribute.TemporalNamespaceDivision)
-	SearchAttributeTemporalPauseInfo                  = newSearchAttributeKeywordListByField(searchattribute.TemporalPauseInfo)
-	SearchAttributeTemporalReportedProblems           = newSearchAttributeKeywordListByField(searchattribute.TemporalReportedProblems)
-	SearchAttributeTemporalWorkerDeploymentVersion    = newSearchAttributeKeywordByField(searchattribute.TemporalWorkerDeploymentVersion)
-	SearchAttributeTemporalWorkflowVersioningBehavior = newSearchAttributeKeywordByField(searchattribute.TemporalWorkflowVersioningBehavior)
-	SearchAttributeTemporalWorkerDeployment           = newSearchAttributeKeywordByField(searchattribute.TemporalWorkerDeployment)
+	SearchAttributeTemporalChangeVersion              = newSearchAttributeKeywordListByField(defs.TemporalChangeVersion)
+	SearchAttributeBinaryChecksums                    = newSearchAttributeKeywordListByField(defs.BinaryChecksums)
+	SearchAttributeBuildIds                           = newSearchAttributeKeywordListByField(defs.BuildIds)
+	SearchAttributeBatcherNamespace                   = newSearchAttributeKeywordByField(defs.BatcherNamespace)
+	SearchAttributeBatcherUser                        = newSearchAttributeKeywordByField(defs.BatcherUser)
+	SearchAttributeTemporalScheduledStartTime         = newSearchAttributeDateTimeByField(defs.TemporalScheduledStartTime)
+	SearchAttributeTemporalScheduledByID              = newSearchAttributeKeywordByField(defs.TemporalScheduledById)
+	SearchAttributeTemporalSchedulePaused             = newSearchAttributeBoolByField(defs.TemporalSchedulePaused)
+	SearchAttributeTemporalNamespaceDivision          = newSearchAttributeKeywordByField(defs.TemporalNamespaceDivision)
+	SearchAttributeTemporalPauseInfo                  = newSearchAttributeKeywordListByField(defs.TemporalPauseInfo)
+	SearchAttributeTemporalReportedProblems           = newSearchAttributeKeywordListByField(defs.TemporalReportedProblems)
+	SearchAttributeTemporalWorkerDeploymentVersion    = newSearchAttributeKeywordByField(defs.TemporalWorkerDeploymentVersion)
+	SearchAttributeTemporalWorkflowVersioningBehavior = newSearchAttributeKeywordByField(defs.TemporalWorkflowVersioningBehavior)
+	SearchAttributeTemporalWorkerDeployment           = newSearchAttributeKeywordByField(defs.TemporalWorkerDeployment)
 )
 
 var (
@@ -166,7 +166,7 @@ func newSearchAttributeFieldKeywordList(index int) SearchAttributeFieldKeywordLi
 
 func resolveFieldName(valueType enumspb.IndexedValueType, index int) string {
 	// Columns are named like TemporalBool01, TemporalDatetime01, TemporalDouble01, TemporalInt01.
-	return fmt.Sprintf("%s%s%02d", searchattribute.ReservedPrefix, valueType.String(), index)
+	return fmt.Sprintf("%s%s%02d", defs.ReservedPrefix, valueType.String(), index)
 }
 
 func (s searchAttributeDefinition) definition() searchAttributeDefinition {

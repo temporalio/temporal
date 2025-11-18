@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
@@ -71,7 +71,7 @@ func (a *LocalActivities) CountExecutionsAdvVisibilityActivity(ctx context.Conte
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
-		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
+		Query:       defs.QueryWithAnyNamespaceDivision(""),
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
@@ -97,7 +97,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
-		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
+		Query:       defs.QueryWithAnyNamespaceDivision(""),
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {

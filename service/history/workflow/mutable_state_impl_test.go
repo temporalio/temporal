@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
@@ -3741,7 +3742,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 }
 
 func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
-	payload, found := s.mutableState.executionInfo.SearchAttributes[searchattribute.BuildIds]
+	payload, found := s.mutableState.executionInfo.SearchAttributes[defs.BuildIds]
 	if !found {
 		return []string{}
 	}

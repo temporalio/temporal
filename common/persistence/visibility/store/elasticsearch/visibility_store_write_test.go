@@ -15,7 +15,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -48,17 +48,17 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 
 			body := bulkRequest.Doc
 
-			s.Equal(request.NamespaceID, body[searchattribute.NamespaceID])
-			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
-			s.Equal(request.RunID, body[searchattribute.RunID])
-			s.Equal(request.WorkflowTypeName, body[searchattribute.WorkflowType])
-			s.EqualValues(request.StartTime, body[searchattribute.StartTime])
-			s.EqualValues(request.ExecutionTime, body[searchattribute.ExecutionTime])
-			s.Equal(request.TaskQueue, body[searchattribute.TaskQueue])
-			s.EqualValues(request.Status.String(), body[searchattribute.ExecutionStatus])
+			s.Equal(request.NamespaceID, body[defs.NamespaceID])
+			s.Equal(request.WorkflowID, body[defs.WorkflowID])
+			s.Equal(request.RunID, body[defs.RunID])
+			s.Equal(request.WorkflowTypeName, body[defs.WorkflowType])
+			s.EqualValues(request.StartTime, body[defs.StartTime])
+			s.EqualValues(request.ExecutionTime, body[defs.ExecutionTime])
+			s.Equal(request.TaskQueue, body[defs.TaskQueue])
+			s.EqualValues(request.Status.String(), body[defs.ExecutionStatus])
 
-			s.Equal(request.Memo.Data, body[searchattribute.Memo])
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
+			s.Equal(request.Memo.Data, body[defs.Memo])
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[defs.MemoEncoding])
 
 			CustomTextField := body["CustomTextField"].(string)
 			// %q because request has JSON encoded string.
@@ -92,9 +92,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 
 			body := bulkRequest.Doc
 
-			_, ok := body[searchattribute.Memo]
+			_, ok := body[defs.Memo]
 			s.False(ok)
-			_, ok = body[searchattribute.MemoEncoding]
+			_, ok = body[defs.MemoEncoding]
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
@@ -142,17 +142,17 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 
 			body := bulkRequest.Doc
 
-			s.Equal(request.NamespaceID, body[searchattribute.NamespaceID])
-			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
-			s.Equal(request.RunID, body[searchattribute.RunID])
-			s.Equal(request.WorkflowTypeName, body[searchattribute.WorkflowType])
-			s.EqualValues(request.StartTime, body[searchattribute.StartTime])
-			s.EqualValues(request.ExecutionTime, body[searchattribute.ExecutionTime])
-			s.Equal(request.Memo.Data, body[searchattribute.Memo])
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
-			s.EqualValues(request.CloseTime, body[searchattribute.CloseTime])
-			s.EqualValues(request.Status.String(), body[searchattribute.ExecutionStatus])
-			s.EqualValues(request.HistoryLength, body[searchattribute.HistoryLength])
+			s.Equal(request.NamespaceID, body[defs.NamespaceID])
+			s.Equal(request.WorkflowID, body[defs.WorkflowID])
+			s.Equal(request.RunID, body[defs.RunID])
+			s.Equal(request.WorkflowTypeName, body[defs.WorkflowType])
+			s.EqualValues(request.StartTime, body[defs.StartTime])
+			s.EqualValues(request.ExecutionTime, body[defs.ExecutionTime])
+			s.Equal(request.Memo.Data, body[defs.Memo])
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[defs.MemoEncoding])
+			s.EqualValues(request.CloseTime, body[defs.CloseTime])
+			s.EqualValues(request.Status.String(), body[defs.ExecutionStatus])
+			s.EqualValues(request.HistoryLength, body[defs.HistoryLength])
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
@@ -182,9 +182,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 
 			body := bulkRequest.Doc
 
-			_, ok := body[searchattribute.Memo]
+			_, ok := body[defs.Memo]
 			s.False(ok)
-			_, ok = body[searchattribute.MemoEncoding]
+			_, ok = body[defs.MemoEncoding]
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)

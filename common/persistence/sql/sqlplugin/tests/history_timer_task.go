@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	persistencetask "go.temporal.io/server/common/persistence/task"
 	"go.temporal.io/server/common/shuffle"
 )
 
@@ -140,7 +140,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Single() {
 		ShardID:                         shardID,
 		InclusiveMinTaskID:              taskID,
 		InclusiveMinVisibilityTimestamp: timestamp,
-		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistence.ScheduledTaskMinPrecision),
+		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistencetask.ScheduledTaskMinPrecision),
 		PageSize:                        1,
 	}
 	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), rangeFilter)
@@ -207,7 +207,7 @@ func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Single() {
 		ShardID:                         shardID,
 		InclusiveMinTaskID:              taskID,
 		InclusiveMinVisibilityTimestamp: timestamp,
-		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistence.ScheduledTaskMinPrecision),
+		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistencetask.ScheduledTaskMinPrecision),
 		PageSize:                        1,
 	}
 	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), rangeFilter)
@@ -273,7 +273,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Single() {
 		ShardID:                         shardID,
 		InclusiveMinTaskID:              taskID,
 		InclusiveMinVisibilityTimestamp: timestamp,
-		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistence.ScheduledTaskMinPrecision),
+		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistencetask.ScheduledTaskMinPrecision),
 		PageSize:                        1,
 	}
 	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), rangeFilter)

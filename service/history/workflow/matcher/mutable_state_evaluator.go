@@ -6,16 +6,16 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/sqlquery"
 )
 
 // Supported Fields
 const (
-	workflowIDColName              = searchattribute.WorkflowID
-	workflowTypeNameColName        = searchattribute.WorkflowType
-	workflowStartTimeColName       = searchattribute.StartTime
-	workflowExecutionStatusColName = searchattribute.ExecutionStatus
+	workflowIDColName              = defs.WorkflowID
+	workflowTypeNameColName        = defs.WorkflowType
+	workflowStartTimeColName       = defs.StartTime
+	workflowExecutionStatusColName = defs.ExecutionStatus
 )
 
 type mutableStateMatchEvaluator struct {

@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 )
@@ -29,11 +29,11 @@ const (
 var (
 	VisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		searchattribute.WorkflowType,
+		defs.WorkflowType,
 		WorkflowType,
-		searchattribute.TemporalNamespaceDivision,
+		defs.TemporalNamespaceDivision,
 		NamespaceDivision,
-		searchattribute.ExecutionStatus,
+		defs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 )

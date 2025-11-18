@@ -6,7 +6,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/types"
 )
 
 const (
@@ -35,7 +35,7 @@ func GetNexusCallback(ctx Context, component Component) (*commonpb.Callback, err
 
 	encodedRef := base64.RawURLEncoding.EncodeToString(ref)
 	headers := map[string]string{
-		commonnexus.CallbackTokenHeader: encodedRef,
+		types.CallbackTokenHeader: encodedRef,
 	}
 
 	return &commonpb.Callback{

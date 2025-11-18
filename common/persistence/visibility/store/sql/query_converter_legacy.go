@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/sqlquery"
 )
 
@@ -141,7 +142,7 @@ func (c *QueryConverterLegacy) BuildCountStmt() (*sqlplugin.VisibilitySelectFilt
 	//nolint:staticcheck
 	groupByDbNames := make([]string, len(qp.groupBy))
 	for i, fieldName := range qp.groupBy {
-		groupByDbNames[i] = searchattribute.GetSqlDbColName(fieldName)
+		groupByDbNames[i] = defs.GetSqlDbColName(fieldName)
 	}
 	queryString, queryArgs := c.buildCountStmt(c.namespaceID, qp.queryString, groupByDbNames)
 	return &sqlplugin.VisibilitySelectFilter{
@@ -226,7 +227,7 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 		namespaceDivisionExpr := &sqlparser.IsExpr{
 			Operator: sqlparser.IsNullStr,
 			Expr: newColName(
-				searchattribute.GetSqlDbColName(searchattribute.TemporalNamespaceDivision),
+				defs.GetSqlDbColName(defs.TemporalNamespaceDivision),
 			),
 		}
 		if sel.Where.Expr == nil {
@@ -250,11 +251,11 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 		if err != nil {
 			return err
 		}
-		if colName.fieldName != searchattribute.ExecutionStatus {
+		if colName.fieldName != defs.ExecutionStatus {
 			return query.NewConverterError(
 				"%s: 'group by' clause is only supported for %s search attribute",
 				query.NotSupportedErrMessage,
-				searchattribute.ExecutionStatus,
+				defs.ExecutionStatus,
 			)
 		}
 	}
@@ -432,15 +433,15 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 			saAlias,
 		)
 	}
-	if saFieldName == searchattribute.TemporalNamespaceDivision {
+	if saFieldName == defs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
 	}
-	if saAlias == searchattribute.CloseTime {
+	if saAlias == defs.CloseTime {
 		*exprRef = c.getCoalesceCloseTimeExpr()
 		return closeTimeSaColName, nil
 	}
 	newExpr := newSAColName(
-		searchattribute.GetSqlDbColName(saFieldName),
+		defs.GetSqlDbColName(saFieldName),
 		saAlias,
 		saFieldName,
 		saType,
@@ -463,7 +464,7 @@ func (c *QueryConverterLegacy) convertValueExpr(
 			return err
 		}
 
-		if name == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
+		if name == defs.ScheduleID && saFieldName == defs.WorkflowID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
@@ -567,7 +568,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 		return tm.UTC().Format(c.getDatetimeFormat()), nil
 	}
 
-	if saName == searchattribute.ExecutionStatus {
+	if saName == defs.ExecutionStatus {
 		var status int64
 		switch v := value.(type) {
 		case int64:
@@ -593,7 +594,7 @@ func (c *QueryConverterLegacy) parseSQLVal(
 		return status, nil
 	}
 
-	if saName == searchattribute.ExecutionDuration {
+	if saName == defs.ExecutionDuration {
 		if durationStr, isString := value.(string); isString {
 			duration, err := query.ParseExecutionDurationStr(durationStr)
 			if err != nil {

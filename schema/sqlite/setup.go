@@ -20,7 +20,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 var (
@@ -116,7 +116,7 @@ func NewNamespaceConfig(
 	global bool,
 	customSearchAttributes map[string]enumspb.IndexedValueType,
 ) (*NamespaceConfig, error) {
-	dbCustomSearchAttributes := searchattribute.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
+	dbCustomSearchAttributes := defs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
 	fieldToAliasMap := map[string]string{}
 	for saName, saType := range customSearchAttributes {
 		var targetFieldName string

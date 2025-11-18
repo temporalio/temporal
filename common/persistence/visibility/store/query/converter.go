@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/sqlquery"
 )
 
@@ -73,7 +74,7 @@ type (
 
 var (
 	groupByFieldWhitelist = []string{
-		searchattribute.ExecutionStatus,
+		defs.ExecutionStatus,
 	}
 
 	supportedComparisonOperators = []string{
@@ -448,7 +449,7 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 		return nil, err
 	}
 
-	if saFieldName == searchattribute.TemporalNamespaceDivision {
+	if saFieldName == defs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
 	}
 
@@ -479,7 +480,7 @@ func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
 	var err error
 	fieldName = alias
 	// First, check if it's a custom search attribute.
-	if searchattribute.IsMappable(alias) && resolveCSA(alias) {
+	if defs.IsMappable(alias) && resolveCSA(alias) {
 		return
 	}
 	// Second, check if it's a system/reserved search attribute.
@@ -488,12 +489,12 @@ func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
 		return
 	}
 	// Third, check for special aliases or adding/removing the `Temporal` prefix.
-	if strings.TrimPrefix(alias, searchattribute.ReservedPrefix) == searchattribute.ScheduleID {
-		fieldName = searchattribute.WorkflowID
-	} else if strings.HasPrefix(fieldName, searchattribute.ReservedPrefix) {
-		fieldName = fieldName[len(searchattribute.ReservedPrefix):]
+	if strings.TrimPrefix(alias, defs.ReservedPrefix) == defs.ScheduleID {
+		fieldName = defs.WorkflowID
+	} else if strings.HasPrefix(fieldName, defs.ReservedPrefix) {
+		fieldName = fieldName[len(defs.ReservedPrefix):]
 	} else {
-		fieldName = searchattribute.ReservedPrefix + fieldName
+		fieldName = defs.ReservedPrefix + fieldName
 	}
 	fieldType, err = c.saTypeMap.GetType(fieldName)
 	if err == nil {
@@ -520,7 +521,7 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		if err != nil {
 			return nil, err
 		}
-		if saName == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
+		if saName == defs.ScheduleID && saFieldName == defs.WorkflowID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 		return value, nil
@@ -586,9 +587,9 @@ func (c *QueryConverter[ExprT]) parseSQLVal(
 	}
 
 	switch saName {
-	case searchattribute.ExecutionStatus:
+	case defs.ExecutionStatus:
 		return parseExecutionStatusValue(value)
-	case searchattribute.ExecutionDuration:
+	case defs.ExecutionDuration:
 		return parseExecutionDurationValue(value)
 	default:
 		return c.validateValueType(saName, saType, value)
@@ -667,7 +668,7 @@ func parseExecutionStatusValue(value any) (string, error) {
 		return "", NewConverterError(
 			"%s: invalid %s value %v",
 			InvalidExpressionErrMessage,
-			searchattribute.ExecutionStatus,
+			defs.ExecutionStatus,
 			v,
 		)
 	case string:
@@ -677,7 +678,7 @@ func parseExecutionStatusValue(value any) (string, error) {
 		return "", NewConverterError(
 			"%s: invalid %s value '%s'",
 			InvalidExpressionErrMessage,
-			searchattribute.ExecutionStatus,
+			defs.ExecutionStatus,
 			v,
 		)
 	default:
@@ -685,7 +686,7 @@ func parseExecutionStatusValue(value any) (string, error) {
 			"%s: unexpected value type %T for search attribute %s",
 			InvalidExpressionErrMessage,
 			v,
-			searchattribute.ExecutionStatus,
+			defs.ExecutionStatus,
 		)
 	}
 }
@@ -700,7 +701,7 @@ func parseExecutionDurationValue(value any) (int64, error) {
 			return 0, NewConverterError(
 				"%s: invalid duration value for search attribute %s: %v",
 				InvalidExpressionErrMessage,
-				searchattribute.ExecutionDuration,
+				defs.ExecutionDuration,
 				value,
 			)
 		}
@@ -710,7 +711,7 @@ func parseExecutionDurationValue(value any) (int64, error) {
 			"%s: unexpected value type %T for search attribute %s",
 			InvalidExpressionErrMessage,
 			v,
-			searchattribute.ExecutionDuration,
+			defs.ExecutionDuration,
 		)
 	}
 }

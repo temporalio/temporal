@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -206,7 +206,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 			payload.Decode(searchValBytes2, &searchVal2)
 			s.Equal(123, searchVal2)
 
-			buildIdsBytes := fields[searchattribute.BuildIds]
+			buildIdsBytes := fields[defs.BuildIds]
 			var buildIds []string
 			err = payload.Decode(buildIdsBytes, &buildIds)
 			s.NoError(err)

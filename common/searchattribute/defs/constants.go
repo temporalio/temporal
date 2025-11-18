@@ -1,7 +1,8 @@
-package searchattribute
+package defs
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 
@@ -214,6 +215,26 @@ var (
 		return res
 	}()
 )
+
+// System returns a clone of the system search attributes map.
+func System() map[string]enumspb.IndexedValueType {
+	return maps.Clone(system)
+}
+
+// Predefined returns a clone of the predefined search attributes map.
+func Predefined() map[string]enumspb.IndexedValueType {
+	return maps.Clone(predefined)
+}
+
+// PredefinedWhiteList returns a clone of the predefined whitelist search attributes map.
+func PredefinedWhiteList() map[string]enumspb.IndexedValueType {
+	return maps.Clone(predefinedWhiteList)
+}
+
+// Reserved returns a clone of the reserved field names map.
+func Reserved() map[string]struct{} {
+	return maps.Clone(reserved)
+}
 
 // IsSystem returns true if name is system search attribute
 func IsSystem(name string) bool {

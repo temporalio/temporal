@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 type (
@@ -203,7 +204,7 @@ func (c *pgQueryConverter) buildSelectStmt(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("%s = ?", defs.GetSqlDbColName(defs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 
@@ -217,10 +218,10 @@ func (c *pgQueryConverter) buildSelectStmt(
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				searchattribute.GetSqlDbColName(searchattribute.RunID),
+				defs.GetSqlDbColName(defs.StartTime),
+				defs.GetSqlDbColName(defs.RunID),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
+				defs.GetSqlDbColName(defs.StartTime),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
@@ -246,8 +247,8 @@ func (c *pgQueryConverter) buildSelectStmt(
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
 		sqlparser.String(c.getCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		defs.GetSqlDbColName(defs.StartTime),
+		defs.GetSqlDbColName(defs.RunID),
 	), queryArgs
 }
 
@@ -261,7 +262,7 @@ func (c *pgQueryConverter) buildCountStmt(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("(%s = ?)", defs.GetSqlDbColName(defs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 

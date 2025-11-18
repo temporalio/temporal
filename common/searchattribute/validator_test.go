@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -114,9 +115,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 
 	// Validate Deployment related search attributes
 	deploymentRestrictedAttributes := []string{
-		TemporalWorkerDeploymentVersion,
-		TemporalWorkerDeployment,
-		TemporalWorkflowVersioningBehavior,
+		defs.TemporalWorkerDeploymentVersion,
+		defs.TemporalWorkerDeployment,
+		defs.TemporalWorkflowVersioningBehavior,
 	}
 
 	for _, restrictedAttr := range deploymentRestrictedAttributes {

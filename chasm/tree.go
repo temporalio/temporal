@@ -21,8 +21,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	persistencetask "go.temporal.io/server/common/persistence/task"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
@@ -2397,8 +2397,8 @@ func isComponentTaskExpired(
 		return false
 	}
 
-	scheduledTime := task.ScheduledTime.AsTime().Truncate(persistence.ScheduledTaskMinPrecision)
-	referenceTime = referenceTime.Truncate(persistence.ScheduledTaskMinPrecision)
+	scheduledTime := task.ScheduledTime.AsTime().Truncate(persistencetask.ScheduledTaskMinPrecision)
+	referenceTime = referenceTime.Truncate(persistencetask.ScheduledTaskMinPrecision)
 
 	return !scheduledTime.After(referenceTime)
 }

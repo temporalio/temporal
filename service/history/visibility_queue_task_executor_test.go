@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
@@ -266,7 +267,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 			parentExecution,
 			rootExecution,
 			map[string]any{
-				searchattribute.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
+				defs.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
 			},
 		),
 	).Return(nil)
@@ -353,7 +354,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 			parentExecution,
 			rootExecution,
 			map[string]any{
-				searchattribute.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
+				defs.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
 			},
 		),
 	).Return(nil)
@@ -624,7 +625,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 
 			s.Len(request.SearchAttributes.IndexedFields, 2)
 
-			v, ok := request.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision]
+			v, ok := request.SearchAttributes.IndexedFields[defs.TemporalNamespaceDivision]
 			s.True(ok)
 			var actualArchetypeIDStr string
 			err := payload.Decode(v, &actualArchetypeIDStr)

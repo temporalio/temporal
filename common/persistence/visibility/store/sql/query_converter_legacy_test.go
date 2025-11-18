@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 type (
@@ -99,7 +100,7 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			input: "GROUP BY ExecutionStatus",
 			output: &queryParamsLegacy{
 				queryString: "TemporalNamespaceDivision is null",
-				groupBy:     []string{searchattribute.ExecutionStatus},
+				groupBy:     []string{defs.ExecutionStatus},
 			},
 			err: nil,
 		},
@@ -119,7 +120,7 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			err: query.NewConverterError(
 				"%s: 'group by' clause is only supported for %s search attribute",
 				query.NotSupportedErrMessage,
-				searchattribute.ExecutionStatus,
+				defs.ExecutionStatus,
 			),
 		},
 		{
@@ -586,12 +587,12 @@ func (s *queryConverterSuite) TestConvertColName() {
 		},
 		{
 			name:   "ScheduleId when there is a ScheduleId custom SA",
-			input:  searchattribute.ScheduleID,
-			output: searchattribute.ScheduleID,
+			input:  defs.ScheduleID,
+			output: defs.ScheduleID,
 			retValue: newSAColName(
-				searchattribute.ScheduleID,
-				searchattribute.ScheduleID,
-				searchattribute.ScheduleID,
+				defs.ScheduleID,
+				defs.ScheduleID,
+				defs.ScheduleID,
 				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			),
 			err: nil,
@@ -602,19 +603,19 @@ func (s *queryConverterSuite) TestConvertColName() {
 						return alias, nil
 					},
 					func(fieldName, namespace string) (string, error) {
-						return searchattribute.ScheduleID, nil
+						return defs.ScheduleID, nil
 					},
 				)
 			},
 		},
 		{
 			name:   "ScheduleId when there is no ScheduleId custom SA",
-			input:  searchattribute.ScheduleID,
+			input:  defs.ScheduleID,
 			output: "workflow_id",
 			retValue: newSAColName(
 				"workflow_id",
-				searchattribute.ScheduleID,
-				searchattribute.WorkflowID,
+				defs.ScheduleID,
+				defs.WorkflowID,
 				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			),
 			err: nil,
@@ -656,11 +657,11 @@ func (s *queryConverterSuite) TestConvertColName() {
 				s.NoError(err)
 				s.Equal(tc.output, sqlparser.String(expr))
 				s.Equal(tc.retValue, saColNameExpr)
-				if tc.input != searchattribute.CloseTime {
+				if tc.input != defs.CloseTime {
 					_, ok := expr.(*saColName)
 					s.True(ok)
 				}
-				if tc.input == searchattribute.TemporalNamespaceDivision {
+				if tc.input == defs.TemporalNamespaceDivision {
 					s.True(s.queryConverter.seenNamespaceDivision)
 				} else {
 					s.False(s.queryConverter.seenNamespaceDivision)
@@ -772,8 +773,8 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "ScheduleId transformation",
 			input: "'test-schedule'",
 			args: map[string]any{
-				"saName":      searchattribute.ScheduleID,
-				"saFieldName": searchattribute.WorkflowID,
+				"saName":      defs.ScheduleID,
+				"saFieldName": defs.WorkflowID,
 				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			output: fmt.Sprintf("'%stest-schedule'", primitives.ScheduleWorkflowIDPrefix),

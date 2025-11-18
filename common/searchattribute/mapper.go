@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 type (
@@ -133,7 +134,7 @@ func AliasFields(
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
 	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if !IsMappable(saName) {
+		if !defs.IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
 			continue
 		}
@@ -180,7 +181,7 @@ func UnaliasFields(
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
 	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if !IsMappable(saName) {
+		if !defs.IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
 			continue
 		}

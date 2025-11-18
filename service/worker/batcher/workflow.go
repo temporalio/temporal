@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	batchspb "go.temporal.io/server/api/batch/v1"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -54,9 +54,9 @@ const (
 
 var (
 	OpenBatchOperationQuery = fmt.Sprintf("%s = '%s' AND %s = %d",
-		searchattribute.TemporalNamespaceDivision,
+		defs.TemporalNamespaceDivision,
 		NamespaceDivision,
-		searchattribute.ExecutionStatus,
+		defs.ExecutionStatus,
 		int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 	)
 )

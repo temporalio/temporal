@@ -5,10 +5,10 @@ package searchattribute
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 const (
@@ -43,20 +43,8 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeM
 		if err != nil {
 			continue
 		}
-		SetMetadataType(saPayload, valueType)
+		defs.SetMetadataType(saPayload, valueType)
 	}
-}
-
-func SetMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
-	if t == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
-		return
-	}
-
-	_, isValidT := enumspb.IndexedValueType_name[int32(t)]
-	if !isValidT {
-		panic(fmt.Sprintf("unknown index value type %v", t))
-	}
-	p.Metadata[MetadataType] = []byte(enumspb.IndexedValueType(t).String())
 }
 
 // This may mutate saPtr and *saPtr

@@ -15,7 +15,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -92,7 +92,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", searchattribute.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
+				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", defs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
@@ -142,7 +142,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 			// Filter by WorkflowId to isolate this test's workflow from other tests
 			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", searchattribute.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
+				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", defs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
 			})
 			require.NoError(t, err)
 			require.NotNil(t, queriedResp)

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	persistencetask "go.temporal.io/server/common/persistence/task"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/util"
@@ -61,7 +62,7 @@ func NewScheduledQueue(
 				TaskCategory:        category,
 				InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
 				ExclusiveMaxTaskKey: tasks.NewKey(
-					r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision),
+					r.ExclusiveMax.FireTime.Add(persistencetask.ScheduledTaskMinPrecision),
 					0,
 				),
 				BatchSize:     options.BatchSize(),
@@ -295,7 +296,7 @@ func IsTimeExpired(
 	// NOTE: Persistence layer may lose precision when persisting the task, which essentially moves
 	// task fire time backward. But we are already performing truncation here, so doesn't need to
 	// account for that.
-	referenceTime = util.MaxTime(referenceTime, task.GetKey().FireTime).Truncate(persistence.ScheduledTaskMinPrecision)
-	testingTime = testingTime.Truncate(persistence.ScheduledTaskMinPrecision)
+	referenceTime = util.MaxTime(referenceTime, task.GetKey().FireTime).Truncate(persistencetask.ScheduledTaskMinPrecision)
+	testingTime = testingTime.Truncate(persistencetask.ScheduledTaskMinPrecision)
 	return !testingTime.After(referenceTime)
 }

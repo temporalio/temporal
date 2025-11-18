@@ -17,7 +17,7 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -295,7 +295,7 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
 
 func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttributes {
 	return temporal.NewSearchAttributes(
-		temporal.NewSearchAttributeKeyString(searchattribute.TemporalNamespaceDivision).ValueSet(WorkerDeploymentNamespaceDivision),
+		temporal.NewSearchAttributeKeyString(defs.TemporalNamespaceDivision).ValueSet(WorkerDeploymentNamespaceDivision),
 	)
 }
 

@@ -1,4 +1,4 @@
-package searchattribute
+package defs
 
 import (
 	"testing"
@@ -82,6 +82,7 @@ func TestGetDbIndexSearchAttributes(t *testing.T) {
 // you mapped the search attribute constant to the column name.
 func TestValidateSqlDbSystemNameToColNameMap(t *testing.T) {
 	require.Contains(t, sqlDbSystemNameToColName, NamespaceID)
+	system := System()
 	for key := range system {
 		require.Contains(t, sqlDbSystemNameToColName, key)
 	}

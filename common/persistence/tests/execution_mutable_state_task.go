@@ -17,9 +17,9 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	persistencetask "go.temporal.io/server/common/persistence/task"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -445,7 +445,7 @@ func (s *ExecutionMutableStateTaskSuite) TestIsReplicationDLQEmpty() {
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
-	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
+	now := time.Now().Truncate(persistencetask.ScheduledTaskMinPrecision)
 	timerTasks := []tasks.Task{
 		&tasks.UserTimerTask{
 			WorkflowKey:         s.WorkflowKey,
@@ -484,7 +484,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
-	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
+	now := time.Now().Truncate(persistencetask.ScheduledTaskMinPrecision)
 	scheduledTasks := []tasks.Task{
 		tasks.NewFakeTask(
 			s.WorkflowKey,
@@ -551,7 +551,7 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	now := time.Now().UTC()
 	randomTasks := make([]tasks.Task, 0, numTasks)
 	for i := 0; i != numTasks; i++ {
-		now = now.Truncate(p.ScheduledTaskMinPrecision)
+		now = now.Truncate(persistencetask.ScheduledTaskMinPrecision)
 		randomTasks = append(randomTasks, newTaskFn(s.WorkflowKey, currentTaskID, now))
 		currentTaskID += rand.Int63n(100) + 1
 		now = now.Add(time.Duration(rand.Int63n(1000_000_000)) + time.Millisecond)
@@ -640,7 +640,7 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 		maxKey = minKey.Next()
 	} else {
 		minKey = tasks.NewKey(key.FireTime, 0)
-		maxKey = tasks.NewKey(key.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0)
+		maxKey = tasks.NewKey(key.FireTime.Add(persistencetask.ScheduledTaskMinPrecision), 0)
 	}
 
 	historyTasks := s.PaginateTasks(category, minKey, maxKey, 1)

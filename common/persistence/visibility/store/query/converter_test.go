@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -333,8 +334,8 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 				OrderBy: sqlparser.OrderBy{
 					&sqlparser.Order{
 						Expr: NewSAColumn(
-							searchattribute.WorkflowType,
-							searchattribute.WorkflowType,
+							defs.WorkflowType,
+							defs.WorkflowType,
 							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 						),
 						Direction: sqlparser.AscScr,
@@ -349,8 +350,8 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 			out: &QueryParams[sqlparser.Expr]{
 				GroupBy: []*SAColumn{
 					NewSAColumn(
-						searchattribute.ExecutionStatus,
-						searchattribute.ExecutionStatus,
+						defs.ExecutionStatus,
+						defs.ExecutionStatus,
 						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					),
 				},
@@ -446,8 +447,8 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 				OrderBy: sqlparser.OrderBy{
 					&sqlparser.Order{
 						Expr: NewSAColumn(
-							searchattribute.WorkflowType,
-							searchattribute.WorkflowType,
+							defs.WorkflowType,
+							defs.WorkflowType,
 							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 						),
 						Direction: sqlparser.AscScr,
@@ -462,8 +463,8 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			out: &QueryParams[sqlparser.Expr]{
 				GroupBy: []*SAColumn{
 					NewSAColumn(
-						searchattribute.ExecutionStatus,
-						searchattribute.ExecutionStatus,
+						defs.ExecutionStatus,
+						defs.ExecutionStatus,
 						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					),
 				},
@@ -563,8 +564,8 @@ func TestQueryConverter_ConvertWhereExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	statusCol := NewSAColumn(
-		searchattribute.ExecutionStatus,
-		searchattribute.ExecutionStatus,
+		defs.ExecutionStatus,
+		defs.ExecutionStatus,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1001,8 +1002,8 @@ func TestQueryConverter_ConvertAndExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	wfTypeCol := NewSAColumn(
-		searchattribute.WorkflowType,
-		searchattribute.WorkflowType,
+		defs.WorkflowType,
+		defs.WorkflowType,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1110,8 +1111,8 @@ func TestQueryConverter_ConvertOrExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	wfTypeCol := NewSAColumn(
-		searchattribute.WorkflowType,
-		searchattribute.WorkflowType,
+		defs.WorkflowType,
+		defs.WorkflowType,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1668,8 +1669,8 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	statusCol := NewSAColumn(
-		searchattribute.ExecutionStatus,
-		searchattribute.ExecutionStatus,
+		defs.ExecutionStatus,
+		defs.ExecutionStatus,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1682,7 +1683,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		{
 			name: "success",
 			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(searchattribute.ExecutionStatus),
+				Name: sqlparser.NewColIdent(defs.ExecutionStatus),
 			},
 			out: statusCol,
 		},
@@ -1698,11 +1699,11 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		{
 			name: "success special ScheduleID",
 			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(searchattribute.ScheduleID),
+				Name: sqlparser.NewColIdent(defs.ScheduleID),
 			},
 			out: NewSAColumn(
-				searchattribute.ScheduleID,
-				searchattribute.WorkflowID,
+				defs.ScheduleID,
+				defs.WorkflowID,
 				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			),
 		},
@@ -1765,7 +1766,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 			} else {
 				r.NoError(err)
 				r.Equal(tc.out, out)
-				if tc.out.FieldName == searchattribute.TemporalNamespaceDivision {
+				if tc.out.FieldName == defs.TemporalNamespaceDivision {
 					r.True(queryConverter.seenNamespaceDivision)
 				} else {
 					r.False(queryConverter.seenNamespaceDivision)
@@ -1948,8 +1949,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "success SQLVal",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  searchattribute.WorkflowType,
-			field:  searchattribute.WorkflowType,
+			alias:  defs.WorkflowType,
+			field:  defs.WorkflowType,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "foo",
 		},
@@ -1957,8 +1958,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "success special ScheduleID",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  searchattribute.ScheduleID,
-			field:  searchattribute.WorkflowID,
+			alias:  defs.ScheduleID,
+			field:  defs.WorkflowID,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    primitives.ScheduleWorkflowIDPrefix + "foo",
 		},
@@ -1987,8 +1988,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "fail SQLVal",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  searchattribute.WorkflowType,
-			field:  searchattribute.WorkflowType,
+			alias:  defs.WorkflowType,
+			field:  defs.WorkflowType,
 			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			err:    InvalidExpressionErrMessage,
 		},
@@ -2129,7 +2130,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "success ExecutionStatus",
 			expr:   sqlparser.NewStrVal([]byte("Running")),
-			saName: searchattribute.ExecutionStatus,
+			saName: defs.ExecutionStatus,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "Running",
 		},
@@ -2137,7 +2138,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "fail ExecutionStatus",
 			expr:   sqlparser.NewStrVal([]byte("Invalid")),
-			saName: searchattribute.ExecutionStatus,
+			saName: defs.ExecutionStatus,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			err:    InvalidExpressionErrMessage,
 		},
@@ -2145,7 +2146,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "success ExecutionDuration",
 			expr:   sqlparser.NewStrVal([]byte("1m")),
-			saName: searchattribute.ExecutionDuration,
+			saName: defs.ExecutionDuration,
 			saType: enumspb.INDEXED_VALUE_TYPE_INT,
 			out:    int64(1 * time.Minute),
 		},
@@ -2153,7 +2154,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "fail ExecutionDuration",
 			expr:   sqlparser.NewStrVal([]byte("1t")),
-			saName: searchattribute.ExecutionDuration,
+			saName: defs.ExecutionDuration,
 			saType: enumspb.INDEXED_VALUE_TYPE_INT,
 			err:    InvalidExpressionErrMessage,
 		},

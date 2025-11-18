@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 const (
@@ -54,8 +55,8 @@ func TestFieldSaAggInterceptor(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	startTimeCol := query.NewSAColumn(
-		searchattribute.StartTime,
-		searchattribute.StartTime,
+		defs.StartTime,
+		defs.StartTime,
 		enumspb.INDEXED_VALUE_TYPE_DATETIME,
 	)
 
@@ -89,7 +90,7 @@ func TestFieldSaAggInterceptor(t *testing.T) {
 		map[string]struct{}{
 			"AliasForCustomIntField":     struct{}{},
 			"AliasForCustomKeywordField": struct{}{},
-			searchattribute.StartTime:    struct{}{},
+			defs.StartTime:               struct{}{},
 		},
 		saInterceptor.names,
 	)

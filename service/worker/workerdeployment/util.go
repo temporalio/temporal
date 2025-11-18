@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -87,11 +87,11 @@ const (
 var (
 	WorkerDeploymentVisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		searchattribute.WorkflowType,
+		defs.WorkflowType,
 		WorkerDeploymentWorkflowType,
-		searchattribute.TemporalNamespaceDivision,
+		defs.TemporalNamespaceDivision,
 		WorkerDeploymentNamespaceDivision,
-		searchattribute.ExecutionStatus,
+		defs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 )

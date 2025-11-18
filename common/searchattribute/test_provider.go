@@ -7,6 +7,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 type (
@@ -34,7 +35,7 @@ var (
 	}
 
 	// default custom search attributes definition for SQL databases
-	sqlCustomSearchAttributes = GetDBIndexSearchAttributes(nil).CustomSearchAttributes
+	sqlCustomSearchAttributes = defs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
 
 	// ScheduleId is mapped to Keyword10 for tests
 	TestScheduleIDFieldName = "Keyword10"
@@ -66,7 +67,7 @@ func TestEsNameTypeMap() NameTypeMap {
 
 func TestEsNameTypeMapWithScheduleID() NameTypeMap {
 	res := TestEsNameTypeMap()
-	res.customSearchAttributes[ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
+	res.customSearchAttributes[defs.ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 	return res
 }
 
@@ -102,7 +103,7 @@ func (t *TestMapper) GetAlias(fieldName string, namespace string) (string, error
 			return fieldName, nil
 		}
 		if t.WithCustomScheduleID && fieldName == TestScheduleIDFieldName {
-			return ScheduleID, nil
+			return defs.ScheduleID, nil
 		}
 		return "AliasFor" + fieldName, nil
 	}
@@ -124,7 +125,7 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		if alias == "pass-through" {
 			return alias, nil
 		}
-		if t.WithCustomScheduleID && alias == ScheduleID {
+		if t.WithCustomScheduleID && alias == defs.ScheduleID {
 			return TestScheduleIDFieldName, nil
 		}
 		if strings.HasPrefix(alias, "AliasFor") {

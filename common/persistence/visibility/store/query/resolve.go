@@ -6,6 +6,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/defs"
 )
 
 // ResolveSearchAttributeAlias resolves the search attribute alias for the given name. The process is:
@@ -20,7 +21,7 @@ func ResolveSearchAttributeAlias(
 	mapper searchattribute.Mapper,
 	saTypeMap searchattribute.NameTypeMap,
 ) (string, enumspb.IndexedValueType, error) {
-	if searchattribute.IsMappable(name) {
+	if defs.IsMappable(name) {
 		// First check if the visibility mapper can handle this field (e.g., custom search attributes)
 		fieldName, fieldType := tryVisibilityMapper(name, ns, mapper, saTypeMap)
 		if fieldName != "" {
@@ -29,10 +30,10 @@ func ResolveSearchAttributeAlias(
 
 		// Handle ScheduleID → WorkflowID transformation, but only if ScheduleID is not defined as a custom search attribute
 		// This fallback only applies when the visibility mapper doesn't handle the field
-		if name == searchattribute.ScheduleID {
+		if name == defs.ScheduleID {
 			// ScheduleID is not defined, transform to WorkflowID
-			saType, _ := saTypeMap.GetType(searchattribute.WorkflowID)
-			return searchattribute.WorkflowID, saType, nil
+			saType, _ := saTypeMap.GetType(defs.WorkflowID)
+			return defs.WorkflowID, saType, nil
 		}
 	}
 
@@ -79,12 +80,12 @@ func tryDirectAndPrefixedLookup(name string, saTypeMap searchattribute.NameTypeM
 		return name, saType, true
 	}
 
-	prefixedName := searchattribute.ReservedPrefix + name
+	prefixedName := defs.ReservedPrefix + name
 	if saType, err := saTypeMap.GetType(prefixedName); err == nil {
 		return prefixedName, saType, true
 	}
 
-	strippedName := strings.TrimPrefix(name, searchattribute.ReservedPrefix)
+	strippedName := strings.TrimPrefix(name, defs.ReservedPrefix)
 	if saType, err := saTypeMap.GetType(strippedName); err == nil {
 		return strippedName, saType, true
 	}
