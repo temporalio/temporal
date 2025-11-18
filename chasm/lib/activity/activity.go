@@ -283,10 +283,14 @@ func (a *Activity) recordStartToCloseTimedOut(ctx chasm.MutableContext, retryInt
 	}
 	attempt.LastAttemptCompleteTime = currentTime
 
-	// If the activity has exhausted retries, mark the outcome failure as well but don't store duplicate failure info.
+	// If the activity has exhausted retries, mark the outcome failure as well.
 	// Also reset the retry interval as there won't be any more retries.
 	if noRetriesLeft {
-		outcome.Variant = &activitypb.ActivityOutcome_Failed_{}
+		outcome.Variant = &activitypb.ActivityOutcome_Failed_{
+			Failed: &activitypb.ActivityOutcome_Failed{
+				Failure: failure,
+			},
+		}
 		attempt.CurrentRetryInterval = nil
 	} else {
 		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
