@@ -46,7 +46,7 @@ func WithConfigLoader(configDir string, env string, zone string) ServerOption {
 // WithServerConfigFilePath sets a custom configuration load
 func WithServerConfigFilePath(filePath string) ServerOption {
 	return applyFunc(func(s *serverOptions) {
-		s.serverConfigFilePath = filePath
+		s.configFilePath = filePath
 	})
 }
 

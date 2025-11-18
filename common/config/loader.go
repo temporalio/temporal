@@ -69,6 +69,8 @@ type loadOptions struct {
 
 type loadOption func(*loadOptions)
 
+// WithEnv sets the environment name for configuration loading (e.g., "development", "production").
+// If empty, defaults to "development".
 func WithEnv(env string) loadOption {
 	return func(o *loadOptions) {
 		if env != "" {
@@ -77,6 +79,8 @@ func WithEnv(env string) loadOption {
 	}
 }
 
+// WithConfigDir sets the directory path where configuration files are located.
+// If empty, defaults to "config".
 func WithConfigDir(configDir string) loadOption {
 	return func(o *loadOptions) {
 		if configDir != "" {
@@ -85,6 +89,8 @@ func WithConfigDir(configDir string) loadOption {
 	}
 }
 
+// WithZone sets the availability zone for configuration loading.
+// This is used to load zone-specific configuration overrides (e.g., "us-east-1a").
 func WithZone(zone string) loadOption {
 	return func(o *loadOptions) {
 		if zone != "" {
@@ -93,6 +99,8 @@ func WithZone(zone string) loadOption {
 	}
 }
 
+// WithConfigFile sets a specific configuration file path to load.
+// When provided, only this file will be loaded, bypassing the legacy hierarchical loading.
 func WithConfigFile(configFilePath string) loadOption {
 	return func(o *loadOptions) {
 		if configFilePath != "" {
@@ -101,12 +109,16 @@ func WithConfigFile(configFilePath string) loadOption {
 	}
 }
 
+// WithEmbedded forces the loader to use only the embedded configuration template.
+// This loads configuration from environment variables only, using the embedded template.
 func WithEmbedded() loadOption {
 	return func(o *loadOptions) {
 		o.useEmbeddedOnly = true
 	}
 }
 
+// WithEnvMap provides a custom environment variable map for template rendering.
+// If not provided, the loader will use os.Environ() to populate environment variables.
 func WithEnvMap(envMap map[string]string) loadOption {
 	return func(o *loadOptions) {
 		if envMap != nil {
@@ -115,25 +127,35 @@ func WithEnvMap(envMap map[string]string) loadOption {
 	}
 }
 
+// Load loads and validates the Temporal server configuration.
+// It supports multiple loading strategies based on the provided options:
+//   - Embedded template with environment variables (WithEmbedded)
+//   - Single config file (WithConfigFile)
+//   - Legacy hierarchical config directory (WithConfigDir, WithEnv, WithZone)
+//
+// Configuration files can be templated using Go template syntax with dockerize-compatible
+// functions. To enable templating, add "# enable-template" comment in the first 1KB of the file.
+//
+// Returns the loaded configuration or an error if loading or validation fails.
 func Load(opts ...loadOption) (*Config, error) {
 	cfg := &Config{}
 	options := &loadOptions{
-		envMap: getEnvMap(),
+		envMap: loadEnvMap(),
 	}
 
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	if err := load(options, cfg); err != nil {
+	if err := options.load(cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
-func load(opts *loadOptions, config any) error {
+func (opts *loadOptions) load(config any) error {
 	if opts.envMap == nil {
-		opts.envMap = getEnvMap()
+		opts.envMap = loadEnvMap()
 	}
 
 	if opts.useEmbeddedOnly {
@@ -148,7 +170,7 @@ func load(opts *loadOptions, config any) error {
 		}
 		return loadAndUnmarshalContent(content, filepath.Base(opts.configFilePath), opts.envMap, config)
 	}
-	return loadLegacy(opts, config)
+	return opts.loadLegacy(config)
 
 }
 
@@ -169,7 +191,7 @@ func load(opts *loadOptions, config any) error {
 //     env.yaml     -- where "environment" is one of the input parameters (e.g., "development")
 //       env_az.yaml -- where "zone" is another input parameter
 
-func loadLegacy(opts *loadOptions, config any) error {
+func (opts *loadOptions) loadLegacy(config any) error {
 	stdlog.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", opts.env, opts.zone, opts.configDir)
 	if opts.env == "" {
 		opts.env = envDevelopment
@@ -306,14 +328,6 @@ func renderTemplate(data []byte, filename string, envMap map[string]string) ([]b
 	return rendered.Bytes(), nil
 }
 
-func LoadConfig(env string, configDir string, zone string) (*Config, error) {
-	cfg, err := Load(WithEnv(env), WithConfigDir(configDir), WithZone(zone))
-	if err != nil {
-		return nil, fmt.Errorf("config file corrupted: %w", err)
-	}
-	return cfg, nil
-}
-
 func loadAndUnmarshalContent(content []byte, filename string, envMap map[string]string, config any) error {
 	processed, err := processConfigFile(content, filename, envMap)
 	if err != nil {
@@ -380,7 +394,7 @@ func file(name string, suffix string) string {
 	return name + "." + suffix
 }
 
-func getEnvMap() map[string]string {
+func loadEnvMap() map[string]string {
 	environ := os.Environ()
 	envMap := make(map[string]string, len(environ))
 

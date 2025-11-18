@@ -19,61 +19,74 @@ func TestEmbeddedTemplateCoversAllConfigFields(t *testing.T) {
 	err = yaml.Unmarshal(rendered, &templateData)
 	require.NoError(t, err)
 
-	configType := reflect.TypeOf(Config{})
+	// Recursively validate all fields in the Config struct and its nested structs
+	validateStructFields(t, reflect.TypeOf(Config{}), templateData, "")
+}
 
-	for i := 0; i < configType.NumField(); i++ {
-		field := configType.Field(i)
+// validateStructFields recursively validates that all required fields in a struct type
+// are present in the corresponding YAML template data
+func validateStructFields(t *testing.T, structType reflect.Type, templateData map[string]any, path string) {
+	t.Helper()
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
 		yamlTag := field.Tag.Get("yaml")
 
+		// Skip fields without yaml tags or explicitly excluded
 		if yamlTag == "" || yamlTag == "-" {
 			continue
 		}
 
 		yamlFieldName := strings.Split(yamlTag, ",")[0]
+		fieldPath := yamlFieldName
+		if path != "" {
+			fieldPath = path + "." + yamlFieldName
+		}
 
 		validateTag := field.Tag.Get("validate")
 		isRequired := strings.Contains(validateTag, "nonzero")
 
-		_, exists := templateData[yamlFieldName]
+		fieldData, exists := templateData[yamlFieldName]
 
 		if isRequired && !exists {
-			t.Errorf("REQUIRED field '%s' (yaml:'%s') is missing from embedded template", field.Name, yamlFieldName)
+			t.Errorf("REQUIRED field '%s' (yaml:'%s') is missing from embedded template at path '%s'",
+				field.Name, yamlFieldName, fieldPath)
 		} else if !exists {
-			t.Logf("Optional field '%s' (yaml:'%s') not in embedded template (this is OK)", field.Name, yamlFieldName)
+			t.Logf("Optional field '%s' (yaml:'%s') not in embedded template at path '%s' (this is OK)",
+				field.Name, yamlFieldName, fieldPath)
+			continue
+		}
+
+		// Recursively validate nested structs
+		fieldType := field.Type
+		// Dereference pointers
+		if fieldType.Kind() == reflect.Ptr {
+			fieldType = fieldType.Elem()
+		}
+
+		switch fieldType.Kind() {
+		case reflect.Struct:
+			// Only recurse if we have nested map data
+			if nestedMap, ok := fieldData.(map[string]any); ok {
+				validateStructFields(t, fieldType, nestedMap, fieldPath)
+			}
+		case reflect.Map:
+			// For maps like Services, validate the value type if it's a struct
+			if fieldType.Elem().Kind() == reflect.Struct {
+				if mapData, ok := fieldData.(map[string]any); ok {
+					// Validate each entry in the map
+					for key, value := range mapData {
+						if nestedMap, ok := value.(map[string]any); ok {
+							mapPath := fieldPath + "." + key
+							validateStructFields(t, fieldType.Elem(), nestedMap, mapPath)
+						}
+					}
+				}
+			}
+		default:
+			// Other types (primitives, slices, etc.) don't require recursive validation
 		}
 	}
-
-	// Verify that required nested fields are also present
-	t.Run("Persistence fields", func(t *testing.T) {
-		persistenceData, ok := templateData["persistence"].(map[string]any)
-		require.True(t, ok, "persistence section must exist")
-
-		requiredFields := []string{"defaultStore", "numHistoryShards", "datastores"}
-		for _, field := range requiredFields {
-			_, exists := persistenceData[field]
-			require.True(t, exists, "persistence.%s must be present in template", field)
-		}
-	})
-
-	t.Run("Services fields", func(t *testing.T) {
-		servicesData, ok := templateData["services"].(map[string]any)
-		require.True(t, ok, "services section must exist")
-
-		requiredServices := []string{"frontend", "history", "matching", "worker"}
-		for _, service := range requiredServices {
-			_, exists := servicesData[service]
-			require.True(t, exists, "services.%s must be present in template", service)
-		}
-	})
-
-	t.Run("Log fields", func(t *testing.T) {
-		logData, ok := templateData["log"].(map[string]any)
-		require.True(t, ok, "log section must exist")
-
-		// Verify basic log config is present
-		_, exists := logData["level"]
-		require.True(t, exists, "log.level must be present in template")
-	})
 }
 
 func TestEmbeddedTemplateHasDefaults(t *testing.T) {

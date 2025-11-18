@@ -1,6 +1,7 @@
 package temporal
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -30,12 +31,12 @@ type (
 	serverOptions struct {
 		serviceNames map[primitives.ServiceName]struct{}
 
-		config               *config.Config
-		configDir            string
-		env                  string
-		zone                 string
-		serverConfigFilePath string
-		hostsByService       map[primitives.ServiceName]static.Hosts
+		config         *config.Config
+		configDir      string
+		env            string
+		zone           string
+		configFilePath string
+		hostsByService map[primitives.ServiceName]static.Hosts
 
 		startupSynchronizationMode synchronizationModeParams
 
@@ -92,9 +93,12 @@ func (so *serverOptions) loadAndValidate() error {
 }
 
 func (so *serverOptions) loadConfig() error {
-	if so.serverConfigFilePath != "" {
+	if so.configFilePath != "" {
+		if so.env != "" || so.configDir != "" || so.zone != "" {
+			return errors.New("env, config, zone can not be set if configFilePath is set")
+		}
 		cfg, err := config.Load(
-			config.WithConfigFile(so.serverConfigFilePath),
+			config.WithConfigFile(so.configFilePath),
 		)
 		if err != nil {
 			return fmt.Errorf("could not load config file: %w", err)

@@ -110,10 +110,10 @@ func buildCLI() *cli.App {
 			Usage:     "Render server config template",
 			ArgsUsage: " ",
 			Action: func(c *cli.Context) error {
-				cfg, err := config.LoadConfig(
-					c.String("env"),
-					c.String("config"),
-					c.String("zone"),
+				cfg, err := config.Load(
+					config.WithEnv(c.String("env")),
+					config.WithConfigDir(c.String("config")),
+					config.WithZone(c.String("zone")),
 				)
 				if err != nil {
 					return cli.Exit(fmt.Errorf("Unable to load configuration: %w", err), 1)
@@ -145,8 +145,8 @@ func buildCLI() *cli.App {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
 				}
 
-				if c.IsSet("config-file") && (c.IsSet("config") || c.IsSet("env") || c.IsSet("zone")) {
-					return cli.Exit("ERROR: can not use --config, --env, or --zone with --config-file", 1)
+				if c.IsSet("config-file") && (c.IsSet("config") || c.IsSet("env") || c.IsSet("zone") || c.IsSet("root")) {
+					return cli.Exit("ERROR: can not use --config, --env, --zone, or --root with --config-file", 1)
 				}
 				return nil
 			},
