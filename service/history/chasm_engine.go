@@ -240,7 +240,7 @@ func (e *ChasmEngine) UpdateComponent(
 	// unnecessarily, but it will not miss notifications. In the future we may want to change
 	// PollComponent to subscribe to component-level notifications, and change UpdateComponent so
 	// that notifications are emitted only for nodes that were mutated in the transaction.
-	e.notifier.Notify(&ChasmComponentNotification{
+	e.notifier.Notify(&ChasmExecutionNotification{
 		Key: ref.EntityKey,
 		Ref: newSerializedRef,
 	})

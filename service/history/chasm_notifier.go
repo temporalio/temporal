@@ -25,13 +25,13 @@ type (
 		timeSource      clock.TimeSource
 		metricsHandler  metrics.Handler
 		status          int32
-		notificationsCh chan *ChasmComponentNotification
+		notificationsCh chan *ChasmExecutionNotification
 		stopCh          chan bool
 		subscribers     collection.ConcurrentTxMap
 	}
 
-	// ChasmComponentNotification is a notification relating to a CHASM component.
-	ChasmComponentNotification struct {
+	// ChasmExecutionNotification is a notification relating to a CHASM component.
+	ChasmExecutionNotification struct {
 		// TODO(dan): confirm that we want Key in addition to the key in serialized ref
 		Key       chasm.EntityKey
 		Ref       []byte
@@ -51,7 +51,7 @@ func NewChasmNotifier(
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.ChasmComponentNotificationScope)),
 		status:          common.DaemonStatusInitialized,
 		stopCh:          make(chan bool),
-		notificationsCh: make(chan *ChasmComponentNotification, 1000),
+		notificationsCh: make(chan *ChasmExecutionNotification, 1000),
 		subscribers: collection.NewShardedConcurrentTxMap(1024, func(key any) uint32 {
 			executionKey, ok := key.(chasm.EntityKey)
 			if !ok {
@@ -79,7 +79,7 @@ func (n *ChasmNotifier) Stop() {
 }
 
 // Notify sends a notification about a CHASM component.
-func (n *ChasmNotifier) Notify(notification *ChasmComponentNotification) {
+func (n *ChasmNotifier) Notify(notification *ChasmExecutionNotification) {
 	n.enqueue(notification)
 }
 
@@ -87,20 +87,20 @@ func (n *ChasmNotifier) Notify(notification *ChasmComponentNotification) {
 // a subscriber ID that can be passed to UnsubscribeNotification.
 //
 // TODO(dan): support subscribing to notifications for a specific component only?
-func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (chan *ChasmComponentNotification, string, error) {
-	channel := make(chan *ChasmComponentNotification, 1)
+func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (chan *ChasmExecutionNotification, string, error) {
+	channel := make(chan *ChasmExecutionNotification, 1)
 	subscriberID := uuid.NewString()
 
 	// TODO(dan): This allocates a value that will not be used if key already has subscribers (code
 	// copied from events.Notifier)
-	subscribers := map[string]chan *ChasmComponentNotification{
+	subscribers := map[string]chan *ChasmExecutionNotification{
 		subscriberID: channel,
 	}
 
 	// If key exists then add new subscriber to that second-level map. Otherwise, add a new
 	// second-level map containing the new subscriber.
 	_, _, err := n.subscribers.PutOrDo(key, subscribers, func(key any, value any) error {
-		subscribers := value.(map[string]chan *ChasmComponentNotification)
+		subscribers := value.(map[string]chan *ChasmExecutionNotification)
 		if _, ok := subscribers[subscriberID]; ok {
 			// uuid collision
 			return serviceerror.NewUnavailable("Unable to watch component.")
@@ -118,7 +118,7 @@ func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (chan *ChasmComponentNoti
 func (n *ChasmNotifier) Unsubscribe(key chasm.EntityKey, subscriberID string) error {
 	success := true
 	n.subscribers.RemoveIf(key, func(key any, value any) bool {
-		subscribers := value.(map[string]chan *ChasmComponentNotification)
+		subscribers := value.(map[string]chan *ChasmExecutionNotification)
 		if _, ok := subscribers[subscriberID]; !ok {
 			success = false
 		} else {
@@ -133,7 +133,7 @@ func (n *ChasmNotifier) Unsubscribe(key chasm.EntityKey, subscriberID string) er
 	return nil
 }
 
-func (n *ChasmNotifier) enqueue(notification *ChasmComponentNotification) {
+func (n *ChasmNotifier) enqueue(notification *ChasmExecutionNotification) {
 	// TODO(dan) This enqueues to an intermediate channel which might fill up, thus dropping
 	// notifications for all subscribers. Consider broadcasting synchronously on enqueue instead.
 	notification.timestamp = n.timeSource.Now()
@@ -157,14 +157,14 @@ func (n *ChasmNotifier) dequeueLoop() {
 	}
 }
 
-func (n *ChasmNotifier) broadcast(notification *ChasmComponentNotification) {
+func (n *ChasmNotifier) broadcast(notification *ChasmExecutionNotification) {
 	startTime := time.Now().UTC()
 	defer func() {
 		// TODO(dan): retaining "Fanout" name for consistency with events.Notifier for now
 		metrics.ChasmComponentNotificationFanoutLatency.With(n.metricsHandler).Record(time.Since(startTime))
 	}()
 	_, _, _ = n.subscribers.GetAndDo(notification.Key, func(key any, value any) error {
-		subscribers := value.(map[string]chan *ChasmComponentNotification)
+		subscribers := value.(map[string]chan *ChasmExecutionNotification)
 		for _, ch := range subscribers {
 			select {
 			case ch <- notification:

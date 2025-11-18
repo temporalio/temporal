@@ -33,7 +33,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	// Multiple subscribers
 	subscriberCount := 100
 	subscribers := make([]struct {
-		channel chan *ChasmComponentNotification
+		channel chan *ChasmExecutionNotification
 		id      string
 	}, subscriberCount)
 
@@ -46,7 +46,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 
 	// Single notification
 	expectedRef := []byte("test-ref")
-	notifier.Notify(&ChasmComponentNotification{
+	notifier.Notify(&ChasmExecutionNotification{
 		Key: entityKey,
 		Ref: expectedRef,
 	})
@@ -93,7 +93,7 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 
 	channel, subscriberID, err := notifier.Subscribe(entityKey1)
 	require.NoError(t, err)
-	notifier.Notify(&ChasmComponentNotification{
+	notifier.Notify(&ChasmExecutionNotification{
 		Key: entityKey2,
 		Ref: []byte("wrong-entity"),
 	})
@@ -127,7 +127,7 @@ func TestChasmNotifier_UnsubscribeStopsDelivery(t *testing.T) {
 	// First notification should arrive
 	channel, subscriberID, err := notifier.Subscribe(entityKey)
 	require.NoError(t, err)
-	notifier.Notify(&ChasmComponentNotification{
+	notifier.Notify(&ChasmExecutionNotification{
 		Key: entityKey,
 		Ref: []byte("before-unsubscribe"),
 	})
@@ -141,7 +141,7 @@ func TestChasmNotifier_UnsubscribeStopsDelivery(t *testing.T) {
 	// Notification after unsubscribe should not arrive
 	err = notifier.Unsubscribe(entityKey, subscriberID)
 	require.NoError(t, err)
-	notifier.Notify(&ChasmComponentNotification{
+	notifier.Notify(&ChasmExecutionNotification{
 		Key: entityKey,
 		Ref: []byte("after-unsubscribe"),
 	})
