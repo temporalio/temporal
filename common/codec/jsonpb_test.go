@@ -77,6 +77,14 @@ func (s *jsonpbEncoderSuite) TestEncodeHistories() {
 	s.JSONEq(fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistory), string(json))
 }
 
+func (s *jsonpbEncoderSuite) TestEncodeEmptyHistories() {
+	var histories []*historypb.History
+
+	json, err := s.encoder.EncodeHistories(histories)
+	s.Nil(err)
+	s.JSONEq("[]", string(json))
+}
+
 func (s *jsonpbEncoderSuite) TestDecodeHistories() {
 	historyJSON := fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistory)
 
