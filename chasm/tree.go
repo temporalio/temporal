@@ -228,6 +228,7 @@ func NewTreeFromDB(
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
 		root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger)
+		// NewEmptyTree initializes the serializedNode to an empty component node,
 		root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
 		return root, nil
 	}
