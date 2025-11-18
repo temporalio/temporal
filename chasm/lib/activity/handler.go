@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -30,10 +31,15 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, nil, err
 			}
 
+			// Log before applying TransitionScheduled
+			fmt.Printf("CHASM Activity: Applying TransitionScheduled for activity %s\n", request.GetActivityId())
+
 			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 			if err != nil {
 				return nil, nil, err
 			}
+
+			fmt.Printf("CHASM Activity: TransitionScheduled applied successfully\n")
 
 			return newActivity, &workflowservice.StartActivityExecutionResponse{
 				Started: true,

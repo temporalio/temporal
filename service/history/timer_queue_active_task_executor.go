@@ -997,6 +997,16 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
+	t.logger.Info("CHASM: Executing ChasmTaskPure timer task",
+		tag.WorkflowNamespaceID(task.NamespaceID),
+		tag.WorkflowID(task.WorkflowID),
+		tag.WorkflowRunID(task.RunID),
+		tag.Timestamp(task.VisibilityTimestamp),
+	)
+
+	fmt.Printf("TIMER EXECUTOR: executeChasmPureTimerTask called for %s/%s/%s at %v\n",
+		task.NamespaceID, task.WorkflowID, task.RunID, task.VisibilityTimestamp)
+
 	wfCtx, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
@@ -1020,9 +1030,13 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
 			// succeed.
 			executed, err := executor.ExecutePureTask(ctx, taskAttributes, taskInstance)
-			if err == nil {
+			if err == nil && executed {
 				processedTimers += 1
-
+				fmt.Printf("TIMER EXECUTOR: Timer processed successfully, total=%d\n", processedTimers)
+			} else if err != nil {
+				fmt.Printf("TIMER EXECUTOR: Timer execution error: %v\n", err)
+			} else {
+				fmt.Printf("TIMER EXECUTOR: Timer not executed (validation failed)\n")
 			}
 
 			return executed, err
@@ -1034,11 +1048,16 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 
 	// Commit changes only if we processed any timers.
 	if processedTimers == 0 {
+		fmt.Printf("TIMER EXECUTOR: No timers processed, not updating workflow\n")
 		return nil
 	}
 
+	fmt.Printf("TIMER EXECUTOR: Processed %d timers, updating workflow\n", processedTimers)
+
 	if t.config.EnableUpdateWorkflowModeIgnoreCurrent() {
-		return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+		err := wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+		fmt.Printf("TIMER EXECUTOR: UpdateWorkflowExecutionAsActive result: %v\n", err)
+		return err
 	}
 
 	// TODO: remove following code once EnableUpdateWorkflowModeIgnoreCurrent config is deprecated.
@@ -1047,5 +1066,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 		// closed workflow.
 		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, historyi.TransactionPolicyActive)
 	}
-	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	updateErr := wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	fmt.Printf("TIMER EXECUTOR: UpdateWorkflowExecutionAsActive result: %v\n", updateErr)
+	return updateErr
 }

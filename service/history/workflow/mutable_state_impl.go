@@ -6119,6 +6119,13 @@ func (ms *MutableStateImpl) AddTasks(
 			ms.logger.Info("Dropped long duration scheduled task.", tasks.Tags(task)...)
 			continue
 		}
+
+		// Debug logging for CHASM tasks
+		if _, ok := task.(*tasks.ChasmTaskPure); ok {
+			fmt.Printf("MutableState: Adding ChasmTaskPure to InsertTasks[%v] at %v\n",
+				category, task.GetVisibilityTime())
+		}
+
 		ms.InsertTasks[category] = append(ms.InsertTasks[category], task)
 	}
 }

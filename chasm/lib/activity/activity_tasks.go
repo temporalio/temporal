@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
@@ -78,12 +79,18 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
+	fmt.Printf("CHASM Activity ScheduleToStartTimeout.Validate: Called\n")
+
 	attempt, err := activity.Attempt.Get(ctx)
 	if err != nil {
+		fmt.Printf("CHASM Activity ScheduleToStartTimeout.Validate: Error getting attempt: %v\n", err)
 		return false, err
 	}
 
 	valid := activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && task.Attempt == attempt.Count
+	fmt.Printf("CHASM Activity ScheduleToStartTimeout.Validate: Status=%v (expect %v), task.Attempt=%d, attempt.Count=%d, valid=%v\n",
+		activity.Status, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, task.Attempt, attempt.Count, valid)
+
 	return valid, nil
 }
 
@@ -93,6 +100,7 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToStartTimeoutTask,
 ) error {
+	fmt.Printf("CHASM Activity ScheduleToStartTimeout.Execute: Called - applying timeout\n")
 	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
 }
 

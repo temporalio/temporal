@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -579,6 +580,15 @@ func NotifyWorkflowSnapshotTasks(
 	if workflowSnapshot == nil {
 		return
 	}
+
+	// Debug logging for tasks
+	if len(workflowSnapshot.Tasks) > 0 {
+		fmt.Printf("NotifyWorkflowSnapshotTasks: Notifying engine of %d task categories\n", len(workflowSnapshot.Tasks))
+		for cat, taskList := range workflowSnapshot.Tasks {
+			fmt.Printf("  Category %v: %d tasks\n", cat, len(taskList))
+		}
+	}
+
 	engine.NotifyNewTasks(workflowSnapshot.Tasks)
 }
 
