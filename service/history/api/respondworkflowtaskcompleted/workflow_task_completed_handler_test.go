@@ -80,7 +80,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			dynamicconfig.GetBoolPropertyFn(false),
 			metricsHandler,
 			logger,
-			namespace.DefaultReplicationResolver,
+			namespace.NewDefaultReplicationResolverFactory(),
 		)
 		out.handler = newWorkflowTaskCompletedHandler( // 😲
 			t.Name(), // identity
