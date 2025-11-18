@@ -59,7 +59,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.58.0
+	go.temporal.io/api v1.58.1-0.20251118184710-8b9eaeb2e837
 	go.temporal.io/sdk v1.35.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0
@@ -171,6 +171,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-// TODO: (Chetan) remove this when the new API release is available.
-replace go.temporal.io/api => github.com/temporalio/api-go v1.58.1-0.20251118184710-8b9eaeb2e837
