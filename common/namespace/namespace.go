@@ -40,9 +40,9 @@ type (
 
 	// Namespace contains the info and config for a namespace
 	Namespace struct {
-		info            *persistencespb.NamespaceInfo
-		config          *persistencespb.NamespaceConfig
-		configVersion   int64
+		info                *persistencespb.NamespaceInfo
+		config              *persistencespb.NamespaceConfig
+		configVersion       int64
 		notificationVersion int64
 
 		customSearchAttributesMapper CustomSearchAttributesMapper
