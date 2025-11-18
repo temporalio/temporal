@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -56,14 +55,14 @@ func (s *jsonpbEncoderSuite) SetupSuite() {
 
 func (s *jsonpbEncoderSuite) TestEncode() {
 	json, err := s.encoder.Encode(history)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	s.JSONEq(encodedHistory, string(json))
 }
 
 func (s *jsonpbEncoderSuite) TestDecode() {
 	var val historypb.History
 	err := s.encoder.Decode([]byte(encodedHistory), &val)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	protoassert.ProtoEqual(s.T(), &val, history)
 }
 
@@ -74,7 +73,7 @@ func (s *jsonpbEncoderSuite) TestEncodeHistories() {
 	histories = append(histories, history)
 
 	json, err := s.encoder.EncodeHistories(histories)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	s.JSONEq(fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistory), string(json))
 }
 
@@ -82,7 +81,7 @@ func (s *jsonpbEncoderSuite) TestEncodeEmptyHistories() {
 	var histories []*historypb.History
 
 	json, err := s.encoder.EncodeHistories(histories)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	s.JSONEq("[]", string(json))
 }
 
@@ -96,7 +95,7 @@ func (s *jsonpbEncoderSuite) TestDecodeHistories() {
 
 	decodedHistories, err := s.encoder.DecodeHistories([]byte(historyJSON))
 
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	protoassert.ProtoSliceEqual(s.T(), histories, decodedHistories)
 }
 
@@ -110,6 +109,6 @@ func (s *jsonpbEncoderSuite) TestDecodeOldHistories() {
 
 	decodedHistories, err := s.encoder.DecodeHistories([]byte(historyJSON))
 
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 	protoassert.ProtoSliceEqual(s.T(), historyEvents, decodedHistories)
 }
