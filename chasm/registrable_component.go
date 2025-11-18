@@ -55,6 +55,7 @@ func WithSingleCluster() RegistrableComponentOption {
 	}
 }
 
+// WithShardingFn allows specifying a custom sharding key function for the component.
 // TODO: remove WithShardingFn, we don't need this functionality.
 func WithShardingFn(
 	shardingFn func(EntityKey) string,
