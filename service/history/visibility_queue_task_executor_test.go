@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -614,10 +615,12 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 
 			v, ok := request.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision]
 			s.True(ok)
-			var actualArchetype string
-			err := payload.Decode(v, &actualArchetype)
+			var actualArchetypeIDStr string
+			err := payload.Decode(v, &actualArchetypeIDStr)
 			s.NoError(err)
-			s.Equal("TestLibrary.test_component", actualArchetype)
+			expectedArchetypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
+			s.True(ok)
+			s.Equal(strconv.FormatUint(uint64(expectedArchetypeID), 10), actualArchetypeIDStr)
 
 			var paused bool
 			err = payload.Decode(request.SearchAttributes.IndexedFields[testComponentPausedSAName], &paused)

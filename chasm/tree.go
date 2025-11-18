@@ -2330,11 +2330,14 @@ func (n *Node) Terminate(
 	return nil
 }
 
+// ArchetypeID returns the framework's internal ID for the root component's fully qualified name.
 func (n *Node) ArchetypeID() ArchetypeID {
 	// Root must be a component.
 	return n.root().serializedNode.Metadata.GetComponentAttributes().GetTypeId()
 }
 
+// Archetype returns the root component's fully qualified name.
+// Deprecated: use ArchetypeID() instead, this method will be removed.
 func (n *Node) Archetype() (Archetype, error) {
 	archetypeID := n.ArchetypeID()
 

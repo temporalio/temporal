@@ -2,7 +2,7 @@ package chasm
 
 const (
 	WorkflowLibraryName   = "workflow"
-	WorkflowComponentName = "Workflow"
+	WorkflowComponentName = "workflow"
 )
 
 var (
