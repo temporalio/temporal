@@ -81,7 +81,7 @@ func (s *jsonpbEncoderSuite) TestEncodeEmptyHistories() {
 	var histories []*historypb.History
 
 	json, err := s.encoder.EncodeHistories(histories)
-	s.Nil(err)
+	s.NoError(err)
 	s.JSONEq("[]", string(json))
 }
 
