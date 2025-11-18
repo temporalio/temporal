@@ -79,6 +79,26 @@ func FromPersistentState(
 	detail *persistencespb.NamespaceDetail,
 	mutations ...Mutation,
 ) *Namespace {
+	return FromPersistentStateWithResolver(detail, nil, mutations...)
+}
+
+func FromPersistentStateWithResolver(
+	detail *persistencespb.NamespaceDetail,
+	resolver ReplicationResolver,
+	mutations ...Mutation,
+) *Namespace {
+	// If no resolver provided, create a default one
+	if resolver == nil {
+		// By convention, a namespace with non-zero failover version is a global namespace
+		isGlobal := detail.FailoverVersion != 0
+		resolver = &defaultReplicationResolver{
+			replicationConfig:           detail.ReplicationConfig,
+			isGlobalNamespace:           isGlobal,
+			failoverVersion:             detail.FailoverVersion,
+			failoverNotificationVersion: detail.FailoverNotificationVersion,
+		}
+	}
+
 	ns := &Namespace{
 		info:          detail.Info,
 		config:        detail.Config,
@@ -87,8 +107,7 @@ func FromPersistentState(
 			fieldToAlias: detail.Config.CustomSearchAttributeAliases,
 			aliasToField: util.InverseMap(detail.Config.CustomSearchAttributeAliases),
 		},
-		// Create a default resolver that will be replaced if WithReplicationResolver is called
-		replicationResolver: NewDefaultReplicationResolverFactory()(detail),
+		replicationResolver: resolver,
 	}
 
 	for _, m := range mutations {

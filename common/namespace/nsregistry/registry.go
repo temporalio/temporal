@@ -351,11 +351,11 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 			return err
 		}
 		for _, namespaceDb := range response.Namespaces {
-			ns := namespace.FromPersistentState(
+			ns := namespace.FromPersistentStateWithResolver(
 				namespaceDb.Namespace,
+				r.replicationResolverFactory(namespaceDb.Namespace),
 				namespace.WithGlobalFlag(namespaceDb.IsGlobalNamespace),
 				namespace.WithNotificationVersion(namespaceDb.NotificationVersion),
-				namespace.WithReplicationResolver(r.replicationResolverFactory(namespaceDb.Namespace)),
 			)
 			namespacesDb = append(namespacesDb, ns)
 			namespaceIDsDb[namespace.ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
@@ -577,11 +577,11 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	if err != nil {
 		return nil, err
 	}
-	return namespace.FromPersistentState(
+	return namespace.FromPersistentStateWithResolver(
 		response.Namespace,
+		r.replicationResolverFactory(response.Namespace),
 		namespace.WithGlobalFlag(response.IsGlobalNamespace),
 		namespace.WithNotificationVersion(response.NotificationVersion),
-		namespace.WithReplicationResolver(r.replicationResolverFactory(response.Namespace)),
 	), nil
 }
 

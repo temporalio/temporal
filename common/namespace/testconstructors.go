@@ -22,7 +22,7 @@ func NewLocalNamespaceForTest(
 		},
 		FailoverVersion: common.EmptyVersion,
 	}
-	return FromPersistentState(detail, WithGlobalFlag(false), WithReplicationResolver(NewDefaultReplicationResolverFactory()(detail)))
+	return FromPersistentState(detail, WithGlobalFlag(false))
 }
 
 // NewNamespaceForTest returns an entry with test data
@@ -39,7 +39,7 @@ func NewNamespaceForTest(
 		ReplicationConfig: ensureRepConfig(repConfig),
 		FailoverVersion:   failoverVersion,
 	}
-	return FromPersistentState(detail, WithGlobalFlag(isGlobalNamespace), WithReplicationResolver(NewDefaultReplicationResolverFactory()(detail)))
+	return FromPersistentState(detail, WithGlobalFlag(isGlobalNamespace))
 }
 
 // newGlobalNamespaceForTest returns an entry with test data
@@ -55,7 +55,7 @@ func NewGlobalNamespaceForTest(
 		ReplicationConfig: ensureRepConfig(repConfig),
 		FailoverVersion:   failoverVersion,
 	}
-	return FromPersistentState(detail, WithGlobalFlag(true), WithReplicationResolver(NewDefaultReplicationResolverFactory()(detail)))
+	return FromPersistentState(detail, WithGlobalFlag(true))
 }
 
 func ensureInfo(proto *persistencespb.NamespaceInfo) *persistencespb.NamespaceInfo {

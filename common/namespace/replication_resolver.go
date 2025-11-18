@@ -15,6 +15,10 @@ type ReplicationResolver interface {
 	FailoverNotificationVersion() int64
 	// GetReplicationConfig returns the replication config for cloning purposes
 	GetReplicationConfig() *persistencespb.NamespaceReplicationConfig
+
+	// Mutation methods for modifying resolver state
+	SetGlobalFlag(isGlobal bool)
+	PretendLocalNamespace(localClusterName string)
 }
 
 type ReplicationResolverFactory func(*persistencespb.NamespaceDetail) ReplicationResolver
@@ -84,4 +88,17 @@ func (r *defaultReplicationResolver) FailoverNotificationVersion() int64 {
 
 func (r *defaultReplicationResolver) GetReplicationConfig() *persistencespb.NamespaceReplicationConfig {
 	return r.replicationConfig
+}
+
+func (r *defaultReplicationResolver) SetGlobalFlag(isGlobal bool) {
+	r.isGlobalNamespace = isGlobal
+}
+
+func (r *defaultReplicationResolver) PretendLocalNamespace(localClusterName string) {
+	r.isGlobalNamespace = false
+	r.replicationConfig = &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: localClusterName,
+		Clusters:          []string{localClusterName},
+	}
+	r.failoverVersion = 0
 }

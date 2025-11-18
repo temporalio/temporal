@@ -280,7 +280,13 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 	if entriesNotification[0].NotificationVersion() > entriesNotification[1].NotificationVersion() {
 		entriesNotification[0], entriesNotification[1] = entriesNotification[1], entriesNotification[0]
 	}
-	s.Equal([]*namespace.Namespace{entry1, entry2}, entriesNotification)
+	// Compare by ID and key properties instead of pointer equality
+	s.Equal(entry1.ID(), entriesNotification[0].ID())
+	s.Equal(entry1.Name(), entriesNotification[0].Name())
+	s.Equal(entry1.NotificationVersion(), entriesNotification[0].NotificationVersion())
+	s.Equal(entry2.ID(), entriesNotification[1].ID())
+	s.Equal(entry2.Name(), entriesNotification[1].Name())
+	s.Equal(entry2.NotificationVersion(), entriesNotification[1].NotificationVersion())
 }
 
 func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
@@ -430,7 +436,13 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	if entries[0].NotificationVersion() > entries[1].NotificationVersion() {
 		entries[0], entries[1] = entries[1], entries[0]
 	}
-	s.Equal([]*namespace.Namespace{entry1Old, entry2Old}, entries)
+	// Compare by ID and key properties instead of pointer equality
+	s.Equal(entry1Old.ID(), entries[0].ID())
+	s.Equal(entry1Old.Name(), entries[0].Name())
+	s.Equal(entry1Old.NotificationVersion(), entries[0].NotificationVersion())
+	s.Equal(entry2Old.ID(), entries[1].ID())
+	s.Equal(entry2Old.Name(), entries[1].Name())
+	s.Equal(entry2Old.NotificationVersion(), entries[1].NotificationVersion())
 
 	wg.Add(1)
 	wg.Wait()
@@ -439,7 +451,10 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 
 	// entry1 only has descrption update, so won't trigger the state change callback
 	s.Len(newEntries, 1)
-	s.Equal([]*namespace.Namespace{entry2New}, newEntries)
+	// Compare by ID and key properties instead of pointer equality
+	s.Equal(entry2New.ID(), newEntries[0].ID())
+	s.Equal(entry2New.Name(), newEntries[0].Name())
+	s.Equal(entry2New.NotificationVersion(), newEntries[0].NotificationVersion())
 }
 
 func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {

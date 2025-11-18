@@ -52,7 +52,11 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 		},
 	}
 	mockRegistery := namespace.NewMockRegistry(ctrl)
-	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
+	testNamespace := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+		Info:   &persistencespb.NamespaceInfo{Id: testNamespaceID.String()},
+		Config: &persistencespb.NamespaceConfig{},
+	})
+	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(testNamespace, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
 	shardContext := historyi.NewMockShardContext(ctrl)
@@ -123,7 +127,11 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 		},
 	}
 	mockRegistery := namespace.NewMockRegistry(ctrl)
-	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
+	testNamespace := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+		Info:   &persistencespb.NamespaceInfo{Id: testNamespaceID.String()},
+		Config: &persistencespb.NamespaceConfig{},
+	})
+	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(testNamespace, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
 	shardContext := historyi.NewMockShardContext(ctrl)
