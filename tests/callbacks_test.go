@@ -48,7 +48,7 @@ type CallbacksSuite struct {
 	chasmEnabled bool
 }
 
-func TestCallbacksSuite(t *testing.T) {
+func TestCallbacksSuiteHSM(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(CallbacksSuite))
 }
@@ -61,8 +61,8 @@ func TestCallbacksSuiteCHASM(t *testing.T) {
 func (s *CallbacksSuite) SetupSuite() {
 	s.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():          s.chasmEnabled,
-			dynamicconfig.EnableCHASMCallbacks.Key(): s.chasmEnabled,
+			dynamicconfig.EnableChasm.Key():             s.chasmEnabled,
+			dynamicconfig.EnableCHASMCallbacks.Key():    s.chasmEnabled,
 		}),
 	)
 }

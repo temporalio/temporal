@@ -145,8 +145,8 @@ func (e InvocationTaskExecutor) Invoke(
 		ref,
 		(*Callback).saveResult,
 		saveResultInput{
-			result: result,
-			config: e.config,
+			result:      result,
+			retryPolicy: e.config.RetryPolicy(),
 		},
 	)
 	return invokable.WrapError(result, saveErr)

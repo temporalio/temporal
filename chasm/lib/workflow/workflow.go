@@ -1,8 +1,15 @@
 package workflow
 
 import (
+	"fmt"
+
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -43,4 +50,83 @@ func (w *Workflow) LifecycleState(
 	// NOTE: detached mode is not implemented yet, so always return Running here.
 	// Otherwise, tasks for callback component can't be executed after workflow is closed.
 	return chasm.LifecycleStateRunning
+}
+
+// ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
+// It iterates through all callbacks and schedules WorkflowClosed ones that are in STANDBY state.
+func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
+	// Iterate through all callbacks and schedule WorkflowClosed ones
+	for _, field := range w.Callbacks {
+		cb, err := field.Get(ctx)
+		if err != nil {
+			return err
+		}
+		// Only process callbacks in STANDBY state (not already triggered)
+		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+			continue
+		}
+		// Trigger the callback by transitioning to SCHEDULED state
+		if err := callback.TransitionScheduled.Apply(ctx, cb, callback.EventScheduled{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
+// maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
+// msPointer is used to initialize the MSPointer field for accessing the underlying mutable state.
+func (w *Workflow) AddCompletionCallbacks(
+	ctx chasm.MutableContext,
+	event *historypb.HistoryEvent,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	maxCallbacksPerWorkflow int,
+	msPointer chasm.MSPointer,
+) error {
+	// Check CHASM max callbacks limit
+	currentCallbackCount := len(w.Callbacks)
+	if len(completionCallbacks)+currentCallbackCount > maxCallbacksPerWorkflow {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
+			maxCallbacksPerWorkflow,
+			currentCallbackCount,
+		)
+	}
+
+	// Initialize map if needed
+	if w.Callbacks == nil {
+		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+	}
+
+	// Add each callback
+	for idx, cb := range completionCallbacks {
+		chasmCB := &callbackspb.Callback{
+			Links: cb.GetLinks(),
+		}
+		switch variant := cb.Variant.(type) {
+		case *commonpb.Callback_Nexus_:
+			chasmCB.Variant = &callbackspb.Callback_Nexus_{
+				Nexus: &callbackspb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		case *commonpb.Callback_Internal_:
+			err := proto.Unmarshal(cb.GetInternal().GetData(), chasmCB)
+			if err != nil {
+				return err
+			}
+		}
+
+		id := fmt.Sprintf("cb-%s-%d", requestID, idx)
+
+		// Create and add callback
+		callbackObj := callback.NewCallback(requestID, event.EventTime, &callbackspb.CallbackState{}, chasmCB)
+		// Initialize the MSPointer field for accessing the underlying mutable state
+		callbackObj.MSPointer = w.MSPointer
+		// callbackObj.CompletionSource = chasm.Field[callback.CompletionSource](chasm.NewComponentField(ctx, w))
+		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
+	}
+	return nil
 }

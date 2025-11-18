@@ -959,6 +959,8 @@ so forwarding by endpoint ID will not work out of the box.`,
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
+	// NOTE (seankane): MaxCHASMCallbacksPerWorkflow is temporary, this will be removed and replaced with MaxCallbacksPerWorkflow
+	// once CHASM is fully enabled
 	MaxCHASMCallbacksPerWorkflow = NewNamespaceIntSetting(
 		"system.maxCHASMCallbacksPerWorkflow",
 		2000,

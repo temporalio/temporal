@@ -35,17 +35,6 @@ func TestCallbacksMigrationSuite(t *testing.T) {
 	suite.Run(t, new(CallbacksMigrationSuite))
 }
 
-func (s *CallbacksMigrationSuite) SetupSuite() {
-	// Start with CHASM disabled for migration tests
-	s.SetupSuiteWithCluster(
-		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():          false,
-			dynamicconfig.EnableCHASMCallbacks.Key(): false,
-			dynamicconfig.EnableNexus.Key():          true,
-		}),
-	)
-}
-
 func (s *CallbacksMigrationSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 	// Start with CHASM disabled by default for migration tests
@@ -55,6 +44,7 @@ func (s *CallbacksMigrationSuite) SetupTest() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 }
 
+// TODO (seankane): This test can be removed once CHASM callbacks are the default
 func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	// This test verifies that when CHASM is enabled mid-workflow, callbacks still work correctly.
 	// 1. Start a workflow with CHASM disabled and a callback registered

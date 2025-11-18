@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -32,6 +33,8 @@ type Callback struct {
 	// MSPointer is a runtime-only field for accessing the underlying mutable state to get completion data.
 	// Similar to MSPointer in the Workflow component, this is set at deserialization time.
 	chasm.MSPointer
+
+	CompletionSource chasm.Field[CompletionSource]
 }
 
 func NewCallback(
@@ -103,8 +106,8 @@ func (c *Callback) loadInvocationArgs(
 }
 
 type saveResultInput struct {
-	result invocationResult
-	config *Config
+	result      invocationResult
+	retryPolicy backoff.RetryPolicy
 }
 
 func (c *Callback) saveResult(
@@ -119,7 +122,7 @@ func (c *Callback) saveResult(
 		err := TransitionAttemptFailed.Apply(ctx, c, EventAttemptFailed{
 			Time:        ctx.Now(c),
 			Err:         r.err,
-			RetryPolicy: input.config.RetryPolicy(),
+			RetryPolicy: input.retryPolicy,
 		})
 		return nil, err
 	case invocationResultFail:
