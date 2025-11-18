@@ -115,19 +115,26 @@ func FromPersistentStateWithResolver(
 }
 
 func (ns *Namespace) Clone(mutations ...Mutation) *Namespace {
-	detail := &persistencespb.NamespaceDetail{
-		Info:                        common.CloneProto(ns.info),
-		Config:                      common.CloneProto(ns.config),
-		ReplicationConfig:           common.CloneProto(ns.replicationResolver.GetReplicationConfig()),
-		ConfigVersion:               ns.configVersion,
-		FailoverNotificationVersion: ns.replicationResolver.FailoverNotificationVersion(),
-		FailoverVersion:             ns.replicationResolver.FailoverVersion(),
+	// Clone the resolver to get a deep copy of replication state
+	clonedResolver := ns.replicationResolver.Clone()
+
+	cloned := &Namespace{
+		info:          common.CloneProto(ns.info),
+		config:        common.CloneProto(ns.config),
+		configVersion: ns.configVersion,
+		customSearchAttributesMapper: CustomSearchAttributesMapper{
+			fieldToAlias: ns.customSearchAttributesMapper.fieldToAlias,
+			aliasToField: ns.customSearchAttributesMapper.aliasToField,
+		},
+		notificationVersion: ns.notificationVersion,
+		replicationResolver: clonedResolver,
 	}
-	defaultMutations := []Mutation{
-		WithGlobalFlag(ns.replicationResolver.IsGlobalNamespace()),
-		WithNotificationVersion(ns.notificationVersion),
+
+	for _, m := range mutations {
+		m.apply(cloned)
 	}
-	return FromPersistentState(detail, append(defaultMutations, mutations...)...)
+
+	return cloned
 }
 
 // VisibilityArchivalState observes the visibility archive configuration (state

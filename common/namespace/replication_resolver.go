@@ -13,12 +13,14 @@ type ReplicationResolver interface {
 	IsGlobalNamespace() bool
 	FailoverVersion() int64
 	FailoverNotificationVersion() int64
-	// GetReplicationConfig returns the replication config for cloning purposes
-	GetReplicationConfig() *persistencespb.NamespaceReplicationConfig
 
 	// Mutation methods for modifying resolver state
 	SetGlobalFlag(isGlobal bool)
+	SetActiveCluster(clusterName string)
 	PretendLocalNamespace(localClusterName string)
+
+	// Clone returns a deep copy of the resolver
+	Clone() ReplicationResolver
 }
 
 type ReplicationResolverFactory func(*persistencespb.NamespaceDetail) ReplicationResolver
@@ -86,12 +88,14 @@ func (r *defaultReplicationResolver) FailoverNotificationVersion() int64 {
 	return r.failoverNotificationVersion
 }
 
-func (r *defaultReplicationResolver) GetReplicationConfig() *persistencespb.NamespaceReplicationConfig {
-	return r.replicationConfig
-}
-
 func (r *defaultReplicationResolver) SetGlobalFlag(isGlobal bool) {
 	r.isGlobalNamespace = isGlobal
+}
+
+func (r *defaultReplicationResolver) SetActiveCluster(clusterName string) {
+	if r.replicationConfig != nil {
+		r.replicationConfig.ActiveClusterName = clusterName
+	}
 }
 
 func (r *defaultReplicationResolver) PretendLocalNamespace(localClusterName string) {
@@ -101,4 +105,25 @@ func (r *defaultReplicationResolver) PretendLocalNamespace(localClusterName stri
 		Clusters:          []string{localClusterName},
 	}
 	r.failoverVersion = 0
+}
+
+func (r *defaultReplicationResolver) Clone() ReplicationResolver {
+	var clonedConfig *persistencespb.NamespaceReplicationConfig
+	if r.replicationConfig != nil {
+		clonedConfig = &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: r.replicationConfig.ActiveClusterName,
+			State:             r.replicationConfig.State,
+		}
+		// Deep copy the clusters slice
+		if r.replicationConfig.Clusters != nil {
+			clonedConfig.Clusters = make([]string, len(r.replicationConfig.Clusters))
+			copy(clonedConfig.Clusters, r.replicationConfig.Clusters)
+		}
+	}
+	return &defaultReplicationResolver{
+		replicationConfig:           clonedConfig,
+		isGlobalNamespace:           r.isGlobalNamespace,
+		failoverVersion:             r.failoverVersion,
+		failoverNotificationVersion: r.failoverNotificationVersion,
+	}
 }

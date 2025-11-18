@@ -16,11 +16,7 @@ func (f mutationFunc) apply(ns *Namespace) {
 func WithActiveCluster(name string) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			// Get the current config and update it
-			config := ns.replicationResolver.GetReplicationConfig()
-			if config != nil {
-				config.ActiveClusterName = name
-			}
+			ns.replicationResolver.SetActiveCluster(name)
 		})
 }
 

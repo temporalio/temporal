@@ -389,20 +389,42 @@ func TestDefaultReplicationResolver_FailoverNotificationVersion(t *testing.T) {
 	}
 }
 
-func TestDefaultReplicationResolver_GetReplicationConfig(t *testing.T) {
+func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	factory := namespace.NewDefaultReplicationResolverFactory()
 
-	expectedConfig := &persistencespb.NamespaceReplicationConfig{
+	originalConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: "cluster-primary",
 		Clusters:          []string{"cluster-primary", "cluster-secondary"},
 		State:             enumspb.REPLICATION_STATE_NORMAL,
 	}
 
 	detail := &persistencespb.NamespaceDetail{
-		ReplicationConfig: expectedConfig,
+		ReplicationConfig:           originalConfig,
+		FailoverVersion:             123,
+		FailoverNotificationVersion: 456,
 	}
 	resolver := factory(detail)
 
-	got := resolver.GetReplicationConfig()
-	assert.Equal(t, expectedConfig, got)
+	// Clone the resolver
+	cloned := resolver.Clone()
+
+	// Verify the cloned resolver has the same values
+	assert.Equal(t, resolver.ActiveClusterName(""), cloned.ActiveClusterName(""))
+	assert.Equal(t, resolver.ClusterNames(""), cloned.ClusterNames(""))
+	assert.Equal(t, resolver.IsGlobalNamespace(), cloned.IsGlobalNamespace())
+	assert.Equal(t, resolver.FailoverVersion(), cloned.FailoverVersion())
+	assert.Equal(t, resolver.FailoverNotificationVersion(), cloned.FailoverNotificationVersion())
+	assert.Equal(t, resolver.NamespaceReplicationState(), cloned.NamespaceReplicationState())
+
+	// Verify that modifying the cloned resolver doesn't affect the original
+	cloned.SetActiveCluster("cluster-tertiary")
+	assert.Equal(t, "cluster-primary", resolver.ActiveClusterName(""))
+	assert.Equal(t, "cluster-tertiary", cloned.ActiveClusterName(""))
+
+	// Verify deep copy of clusters slice
+	clonedClusters := cloned.ClusterNames("")
+	if len(clonedClusters) > 0 {
+		clonedClusters[0] = "modified"
+		assert.Equal(t, "cluster-primary", cloned.ClusterNames("")[0], "Modifying returned slice should not affect resolver")
+	}
 }
