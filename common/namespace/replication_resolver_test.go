@@ -34,7 +34,7 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 	tests := []struct {
 		name              string
 		replicationConfig *persistencespb.NamespaceReplicationConfig
-		entityId          string
+		entityID          string
 		want              string
 	}{
 		{
@@ -43,7 +43,7 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-a", "cluster-b"},
 			},
-			entityId: "",
+			entityID: "",
 			want:     "cluster-a",
 		},
 		{
@@ -52,13 +52,13 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 				ActiveClusterName: "cluster-b",
 				Clusters:          []string{"cluster-a", "cluster-b"},
 			},
-			entityId: "workflow-123",
+			entityID: "workflow-123",
 			want:     "cluster-b",
 		},
 		{
 			name:              "returns empty string when replication config is nil",
 			replicationConfig: nil,
-			entityId:          "",
+			entityID:          "",
 			want:              "",
 		},
 	}
@@ -71,7 +71,7 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.ActiveClusterName(tt.entityId)
+			got := resolver.ActiveClusterName(tt.entityID)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -81,7 +81,7 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 	tests := []struct {
 		name              string
 		replicationConfig *persistencespb.NamespaceReplicationConfig
-		entityId          string
+		entityID          string
 		want              []string
 	}{
 		{
@@ -90,7 +90,7 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-a", "cluster-b", "cluster-c"},
 			},
-			entityId: "",
+			entityID: "",
 			want:     []string{"cluster-a", "cluster-b", "cluster-c"},
 		},
 		{
@@ -99,13 +99,13 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-1", "cluster-2"},
 			},
-			entityId: "workflow-456",
+			entityID: "workflow-456",
 			want:     []string{"cluster-1", "cluster-2"},
 		},
 		{
 			name:              "returns nil when replication config is nil",
 			replicationConfig: nil,
-			entityId:          "",
+			entityID:          "",
 			want:              nil,
 		},
 		{
@@ -114,7 +114,7 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{},
 			},
-			entityId: "",
+			entityID: "",
 			want:     []string{},
 		},
 	}
@@ -127,14 +127,14 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.ClusterNames(tt.entityId)
+			got := resolver.ClusterNames(tt.entityID)
 			assert.Equal(t, tt.want, got)
 
 			// Verify immutability - modifying returned slice shouldn't affect subsequent calls
-			if got != nil && len(got) > 0 {
+			if len(got) > 0 {
 				got[0] = "modified"
-				got2 := resolver.ClusterNames(tt.entityId)
-				if tt.want != nil && len(tt.want) > 0 {
+				got2 := resolver.ClusterNames(tt.entityID)
+				if len(tt.want) > 0 {
 					assert.Equal(t, tt.want[0], got2[0], "ClusterNames should return a copy to preserve immutability")
 				}
 			}
@@ -146,7 +146,7 @@ func TestDefaultReplicationResolver_WorkflowReplicationState(t *testing.T) {
 	tests := []struct {
 		name              string
 		replicationConfig *persistencespb.NamespaceReplicationConfig
-		entityId          string
+		entityID          string
 		want              enumspb.ReplicationState
 	}{
 		{
@@ -156,7 +156,7 @@ func TestDefaultReplicationResolver_WorkflowReplicationState(t *testing.T) {
 				Clusters:          []string{"cluster-a", "cluster-b"},
 				State:             enumspb.REPLICATION_STATE_NORMAL,
 			},
-			entityId: "",
+			entityID: "",
 			want:     enumspb.REPLICATION_STATE_NORMAL,
 		},
 		{
@@ -166,13 +166,13 @@ func TestDefaultReplicationResolver_WorkflowReplicationState(t *testing.T) {
 				Clusters:          []string{"cluster-a", "cluster-b"},
 				State:             enumspb.REPLICATION_STATE_HANDOVER,
 			},
-			entityId: "workflow-789",
+			entityID: "workflow-789",
 			want:     enumspb.REPLICATION_STATE_HANDOVER,
 		},
 		{
 			name:              "returns unspecified when replication config is nil",
 			replicationConfig: nil,
-			entityId:          "",
+			entityID:          "",
 			want:              enumspb.REPLICATION_STATE_UNSPECIFIED,
 		},
 	}
@@ -185,7 +185,7 @@ func TestDefaultReplicationResolver_WorkflowReplicationState(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.WorkflowReplicationState(tt.entityId)
+			got := resolver.WorkflowReplicationState(tt.entityID)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -269,11 +269,11 @@ func TestDefaultReplicationResolver_DifferentEntityIds(t *testing.T) {
 	}
 	resolver := factory(detail)
 
-	entityIds := []string{"", "workflow-1", "workflow-2", "activity-1", "some-other-entity"}
-	for _, entityId := range entityIds {
-		assert.Equal(t, "cluster-x", resolver.ActiveClusterName(entityId))
-		assert.Equal(t, []string{"cluster-x", "cluster-y"}, resolver.ClusterNames(entityId))
-		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.WorkflowReplicationState(entityId))
+	entityIDs := []string{"", "workflow-1", "workflow-2", "activity-1", "some-other-entity"}
+	for _, entityID := range entityIDs {
+		assert.Equal(t, "cluster-x", resolver.ActiveClusterName(entityID))
+		assert.Equal(t, []string{"cluster-x", "cluster-y"}, resolver.ClusterNames(entityID))
+		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.WorkflowReplicationState(entityID))
 	}
 }
 
@@ -317,7 +317,7 @@ func TestDefaultReplicationResolver_IsGlobalNamespace(t *testing.T) {
 			// The isGlobalNamespace is false by default in the factory
 			// This tests the default behavior - to test mutations, we'd need to test through Namespace
 			// For this test, we verify it returns false by default (as set in factory)
-			assert.Equal(t, false, resolver.IsGlobalNamespace())
+			assert.False(t, resolver.IsGlobalNamespace())
 		})
 	}
 }

@@ -62,7 +62,7 @@ type (
 const (
 	EmptyName     Name = ""
 	EmptyID       ID   = ""
-	EmptyEntityId      = ""
+	EmptyEntityID      = ""
 
 	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
 	// applicable to local namespace & global namespace with one cluster
@@ -192,13 +192,13 @@ func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
 func (ns *Namespace) ActiveClusterName() string {
-	return ns.replicationResolver.ActiveClusterName(EmptyEntityId)
+	return ns.replicationResolver.ActiveClusterName(EmptyEntityID)
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
 // replicated.
 func (ns *Namespace) ClusterNames() []string {
-	return ns.replicationResolver.ClusterNames(EmptyEntityId)
+	return ns.replicationResolver.ClusterNames(EmptyEntityID)
 }
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.
