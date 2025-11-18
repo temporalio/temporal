@@ -3,6 +3,7 @@ package nexusrpc
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -176,9 +177,16 @@ func (h *httpHandler) startOperation(service, operation string, writer http.Resp
 		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid %q header", headerLink))
 		return
 	}
+	callbackToken := ""
+	if encodedToken := request.Header.Get("Nexus-Callback-Token"); encodedToken != "" {
+		if decodedBytes, err := base64.StdEncoding.DecodeString(encodedToken); err == nil {
+			callbackToken = string(decodedBytes)
+		}
+	}
 	options := nexus.StartOperationOptions{
 		RequestID:      request.Header.Get(headerRequestID),
 		CallbackURL:    request.URL.Query().Get(queryCallbackURL),
+		CallbackToken:  callbackToken,
 		CallbackHeader: prefixStrippedHTTPHeaderToNexusHeader(request.Header, "nexus-callback-"),
 		Header:         httpHeaderToNexusHeader(request.Header, "content-", "nexus-callback-"),
 		Links:          links,
