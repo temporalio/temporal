@@ -342,7 +342,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 
 	s.tqMgr.Start()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	s.tqMgr.WaitUntilInitialized(ctx)
+	err := s.tqMgr.WaitUntilInitialized(ctx)
+	s.NoError(err)
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 	cancel()
 
@@ -350,7 +351,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	// otherwise the task persist process is async and hard to test
 	s.tqMgr.tqCtxCancel()
 
-	err := s.tqMgr.SpoolTask(&persistencespb.TaskInfo{
+	err = s.tqMgr.SpoolTask(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	})
 	s.Equal(errShutdown, err) // task writer was stopped above
