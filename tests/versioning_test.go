@@ -64,6 +64,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit.Key():                  3,
+		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key():  true,
 
 		dynamicconfig.AssignmentRuleLimitPerQueue.Key():              10,
 		dynamicconfig.RedirectRuleLimitPerQueue.Key():                10,

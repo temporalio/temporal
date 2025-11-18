@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -163,12 +165,14 @@ const (
 type (
 	MutableStateTaskStore struct {
 		Session gocql.Session
+		Logger  log.Logger
 	}
 )
 
-func NewMutableStateTaskStore(session gocql.Session) *MutableStateTaskStore {
+func NewMutableStateTaskStore(session gocql.Session, logger log.Logger) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
 		Session: session,
+		Logger:  logger,
 	}
 }
 
@@ -210,6 +214,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 	if !applied {
 		if previousRangeID, ok := previous["range_id"].(int64); ok && previousRangeID != request.RangeID {
 			// CreateWorkflowExecution failed because rangeID was modified
+			softassert.Sometimes(d.Logger).Debug("ShardOwnershipLost: Failed to add tasks")
 			return &p.ShardOwnershipLostError{
 				ShardID: request.ShardID,
 				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),

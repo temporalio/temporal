@@ -940,6 +940,9 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
 		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
+		if m.ms.config.EnableWorkflowTaskStampIncrementOnFailure() {
+			m.ms.executionInfo.WorkflowTaskStamp += 1
+		}
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)

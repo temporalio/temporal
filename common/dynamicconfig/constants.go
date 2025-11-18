@@ -102,6 +102,12 @@ var (
 		`SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
 values in system search attributes.`,
 	)
+	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
+		"system.visibilityEnableUnifiedQueryConverter",
+		false,
+		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
+query.`,
+	)
 
 	HistoryArchivalState = NewGlobalStringSetting(
 		"system.historyArchivalState",
@@ -187,6 +193,11 @@ config as the other services.`,
 		"system.enableActivityEagerExecution",
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
+		"system.enableActivityRetryStampIncrement",
+		false,
+		`EnableActivityRetryStampIncrement indicates if activity retry stamp increment is enabled`,
 	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
@@ -876,6 +887,11 @@ and deployment interaction in matching and history.`,
 including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
 	)
+	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
+		"system.useRevisionNumberForWorkerVersioning",
+		false,
+		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		true,
@@ -1275,6 +1291,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.TaskQueueInfoByBuildIdTTL",
 		5*time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
+	)
+	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
+		"matching.deploymentWorkflowVersion",
+		0,
+		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
@@ -2245,10 +2266,20 @@ the number of children greater than or equal to this threshold`,
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
 	)
+	EnableWorkflowTaskStampIncrementOnFailure = NewGlobalBoolSetting(
+		"history.enableWorkflowTaskStampIncrementOnFailure",
+		false,
+		`EnableWorkflowTaskStampIncrementOnFailure controls whether the workflow task stamp is incremented when a workflow task fails and is rescheduled`,
+	)
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
 		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
 		10,
 		`If speculative workflow task shipped more than DiscardSpeculativeWorkflowTaskMaximumEventsCount events, it can't be discarded`,
+	)
+	EnableDropRepeatedWorkflowTaskFailures = NewNamespaceBoolSetting(
+		"history.enableDropRepeatedWorkflowTaskFailures",
+		false,
+		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
 	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
@@ -2595,6 +2626,12 @@ that task will be sent to DLQ.`,
 		"history.enableChasm",
 		false,
 		"Use real chasm tree implementation instead of the noop one",
+	)
+
+	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
+		"history.chasmMaxInMemoryPureTasks",
+		32,
+		`ChasmMaxInMemoryPureTasks is the maximum number of physical pure tasks that can be held in memory for best effort task deletion.`,
 	)
 
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(

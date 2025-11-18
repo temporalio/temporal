@@ -12,13 +12,16 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/predicates"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
 
@@ -27,7 +30,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller *gomock.Controller
+		controller            *gomock.Controller
+		mockClusterMetadata   *cluster.MockMetadata
+		mockNamespaceRegistry *namespace.MockRegistry
 
 		executableFactory ExecutableFactory
 		monitor           *monitorImpl
@@ -47,6 +52,10 @@ func (s *sliceSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
 	s.executableFactory = ExecutableFactoryFn(func(readerID int64, t tasks.Task) Executable {
 		return NewExecutable(
@@ -57,8 +66,9 @@ func (s *sliceSuite) SetupTest() {
 			nil,
 			NewNoopPriorityAssigner(),
 			clock.NewRealTimeSource(),
-			nil,
-			nil,
+			s.mockNamespaceRegistry,
+			s.mockClusterMetadata,
+			testTaskTagValueProvider,
 			nil,
 			metrics.NoopMetricsHandler,
 			telemetry.NoopTracer,
@@ -446,6 +456,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 				mockTask := tasks.NewMockTask(s.controller)
 				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
+				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 
 				namespaceID := namespaceIDs[rand.Intn(len(namespaceIDs))]
 				if i >= numTasks/2 {
@@ -501,6 +512,7 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 				mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
 			}
 
@@ -544,6 +556,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 				mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
 			}
 

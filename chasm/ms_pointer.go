@@ -1,8 +1,6 @@
 package chasm
 
 import (
-	"context"
-
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
@@ -10,10 +8,18 @@ import (
 // state). It is used to expose methods needed from the mutable state without polluting the chasm.Context interface.
 // When deserializing components with fields of this type, the CHASM engine will set the value to its NodeBackend.
 // This should only be used by the Workflow component.
-type MSPointer interface {
-	// TODO: Add methods needed from MutableState / NodeBackend here.
-	GetNexusCompletion(
-		ctx context.Context,
-		requestID string,
-	) (nexusrpc.OperationCompletion, error)
+type MSPointer struct {
+	backend NodeBackend
+}
+
+// NewMSPointer creates a new MSPointer instance.
+func NewMSPointer(backend NodeBackend) MSPointer {
+	return MSPointer{
+		backend: backend,
+	}
+}
+
+// GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
+func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.OperationCompletion, error) {
+	return m.backend.GetNexusCompletion(ctx.getContext(), requestID)
 }

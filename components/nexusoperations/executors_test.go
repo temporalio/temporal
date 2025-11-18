@@ -333,11 +333,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "operation-timeout",
 			onStartOperation:      nil, // This should not be called if the operation has timed out.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
-				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
 				require.Equal(t, 1, len(events))
-				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
-				require.NotNil(t, failure.GetApplicationFailureInfo())
-				require.Equal(t, "remaining operation timeout is less than required minimum", failure.Message)
+				failure := events[0].GetNexusOperationTimedOutEventAttributes().Failure.Cause
+				require.NotNil(t, failure.GetTimeoutFailureInfo())
+				require.Equal(t, "operation timed out", failure.Message)
 			},
 		},
 		{

@@ -11,6 +11,11 @@ on:
         required: false
         default: '7'
         type: string
+      max_links:
+        description: 'Maximum number of failure links to show per test'
+        required: false
+        default: '3'
+        type: string
 
 permissions:
   contents: read
@@ -64,7 +69,7 @@ jobs:
           mkdir -p tools/flakes/out
           
           tringa --json --since-days "$DAYS_PARAM" repo sql \
-            'select classname, name, count(*) as failure_count, max(artifact) as artifact from test where passed = false and skipped = false group by classname, name order by failure_count desc' \
+            'select classname, name, artifact from test where passed = false and skipped = false order by classname, name, artifact desc' \
             --branch main \
             --workflow-id 80591745 \
             https://github.com/temporalio/temporal > tools/flakes/out/out.json
@@ -81,6 +86,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
+          MAX_LINKS_PARAM: ${{ github.event.inputs.max_links || '3' }}
         run: |
           set -x
           cd tools/flakes && uv run main.py \
@@ -89,7 +95,8 @@ jobs:
             --slack-webhook "$SLACK_WEBHOOK" \
             --run-id "$RUN_ID" \
             --ref-name "$REF_NAME" \
-            --sha "$SHA"
+            --sha "$SHA" \
+            --max-links "$MAX_LINKS_PARAM"
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4

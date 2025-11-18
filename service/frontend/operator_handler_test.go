@@ -184,10 +184,15 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return(tc.storeNames).AnyTimes()
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(tc.indexName).AnyTimes()
 
+			saTypeMap := searchattribute.TestNameTypeMap()
+			if len(tc.storeNames) > 0 && tc.storeNames[0] == elasticsearch.PersistenceName {
+				saTypeMap = searchattribute.TestEsNameTypeMap()
+			}
+
 			if tc.getSearchAttributesCalled {
 				s.mockResource.SearchAttributesManager.EXPECT().
 					GetSearchAttributes(tc.indexName, true).
-					Return(searchattribute.TestNameTypeMap, tc.getSearchAttributesErr)
+					Return(saTypeMap, tc.getSearchAttributesErr)
 			}
 
 			if tc.addInternalSuccess {
@@ -287,12 +292,12 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName1, true).
-				Return(searchattribute.TestNameTypeMap, nil).
+				Return(searchattribute.TestNameTypeMap(), nil).
 				AnyTimes()
 
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName2, true).
-				Return(searchattribute.TestNameTypeMap, nil).
+				Return(searchattribute.TestNameTypeMap(), nil).
 				AnyTimes()
 
 			if tc.addVisManager1 {
@@ -433,9 +438,14 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
+			saTypeMap := searchattribute.TestNameTypeMap()
+			if tc.storeName == elasticsearch.PersistenceName {
+				saTypeMap = searchattribute.TestEsNameTypeMap()
+			}
+
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(tc.indexName, true).
-				Return(searchattribute.TestNameTypeMap, tc.getSearchAttributesErr)
+				Return(saTypeMap, tc.getSearchAttributesErr)
 			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{tc.storeName})
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(tc.indexName)
 
@@ -446,7 +456,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 				).Return(tc.addEsSchemaErr)
 
 				if tc.addEsSchemaErr == nil {
-					expectedNewCustomSearchAttributes := util.CloneMapNonNil(searchattribute.TestNameTypeMap.Custom())
+					expectedNewCustomSearchAttributes := util.CloneMapNonNil(saTypeMap.Custom())
 					maps.Copy(expectedNewCustomSearchAttributes, tc.request.SearchAttributes)
 					s.mockResource.SearchAttributesManager.EXPECT().
 						SaveSearchAttributes(gomock.Any(), tc.indexName, expectedNewCustomSearchAttributes).
@@ -574,10 +584,11 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesElasticsearch() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
+			saTypeMap := searchattribute.TestEsNameTypeMap()
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName, true).
-				Return(searchattribute.TestNameTypeMap, nil)
+				Return(saTypeMap, nil)
 
 			if tc.passValidation {
 				s.mockResource.VisibilityManager.EXPECT().AddSearchAttributes(
@@ -586,7 +597,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesElasticsearch() {
 				).Return(tc.addEsSchemaErr)
 
 				if tc.addEsSchemaErr == nil {
-					expectedNewCustomSearchAttributes := util.CloneMapNonNil(searchattribute.TestNameTypeMap.Custom())
+					expectedNewCustomSearchAttributes := util.CloneMapNonNil(saTypeMap.Custom())
 					maps.Copy(expectedNewCustomSearchAttributes, tc.customAttributesToAdd)
 					s.mockResource.SearchAttributesManager.EXPECT().
 						SaveSearchAttributes(gomock.Any(), testIndexName, expectedNewCustomSearchAttributes).
@@ -697,9 +708,10 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 			request: &operatorservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					// there is already one keyword search attribute defined in TestNameTypeMap
-					"CustomAttr1": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-					"CustomAttr2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-					"CustomAttr3": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					"CustomAttr1": enumspb.INDEXED_VALUE_TYPE_INT,
+					"CustomAttr2": enumspb.INDEXED_VALUE_TYPE_INT,
+					"CustomAttr3": enumspb.INDEXED_VALUE_TYPE_INT,
+					"CustomAttr4": enumspb.INDEXED_VALUE_TYPE_INT,
 				},
 				Namespace: testNamespace,
 			},
@@ -707,7 +719,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 			expectedErrMsg: fmt.Sprintf(
 				errTooManySearchAttributesMessage,
 				3,
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				enumspb.INDEXED_VALUE_TYPE_INT,
 			),
 		},
 		{
@@ -745,10 +757,11 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
+			saTypeMap := searchattribute.TestNameTypeMap()
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName, true).
-				Return(searchattribute.TestNameTypeMap, nil)
+				Return(saTypeMap, nil)
 
 			s.mockResource.ClientFactory.EXPECT().
 				NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
@@ -806,7 +819,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_Elasticsearch() {
 	// Configure Elasticsearch: add advanced visibility store config with index name.
 	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
-	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestEsNameTypeMap(), nil)
 	resp, err := handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -839,7 +852,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 
 	s.mockResource.SearchAttributesManager.EXPECT().
 		GetSearchAttributes(testIndexName, true).
-		Return(searchattribute.TestNameTypeMap, nil)
+		Return(searchattribute.TestNameTypeMap(), nil)
 	resp, err := handler.ListSearchAttributes(
 		ctx,
 		&operatorservice.ListSearchAttributesRequest{Namespace: testNamespace},
@@ -895,14 +908,15 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_Elasticsearch() {
 
 	for _, testCase := range testCases {
 		s.Run(testCase.Name, func() {
+			saTypeMap := searchattribute.TestEsNameTypeMap()
 			s.mockResource.VisibilityManager.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName, true).
-				Return(searchattribute.TestNameTypeMap, nil)
+				Return(saTypeMap, nil)
 
 			if testCase.SaveCalled {
-				expectedNewCustomSA := maps.Clone(searchattribute.TestNameTypeMap.Custom())
+				expectedNewCustomSA := maps.Clone(saTypeMap.Custom())
 				for _, sa := range testCase.Request.SearchAttributes {
 					delete(expectedNewCustomSA, sa)
 				}
@@ -969,7 +983,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_SQL() {
 			s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName)
 			s.mockResource.SearchAttributesManager.EXPECT().
 				GetSearchAttributes(testIndexName, true).
-				Return(searchattribute.TestNameTypeMap, nil)
+				Return(searchattribute.TestNameTypeMap(), nil)
 			s.mockResource.ClientFactory.EXPECT().
 				NewLocalFrontendClientWithTimeout(gomock.Any(), gomock.Any()).
 				Return(nil, s.mockResource.GetFrontendClient(), nil)
