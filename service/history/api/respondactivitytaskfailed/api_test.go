@@ -305,6 +305,7 @@ func (s *workflowSuite) Test_NoMoreRetriesAndMutableStateHasNoPendingTasks_WillR
 		request.FailedRequest.GetIdentity(),
 		request.FailedRequest.WorkerVersion,
 	).Return(nil, nil)
+	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.currentMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 	s.workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
