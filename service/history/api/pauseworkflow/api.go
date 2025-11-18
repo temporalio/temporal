@@ -5,6 +5,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -30,8 +31,8 @@ func Invoke(
 		return nil, serviceerror.NewInvalidArgument("pause request is nil.")
 	}
 
-	if !shard.GetConfig().WorkflowPauseEnabled(namespaceID.String()) {
-		return nil, serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", namespaceEntry.Name().String())
+	if err := validatePauseRequest(pauseRequest, shard, namespaceEntry); err != nil {
+		return nil, err
 	}
 
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -56,11 +57,15 @@ func Invoke(
 
 			// Check if workflow is already paused
 			if mutableState.GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
-				// Already paused, nothing to do
-				return &api.UpdateWorkflowAction{
-					Noop:               true,
-					CreateWorkflowTask: false,
-				}, nil
+				if mutableState.GetExecutionInfo().PauseInfo.RequestId == pauseRequest.GetRequestId() {
+					// Already paused with the same request id, nothing to do
+					return &api.UpdateWorkflowAction{
+						Noop:               true,
+						CreateWorkflowTask: false,
+					}, nil
+				}
+				releaseFn(nil)
+				return nil, serviceerror.NewFailedPrecondition("workflow is already paused.")
 			}
 
 			// Add the workflow execution paused event
@@ -88,4 +93,23 @@ func Invoke(
 
 	// Return response
 	return &historyservice.PauseWorkflowExecutionResponse{}, nil
+}
+
+func validatePauseRequest(req *workflowservice.PauseWorkflowExecutionRequest, shard historyi.ShardContext, namespaceEntry *namespace.Namespace) error {
+	if !shard.GetConfig().WorkflowPauseEnabled(namespaceEntry.ID().String()) {
+		return serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", namespaceEntry.Name().String())
+	}
+
+	// verify size limits of reason, request id and identity.
+	if len(req.GetReason()) > shard.GetConfig().MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgument("reason is too long.")
+	}
+	if len(req.GetRequestId()) > shard.GetConfig().MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgument("request id is too long.")
+	}
+	if len(req.GetIdentity()) > shard.GetConfig().MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgument("identity is too long.")
+	}
+
+	return nil
 }
