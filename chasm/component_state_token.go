@@ -8,9 +8,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// HasStateAdvanced returns a ref for the component if component state has advanced beyond the state
+// ComponentStateChanged returns a ref for the component if component state has advanced beyond the state
 // encoded in stateToken.
-func HasStateAdvanced(c Component, ctx Context, stateToken []byte) ([]byte, bool, error) {
+func ComponentStateChanged(c Component, ctx Context, stateToken []byte) ([]byte, bool, error) {
 	refBytes, err := ctx.Ref(c)
 	if err != nil {
 		return nil, false, err
