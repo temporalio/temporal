@@ -3,6 +3,7 @@
 package queues
 
 import (
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -145,11 +146,14 @@ func (r *reschedulerImpl) Reschedule(
 
 	now := r.timeSource.Now()
 	updatedRescheduleTime := false
-	for key, pq := range r.pqMap {
+	
+	// Process keys in decreasing order of priority
+	for _, key := range r.getSortedKeysByPriority() {
 		if key.NamespaceID != namespaceID {
 			continue
 		}
-
+		
+		pq := r.pqMap[key]
 		updatedRescheduleTime = true
 		// set reschedule time for all tasks in this pq to be now
 		items := make([]rescheduledExecuable, 0, pq.Len())
@@ -212,7 +216,10 @@ func (r *reschedulerImpl) reschedule() {
 
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
-	for _, pq := range r.pqMap {
+	
+	// Process keys in decreasing order of priority
+	for _, key := range r.getSortedKeysByPriority() {
+		pq := r.pqMap[key]
 		for !pq.IsEmpty() {
 			rescheduled := pq.Peek()
 
@@ -245,7 +252,9 @@ func (r *reschedulerImpl) cleanupPQ() {
 	r.Lock()
 	defer r.Unlock()
 
-	for key, pq := range r.pqMap {
+	// Process keys in decreasing order of priority
+	for _, key := range r.getSortedKeysByPriority() {
+		pq := r.pqMap[key]
 		if pq.IsEmpty() {
 			delete(r.pqMap, key)
 		}
@@ -256,7 +265,9 @@ func (r *reschedulerImpl) drain() {
 	r.Lock()
 	defer r.Unlock()
 
-	for key, pq := range r.pqMap {
+	// Process keys in decreasing order of priority
+	for _, key := range r.getSortedKeysByPriority() {
+		pq := r.pqMap[key]
 		for !pq.IsEmpty() {
 			pq.Remove()
 		}
@@ -297,4 +308,23 @@ func (r *reschedulerImpl) rescheduledExecuableCompareLess(
 	that rescheduledExecuable,
 ) bool {
 	return this.rescheduleTime.Before(that.rescheduleTime)
+}
+
+// getSortedKeysByPriority returns TaskChannelKeys sorted by decreasing priority 
+// (i.e., ascending order of Priority numeric values since lower numbers = higher priority)
+func (r *reschedulerImpl) getSortedKeysByPriority() []TaskChannelKey {
+	keys := make([]TaskChannelKey, 0, len(r.pqMap))
+	for key := range r.pqMap {
+		keys = append(keys, key)
+	}
+	
+	// Sort by Priority (ascending) then by NamespaceID (for deterministic ordering)
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].Priority == keys[j].Priority {
+			return keys[i].NamespaceID < keys[j].NamespaceID
+		}
+		return keys[i].Priority < keys[j].Priority // Lower priority number = higher priority
+	})
+	
+	return keys
 }
