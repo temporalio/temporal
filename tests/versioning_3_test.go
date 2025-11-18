@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -4106,4 +4107,57 @@ func (s *Versioning3Suite) TestActivityTQLags_IndependentActivityDispatchesToIts
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-// func (s *Versioning3Suite) TestRampChangeDoesNotTriggerTransition_WithRevisionNumberMechanics() {}
+// TestEmptyTaskQueueNameFromStickyPoll demonstrates the bug where a sticky task queue
+// with an empty normalName (from maybe an old SDK) causes an empty task queue name to be
+// registered in the worker deployment version.
+func (s *Versioning3Suite) TestEmptyTaskQueueNameFromStickyPoll() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// Simulate an old SDK polling a sticky task queue without providing normalName.
+	// This is allowed by the validator for backward compatibility.
+	stickyTaskQueueWithoutNormalName := &taskqueuepb.TaskQueue{
+		Name:       "sticky-" + uuid.New(),
+		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+		NormalName: "", // Empty normalName - simulates old SDK behavior
+	}
+
+	// Poll from the sticky queue with deployment options
+	// This should trigger registration in the deployment version
+	_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         stickyTaskQueueWithoutNormalName,
+		Identity:          "test-worker",
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+
+	// Verify that a task queue with empty name was registered
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		if !a.NoError(err) {
+			return
+		}
+
+		// Check if any task queue has an empty name
+		taskQueueInfos := resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()
+		foundEmptyName := false
+		for _, tqInfo := range taskQueueInfos {
+			if tqInfo.GetName() == "" {
+				foundEmptyName = true
+				break
+			}
+		}
+
+		// This assertion documents the bug: we should NOT find an empty task queue name,
+		// but currently we do because sticky queues with empty normalName are allowed
+		// and their normalName becomes the TaskQueueFamily name.
+		a.True(foundEmptyName, "Expected to find empty task queue name (this is the bug we're demonstrating)")
+	}, 10*time.Second, 500*time.Millisecond)
+}
