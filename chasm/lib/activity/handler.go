@@ -73,7 +73,7 @@ func (h *handler) PollActivityExecution(
 
 	switch waitPolicy.(type) {
 	case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
-		stateToken := req.GetFrontendRequest().
+		token := req.GetFrontendRequest().
 			GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
 			WaitAnyStateChange.GetLongPollToken()
 		response, _, err = chasm.PollComponent(ctx, ref, func(
@@ -81,11 +81,11 @@ func (h *handler) PollActivityExecution(
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
-			_, advanced, err := chasm.ComponentStateChanged(a, ctx, stateToken)
+			_, changed, err := chasm.ExecutionStateChanged(a, ctx, token)
 			if err != nil {
 				return nil, false, err
 			}
-			if advanced {
+			if changed {
 				// TODO(dan): pass ref returned by HasStateAdvanced into this?
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				if err != nil {

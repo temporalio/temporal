@@ -13,9 +13,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
-	chasmactivitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/tests/testcore"
@@ -239,13 +239,13 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 	// Manipulate the token to verify token staleness checks (simulate ErrStaleReference). To do so
 	// we make use of the internal implementation detail that the bytes are a serialized ref.
 	token := firstPollResp.StateChangeLongPollToken
-	var tokenProto chasmactivitypb.ComponentStateToken
-	err = tokenProto.Unmarshal(token)
+	var pRef persistencespb.ChasmComponentRef
+	err = pRef.Unmarshal(token)
 	require.NoError(t, err)
-	if tokenProto.VersionedTransition != nil {
-		tokenProto.VersionedTransition.NamespaceFailoverVersion += 1
+	if pRef.EntityVersionedTransition != nil {
+		pRef.EntityVersionedTransition.NamespaceFailoverVersion += 1
 	}
-	token, err = tokenProto.Marshal()
+	token, err = pRef.Marshal()
 	require.NoError(t, err)
 
 	_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{

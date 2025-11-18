@@ -385,11 +385,7 @@ func (a *Activity) buildPollActivityExecutionResponse(
 	request := req.GetFrontendRequest()
 
 	// TODO(dan): pass ref into this function?
-	ref, err := ctx.Ref(a)
-	if err != nil {
-		return nil, err
-	}
-	token, err := chasm.EncodeComponentStateToken(ref)
+	token, err := ctx.Ref(a)
 	if err != nil {
 		return nil, err
 	}
