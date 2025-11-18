@@ -89,11 +89,8 @@ func FromPersistentStateWithResolver(
 ) *Namespace {
 	// If no resolver provided, create a default one
 	if resolver == nil {
-		// By convention, a namespace with non-zero failover version is a global namespace
-		isGlobal := detail.FailoverVersion != 0
 		resolver = &defaultReplicationResolver{
 			replicationConfig:           detail.ReplicationConfig,
-			isGlobalNamespace:           isGlobal,
 			failoverVersion:             detail.FailoverVersion,
 			failoverNotificationVersion: detail.FailoverNotificationVersion,
 		}
