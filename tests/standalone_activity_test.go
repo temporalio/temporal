@@ -247,6 +247,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
 		pollResp.Info,
 		activityID,
 		startResp.RunId,
+		enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 		enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
 	)
 	require.NotNil(t, pollResp.Input)
@@ -284,6 +285,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 		firstPollResp.Info,
 		activityID,
 		startResp.RunId,
+		enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 		enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
 	)
 
@@ -327,6 +329,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 			activityPollResp.Info,
 			activityID,
 			startResp.RunId,
+			enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			enumspb.PENDING_ACTIVITY_STATE_STARTED,
 		)
 		require.NotNil(t, activityPollResp.Input)
@@ -366,8 +369,111 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 }
 
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion() {
-	t := s.T()
-	t.Skip("TODO(dan): implement test when RecordActivityTaskCompleted is implemented")
+	testCases := []struct {
+		name                   string
+		expectedStatus         enumspb.ActivityExecutionStatus
+		taskCompletionFn       func(context.Context, []byte) error
+		completionValidationFn func(*testing.T, *workflowservice.PollActivityExecutionResponse)
+	}{
+		{
+			name:           "successful completion",
+			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			taskCompletionFn: func(ctx context.Context, taskToken []byte) error {
+				_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: s.Namespace().String(),
+					TaskToken: taskToken,
+					Result:    defaultResult,
+				})
+
+				return err
+			},
+			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
+				require.True(t, proto.Equal(defaultResult, response.GetResult()))
+			},
+		},
+		{
+			name:           "failure completion",
+			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			taskCompletionFn: func(ctx context.Context, taskToken []byte) error {
+				_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+					Namespace: s.Namespace().String(),
+					TaskToken: taskToken,
+					Failure:   defaultFailure,
+				})
+
+				return err
+			},
+			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
+				require.True(t, proto.Equal(defaultFailure, response.GetInfo().GetLastFailure()))
+				require.True(t, proto.Equal(&failurepb.Failure{}, response.GetFailure()))
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t := s.T()
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		t.Cleanup(cancel)
+
+		activityID := s.tv.ActivityID()
+		taskQueue := s.tv.TaskQueue().String()
+
+		startResp, err := s.startActivity(ctx, activityID, taskQueue)
+		require.NoError(t, err)
+
+		activityPollDone := make(chan struct{})
+		var activityPollResp *workflowservice.PollActivityExecutionResponse
+		var activityPollErr error
+		var taskError error
+
+		go func() {
+			defer close(activityPollDone)
+			activityPollResp, activityPollErr = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+				Namespace:      s.Namespace().String(),
+				ActivityId:     activityID,
+				RunId:          startResp.RunId,
+				IncludeInfo:    true,
+				IncludeInput:   true,
+				IncludeOutcome: true,
+				WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitCompletion{
+					WaitCompletion: &workflowservice.PollActivityExecutionRequest_CompletionWaitOptions{},
+				},
+			})
+		}()
+
+		// Worker picks up activity task and completes it
+		go func() {
+			pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+			if err != nil {
+				taskError = err
+				return
+			}
+
+			taskError = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken)
+		}()
+
+		select {
+		case <-activityPollDone:
+			require.NoError(t, activityPollErr)
+			require.NotNil(t, activityPollResp)
+			require.NotNil(t, activityPollResp.Info)
+			s.assertActivityExecutionInfo(
+				t,
+				activityPollResp.Info,
+				activityID,
+				startResp.RunId,
+				tc.expectedStatus,
+				enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
+			)
+
+			require.True(t, proto.Equal(defaultInput, activityPollResp.GetInput()))
+			tc.completionValidationFn(t, activityPollResp)
+		case <-ctx.Done():
+			t.Fatal("PollActivityExecution timed out")
+		}
+
+		require.NoError(t, taskError)
+	}
 }
 
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateChange_Success_UpdateComponent() {
@@ -529,6 +635,7 @@ func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
 	info *activitypb.ActivityExecutionInfo,
 	activityID string,
 	runID string,
+	runStatus enumspb.ActivityExecutionStatus,
 	runState enumspb.PendingActivityState,
 ) {
 	t.Helper()
@@ -536,7 +643,7 @@ func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
 	require.Equal(t, runID, info.RunId)
 	require.NotNil(t, info.ActivityType)
 	require.Equal(t, s.tv.ActivityType(), info.ActivityType)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.Status)
+	require.Equal(t, runStatus, info.Status)
 	require.Equal(t, runState, info.RunState)
 
 	// TODO(dan): This test to be finalized when full API surface area implemented.
