@@ -2945,7 +2945,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	)
 
 	WorkflowPauseEnabled = NewNamespaceBoolSetting(
-		"history.WorkflowPauseEnabled",
+		"frontend.WorkflowPauseEnabled",
 		false,
 		`WorkflowPauseEnabled is a "feature enable" flag. When enabled it allows clients to pause workflows.`,
 	)
