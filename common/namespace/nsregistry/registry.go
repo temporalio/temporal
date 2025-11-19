@@ -351,12 +351,15 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 			return err
 		}
 		for _, namespaceDb := range response.Namespaces {
-			ns := namespace.FromPersistentStateWithResolver(
+			ns, err := namespace.FromPersistentState(
 				namespaceDb.Namespace,
 				r.replicationResolverFactory(namespaceDb.Namespace),
 				namespace.WithGlobalFlag(namespaceDb.IsGlobalNamespace),
 				namespace.WithNotificationVersion(namespaceDb.NotificationVersion),
 			)
+			if err != nil {
+				return err
+			}
 			namespacesDb = append(namespacesDb, ns)
 			namespaceIDsDb[namespace.ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
 		}
@@ -577,12 +580,12 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	if err != nil {
 		return nil, err
 	}
-	return namespace.FromPersistentStateWithResolver(
+	return namespace.FromPersistentState(
 		response.Namespace,
 		r.replicationResolverFactory(response.Namespace),
 		namespace.WithGlobalFlag(response.IsGlobalNamespace),
 		namespace.WithNotificationVersion(response.NotificationVersion),
-	), nil
+	)
 }
 
 // this test should include anything that might affect whether a namespace is active on

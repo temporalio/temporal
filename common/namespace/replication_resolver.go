@@ -6,10 +6,9 @@ import (
 )
 
 type ReplicationResolver interface {
-	ActiveClusterName(entityID string) string
-	ClusterNames(entityID string) []string
-	WorkflowReplicationState(entityID string) enumspb.ReplicationState
-	NamespaceReplicationState() enumspb.ReplicationState
+	ActiveClusterName() string
+	ClusterNames() []string
+	ReplicationState() enumspb.ReplicationState
 	IsGlobalNamespace() bool
 	FailoverVersion() int64
 	FailoverNotificationVersion() int64
@@ -45,14 +44,14 @@ func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
 	}
 }
 
-func (r *defaultReplicationResolver) ActiveClusterName(entityID string) string {
+func (r *defaultReplicationResolver) ActiveClusterName() string {
 	if r.replicationConfig == nil {
 		return ""
 	}
 	return r.replicationConfig.ActiveClusterName
 }
 
-func (r *defaultReplicationResolver) ClusterNames(entityID string) []string {
+func (r *defaultReplicationResolver) ClusterNames() []string {
 	if r.replicationConfig == nil {
 		return nil
 	}
@@ -62,14 +61,7 @@ func (r *defaultReplicationResolver) ClusterNames(entityID string) []string {
 	return out
 }
 
-func (r *defaultReplicationResolver) WorkflowReplicationState(entityID string) enumspb.ReplicationState {
-	if r.replicationConfig == nil {
-		return enumspb.REPLICATION_STATE_UNSPECIFIED
-	}
-	return r.replicationConfig.State
-}
-
-func (r *defaultReplicationResolver) NamespaceReplicationState() enumspb.ReplicationState {
+func (r *defaultReplicationResolver) ReplicationState() enumspb.ReplicationState {
 	if r.replicationConfig == nil {
 		return enumspb.REPLICATION_STATE_UNSPECIFIED
 	}

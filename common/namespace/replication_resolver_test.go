@@ -24,17 +24,15 @@ func TestNewDefaultReplicationResolverFactory(t *testing.T) {
 
 	resolver := factory(detail)
 	require.NotNil(t, resolver)
-	assert.Equal(t, "active-cluster", resolver.ActiveClusterName(""))
-	assert.Equal(t, []string{"cluster1", "cluster2", "cluster3"}, resolver.ClusterNames(""))
-	assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.WorkflowReplicationState(""))
-	assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.NamespaceReplicationState())
+	assert.Equal(t, "active-cluster", resolver.ActiveClusterName())
+	assert.Equal(t, []string{"cluster1", "cluster2", "cluster3"}, resolver.ClusterNames())
+	assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState())
 }
 
 func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 	tests := []struct {
 		name              string
 		replicationConfig *persistencespb.NamespaceReplicationConfig
-		entityID          string
 		want              string
 	}{
 		{
@@ -43,22 +41,19 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-a", "cluster-b"},
 			},
-			entityID: "",
-			want:     "cluster-a",
+			want: "cluster-a",
 		},
 		{
-			name: "returns active cluster name with entity ID",
+			name: "returns active cluster name for cluster-b",
 			replicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: "cluster-b",
 				Clusters:          []string{"cluster-a", "cluster-b"},
 			},
-			entityID: "workflow-123",
-			want:     "cluster-b",
+			want: "cluster-b",
 		},
 		{
 			name:              "returns empty string when replication config is nil",
 			replicationConfig: nil,
-			entityID:          "",
 			want:              "",
 		},
 	}
@@ -71,7 +66,7 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.ActiveClusterName(tt.entityID)
+			got := resolver.ActiveClusterName()
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -81,7 +76,6 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 	tests := []struct {
 		name              string
 		replicationConfig *persistencespb.NamespaceReplicationConfig
-		entityID          string
 		want              []string
 	}{
 		{
@@ -90,22 +84,19 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-a", "cluster-b", "cluster-c"},
 			},
-			entityID: "",
-			want:     []string{"cluster-a", "cluster-b", "cluster-c"},
+			want: []string{"cluster-a", "cluster-b", "cluster-c"},
 		},
 		{
-			name: "returns cluster names with entity ID",
+			name: "returns cluster names for multiple clusters",
 			replicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{"cluster-1", "cluster-2"},
 			},
-			entityID: "workflow-456",
-			want:     []string{"cluster-1", "cluster-2"},
+			want: []string{"cluster-1", "cluster-2"},
 		},
 		{
 			name:              "returns nil when replication config is nil",
 			replicationConfig: nil,
-			entityID:          "",
 			want:              nil,
 		},
 		{
@@ -114,8 +105,7 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 				ActiveClusterName: "cluster-a",
 				Clusters:          []string{},
 			},
-			entityID: "",
-			want:     []string{},
+			want: []string{},
 		},
 	}
 
@@ -127,13 +117,13 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.ClusterNames(tt.entityID)
+			got := resolver.ClusterNames()
 			assert.Equal(t, tt.want, got)
 
 			// Verify immutability - modifying returned slice shouldn't affect subsequent calls
 			if len(got) > 0 {
 				got[0] = "modified"
-				got2 := resolver.ClusterNames(tt.entityID)
+				got2 := resolver.ClusterNames()
 				if len(tt.want) > 0 {
 					assert.Equal(t, tt.want[0], got2[0], "ClusterNames should return a copy to preserve immutability")
 				}
@@ -142,56 +132,7 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 	}
 }
 
-func TestDefaultReplicationResolver_WorkflowReplicationState(t *testing.T) {
-	tests := []struct {
-		name              string
-		replicationConfig *persistencespb.NamespaceReplicationConfig
-		entityID          string
-		want              enumspb.ReplicationState
-	}{
-		{
-			name: "returns normal state",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: "cluster-a",
-				Clusters:          []string{"cluster-a", "cluster-b"},
-				State:             enumspb.REPLICATION_STATE_NORMAL,
-			},
-			entityID: "",
-			want:     enumspb.REPLICATION_STATE_NORMAL,
-		},
-		{
-			name: "returns handover state",
-			replicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: "cluster-a",
-				Clusters:          []string{"cluster-a", "cluster-b"},
-				State:             enumspb.REPLICATION_STATE_HANDOVER,
-			},
-			entityID: "workflow-789",
-			want:     enumspb.REPLICATION_STATE_HANDOVER,
-		},
-		{
-			name:              "returns unspecified when replication config is nil",
-			replicationConfig: nil,
-			entityID:          "",
-			want:              enumspb.REPLICATION_STATE_UNSPECIFIED,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
-				ReplicationConfig: tt.replicationConfig,
-			}
-			resolver := factory(detail)
-
-			got := resolver.WorkflowReplicationState(tt.entityID)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestDefaultReplicationResolver_NamespaceReplicationState(t *testing.T) {
+func TestDefaultReplicationResolver_ReplicationState(t *testing.T) {
 	tests := []struct {
 		name              string
 		replicationConfig *persistencespb.NamespaceReplicationConfig
@@ -230,7 +171,7 @@ func TestDefaultReplicationResolver_NamespaceReplicationState(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.NamespaceReplicationState()
+			got := resolver.ReplicationState()
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -250,32 +191,12 @@ func TestDefaultReplicationResolver_MultipleCalls(t *testing.T) {
 
 	// Call multiple times and verify consistency
 	for i := 0; i < 5; i++ {
-		assert.Equal(t, "primary", resolver.ActiveClusterName(""))
-		assert.Equal(t, []string{"primary", "secondary", "tertiary"}, resolver.ClusterNames(""))
-		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.WorkflowReplicationState(""))
-		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.NamespaceReplicationState())
+		assert.Equal(t, "primary", resolver.ActiveClusterName())
+		assert.Equal(t, []string{"primary", "secondary", "tertiary"}, resolver.ClusterNames())
+		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState())
 	}
 }
 
-func TestDefaultReplicationResolver_DifferentEntityIds(t *testing.T) {
-	// Test that different entity IDs don't affect the default resolver behavior
-	factory := namespace.NewDefaultReplicationResolverFactory()
-	detail := &persistencespb.NamespaceDetail{
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: "cluster-x",
-			Clusters:          []string{"cluster-x", "cluster-y"},
-			State:             enumspb.REPLICATION_STATE_NORMAL,
-		},
-	}
-	resolver := factory(detail)
-
-	entityIDs := []string{"", "workflow-1", "workflow-2", "activity-1", "some-other-entity"}
-	for _, entityID := range entityIDs {
-		assert.Equal(t, "cluster-x", resolver.ActiveClusterName(entityID))
-		assert.Equal(t, []string{"cluster-x", "cluster-y"}, resolver.ClusterNames(entityID))
-		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.WorkflowReplicationState(entityID))
-	}
-}
 
 func TestDefaultReplicationResolver_IsGlobalNamespace(t *testing.T) {
 	factory := namespace.NewDefaultReplicationResolverFactory()
@@ -409,22 +330,22 @@ func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	cloned := resolver.Clone()
 
 	// Verify the cloned resolver has the same values
-	assert.Equal(t, resolver.ActiveClusterName(""), cloned.ActiveClusterName(""))
-	assert.Equal(t, resolver.ClusterNames(""), cloned.ClusterNames(""))
+	assert.Equal(t, resolver.ActiveClusterName(), cloned.ActiveClusterName())
+	assert.Equal(t, resolver.ClusterNames(), cloned.ClusterNames())
 	assert.Equal(t, resolver.IsGlobalNamespace(), cloned.IsGlobalNamespace())
 	assert.Equal(t, resolver.FailoverVersion(), cloned.FailoverVersion())
 	assert.Equal(t, resolver.FailoverNotificationVersion(), cloned.FailoverNotificationVersion())
-	assert.Equal(t, resolver.NamespaceReplicationState(), cloned.NamespaceReplicationState())
+	assert.Equal(t, resolver.ReplicationState(), cloned.ReplicationState())
 
 	// Verify that modifying the cloned resolver doesn't affect the original
 	cloned.SetActiveCluster("cluster-tertiary")
-	assert.Equal(t, "cluster-primary", resolver.ActiveClusterName(""))
-	assert.Equal(t, "cluster-tertiary", cloned.ActiveClusterName(""))
+	assert.Equal(t, "cluster-primary", resolver.ActiveClusterName())
+	assert.Equal(t, "cluster-tertiary", cloned.ActiveClusterName())
 
 	// Verify deep copy of clusters slice
-	clonedClusters := cloned.ClusterNames("")
+	clonedClusters := cloned.ClusterNames()
 	if len(clonedClusters) > 0 {
 		clonedClusters[0] = "modified"
-		assert.Equal(t, "cluster-primary", cloned.ClusterNames("")[0], "Modifying returned slice should not affect resolver")
+		assert.Equal(t, "cluster-primary", cloned.ClusterNames()[0], "Modifying returned slice should not affect resolver")
 	}
 }

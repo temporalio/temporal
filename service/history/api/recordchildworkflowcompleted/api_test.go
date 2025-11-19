@@ -52,10 +52,13 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 		},
 	}
 	mockRegistery := namespace.NewMockRegistry(ctrl)
-	testNamespace := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
 		Info:   &persistencespb.NamespaceInfo{Id: testNamespaceID.String()},
 		Config: &persistencespb.NamespaceConfig{},
-	})
+	}
+	testNamespace, err := namespace.FromPersistentState(detail, factory(detail))
+	require.NoError(t, err)
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(testNamespace, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
@@ -127,10 +130,13 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 		},
 	}
 	mockRegistery := namespace.NewMockRegistry(ctrl)
-	testNamespace := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
 		Info:   &persistencespb.NamespaceInfo{Id: testNamespaceID.String()},
 		Config: &persistencespb.NamespaceConfig{},
-	})
+	}
+	testNamespace, err := namespace.FromPersistentState(detail, factory(detail))
+	require.NoError(t, err)
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(testNamespace, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")

@@ -60,9 +60,8 @@ type (
 )
 
 const (
-	EmptyName     Name = ""
-	EmptyID       ID   = ""
-	EmptyEntityID      = ""
+	EmptyName Name = ""
+	EmptyID   ID   = ""
 
 	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
 	// applicable to local namespace & global namespace with one cluster
@@ -77,25 +76,12 @@ func NewID() ID {
 
 func FromPersistentState(
 	detail *persistencespb.NamespaceDetail,
-	mutations ...Mutation,
-) *Namespace {
-	return FromPersistentStateWithResolver(detail, nil, mutations...)
-}
-
-func FromPersistentStateWithResolver(
-	detail *persistencespb.NamespaceDetail,
 	resolver ReplicationResolver,
 	mutations ...Mutation,
-) *Namespace {
-	// If no resolver provided, create a default one
+) (*Namespace, error) {
 	if resolver == nil {
-		resolver = &defaultReplicationResolver{
-			replicationConfig:           detail.ReplicationConfig,
-			failoverVersion:             detail.FailoverVersion,
-			failoverNotificationVersion: detail.FailoverNotificationVersion,
-		}
+		return nil, serviceerror.NewInvalidArgument("replicationResolver must be provided")
 	}
-
 	ns := &Namespace{
 		info:          detail.Info,
 		config:        detail.Config,
@@ -111,7 +97,7 @@ func FromPersistentStateWithResolver(
 		m.apply(ns)
 	}
 
-	return ns
+	return ns, nil
 }
 
 func (ns *Namespace) Clone(mutations ...Mutation) *Namespace {
@@ -193,19 +179,19 @@ func (ns *Namespace) State() enumspb.NamespaceState {
 }
 
 func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
-	return ns.replicationResolver.NamespaceReplicationState()
+	return ns.replicationResolver.ReplicationState()
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
 func (ns *Namespace) ActiveClusterName() string {
-	return ns.replicationResolver.ActiveClusterName(EmptyEntityID)
+	return ns.replicationResolver.ActiveClusterName()
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
 // replicated.
 func (ns *Namespace) ClusterNames() []string {
-	return ns.replicationResolver.ClusterNames(EmptyEntityID)
+	return ns.replicationResolver.ClusterNames()
 }
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.
