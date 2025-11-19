@@ -715,6 +715,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		},
 	}
 	if includeTaskQueueStatus {
+		//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
 		resp.DescResponse.TaskQueueStatus = pm.MustGetDefaultQueue(context.Background()).LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
