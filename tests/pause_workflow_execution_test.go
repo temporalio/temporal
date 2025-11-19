@@ -186,10 +186,10 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	resp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
 	s.Nil(resp)
-	var unavailableErr *serviceerror.Unavailable
-	s.ErrorAs(err, &unavailableErr)
-	s.NotNil(unavailableErr)
-	s.Contains(unavailableErr.Error(), namespaceName)
+	var unimplementedErr *serviceerror.Unimplemented
+	s.ErrorAs(err, &unimplementedErr)
+	s.NotNil(unimplementedErr)
+	s.Contains(unimplementedErr.Error(), namespaceName)
 }
 
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() {
