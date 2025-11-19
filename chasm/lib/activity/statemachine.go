@@ -2,14 +2,13 @@ package activity
 
 import (
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/common/backoff"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -77,6 +76,11 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 )
 
+type rescheduleInfo struct {
+	retryInterval time.Duration
+	failure       *failurepb.Failure
+}
+
 // TransitionRescheduled affects a transition to Scheduled from Started, which happens on retries. The event to pass in
 // is the failure to be recorded from the previously failed attempt.
 var TransitionRescheduled = chasm.NewTransition(
@@ -84,7 +88,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, // For retries the activity will be in started status
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-	func(a *Activity, ctx chasm.MutableContext, failure *failurepb.Failure) error {
+	func(a *Activity, ctx chasm.MutableContext, info rescheduleInfo) error {
 		attempt, err := a.Attempt.Get(ctx)
 		if err != nil {
 			return err
@@ -93,12 +97,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		currentTime := ctx.Now(a)
 		attempt.Count += 1
 
-		retryInterval := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
-		if retryInterval <= 0 {
-			retryInterval = backoff.CalculateExponentialRetryInterval(a.GetRetryPolicy(), attempt.GetCount())
-		}
-
-		err = a.recordFailedAttempt(ctx, retryInterval, failure, false)
+		err = a.recordFailedAttempt(ctx, info.retryInterval, info.failure, false)
 		if err != nil {
 			return err
 		}
@@ -107,7 +106,7 @@ var TransitionRescheduled = chasm.NewTransition(
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout).Add(retryInterval),
+					ScheduledTime: currentTime.Add(timeout).Add(info.retryInterval),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Attempt: attempt.GetCount(),
@@ -117,7 +116,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
-				ScheduledTime: currentTime.Add(retryInterval),
+				ScheduledTime: currentTime.Add(info.retryInterval),
 			},
 			&activitypb.ActivityDispatchTask{
 				Attempt: attempt.GetCount(),
@@ -158,45 +157,43 @@ var TransitionCompleted = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-	func(a *Activity, ctx chasm.MutableContext, params RecordCompletedParams) error {
+	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
 		}
 
 		if store == nil {
-			err = a.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-				attempt, err := a.Attempt.Get(ctx)
-				if err != nil {
-					return err
-				}
-
-				attempt.LastAttemptCompleteTime = timestamppb.New(ctx.Now(a))
-				if params.WorkerIdentity != "" {
-					attempt.LastWorkerIdentity = params.WorkerIdentity
-				}
-
-				outcome, err := a.Outcome.Get(ctx)
-				if err != nil {
-					return err
-				}
-
-				outcome.Variant = &activitypb.ActivityOutcome_Successful_{
-					Successful: &activitypb.ActivityOutcome_Successful{
-						Output: params.Payload,
-					},
-				}
-
-				return nil
-			})
-		} else {
-			err = store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-				// Implement workflow activity completion handling here, including logic to rebuild the workflow state from history if needed.
-				return status.Errorf(codes.Unimplemented, "workflow activity completed handling is not implemented")
-			})
+			store = a
 		}
 
-		return err
+		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			attempt, err := a.Attempt.Get(ctx)
+			if err != nil {
+				return err
+			}
+
+			attempt.LastAttemptCompleteTime = timestamppb.New(ctx.Now(a))
+
+			// The Identity field is optionally set by the worker, so it could be blank at this point. Set identity
+			// only if has been provided to avoid overwriting previous value with blank.
+			if identity := request.GetCompleteRequest().GetIdentity(); identity != "" {
+				attempt.LastWorkerIdentity = identity
+			}
+
+			outcome, err := a.Outcome.Get(ctx)
+			if err != nil {
+				return err
+			}
+
+			outcome.Variant = &activitypb.ActivityOutcome_Successful_{
+				Successful: &activitypb.ActivityOutcome_Successful{
+					Output: request.GetCompleteRequest().GetResult(),
+				},
+			}
+
+			return nil
+		})
 	},
 )
 
@@ -206,40 +203,39 @@ var TransitionFailed = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-	func(a *Activity, ctx chasm.MutableContext, params RecordFailedParams) error {
+	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
 		}
 
 		if store == nil {
-			return a.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-				if params.LastHeartbeatDetails != nil {
-					heartbeatDetails, err := a.LastHeartbeat.Get(ctx)
-					if err != nil {
-						return err
-					}
-
-					heartbeatDetails.Details = params.LastHeartbeatDetails
-					heartbeatDetails.RecordedTime = timestamppb.New(ctx.Now(a))
-				}
-
-				if params.WorkerIdentity != "" {
-					attempt, err := a.Attempt.Get(ctx)
-					if err != nil {
-						return err
-					}
-
-					attempt.LastWorkerIdentity = params.WorkerIdentity
-				}
-
-				return a.recordFailedAttempt(ctx, 0, params.Failure, true)
-			})
+			store = a
 		}
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			// Implement workflow failure handling here, including logic to rebuild the workflow state from history if needed.
-			return status.Errorf(codes.Unimplemented, "workflow failure handling is not implemented")
+			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
+				heartbeatDetails, err := a.LastHeartbeat.Get(ctx)
+				if err != nil {
+					return err
+				}
+
+				heartbeatDetails.Details = details
+				heartbeatDetails.RecordedTime = timestamppb.New(ctx.Now(a))
+			}
+
+			// The Identity field is optionally set by the worker, so it could be blank at this point. Set identity
+			// only if has been provided to avoid overwriting previous value with blank.
+			if identity := req.GetFailedRequest().GetIdentity(); identity != "" {
+				attempt, err := a.Attempt.Get(ctx)
+				if err != nil {
+					return err
+				}
+
+				attempt.LastWorkerIdentity = identity
+			}
+
+			return a.recordFailedAttempt(ctx, 0, req.GetFailedRequest().GetFailure(), true)
 		})
 	},
 )
@@ -270,23 +266,20 @@ var TransitionTimedOut = chasm.NewTransition(
 		}
 
 		if store == nil {
-			return a.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-				switch timeoutType {
-				case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-					return a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
-				case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-					failure := a.createStartToCloseTimeoutFailure()
-					return a.recordFailedAttempt(ctx, 0, failure, true)
-				default:
-					return fmt.Errorf("unhandled activity timeout: %v", timeoutType)
-				}
-			})
+			store = a
 		}
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			// Implement workflow timeout handling here, including logic to rebuild the workflow state from history if needed.
-			return status.Errorf(codes.Unimplemented, "workflow timeout handling is not implemented")
+			switch timeoutType {
+			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+				return a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
+			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
+				failure := createStartToCloseTimeoutFailure()
+				return a.recordFailedAttempt(ctx, 0, failure, true)
+			default:
+				return fmt.Errorf("unhandled activity timeout: %v", timeoutType)
+			}
 		})
 	},
 )

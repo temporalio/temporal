@@ -313,7 +313,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 
 	// TODO(dan): race here: subscription might not be established yet
 
-	// Worker picks up activity task, triggering transition (via RecordStarted)
+	// Worker picks up activity task, triggering transition (via HandleStarted)
 	go func() {
 		_, err := s.pollActivityTaskQueue(ctx, taskQueue)
 		taskQueuePollErr <- err

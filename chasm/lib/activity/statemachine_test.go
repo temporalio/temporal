@@ -8,6 +8,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/payloads"
@@ -182,7 +184,10 @@ func TestTransitionRescheduled(t *testing.T) {
 				Outcome: chasm.NewDataField(ctx, outcome),
 			}
 
-			err := TransitionRescheduled.Apply(activity, ctx, activity.createStartToCloseTimeoutFailure())
+			err := TransitionRescheduled.Apply(activity, ctx, rescheduleInfo{
+				retryInterval: tc.expectedRetryInterval,
+				failure:       createStartToCloseTimeoutFailure(),
+			})
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, activity.Status)
 			require.Equal(t, tc.startingAttemptCount+1, attemptState.Count)
@@ -356,9 +361,11 @@ func TestTransitionCompleted(t *testing.T) {
 
 	payload := payloads.EncodeString("Done")
 
-	err := TransitionCompleted.Apply(activity, ctx, RecordCompletedParams{
-		Payload:        payload,
-		WorkerIdentity: "worker",
+	err := TransitionCompleted.Apply(activity, ctx, &historyservice.RespondActivityTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
+			Result:   payload,
+			Identity: "worker",
+		},
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
@@ -397,10 +404,12 @@ func TestTransitionFailed(t *testing.T) {
 		}},
 	}
 
-	err := TransitionFailed.Apply(activity, ctx, RecordFailedParams{
-		Failure:              failure,
-		LastHeartbeatDetails: heartbeatDetails,
-		WorkerIdentity:       "worker",
+	err := TransitionFailed.Apply(activity, ctx, &historyservice.RespondActivityTaskFailedRequest{
+		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+			Failure:              failure,
+			LastHeartbeatDetails: heartbeatDetails,
+			Identity:             "worker",
+		},
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, activity.Status)

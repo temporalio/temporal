@@ -45,11 +45,7 @@ func Invoke(
 			ctx,
 			componentRef,
 			(*activity.Activity).HandleFailed,
-			activity.RecordFailedParams{
-				Failure:              request.GetFailure(),
-				LastHeartbeatDetails: request.GetLastHeartbeatDetails(),
-				WorkerIdentity:       request.GetIdentity(),
-			},
+			req,
 		)
 
 		if err != nil {

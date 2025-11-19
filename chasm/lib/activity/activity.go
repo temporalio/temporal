@@ -3,6 +3,7 @@ package activity
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"go.temporal.io/api/activity/v1"
@@ -15,18 +16,16 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	commonfailure "go.temporal.io/server/common/failure"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type ActivityStore interface {
-	// PopulateRecordStartedResponse populates the response for RecordStarted
+	// PopulateRecordStartedResponse populates the response for HandleStarted
 	PopulateRecordStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error
 
 	// RecordCompleted applies the provided function to record activity completion
@@ -134,14 +133,9 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 	}, nil
 }
 
-// RecordStartedParams holds parameters for RecordStarted
-type RecordStartedParams struct {
-	VersionDirective *taskqueuespb.TaskVersionDirective
-	WorkerIdentity   string
-}
-
-// RecordStarted updates the activity on recording activity task started and populates the response.
-func (a *Activity) RecordStarted(ctx chasm.MutableContext, params RecordStartedParams) (*historyservice.RecordActivityTaskStartedResponse, error) {
+// HandleStarted updates the activity on recording activity task started and populates the response.
+func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
+	*historyservice.RecordActivityTaskStartedResponse, error) {
 	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
 		return nil, err
 	}
@@ -152,9 +146,9 @@ func (a *Activity) RecordStarted(ctx chasm.MutableContext, params RecordStartedP
 	}
 
 	attempt.LastStartedTime = timestamppb.New(ctx.Now(a))
-	attempt.LastWorkerIdentity = params.WorkerIdentity
+	attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
 
-	if versionDirective := params.VersionDirective.GetDeploymentVersion(); versionDirective != nil {
+	if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
 		attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
 			BuildId:        versionDirective.GetBuildId(),
 			DeploymentName: versionDirective.GetDeploymentName(),
@@ -227,38 +221,32 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	return applyFn(ctx)
 }
 
-// RecordCompletedParams holds parameters for HandleCompleted
-type RecordCompletedParams struct {
-	Payload        *commonpb.Payloads
-	WorkerIdentity string
-}
-
 // HandleCompleted updates the activity on activity completion.
-func (a *Activity) HandleCompleted(ctx chasm.MutableContext, params RecordCompletedParams) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	if err := TransitionCompleted.Apply(a, ctx, params); err != nil {
+func (a *Activity) HandleCompleted(ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) (
+	*historyservice.RespondActivityTaskCompletedResponse, error) {
+	if err := TransitionCompleted.Apply(a, ctx, request); err != nil {
 		return nil, err
 	}
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
 
-// RecordFailedParams holds parameters for HandleFailed
-type RecordFailedParams struct {
-	Failure              *failurepb.Failure
-	LastHeartbeatDetails *commonpb.Payloads
-	WorkerIdentity       string
-}
-
 // HandleFailed updates the activity on activity failure. if the activity is retryable, it will be rescheduled
 // for retry instead.
-func (a *Activity) HandleFailed(ctx chasm.MutableContext, params RecordFailedParams) (*historyservice.RespondActivityTaskFailedResponse, error) {
-	shouldRetry, err := a.shouldRetryOnFailure(ctx, params.Failure)
+func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) (
+	*historyservice.RespondActivityTaskFailedResponse, error) {
+	failure := req.GetFailedRequest().GetFailure()
+
+	shouldRetry, retryInterval, err := a.shouldRetryOnFailure(ctx, failure)
 	if err != nil {
 		return nil, err
 	}
 
 	if shouldRetry {
-		if err := TransitionRescheduled.Apply(a, ctx, params.Failure); err != nil {
+		if err := TransitionRescheduled.Apply(a, ctx, rescheduleInfo{
+			retryInterval: retryInterval,
+			failure:       failure,
+		}); err != nil {
 			return nil, err
 		}
 
@@ -266,32 +254,31 @@ func (a *Activity) HandleFailed(ctx chasm.MutableContext, params RecordFailedPar
 	}
 
 	// No more retries, transition to failed state
-	if err := TransitionFailed.Apply(a, ctx, params); err != nil {
+	if err := TransitionFailed.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
 
-func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Failure) (bool, error) {
-	isRetryable := commonfailure.IsRetryable(failure, a.GetRetryPolicy().GetNonRetryableErrorTypes())
+func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Failure) (bool, time.Duration, error) {
+	var isRetryable bool
+
+	if failure.GetApplicationFailureInfo() != nil {
+		appFailure := failure.GetApplicationFailureInfo()
+		isRetryable = !appFailure.GetNonRetryable() && !slices.Contains(
+			a.GetRetryPolicy().GetNonRetryableErrorTypes(),
+			appFailure.GetType(),
+		)
+	}
+
 	if !isRetryable {
-		return false, nil
+		return false, 0, nil
 	}
 
-	attempt, err := a.Attempt.Get(ctx)
-	if err != nil {
-		return false, err
-	}
-	retryPolicy := a.RetryPolicy
+	overridingRetryInterval := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
 
-	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || attempt.GetCount() < retryPolicy.GetMaximumAttempts()
-	enoughTime, err := a.hasEnoughTimeForRetry(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	return enoughAttempts && enoughTime, nil
+	return a.shouldRetry(ctx, overridingRetryInterval)
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
@@ -359,20 +346,42 @@ func (a *Activity) recordFailedAttempt(
 	return nil
 }
 
-func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context) (bool, error) {
+func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration, error) {
 	attempt, err := a.Attempt.Get(ctx)
 	if err != nil {
-		return false, err
+		return false, 0, err
+	}
+	retryPolicy := a.RetryPolicy
+
+	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || attempt.GetCount() < retryPolicy.GetMaximumAttempts()
+	enoughTime, retryInterval, err := a.hasEnoughTimeForRetry(ctx, overridingRetryInterval)
+	if err != nil {
+		return false, 0, err
 	}
 
-	retryInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.Count)
+	return enoughAttempts && enoughTime, retryInterval, nil
+}
+
+// hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time
+// remains, it will also return a valid retry interval
+func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration, error) {
+	attempt, err := a.Attempt.Get(ctx)
+	if err != nil {
+		return false, 0, err
+	}
+
+	// Use overriding retry interval if provided, else calculate based on retry policy
+	retryInterval := overridingRetryInterval
+	if retryInterval <= 0 {
+		retryInterval = backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.Count)
+	}
 
 	deadline := a.ScheduledTime.AsTime().Add(a.GetScheduleToCloseTimeout().AsDuration())
 
-	return ctx.Now(a).Add(retryInterval).Before(deadline), nil
+	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval, nil
 }
 
-func (a *Activity) createStartToCloseTimeoutFailure() *failurepb.Failure {
+func createStartToCloseTimeoutFailure() *failurepb.Failure {
 	return &failurepb.Failure{
 		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()),
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{

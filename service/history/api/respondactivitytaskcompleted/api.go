@@ -44,10 +44,7 @@ func Invoke(
 			ctx,
 			componentRef,
 			(*activity.Activity).HandleCompleted,
-			activity.RecordCompletedParams{
-				Payload:        request.GetResult(),
-				WorkerIdentity: request.GetIdentity(),
-			},
+			req,
 		)
 
 		if err != nil {
