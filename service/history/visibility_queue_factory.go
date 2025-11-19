@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/telemetry"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -37,17 +38,24 @@ func NewVisibilityQueueFactory(
 	return &visibilityQueueFactory{
 		visibilityQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: queues.NewScheduler(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				queues.SchedulerOptions{
-					WorkerCount:                    params.Config.VisibilityProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
-					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
-				},
-				params.NamespaceRegistry,
-				params.Logger,
-			),
+			HostScheduler: func() queues.Scheduler {
+				rateLimiter := queues.SchedulerRateLimiter(quotas.NoopRequestRateLimiter)
+				if params.Config.TaskSchedulerEnableRateLimiter() {
+					rateLimiter = params.SchedulerRateLimiter
+				}
+				return queues.NewScheduler(
+					params.ClusterMetadata.GetCurrentClusterName(),
+					queues.SchedulerOptions{
+						WorkerCount:                    params.Config.VisibilityProcessorSchedulerWorkerCount,
+						ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+						StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+						InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					},
+					params.NamespaceRegistry,
+					params.Logger,
+					rateLimiter,
+				)
+			}(),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
@@ -69,21 +77,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope))
 
 	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			f.ClusterMetadata.GetCurrentClusterName(),
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			logger,
-			metricsHandler,
-		)
-	}
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
