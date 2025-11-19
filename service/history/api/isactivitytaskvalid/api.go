@@ -27,7 +27,7 @@ func Invoke(
 			req.Execution.RunId,
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			isTaskValid, err := isActivityTaskValid(workflowLease, req.ScheduledEventId)
+			isTaskValid, err := isActivityTaskValid(workflowLease, req.ScheduledEventId, req.GetStamp())
 			if err != nil {
 				return nil, err
 			}
@@ -49,6 +49,7 @@ func Invoke(
 func isActivityTaskValid(
 	workflowLease api.WorkflowLease,
 	scheduledEventID int64,
+	stamp int32,
 ) (bool, error) {
 	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() {
@@ -56,7 +57,7 @@ func isActivityTaskValid(
 	}
 
 	ai, ok := mutableState.GetActivityInfo(scheduledEventID)
-	if ok && ai.StartedEventId == common.EmptyEventID {
+	if ok && ai.StartedEventId == common.EmptyEventID && ai.GetStamp() == stamp {
 		return true, nil
 	}
 	return false, nil

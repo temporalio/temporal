@@ -180,8 +180,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 	case nil:
 		db.rangeID = response.RangeID
 		// If we are the draining one, then assume the other has tasks, so we can migrate
-		// backwards safely. Note that we do this even if enableMigration is turned off so that
-		// if we started migration on a partition, we continue it.
+		// backwards safely.
 		db.otherHasTasks = response.TaskQueueInfo.OtherHasTasks || db.isDraining
 		db.subqueues = db.ensureDefaultSubqueuesLocked(
 			response.TaskQueueInfo.Subqueues,
@@ -193,6 +192,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			db.rangeID = 0
 			return err
 		}
+		db.lastWrite = time.Now()
 		// We took over the task queue and are not sure what tasks may have been written
 		// before. Set max read level id of all subqueues to just before our new block.
 		maxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
@@ -205,9 +205,11 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		db.rangeID = initialRangeID
 		db.subqueues = db.ensureDefaultSubqueuesLocked(nil, 0, 0)
 
-		// Assume otherHasTasks for safe migration, both when we're active and inactive.
-		// We can skip this if useNewMatcher+enableFairness are false and we are the active one.
-		db.otherHasTasks = db.config.NewMatcher || db.config.EnableFairness || db.isDraining
+		// If we are the draining one, then assume the other has tasks, so we can migrate
+		// backwards safely. Also assume other has tasks if the config allows for migration
+		// (and we're not sticky) since we may have just turned on fairness and need to migrate.
+		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY
+		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
 			RangeID:       db.rangeID,
@@ -474,9 +476,12 @@ func (db *taskQueueDB) CreateTasks(
 	}
 
 	if err == nil {
-		// Only update lastWrite for persistence implementations that update metadata on CreateTasks.
+		// Only update lastWrite for persistence implementations that update metadata on CreateTasks,
+		// otherwise we have a change to ApproximateBacklogCount we need to write.
 		if resp.UpdatedMetadata {
 			db.lastWrite = time.Now()
+		} else {
+			db.lastChange = time.Now()
 		}
 	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
@@ -544,9 +549,12 @@ func (db *taskQueueDB) CreateFairTasks(
 		})
 
 	if err == nil {
-		// Only update lastWrite for persistence implementations that update metadata on CreateTasks.
+		// Only update lastWrite for persistence implementations that update metadata on CreateTasks,
+		// otherwise we have a change to ApproximateBacklogCount we need to write.
 		if resp.UpdatedMetadata {
 			db.lastWrite = time.Now()
+		} else {
+			db.lastChange = time.Now()
 		}
 	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
 		// Tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
@@ -721,10 +729,11 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 		return
 	}
 
-	var approximateBacklogCount, totalLag int64
+	var totalLag int64
 	var oldestTime time.Time
+	counts := make(map[int32]int64)
 	for _, s := range db.subqueues {
-		approximateBacklogCount += s.ApproximateBacklogCount
+		counts[s.Key.Priority] += s.ApproximateBacklogCount
 		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
@@ -737,7 +746,9 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 		}
 	}
 
-	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(approximateBacklogCount))
+	for priority, count := range counts {
+		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
+	}
 	if oldestTime.IsZero() {
 		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	} else {
@@ -805,7 +816,16 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 		return
 	}
 
-	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0)
+	priorities := make(map[int32]struct{})
+	db.Lock()
+	for _, s := range db.subqueues {
+		priorities[s.Key.Priority] = struct{}{}
+	}
+	db.Unlock()
+
+	for k := range priorities {
+		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+	}
 	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }

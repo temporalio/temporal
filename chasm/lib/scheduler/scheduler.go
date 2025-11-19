@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"slices"
 	"strings"
@@ -10,9 +12,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -48,6 +53,8 @@ const (
 	recentActionCount = 10
 )
 
+var ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
+
 // NewScheduler returns an initialized CHASM scheduler root component.
 func NewScheduler(
 	ctx chasm.MutableContext,
@@ -61,10 +68,8 @@ func NewScheduler(
 		SchedulerState: &schedulerpb.SchedulerState{
 			Schedule: input,
 			Info: &schedulepb.ScheduleInfo{
-				CreateTime: timestamppb.Now(),
 				UpdateTime: timestamppb.New(zero),
 			},
-			InitialPatch:  patch,
 			Namespace:     namespace,
 			NamespaceId:   namespaceID,
 			ScheduleId:    scheduleID,
@@ -74,13 +79,55 @@ func NewScheduler(
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
 	}
+	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
+	sched.Schedule.State = &schedulepb.ScheduleState{}
 
 	invoker := NewInvoker(ctx, sched)
 	generator := NewGenerator(ctx, sched, invoker)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
 	sched.Generator = chasm.NewComponentField(ctx, generator)
 
+	// Create backfillers to fulfill initialPatch.
+	sched.handlePatch(ctx, patch)
+
 	return sched
+}
+
+// handlePatch creates backfillers to fulfill the given patch request.
+func (s *Scheduler) handlePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) {
+	if patch != nil {
+		if patch.TriggerImmediately != nil {
+			s.NewImmediateBackfiller(ctx, patch.TriggerImmediately)
+		}
+
+		for _, backfill := range patch.BackfillRequest {
+			s.NewRangeBackfiller(ctx, backfill)
+		}
+	}
+}
+
+// CreateScheduler initializes a new Scheduler for CreateSchedule requests.
+func CreateScheduler(
+	ctx chasm.MutableContext,
+	req *schedulerpb.CreateScheduleRequest,
+) (*Scheduler, *schedulerpb.CreateScheduleResponse, error) {
+	// TODO: namespace name should be resolved from namespace_id via namespace registry
+	sched := NewScheduler(
+		ctx,
+		req.FrontendRequest.Namespace,
+		req.NamespaceId,
+		req.FrontendRequest.ScheduleId,
+		req.FrontendRequest.Schedule,
+		req.FrontendRequest.InitialPatch,
+	)
+
+	// TODO - use visibility component to update SAs
+
+	return sched, &schedulerpb.CreateScheduleResponse{
+		FrontendResponse: &workflowservice.CreateScheduleResponse{
+			ConflictToken: sched.generateConflictToken(),
+		},
+	}, nil
 }
 
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
@@ -101,7 +148,7 @@ func (s *Scheduler) NewRangeBackfiller(
 	backfiller.Request = &schedulerpb.BackfillerState_BackfillRequest{
 		BackfillRequest: request,
 	}
-	s.addBackfiller(ctx, backfiller)
+	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
@@ -115,18 +162,8 @@ func (s *Scheduler) NewImmediateBackfiller(
 	backfiller.Request = &schedulerpb.BackfillerState_TriggerRequest{
 		TriggerRequest: request,
 	}
-	s.addBackfiller(ctx, backfiller)
-	return backfiller
-}
-
-// addBackfiller adds the backfiller to the scheduler tree, and adds a task to
-// kick off backfill processing.
-func (s *Scheduler) addBackfiller(
-	ctx chasm.MutableContext,
-	backfiller *Backfiller,
-) {
 	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
-	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+	return backfiller
 }
 
 // useScheduledAction returns true when the Scheduler should allow scheduled
@@ -136,7 +173,7 @@ func (s *Scheduler) addBackfiller(
 // decremented when an action can be taken. When decrement is false, no state
 // is mutated.
 func (s *Scheduler) useScheduledAction(decrement bool) bool {
-	scheduleState := s.Schedule.State
+	scheduleState := s.Schedule.GetState()
 
 	// If paused, don't do anything.
 	if scheduleState.Paused {
@@ -183,7 +220,7 @@ func (s *Scheduler) getCompiledSpec(specBuilder *scheduler.SpecBuilder) (*schedu
 // WorkflowID returns the Workflow ID given as part of the request spec.
 // During start generation, nominal time is suffixed to this ID.
 func (s *Scheduler) WorkflowID() string {
-	return s.Schedule.Action.GetStartWorkflow().WorkflowId
+	return s.Schedule.GetAction().GetStartWorkflow().GetWorkflowId()
 }
 
 func (s *Scheduler) jitterSeed() string {
@@ -195,7 +232,7 @@ func (s *Scheduler) identity() string {
 }
 
 func (s *Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
-	policy := s.Schedule.Policies.OverlapPolicy
+	policy := s.Schedule.GetPolicies().GetOverlapPolicy()
 	if policy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
 		policy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
 	}
@@ -236,10 +273,10 @@ func (s *Scheduler) updateConflictToken() {
 func (s *Scheduler) getLastEventTime() time.Time {
 	var lastEvent time.Time
 	if len(s.Info.RecentActions) > 0 {
-		lastEvent = s.Info.RecentActions[len(s.Info.RecentActions)-1].ActualTime.AsTime()
+		lastEvent = s.Info.RecentActions[len(s.Info.RecentActions)-1].GetActualTime().AsTime()
 	}
-	lastEvent = util.MaxTime(lastEvent, s.Info.CreateTime.AsTime())
-	lastEvent = util.MaxTime(lastEvent, s.Info.UpdateTime.AsTime())
+	lastEvent = util.MaxTime(lastEvent, s.Info.GetCreateTime().AsTime())
+	lastEvent = util.MaxTime(lastEvent, s.Info.GetUpdateTime().AsTime())
 	return lastEvent
 }
 
@@ -270,10 +307,13 @@ func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 		}
 
 		var policy enumspb.ScheduleOverlapPolicy
-		if backfiller.GetBackfillRequest() != nil {
-			policy = backfiller.GetBackfillRequest().OverlapPolicy
-		} else {
-			policy = backfiller.GetTriggerRequest().OverlapPolicy
+		switch request := backfiller.GetRequest().(type) {
+		case *schedulerpb.BackfillerState_BackfillRequest:
+			policy = request.BackfillRequest.OverlapPolicy
+		case *schedulerpb.BackfillerState_TriggerRequest:
+			policy = request.TriggerRequest.OverlapPolicy
+		default:
+			return false
 		}
 
 		if enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL == s.resolveOverlapPolicy(policy) {
@@ -466,4 +506,86 @@ func (s *Scheduler) isActionCompleted(workflowID string) bool {
 	// A workflow could have completed and subsequently truncated from RecentActions,
 	// but we don't care about that case.
 	return false
+}
+
+// Describe returns the current state of the Scheduler for DescribeSchedule requests.
+func (s *Scheduler) Describe(
+	ctx chasm.Context,
+	req *schedulerpb.DescribeScheduleRequest,
+) (*schedulerpb.DescribeScheduleResponse, error) {
+	return &schedulerpb.DescribeScheduleResponse{
+		FrontendResponse: &workflowservice.DescribeScheduleResponse{
+			Schedule:      common.CloneProto(s.Schedule),
+			Info:          common.CloneProto(s.Info),
+			ConflictToken: s.generateConflictToken(),
+			// TODO - memo and search_attributes are handled by visibility (separate PR)
+		},
+	}, nil
+}
+
+// Delete marks the Scheduler as closed without an idle timer.
+func (s *Scheduler) Delete(
+	ctx chasm.MutableContext,
+	req *schedulerpb.DeleteScheduleRequest,
+) (*schedulerpb.DeleteScheduleResponse, error) {
+	s.Closed = true
+	return &schedulerpb.DeleteScheduleResponse{
+		FrontendResponse: &workflowservice.DeleteScheduleResponse{},
+	}, nil
+}
+
+// Update replaces the schedule with a new one for UpdateSchedule requests.
+func (s *Scheduler) Update(
+	ctx chasm.MutableContext,
+	req *schedulerpb.UpdateScheduleRequest,
+) (*schedulerpb.UpdateScheduleResponse, error) {
+	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
+		return nil, ErrConflictTokenMismatch
+	}
+
+	s.Schedule = common.CloneProto(req.FrontendRequest.Schedule)
+	// TODO - use visibility component to update SAs
+
+	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
+	s.updateConflictToken()
+
+	return &schedulerpb.UpdateScheduleResponse{
+		FrontendResponse: &workflowservice.UpdateScheduleResponse{},
+	}, nil
+}
+
+// Patch applies a patch to the schedule for PatchSchedule requests.
+func (s *Scheduler) Patch(
+	ctx chasm.MutableContext,
+	req *schedulerpb.PatchScheduleRequest,
+) (*schedulerpb.PatchScheduleResponse, error) {
+	// Handle paused status.
+	if req.FrontendRequest.Patch.Pause != "" {
+		s.Schedule.State.Paused = true
+		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
+	}
+	if req.FrontendRequest.Patch.Unpause != "" {
+		s.Schedule.State.Paused = false
+		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
+	}
+
+	s.handlePatch(ctx, req.FrontendRequest.Patch)
+
+	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
+	s.updateConflictToken()
+
+	return &schedulerpb.PatchScheduleResponse{
+		FrontendResponse: &workflowservice.PatchScheduleResponse{},
+	}, nil
+}
+
+func (s *Scheduler) generateConflictToken() []byte {
+	token := make([]byte, 8)
+	binary.LittleEndian.PutUint64(token, uint64(s.ConflictToken))
+	return token
+}
+
+func (s *Scheduler) validateConflictToken(token []byte) bool {
+	current := s.generateConflictToken()
+	return bytes.Equal(current, token)
 }

@@ -688,6 +688,8 @@ const (
 )
 
 var (
+	testComponentPausedSearchAttribute = chasm.NewSearchAttributeBool(testComponentPausedSAName, chasm.SearchAttributeFieldBool01)
+
 	_ chasm.VisibilitySearchAttributesProvider = (*testComponent)(nil)
 	_ chasm.VisibilityMemoProvider             = (*testComponent)(nil)
 )
@@ -702,9 +704,9 @@ func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-func (l *testComponent) SearchAttributes(_ chasm.Context) map[string]chasm.VisibilityValue {
-	return map[string]chasm.VisibilityValue{
-		testComponentPausedSAName: chasm.VisibilityValueBool(l.ActivityInfo.Paused),
+func (l *testComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
+	return []chasm.SearchAttributeKeyValue{
+		testComponentPausedSearchAttribute.Value(l.ActivityInfo.Paused),
 	}
 }
 
@@ -732,6 +734,7 @@ func (l *testChasmLibrary) Name() string {
 
 func (l *testChasmLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*testComponent]("test_component"),
+		chasm.NewRegistrableComponent[*testComponent]("test_component",
+			chasm.WithSearchAttributes(testComponentPausedSearchAttribute)),
 	}
 }

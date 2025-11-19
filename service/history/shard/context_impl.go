@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -2279,6 +2280,7 @@ func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 
 // newShardClosedErrorWithShardID when shard is closed and a req cannot be processed
 func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnershipLostError {
+	softassert.Sometimes(s.contextTaggedLogger).Debug("ShardOwnershipLostError: Shard closed")
 	return &persistence.ShardOwnershipLostError{
 		ShardID: s.shardID, // immutable
 		Msg:     "shard closed",

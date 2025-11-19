@@ -16,7 +16,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -29,10 +30,6 @@ type chasmInvocation struct {
 }
 
 func (c chasmInvocation) WrapError(result invocationResult, err error) error {
-	if failure, ok := result.(invocationResultFail); ok {
-		return queues.NewUnprocessableTaskError(failure.err.Error())
-	}
-
 	return result.error()
 }
 
@@ -57,13 +54,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
-	ref := &persistencespb.ChasmComponentRef{}
-	err = proto.Unmarshal(decodedRef, ref)
-	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef: %v", err)}
-	}
-
-	request, err := c.getHistoryRequest(ref)
+	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
 		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
 	}
@@ -71,18 +62,18 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
-		if isRetryableRpcResponse(err) {
-			return invocationResultRetry{msg}
+		redactedErr := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
+		if isRetryableRPCResponse(err) {
+			return invocationResultRetry{redactedErr}
 		}
-		return invocationResultFail{msg}
+		return invocationResultFail{redactedErr}
 	}
 
 	return invocationResultOK{}
 }
 
 func (c chasmInvocation) getHistoryRequest(
-	ref *persistencespb.ChasmComponentRef,
+	ref []byte,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
@@ -131,4 +122,31 @@ func (c chasmInvocation) getHistoryRequest(
 	}
 
 	return req, nil
+}
+
+func isRetryableRPCResponse(err error) bool {
+	var st *status.Status
+	stGetter, ok := err.(interface{ Status() *status.Status })
+	if ok {
+		st = stGetter.Status()
+	} else {
+		st, ok = status.FromError(err)
+		if !ok {
+			// Not a gRPC induced error
+			return false
+		}
+	}
+	// nolint:exhaustive
+	switch st.Code() {
+	case codes.Canceled,
+		codes.Unknown,
+		codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Internal:
+		return true
+	default:
+		return false
+	}
 }

@@ -8,17 +8,18 @@ import (
 const (
 	// Archetype for today's workflow implementation.
 	// This value is NOT persisted today, and ok to be changed.
-	Archetype chasm.Archetype = "Workflow"
+	Archetype chasm.Archetype = "workflow.Workflow"
 )
 
 type Workflow struct {
 	chasm.UnimplementedComponent
 
-	// State of the workflow is managed by mutable_state_impl, not CHASM engine, so this will always be empty.
-	State *emptypb.Empty
+	// For now, workflow state is managed by mutable_state_impl, not CHASM engine, leaving it empty as CHASM expects a
+	// state object.
+	*emptypb.Empty
 
-	// MSPointer is a special in-memory field for getting mutable state access.
-	MSPointer chasm.MSPointer
+	// MSPointer is a special in-memory field for accessing the underlying mutable state.
+	chasm.MSPointer
 
 	// TODO: populate with actual callback component type
 	// Callbacks chasm.Map[string, *CallbackComponent]

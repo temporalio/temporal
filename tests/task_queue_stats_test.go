@@ -42,7 +42,8 @@ type (
 	// Unless a test calls out a specific methods, all three methods are tested in each test case.
 	TaskQueueStatsSuite struct {
 		testcore.FunctionalTestBase
-		usePriMatcher bool
+		usePriMatcher        bool
+		useNewDeploymentData bool
 	}
 
 	TaskQueueExpectations struct {
@@ -294,6 +295,7 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 }
 
 func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
+	// Using old DeploymentData format
 	var wg sync.WaitGroup
 	wg.Add(2)
 

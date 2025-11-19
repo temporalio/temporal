@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -40,12 +39,10 @@ type (
 	}
 
 	SpecProcessorImpl struct {
-		fx.In
-
-		Config         *Config
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		SpecBuilder    *legacyscheduler.SpecBuilder
+		config         *Config
+		metricsHandler metrics.Handler
+		logger         log.Logger
+		specBuilder    *legacyscheduler.SpecBuilder
 	}
 
 	ProcessedTimeRange struct {
@@ -54,6 +51,20 @@ type (
 		BufferedStarts []*schedulespb.BufferedStart
 	}
 )
+
+func NewSpecProcessor(
+	config *Config,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	specBuilder *legacyscheduler.SpecBuilder,
+) *SpecProcessorImpl {
+	return &SpecProcessorImpl{
+		config:         config,
+		metricsHandler: metricsHandler,
+		logger:         logger,
+		specBuilder:    specBuilder,
+	}
+}
 
 func (s *SpecProcessorImpl) ProcessTimeRange(
 	scheduler *Scheduler,
@@ -64,10 +75,10 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	manual bool,
 	limit *int,
 ) (*ProcessedTimeRange, error) {
-	tweakables := s.Config.Tweakables(scheduler.Namespace)
+	tweakables := s.config.Tweakables(scheduler.Namespace)
 	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
-	s.Logger.Debug("ProcessTimeRange",
+	s.logger.Debug("ProcessTimeRange",
 		tag.NewTimeTag("start", start),
 		tag.NewTimeTag("end", end),
 		tag.NewAnyTag("overlap-policy", overlapPolicy),
@@ -93,11 +104,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	}
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
-	lastAction := start
+	lastAction := end
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
 	for next, err = s.getNextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
+		lastAction = next.Next
+
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
@@ -105,10 +118,10 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 		}
 
 		if !manual && end.Sub(next.Next) > catchupWindow {
-			s.Logger.Warn("Schedule missed catchup window",
+			s.logger.Warn("Schedule missed catchup window",
 				tag.NewTimeTag("now", end),
 				tag.NewTimeTag("time", next.Next))
-			s.MetricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
+			s.metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++
 			continue
@@ -123,7 +136,6 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
 			WorkflowId:    fmt.Sprintf("%s-%s", workflowID, nominalTimeSec.Format(time.RFC3339)),
 		})
-		lastAction = next.Next
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
@@ -140,7 +152,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 }
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
-	cw := s.Schedule.Policies.CatchupWindow
+	cw := s.Schedule.GetPolicies().GetCatchupWindow()
 	if cw == nil {
 		return tweakables.DefaultCatchupWindow
 	}
@@ -150,9 +162,9 @@ func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 
 // getNextTime returns the next time result, or an error if the schedule cannot be compiled.
 func (s *SpecProcessorImpl) getNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
-	spec, err := scheduler.getCompiledSpec(s.SpecBuilder)
+	spec, err := scheduler.getCompiledSpec(s.specBuilder)
 	if err != nil {
-		s.Logger.Error("Invalid schedule", tag.Error(err))
+		s.logger.Error("Invalid schedule", tag.Error(err))
 		return legacyscheduler.GetNextTimeResult{}, err
 	}
 

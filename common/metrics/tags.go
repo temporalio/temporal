@@ -263,6 +263,14 @@ func TaskPriorityTag(value string) Tag {
 	return Tag{Key: TaskPriorityTagName, Value: value}
 }
 
+func MatchingTaskPriorityTag(value int32) Tag {
+	priStr := ""
+	if value != 0 {
+		priStr = strconv.FormatInt(int64(value), 10)
+	}
+	return Tag{Key: TaskPriorityTagName, Value: priStr}
+}
+
 func QueueReaderIDTag(readerID int64) Tag {
 	return Tag{Key: QueueReaderIDTagName, Value: strconv.Itoa(int(readerID))}
 }
@@ -293,6 +301,10 @@ func VisibilityIndexNameTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: visibilityIndexNameTagName, Value: value}
+}
+
+func WorkerPluginNameTag(value string) Tag {
+	return Tag{Key: WorkerPluginNameTagName, Value: value}
 }
 
 // VersionedTag represents whether a loaded task queue manager represents a specific version set or build ID or not.

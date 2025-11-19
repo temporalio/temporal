@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
-	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -351,26 +350,29 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 	}
 
 	var drainBacklogMgr backlogManager
+	var logger log.Logger
 	switch c.backlogMgr.(type) {
 	case *fairBacklogManagerImpl:
+		logger = log.With(c.logger, backlogTagPriorityDrain)
 		drainBacklogMgr = newPriBacklogManager(
 			c.tqCtx,
 			c,
 			c.config,
 			c.partitionMgr.engine.taskManager,
-			log.With(c.logger, backlogTagPriorityDrain),
+			logger,
 			log.With(c.throttledLogger, backlogTagPriorityDrain),
 			c.partitionMgr.engine.matchingRawClient,
 			newPriMetricsHandler(c.metricsHandler),
 			true,
 		)
 	case *priBacklogManagerImpl:
+		logger = log.With(c.logger, backlogTagFairnessDrain)
 		drainBacklogMgr = newFairBacklogManager(
 			c.tqCtx,
 			c,
 			c.config,
 			c.partitionMgr.engine.fairTaskManager,
-			log.With(c.logger, backlogTagFairnessDrain),
+			logger,
 			log.With(c.throttledLogger, backlogTagFairnessDrain),
 			c.partitionMgr.engine.matchingRawClient,
 			newFairMetricsHandler(c.metricsHandler),
@@ -386,6 +388,7 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 	if !softassert.That(c.logger, prev == nil, "SetupDraining called twice") {
 		return
 	}
+	logger.Info("Starting draining")
 	drainBacklogMgr.Start()
 }
 
@@ -702,7 +705,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	}
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if worker_versioning.FindDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) != -1 {
+	if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -720,16 +723,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			// error is not from registration, just return it without waiting
 			return err
 		}
-		var errMaxTaskQueuesInVersion workerdeployment.ErrMaxTaskQueuesInVersion
-		var errMaxVersionsInDeployment workerdeployment.ErrMaxVersionsInDeployment
-		var errMaxDeploymentsInNamespace workerdeployment.ErrMaxDeploymentsInNamespace
-		if errors.As(err, &errMaxTaskQueuesInVersion) {
-			err = errMaxTaskQueuesInVersion
-		} else if errors.As(err, &errMaxVersionsInDeployment) {
-			err = errMaxVersionsInDeployment
-		} else if errors.As(err, &errMaxDeploymentsInNamespace) {
-			err = errMaxDeploymentsInNamespace
-		} else {
+		var errResourceExhausted *serviceerror.ResourceExhausted
+		if !errors.As(err, &errResourceExhausted) {
 			// Do not surface low level error to user
 			c.logger.Error("error while registering version", tag.Error(err))
 			err = errDeploymentVersionNotReady
@@ -748,7 +743,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			return err
 		}
 		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-		if worker_versioning.FindDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
+		if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 			break
 		}
 		select {
