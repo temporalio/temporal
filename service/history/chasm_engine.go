@@ -447,7 +447,7 @@ func (e *ChasmEngine) handleConflictPolicy(
 ) (chasm.EntityKey, []byte, error) {
 	switch conflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.EntityKey{}, nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+		return chasm.EntityKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
 				newEntityParams.entityRef.EntityKey.BusinessID,
@@ -457,11 +457,26 @@ func (e *ChasmEngine) handleConflictPolicy(
 			currentRunInfo.createRequestID,
 			currentRunInfo.RunID,
 		)
-	case chasm.BusinessIDConflictPolicyTermiateExisting:
-		// TODO: handle BusinessIDConflictPolicyTermiateExisting
+	case chasm.BusinessIDConflictPolicyTerminateExisting:
+		// TODO: handle BusinessIDConflictPolicyTerminateExisting and update TestNewEntity_ConflictPolicy_TerminateExisting.
+		//
+		// Today's state-based replication logic can not existly handle this policy correctly
+		// (or any operation that close and starts a new run in one transaction).
+		// The termination and creation of new run can not be replicated transactionally.
+		//
+		// The main blocker is that state-based replication works on the current state,
+		// and we may have a chain of runs all created via TerminateExisting policy, meaning
+		// replication has to replicated all of them transactionally.
+		// We need a way to break this chain into consistent pieces and replicate them one by one.
 		return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not yet supported")
-	// case chasm.BusinessIDConflictPolicyUseExisting:
-	// 	return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("ID Conflict Policy Use Existing is not yet supported")
+	case chasm.BusinessIDConflictPolicyUseExisting:
+		existingEntityRef := newEntityParams.entityRef
+		existingEntityRef.EntityID = currentRunInfo.RunID
+		serializedRef, err := existingEntityRef.Serialize(e.registry)
+		if err != nil {
+			return chasm.EntityKey{}, nil, err
+		}
+		return existingEntityRef.EntityKey, serializedRef, nil
 	default:
 		return chasm.EntityKey{}, nil, serviceerror.NewInternal(
 			fmt.Sprintf("unknown business ID conflict policy for newEntity: %v", conflictPolicy),
@@ -482,7 +497,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		// Fallthrough to persist the new entity as current run.
 	case chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly:
 		if _, ok := consts.FailedWorkflowStatuses[currentRunInfo.Status]; !ok {
-			return chasm.EntityKey{}, nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+			return chasm.EntityKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 				fmt.Sprintf(
 					"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 					newEntityParams.entityRef.EntityKey.BusinessID,
@@ -495,7 +510,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		}
 		// Fallthrough to persist the new entity as current run.
 	case chasm.BusinessIDReusePolicyRejectDuplicate:
-		return chasm.EntityKey{}, nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+		return chasm.EntityKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 				newEntityParams.entityRef.EntityKey.BusinessID,
