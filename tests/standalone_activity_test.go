@@ -18,13 +18,28 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+var (
+	defaultInput = &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("json/plain"),
+				},
+				Data: []byte("test-activity-input"),
+			},
+		},
+	}
+)
+
 type standaloneActivityTestSuite struct {
 	testcore.FunctionalTestBase
+	tv          *testvars.TestVars
 	chasmEngine chasm.Engine
 }
 
@@ -35,6 +50,7 @@ func TestStandaloneActivityTestSuite(t *testing.T) {
 
 func (s *standaloneActivityTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuite()
+	s.tv = testvars.New(s.T())
 	s.OverrideDynamicConfig(
 		dynamicconfig.EnableChasm,
 		true,
