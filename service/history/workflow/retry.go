@@ -41,7 +41,7 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
-	if !IsRetryable(failure, nonRetryableTypes) {
+	if !isRetryable(failure, nonRetryableTypes) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
@@ -294,8 +294,8 @@ func SetupNewWorkflowForRetryOrCron(
 	return nil
 }
 
-// IsRetryable determines if a failure is retryable based on its type and non-retryable types list.
-func IsRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
+// isRetryable determines if a failure is retryable based on its type and non-retryable types list.
+func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	if failure == nil {
 		return true
 	}
