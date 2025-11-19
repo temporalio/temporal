@@ -176,14 +176,15 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 }
 
 func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() {
-	s.T().Skip("CHASM Callbacks will hang if CHASM is disabled mid-run")
-	// This test verifies that when CHASM is disabled mid-workflow, callbacks still work correctly.
-	// 1. Enable CHASM
-	// 2. Start a workflow with a callback registered
+	// This test verifies that when EnableCHASMCallbacks is disabled mid-workflow,
+	// callbacks that were already created in CHASM still trigger successfully.
+	//
+	// 1. Enable both CHASM and CHASM callbacks
+	// 2. Start a workflow with a callback registered (CHASM callback)
 	// 3. Workflow blocks waiting for a signal
-	// 4. Disable CHASM dynamically
+	// 4. Disable EnableCHASMCallbacks (but keep CHASM enabled)
 	// 5. Send signal to unblock workflow and let it complete
-	// 6. Verify callback is invoked successfully
+	// 6. Verify callback is invoked successfully despite EnableCHASMCallbacks being disabled
 
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
@@ -276,8 +277,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		5*time.Second,
 		10*time.Millisecond)
 
-	// Disable CHASM mid-workflow
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
 
 	// Unblock the workflow by sending the continue signal
@@ -298,9 +297,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	s.Equal(1, result)
 
 	// Verify callback was invoked with successful completion
-	// Note: When CHASM is disabled after callbacks were created in CHASM,
-	// there may be a longer delay for callback execution as the system
-	// needs to handle the migration from CHASM to HSM
 	select {
 	case completion := <-ch.requestCh:
 		s.Equal(nexus.OperationStateSucceeded, completion.State)
@@ -309,8 +305,8 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 		s.Equal(1, callbackResult)
 		// Acknowledge the callback
 		ch.requestCompleteCh <- nil
-	case <-time.After(10 * time.Second):
-		s.Fail("timeout waiting for callback")
+	case <-time.After(5 * time.Second):
+		s.Fail("timeout waiting for callback - callback should still be triggered even with EnableCHASMCallbacks disabled")
 	}
 }
 

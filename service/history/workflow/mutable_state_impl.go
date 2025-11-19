@@ -6172,8 +6172,11 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 		return nil
 	}
 
-	// Process CHASM callbacks if enabled
-	if ms.chasmCallbacksEnabled() {
+	// Process CHASM callbacks if CHASM is enabled. Note that we check ChasmEnabled() rather than
+	// chasmCallbacksEnabled() to ensure that callbacks created when both CHASM and CHASM callbacks
+	// were enabled can still be triggered even if the EnableCHASMCallbacks dynamic config is later
+	// turned off. Once created in CHASM, callbacks should always be processed as long as CHASM is enabled.
+	if ms.ChasmEnabled() {
 		if err := ms.processCloseCallbacksChasm(); err != nil {
 			return err
 		}
