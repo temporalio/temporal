@@ -2859,9 +2859,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 	// Invalidate pending workflow task by incrementing the persisted stamp.
 	// This ensures subsequent task dispatch detects the change.
 	if ms.HasPendingWorkflowTask() {
-		workflowTask := ms.GetPendingWorkflowTask()
-		workflowTask.Stamp = workflowTask.Stamp + 1
-		ms.workflowTaskManager.UpdateWorkflowTask(workflowTask)
+		ms.executionInfo.WorkflowTaskStamp += 1
+		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
 	}
 	return nil
 }
