@@ -448,7 +448,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		searchattributes,
 	)
 
-	// We reuses the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
+	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
 	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
 
 	if mutableState.IsWorkflowExecutionRunning() {
