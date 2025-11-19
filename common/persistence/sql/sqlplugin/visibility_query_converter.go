@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
@@ -49,14 +48,12 @@ type VisibilityQueryConverter interface {
 	) (sqlparser.Expr, error)
 
 	BuildSelectStmt(
-		namespaceID namespace.ID,
 		queryExpr *query.QueryParams[sqlparser.Expr],
 		pageSize int,
 		pageToken *VisibilityPageToken,
 	) (string, []any)
 
 	BuildCountStmt(
-		namespaceID namespace.ID,
 		queryExpr *query.QueryParams[sqlparser.Expr],
 	) (string, []any)
 }
