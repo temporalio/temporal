@@ -113,7 +113,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Create
 	}).Return(nsResponse, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
-	nsFromResponse, err := fromAdminClientApiResponse(nsResponse)
+	nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
 	s.NoError(err)
 	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(nsFromResponse, nil).Times(1)
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
@@ -156,7 +156,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Update
 	}
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, nil).Times(1)
-	nsFromResponse, err := fromAdminClientApiResponse(nsResponse)
+	nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
 	s.NoError(err)
 	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(nsFromResponse, nil).Times(1)
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
@@ -247,7 +247,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 	s.IsType(&serviceerror.FailedPrecondition{}, err)
 }
 
-func fromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) (*namespace.Namespace, error) {
+func fromAdminClientAPIResponse(response *adminservice.GetNamespaceResponse) (*namespace.Namespace, error) {
 	info := &persistencespb.NamespaceInfo{
 		Id:          response.GetInfo().GetId(),
 		Name:        response.GetInfo().GetName(),

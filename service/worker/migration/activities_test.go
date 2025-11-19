@@ -604,7 +604,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		}
 		ns, nsErr := namespace.FromPersistentState(detail, factory(detail))
-		s.NoError(nsErr)
+		s.Require().NoError(nsErr)
 
 		details := replicationTasksHeartbeatDetails{}
 		ctx := context.TODO()
