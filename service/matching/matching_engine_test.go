@@ -2119,8 +2119,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		s.NoError(err)
 	}
 
-	tlMgr, ok := s.matchingEngine.partitions[dbq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	tlMgr := s.getPhysicalTaskQueueManagerImpl(dbq)
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
 
 	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
@@ -2254,8 +2253,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.NoError(err)
 		}
 
-		tlMgr, ok := s.matchingEngine.partitions[dbq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-		s.True(ok, "failed to load task queue")
+		tlMgr := s.getPhysicalTaskQueueManagerImpl(dbq)
 		s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
 		blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 
@@ -2988,7 +2986,9 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	tlmImpl, ok := tqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	defaultQ, err := tqm.(*taskQueuePartitionManagerImpl).managerReady.Get(context.Background())
+	s.Require().NoError(err)
+	tlmImpl := defaultQ.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
 	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, prtn, tlmImpl.queue.version, 1)
@@ -3223,8 +3223,9 @@ func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
 
 // getPhysicalTaskQueueManagerImpl extracts the physicalTaskQueueManagerImpl for the given PhysicalTaskQueueKey
 func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQueueKey) *physicalTaskQueueManagerImpl {
-	pgMgr, ok := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	defaultQ, err := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).managerReady.Get(context.Background())
+	s.Require().NoError(err)
+	pgMgr := defaultQ.(*physicalTaskQueueManagerImpl)
 	return pgMgr
 }
 

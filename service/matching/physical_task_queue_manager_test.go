@@ -100,7 +100,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
-	prtnMgr.defaultQueue = s.tqMgr
+	prtnMgr.managerReady.Set(s.tqMgr, nil)
 }
 
 /*
@@ -343,7 +343,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	s.tqMgr.Start()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	err := s.tqMgr.WaitUntilInitialized(ctx)
-	s.NoError(err)
+	s.Require().NoError(err)
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 	cancel()
 
