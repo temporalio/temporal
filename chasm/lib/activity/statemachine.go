@@ -34,8 +34,6 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		fmt.Printf("CHASM Activity: TransitionScheduled.Apply called\n")
-
 		attempt, err := a.Attempt.Get(ctx)
 		if err != nil {
 			return err
@@ -45,9 +43,6 @@ var TransitionScheduled = chasm.NewTransition(
 		attempt.Count += 1
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-			fmt.Printf("CHASM Activity: Adding ScheduleToStartTimeoutTask with timeout=%v at time=%v\n",
-				timeout, currentTime.Add(timeout))
-
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
@@ -56,8 +51,6 @@ var TransitionScheduled = chasm.NewTransition(
 				&activitypb.ScheduleToStartTimeoutTask{
 					Attempt: attempt.GetCount(),
 				})
-		} else {
-			fmt.Printf("CHASM Activity: No ScheduleToStartTimeout configured\n")
 		}
 
 		if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
@@ -196,31 +189,19 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
-		fmt.Printf("CHASM Activity: TransitionTimedOut.Apply - timeoutType=%v, currentStatus=%v\n",
-			timeoutType, a.Status)
-
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
 		}
 
 		if store == nil {
-			fmt.Printf("CHASM Activity: TransitionTimedOut - standalone activity, applying timeout\n")
 			return a.RecordCompletion(ctx, func(ctx chasm.MutableContext) error {
 				switch timeoutType {
 				case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-					err := a.recordFromScheduledTimeOut(ctx, timeoutType)
-					if err == nil {
-						fmt.Printf("CHASM Activity: TransitionTimedOut - timeout recorded successfully\n")
-					}
-					return err
+					return a.recordFromScheduledTimeOut(ctx, timeoutType)
 				case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-					err := a.recordStartToCloseTimedOut(ctx, 0, true)
-					if err == nil {
-						fmt.Printf("CHASM Activity: TransitionTimedOut - timeout recorded successfully\n")
-					}
-					return err
+					return a.recordStartToCloseTimedOut(ctx, 0, true)
 				default:
 					return fmt.Errorf("unhandled activity timeout: %v", timeoutType)
 				}

@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -861,15 +860,6 @@ func (e *historyEngineImpl) NotifyNewTasks(
 					e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
 				}
 				continue
-			}
-			// Debug logging
-			fmt.Printf("NotifyNewTasks: Notifying processor for category %v with %d tasks\n", category, len(tasksByCategory))
-			for _, task := range tasksByCategory {
-				fmt.Printf("  Task type: %T\n", task)
-				if chasmTask, ok := task.(*tasks.ChasmTaskPure); ok {
-					fmt.Printf("  ChasmTaskPure: NS=%s WF=%s RUN=%s at %v\n",
-						chasmTask.NamespaceID, chasmTask.WorkflowID, chasmTask.RunID, chasmTask.GetVisibilityTime())
-				}
 			}
 			proc.NotifyNewTasks(tasksByCategory)
 		}

@@ -1831,22 +1831,8 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 		return nil
 	}
 
-	wfKey := n.backend.GetWorkflowKey()
-	n.logger.Info("CHASM: Creating ChasmTaskPure timer task",
-		tag.WorkflowNamespaceID(wfKey.NamespaceID),
-		tag.WorkflowID(wfKey.WorkflowID),
-		tag.WorkflowRunID(wfKey.RunID),
-		tag.Timestamp(firstPureTask.ScheduledTime.AsTime()),
-		tag.NewStringTag("taskType", firstPureTask.Type),
-	)
-
-	// Also use printf for debugging
-	fmt.Printf("CHASM Tree: Creating ChasmTaskPure for %s/%s/%s at %v\n",
-		wfKey.NamespaceID, wfKey.WorkflowID, wfKey.RunID,
-		firstPureTask.ScheduledTime.AsTime())
-
 	n.backend.AddTasks(&tasks.ChasmTaskPure{
-		WorkflowKey:         wfKey,
+		WorkflowKey:         n.backend.GetWorkflowKey(),
 		VisibilityTimestamp: firstPureTask.ScheduledTime.AsTime(),
 		Category:            tasks.CategoryTimer,
 	})
@@ -2468,8 +2454,6 @@ func (n *Node) eachNodePureTask(
 		if !isComponentTaskExpired(referenceTime, task) {
 			// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
 			// an unexpired task deadline.
-			fmt.Printf("CHASM: Task not expired yet - scheduled=%v, reference=%v\n", 
-				task.ScheduledTime.AsTime(), referenceTime)
 			return taskExecuted, nil
 		}
 
@@ -2482,9 +2466,6 @@ func (n *Node) eachNodePureTask(
 			ScheduledTime: task.ScheduledTime.AsTime(),
 			Destination:   task.Destination,
 		}
-
-		fmt.Printf("CHASM: Executing expired task - type=%T, scheduled=%v\n", 
-			taskInstance, task.ScheduledTime.AsTime())
 
 		executed, err := callback(n, taskAttributes, taskInstance)
 		if err != nil {

@@ -2,7 +2,6 @@ package queues
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -128,10 +127,8 @@ func (p *scheduledQueue) Start() {
 		return
 	}
 
-	p.logger.Info("Timer queue processor starting", tag.LifeCycleStarting)
-	defer p.logger.Info("Timer queue processor started", tag.LifeCycleStarted)
-
-	fmt.Printf("TIMER QUEUE: Starting timer queue processor for category %v\n", p.category)
+	p.logger.Info("", tag.LifeCycleStarting)
+	defer p.logger.Info("", tag.LifeCycleStarted)
 
 	p.queueBase.Start()
 
@@ -164,11 +161,6 @@ func (p *scheduledQueue) NotifyNewTasks(tasks []tasks.Task) {
 		return
 	}
 
-	fmt.Printf("TIMER QUEUE: NotifyNewTasks called with %d tasks\n", len(tasks))
-	for _, task := range tasks {
-		fmt.Printf("  Task: %T at %v\n", task, task.GetVisibilityTime())
-	}
-
 	newTime := tasks[0].GetVisibilityTime()
 	for _, task := range tasks {
 		ts := task.GetVisibilityTime()
@@ -177,14 +169,11 @@ func (p *scheduledQueue) NotifyNewTasks(tasks []tasks.Task) {
 		}
 	}
 
-	fmt.Printf("TIMER QUEUE: Notifying timer at %v\n", newTime)
 	p.notify(newTime)
 }
 
 func (p *scheduledQueue) processEventLoop() {
 	defer p.shutdownWG.Done()
-
-	fmt.Printf("TIMER QUEUE: processEventLoop started for category %v\n", p.category)
 
 	for {
 		select {
@@ -198,12 +187,10 @@ func (p *scheduledQueue) processEventLoop() {
 			return
 		case <-p.newTimerCh:
 			metrics.NewTimerNotifyCounter.With(p.metricsHandler).Record(1)
-			fmt.Printf("TIMER QUEUE: newTimerCh fired, processing new time\n")
 			p.processNewTime()
 		case <-p.lookAheadCh:
 			p.lookAheadTask()
 		case <-p.timerGate.FireCh():
-			fmt.Printf("TIMER QUEUE: timerGate fired, processing new range\n")
 			p.processNewRange()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
