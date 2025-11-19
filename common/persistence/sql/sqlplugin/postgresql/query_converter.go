@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
@@ -126,23 +125,12 @@ func (c *queryConverter) ConvertTextComparisonExpr(
 }
 
 func (c *queryConverter) BuildSelectStmt(
-	namespaceID namespace.ID,
 	queryParams *query.QueryParams[sqlparser.Expr],
 	pageSize int,
 	token *sqlplugin.VisibilityPageToken,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
-
-	// Namespace filter
-	whereClauses = append(
-		whereClauses,
-		fmt.Sprintf(
-			"%s = '%s'",
-			searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
-			namespaceID,
-		),
-	)
 
 	if queryParams.QueryExpr != nil {
 		if queryString := sqlparser.String(queryParams.QueryExpr); queryString != "" {
@@ -174,10 +162,15 @@ func (c *queryConverter) BuildSelectStmt(
 		)
 	}
 
+	whereString := ""
+	if len(whereClauses) > 0 {
+		whereString = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
 	stmt := fmt.Sprintf(
-		`SELECT %s FROM executions_visibility WHERE %s ORDER BY %s DESC, %s DESC, %s LIMIT ?`,
+		`SELECT %s FROM executions_visibility%s ORDER BY %s DESC, %s DESC, %s LIMIT ?`,
 		strings.Join(sqlplugin.DbFields, ", "),
-		strings.Join(whereClauses, " AND "),
+		whereString,
 		sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
@@ -188,24 +181,13 @@ func (c *queryConverter) BuildSelectStmt(
 }
 
 func (c *queryConverter) BuildCountStmt(
-	namespaceID namespace.ID,
 	queryParams *query.QueryParams[sqlparser.Expr],
 ) (string, []any) {
-	var whereClauses []string
-
-	// Namespace filter
-	whereClauses = append(
-		whereClauses,
-		fmt.Sprintf(
-			"%s = '%s'",
-			searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
-			namespaceID,
-		),
-	)
-
+	whereString := ""
 	if queryParams.QueryExpr != nil {
-		if queryString := sqlparser.String(queryParams.QueryExpr); queryString != "" {
-			whereClauses = append(whereClauses, queryString)
+		whereString = sqlparser.String(queryParams.QueryExpr)
+		if whereString != "" {
+			whereString = " WHERE " + whereString
 		}
 	}
 
@@ -220,9 +202,9 @@ func (c *queryConverter) BuildCountStmt(
 	}
 
 	return fmt.Sprintf(
-		"SELECT %s FROM executions_visibility WHERE %s%s",
+		"SELECT %s FROM executions_visibility%s%s",
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
-		strings.Join(whereClauses, " AND "),
+		whereString,
 		groupByClause,
 	), nil
 }
