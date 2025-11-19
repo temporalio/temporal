@@ -212,6 +212,8 @@ type (
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 
 		IsWorkflowExecutionRunning() bool
+		AddWorkflowExecutionPausedEvent(identity string, reason string, requestID string) (*historypb.HistoryEvent, error)
+		ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
