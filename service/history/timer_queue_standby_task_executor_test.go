@@ -22,7 +22,6 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -1793,7 +1792,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateChasmEntity(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasmworkflow.Archetype, locks.PriorityLow,
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
@@ -1901,7 +1900,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateChasmEntity(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasmworkflow.Archetype, locks.PriorityLow,
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
@@ -2004,7 +2003,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateChasmEntity(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasmworkflow.Archetype, locks.PriorityLow,
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
@@ -2253,6 +2252,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		s.mockNamespaceCache,
 		s.mockClusterMetadata,
+		s.mockShard.ChasmRegistry(),
 		queues.GetTaskTypeTagValue,
 		nil,
 		metrics.NoopMetricsHandler,

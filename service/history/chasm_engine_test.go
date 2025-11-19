@@ -349,7 +349,7 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
 			chasm.BusinessIDConflictPolicyFail,
 		),
 	)
-	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
+	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
 }
 
 func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
@@ -383,7 +383,87 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
 			chasm.BusinessIDConflictPolicyFail,
 		),
 	)
-	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err)
+	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
+}
+
+func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_UseExisting() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+	// Current run is still running, conflict policy will be used.
+	currentRunConditionFailedErr := s.currentRunConditionFailedErr(
+		tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		currentRunConditionFailedErr,
+	).Times(1)
+
+	entityKey, serializedRef, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicate,
+			chasm.BusinessIDConflictPolicyUseExisting,
+		),
+	)
+	s.NoError(err)
+
+	expectedEntityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    tv.RunID(),
+	}
+	s.Equal(expectedEntityKey, entityKey)
+	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+}
+
+func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_TerminateExisting() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    "",
+		},
+	)
+	newActivityID := tv.ActivityID()
+	// Current run is still running, conflict policy will be used.
+	currentRunConditionFailedErr := s.currentRunConditionFailedErr(
+		tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil,
+		currentRunConditionFailedErr,
+	).Times(1)
+
+	_, _, err := s.engine.NewEntity(
+		context.Background(),
+		ref,
+		s.newTestEntityFn(newActivityID),
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicate,
+			chasm.BusinessIDConflictPolicyTerminateExisting,
+		),
+	)
+	s.ErrorAs(err, new(*serviceerror.Unimplemented))
 }
 
 func (s *chasmEngineSuite) newTestEntityFn(
@@ -430,9 +510,11 @@ func (s *chasmEngineSuite) validateNewEntityResponseRef(
 	s.NoError(err)
 	s.Equal(expectedEntityKey, deserializedRef.EntityKey)
 
-	archetype, err := deserializedRef.Archetype(s.registry)
+	archetypeID, err := deserializedRef.ArchetypeID(s.registry)
 	s.NoError(err)
-	s.Equal("TestLibrary.test_component", archetype.String())
+	fqn, ok := s.registry.ComponentFqnByID(archetypeID)
+	s.True(ok)
+	s.Equal("TestLibrary.test_component", fqn)
 }
 
 func (s *chasmEngineSuite) currentRunConditionFailedErr(
@@ -547,6 +629,10 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 	key chasm.EntityKey,
 	componentState proto.Message,
 ) *persistencespb.WorkflowMutableState {
+
+	testComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
+	s.True(ok)
+
 	return &persistencespb.WorkflowMutableState{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			NamespaceId: key.NamespaceID,
@@ -584,7 +670,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 					},
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-							Type: "TestLibrary.test_component",
+							TypeId: testComponentTypeID,
 						},
 					},
 				},

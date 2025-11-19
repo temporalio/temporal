@@ -73,17 +73,32 @@ func (mr *MockChasmTreeMockRecorder) ApplySnapshot(arg0 any) *gomock.Call {
 }
 
 // Archetype mocks base method.
-func (m *MockChasmTree) Archetype() chasm.Archetype {
+func (m *MockChasmTree) Archetype() (chasm.Archetype, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Archetype")
 	ret0, _ := ret[0].(chasm.Archetype)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Archetype indicates an expected call of Archetype.
 func (mr *MockChasmTreeMockRecorder) Archetype() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Archetype", reflect.TypeOf((*MockChasmTree)(nil).Archetype))
+}
+
+// ArchetypeID mocks base method.
+func (m *MockChasmTree) ArchetypeID() chasm.ArchetypeID {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ArchetypeID")
+	ret0, _ := ret[0].(chasm.ArchetypeID)
+	return ret0
+}
+
+// ArchetypeID indicates an expected call of ArchetypeID.
+func (mr *MockChasmTreeMockRecorder) ArchetypeID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ArchetypeID", reflect.TypeOf((*MockChasmTree)(nil).ArchetypeID))
 }
 
 // CloseTransaction mocks base method.

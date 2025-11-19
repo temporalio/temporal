@@ -178,12 +178,7 @@ func (c *QueryConverter[ExprT]) Convert(
 		}
 	}
 
-	queryExpr, err := c.storeQC.BuildParenExpr(queryParams.QueryExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryExpr)
+	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
 	if err != nil {
 		return nil, err
 	}

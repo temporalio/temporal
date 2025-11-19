@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -446,7 +447,9 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		memo,
 		searchattributes,
 	)
-	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(tree.Archetype().String())
+
+	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
+	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)

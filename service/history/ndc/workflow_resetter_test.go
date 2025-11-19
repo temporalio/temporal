@@ -21,7 +21,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
@@ -712,7 +712,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	resetContext.EXPECT().Unlock()
 	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	resetContext.EXPECT().SetArchetype(chasmworkflow.Archetype).Times(1)
+	resetContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 	resetMutableState := historyi.NewMockMutableState(s.controller)
 	resetContextCacheKey := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID),

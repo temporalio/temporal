@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.uber.org/mock/gomock"
@@ -90,7 +89,6 @@ func (c *dummyVisQC) ConvertIsExpr(
 }
 
 func (c *dummyVisQC) BuildSelectStmt(
-	namespaceID namespace.ID,
 	queryExpr *query.QueryParams[sqlparser.Expr],
 	pageSize int,
 	pageToken *sqlplugin.VisibilityPageToken,
@@ -100,7 +98,6 @@ func (c *dummyVisQC) BuildSelectStmt(
 }
 
 func (c *dummyVisQC) BuildCountStmt(
-	namespaceID namespace.ID,
 	queryExpr *query.QueryParams[sqlparser.Expr],
 ) (string, []any) {
 	c.buildCountStmtCalls++
@@ -241,7 +238,7 @@ func TestSQLQueryConverter_BuildAndExpr(t *testing.T) {
 				parseWhereString("a = 1 and b = 'foo'"),
 				parseWhereString("c = 'bar'"),
 			},
-			out: "a = 1 and b = 'foo' and c = 'bar'",
+			out: "(a = 1 and b = 'foo') and c = 'bar'",
 		},
 		{
 			in: []sqlparser.Expr{
@@ -929,8 +926,8 @@ func TestSQLQueryConverter_SelectStmt(t *testing.T) {
 				VisibilityQueryConverter: pluginVisQCMock,
 			}
 
-			pluginVisQCMock.EXPECT().BuildSelectStmt(testNamespaceID, tc.queryParams, tc.pageSize, tc.pageToken).Return("", nil)
-			queryConverter.BuildSelectStmt(testNamespaceID, tc.queryParams, tc.pageSize, tc.pageToken)
+			pluginVisQCMock.EXPECT().BuildSelectStmt(tc.queryParams, tc.pageSize, tc.pageToken).Return("", nil)
+			queryConverter.BuildSelectStmt(tc.queryParams, tc.pageSize, tc.pageToken)
 		})
 	}
 }
@@ -961,8 +958,8 @@ func TestSQLQueryConverter_CountStmt(t *testing.T) {
 				VisibilityQueryConverter: pluginVisQCMock,
 			}
 
-			pluginVisQCMock.EXPECT().BuildCountStmt(testNamespaceID, tc.queryParams).Return("", nil)
-			queryConverter.BuildCountStmt(testNamespaceID, tc.queryParams)
+			pluginVisQCMock.EXPECT().BuildCountStmt(tc.queryParams).Return("", nil)
+			queryConverter.BuildCountStmt(tc.queryParams)
 		})
 	}
 }
