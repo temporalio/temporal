@@ -197,7 +197,6 @@ func TestDefaultReplicationResolver_MultipleCalls(t *testing.T) {
 	}
 }
 
-
 func TestDefaultReplicationResolver_IsGlobalNamespace(t *testing.T) {
 	factory := namespace.NewDefaultReplicationResolverFactory()
 

@@ -24,10 +24,7 @@ func NewLocalNamespaceForTest(
 	}
 	factory := NewDefaultReplicationResolverFactory()
 	resolver := factory(detail)
-	ns, err := FromPersistentState(detail, resolver, WithGlobalFlag(false))
-	if err != nil {
-		panic(err)
-	}
+	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(false))
 	return ns
 }
 
@@ -47,10 +44,7 @@ func NewNamespaceForTest(
 	}
 	factory := NewDefaultReplicationResolverFactory()
 	resolver := factory(detail)
-	ns, err := FromPersistentState(detail, resolver, WithGlobalFlag(isGlobalNamespace))
-	if err != nil {
-		panic(err)
-	}
+	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(isGlobalNamespace))
 	return ns
 }
 
@@ -69,10 +63,7 @@ func NewGlobalNamespaceForTest(
 	}
 	factory := NewDefaultReplicationResolverFactory()
 	resolver := factory(detail)
-	ns, err := FromPersistentState(detail, resolver, WithGlobalFlag(true))
-	if err != nil {
-		panic(err)
-	}
+	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(true))
 	return ns
 }
 

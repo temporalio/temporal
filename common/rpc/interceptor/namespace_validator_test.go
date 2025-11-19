@@ -383,7 +383,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 					},
 				}
 				ns, err := namespace.FromPersistentState(detail, factory(detail))
-				require.NoError(s.T(), err)
+				s.Require().NoError(err)
 				s.mockRegistry.EXPECT().GetNamespace(namespace.Name("test-namespace")).Return(ns, nil)
 			}
 
@@ -460,7 +460,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken(
 			},
 		}
 		ns, nsErr := namespace.FromPersistentState(detail, factory(detail))
-		require.NoError(s.T(), nsErr)
+		s.Require().NoError(nsErr)
 		s.mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("test-namespace-id")).Return(ns, nil)
 
 		nvi := NewNamespaceValidatorInterceptor(
@@ -626,7 +626,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 			},
 		}
 		tokenNamespace, err := namespace.FromPersistentState(tokenDetail, factory(tokenDetail))
-		require.NoError(s.T(), err)
+		s.Require().NoError(err)
 
 		req := &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: testCase.requestNamespaceName.String(),
@@ -646,7 +646,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 			},
 		}
 		requestNamespace, reqErr := namespace.FromPersistentState(requestDetail, factory(requestDetail))
-		require.NoError(s.T(), reqErr)
+		s.Require().NoError(reqErr)
 
 		// 2 times because of RespondQueryTaskCompleted.
 		s.mockRegistry.EXPECT().GetNamespace(testCase.requestNamespaceName).Return(requestNamespace, nil).Times(2)
