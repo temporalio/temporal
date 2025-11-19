@@ -6220,7 +6220,8 @@ func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
 }
 
 // TODO mutable state should generate corresponding transfer / timer tasks according to
-//  updates accumulated, while currently all transfer / timer tasks are managed manually
+//
+//	updates accumulated, while currently all transfer / timer tasks are managed manually
 func (ms *MutableStateImpl) AddTasks(
 	newTasks ...tasks.Task,
 ) {

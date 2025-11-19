@@ -378,4 +378,3 @@ func ChasmCallbackToAPICallback(cb *chasmcallback.Callback) (*commonpb.Callback,
 	// This should not happen as CHASM only supports Nexus callbacks currently
 	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }
-
