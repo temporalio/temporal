@@ -96,6 +96,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetNamespaceRegistry(),
 		rateLimiter,
 		s.mockShard.GetTimeSource(),
+		s.mockShard.ChasmRegistry(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -114,6 +115,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetTimeSource(),
 		s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetClusterMetadata(),
+		s.mockShard.ChasmRegistry(),
 		GetTaskTypeTagValue,
 		logger,
 		metrics.NoopMetricsHandler,

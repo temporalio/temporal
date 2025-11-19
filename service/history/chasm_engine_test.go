@@ -510,9 +510,11 @@ func (s *chasmEngineSuite) validateNewEntityResponseRef(
 	s.NoError(err)
 	s.Equal(expectedEntityKey, deserializedRef.EntityKey)
 
-	archetype, err := deserializedRef.Archetype(s.registry)
+	archetypeID, err := deserializedRef.ArchetypeID(s.registry)
 	s.NoError(err)
-	s.Equal("TestLibrary.test_component", archetype.String())
+	fqn, ok := s.registry.ComponentFqnByID(archetypeID)
+	s.True(ok)
+	s.Equal("TestLibrary.test_component", fqn)
 }
 
 func (s *chasmEngineSuite) currentRunConditionFailedErr(
@@ -627,6 +629,10 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 	key chasm.EntityKey,
 	componentState proto.Message,
 ) *persistencespb.WorkflowMutableState {
+
+	testComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
+	s.True(ok)
+
 	return &persistencespb.WorkflowMutableState{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			NamespaceId: key.NamespaceID,
@@ -664,7 +670,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 					},
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-							Type: "TestLibrary.test_component",
+							TypeId: testComponentTypeID,
 						},
 					},
 				},
