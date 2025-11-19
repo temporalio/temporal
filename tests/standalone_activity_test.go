@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -134,7 +135,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 	t.Logf("Started activity %s with 1s start-to-close timeout", activityID)
 
-	// First poll: activity has not started yet
+	fmt.Println("🟠 First poll: activity has not started yet")
 	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:   s.Namespace().String(),
 		ActivityId:  activityID,
@@ -159,7 +160,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NotNil(t, pollTaskResp)
 	require.NotEmpty(t, pollTaskResp.TaskToken)
 
-	// Second poll: activity has started
+	fmt.Println("🟠 Second poll: activity should have started")
 	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:   s.Namespace().String(),
 		ActivityId:  activityID,
@@ -196,6 +197,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	longPollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
+	fmt.Println("🟠 Third poll: activity should have timed out")
 	pollResp, err = s.FrontendClient().PollActivityExecution(longPollCtx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,

@@ -240,6 +240,7 @@ func (e *ChasmEngine) UpdateComponent(
 	// unnecessarily, but it will not miss notifications. In the future we may want to change
 	// PollComponent to subscribe to component-level notifications, and change UpdateComponent so
 	// that notifications are emitted only for nodes that were mutated in the transaction.
+	fmt.Println("🟦 UpdateComponent: emitting notification")
 	e.notifier.Notify(&ChasmExecutionNotification{
 		Key: ref.EntityKey,
 		Ref: newSerializedRef,
@@ -297,13 +298,21 @@ func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
-) ([]byte, error) {
+) (retRef []byte, retError error) {
 	// 1. Acquire lock
 	// 2. Error if shard execution VT < requestRef VT ('stale state')
 	// 3. If predicate satisfied, release lock and return
 	// 4. Subscribe to notifications for this execution
 	// 5. Release lock
 	// 6. On notification repeat (1) and (2)
+
+	defer func() {
+		if retError != nil {
+			fmt.Println("🔴 PollComponent: returning with error", retError)
+		} else {
+			fmt.Println("🟢 PollComponent: returning successfully")
+		}
+	}()
 
 	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
 	if err != nil {
@@ -364,8 +373,18 @@ func (e *ChasmEngine) PollComponent(
 	// indicating to a caller that they should continue long-polling. Unlike
 	// PollWorkflowExecutionUpdate we reserve 1s buffer.
 	softTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+
+	fmt.Println("⏲️ PollComponent: softTimeout", softTimeout)
+
 	stCtx, stCancel := contextutil.WithDeadlineBuffer(ctx, softTimeout, time.Second)
 	defer stCancel()
+
+	if deadline, ok := ctx.Deadline(); ok {
+		fmt.Println("⏲️ PollComponent: ctx has deadline", time.Until(deadline))
+	}
+	if stDeadline, ok := stCtx.Deadline(); ok {
+		fmt.Println("⏲️ PollComponent: stCtx has deadline", time.Until(stDeadline))
+	}
 
 	for {
 		select {
@@ -394,6 +413,7 @@ func (e *ChasmEngine) PollComponent(
 				}
 				if errors.Is(err, stCtx.Err()) {
 					// Server-imposed timeout; caller should continue long-polling.
+					fmt.Println("🟡 PollComponent: server-imposed timeout I")
 					return nil, nil
 				}
 				return nil, err
@@ -407,6 +427,7 @@ func (e *ChasmEngine) PollComponent(
 				return nil, ctx.Err()
 			}
 			// Server-imposed timeout; caller should continue long-polling.
+			fmt.Println("🟡 PollComponent: server-imposed timeout II")
 			return nil, nil
 		}
 	}
@@ -420,6 +441,7 @@ func (e *ChasmEngine) checkPredicate(
 	executionLease api.WorkflowLease,
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) ([]byte, error) {
+	fmt.Println("🔎 checkPredicate")
 
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
 	if !ok {
@@ -453,6 +475,7 @@ func (e *ChasmEngine) checkPredicate(
 		return nil, err
 	}
 	if !satisfied {
+		fmt.Println("    🟠 checkPredicate: predicate not satisfied")
 		return nil, nil
 	}
 
@@ -460,6 +483,7 @@ func (e *ChasmEngine) checkPredicate(
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("    🟢 checkPredicate: predicate satisfied")
 	return newRef, nil
 }
 
