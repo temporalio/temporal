@@ -314,6 +314,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	}
 }
 
+// TODO (seankane): This test can be removed once CHASM callbacks are the default
 func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	// This test verifies that both HSM and CHASM callbacks work correctly together.
 	// 1. Start a workflow with CHASM disabled and a callback registered (HSM callback)
