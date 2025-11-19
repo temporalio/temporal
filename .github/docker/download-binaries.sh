@@ -57,6 +57,8 @@ GOOS=linux GOARCH=${ARCH} CGO_ENABLED=0 go build -o "${BUILD_DIR}/tdbg" ./cmd/to
 if [ "${ARCH}" = "amd64" ]; then
   echo "Copying config files from temporal repo..."
   cp "${TEMP_DIR}/temporal/config/dynamicconfig/docker.yaml" "${SCRIPT_DIR}/build/config_docker.yaml"
+  # config_template.yaml is now embedded in temporal-server binary (as of v1.26.0+)
+  # Only legacy-server still needs config_template.yaml for dockerize templating
   cp "${TEMP_DIR}/temporal/docker/config_template.yaml" "${SCRIPT_DIR}/build/config_template.yaml"
 fi
 
