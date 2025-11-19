@@ -2,6 +2,7 @@ package queues
 
 import (
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -27,6 +28,7 @@ type (
 		timeSource                 clock.TimeSource
 		namespaceRegistry          namespace.Registry
 		clusterMetadata            cluster.Metadata
+		chasmRegistry              *chasm.Registry
 		taskTypeTagProvider        TaskTypeTagProvider
 		logger                     log.Logger
 		metricsHandler             metrics.Handler
@@ -51,6 +53,7 @@ func NewExecutableFactory(
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	chasmRegistry *chasm.Registry,
 	taskTypeTagProvider TaskTypeTagProvider,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
@@ -69,6 +72,7 @@ func NewExecutableFactory(
 		timeSource:                 timeSource,
 		namespaceRegistry:          namespaceRegistry,
 		clusterMetadata:            clusterMetadata,
+		chasmRegistry:              chasmRegistry,
 		taskTypeTagProvider:        taskTypeTagProvider,
 		logger:                     logger,
 		metricsHandler:             metricsHandler.WithTags(defaultExecutableMetricsTags...),
@@ -92,6 +96,7 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 		f.timeSource,
 		f.namespaceRegistry,
 		f.clusterMetadata,
+		f.chasmRegistry,
 		f.taskTypeTagProvider,
 		f.logger,
 		f.metricsHandler,

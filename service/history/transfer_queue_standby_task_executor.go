@@ -80,7 +80,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
+	taskType := queues.GetStandbyTransferTaskTypeTagValue(task, t.shardContext.ChasmRegistry())
 	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),

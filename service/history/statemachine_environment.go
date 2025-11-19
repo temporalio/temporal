@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -35,7 +34,7 @@ func getWorkflowExecutionContextForTask(
 	workflowCache wcache.Cache,
 	task tasks.Task,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
-	archetype := chasmworkflow.Archetype
+	archetype := chasm.WorkflowArchetype
 	switch task.GetType() {
 	case enumsspb.TASK_TYPE_CHASM,
 		enumsspb.TASK_TYPE_CHASM_PURE,
@@ -327,7 +326,7 @@ func (e *stateMachineEnvironment) getValidatedMutableState(
 	key definition.WorkflowKey,
 	validate func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, historyi.MutableState, error) {
-	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, chasmworkflow.Archetype, locks.PriorityLow)
+	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, chasm.WorkflowArchetype, locks.PriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
 	}

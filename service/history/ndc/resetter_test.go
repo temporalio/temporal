@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -143,7 +143,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetype,
 	).Return(mockBaseWorkflow, nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
@@ -222,7 +222,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetype,
 	).Return(mockBaseWorkflow, nil)
 
 	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(

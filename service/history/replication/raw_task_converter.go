@@ -13,7 +13,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -123,7 +122,7 @@ func convertActivityStateReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetype,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -211,7 +210,7 @@ func convertWorkflowStateReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetype,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			state, _ := mutableState.GetWorkflowStateStatus()
@@ -256,7 +255,7 @@ func convertSyncHSMReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetype,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			// HSM can be updated after workflow is completed

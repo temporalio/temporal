@@ -9,6 +9,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -72,6 +73,7 @@ func (s *readerSuite) SetupTest() {
 			clock.NewRealTimeSource(),
 			s.mockNamespaceRegistry,
 			s.mockClusterMetadata,
+			chasm.NewRegistry(log.NewTestLogger()),
 			testTaskTagValueProvider,
 			nil,
 			metrics.NoopMetricsHandler,
@@ -528,6 +530,6 @@ func (s *readerSuite) newTestReader(
 	)
 }
 
-func testTaskTagValueProvider(_ tasks.Task, _ bool) string {
+func testTaskTagValueProvider(_ tasks.Task, _ bool, _ *chasm.Registry) string {
 	return "testTaskType"
 }

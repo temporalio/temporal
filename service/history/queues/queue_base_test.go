@@ -666,6 +666,7 @@ func (s *queueBaseSuite) newQueueBase(
 		mockShard.GetTimeSource(),
 		mockShard.GetNamespaceRegistry(),
 		mockShard.GetClusterMetadata(),
+		mockShard.ChasmRegistry(),
 		testTaskTagValueProvider,
 		s.logger,
 		s.metricsHandler,

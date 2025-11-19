@@ -55,13 +55,13 @@ func (s *visibilitySuite) initAssertions() {
 func (s *visibilitySuite) TestComponentFqType() {
 	rc, ok := s.registry.ComponentFor(&Visibility{})
 	s.True(ok)
-	s.Equal(visibilityComponentFqType, rc.FqType())
+	s.Equal(visibilityComponentType, rc.FqType())
 }
 
 func (s *visibilitySuite) TestTaskFqType() {
 	rc, ok := s.registry.TaskFor(&persistencespb.ChasmVisibilityTaskData{})
 	s.True(ok)
-	s.Equal(visibilityTaskFqType, rc.FqType())
+	s.Equal(visibilityTaskType, rc.FqType())
 }
 
 func (s *visibilitySuite) TestLifeCycleState() {

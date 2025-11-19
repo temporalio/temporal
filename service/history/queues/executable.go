@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/circuitbreaker"
@@ -141,6 +142,7 @@ type (
 		timeSource          clock.TimeSource
 		namespaceRegistry   namespace.Registry
 		clusterMetadata     cluster.Metadata
+		chasmRegistry       *chasm.Registry
 		taskTypeTagProvider TaskTypeTagProvider
 		logger              log.Logger
 		metricsHandler      metrics.Handler
@@ -171,7 +173,7 @@ type (
 	}
 	ExecutableOption func(*ExecutableParams)
 
-	TaskTypeTagProvider func(t tasks.Task, isActive bool) string
+	TaskTypeTagProvider func(t tasks.Task, isActive bool, chasmRegistry *chasm.Registry) string
 )
 
 func NewExecutable(
@@ -184,6 +186,7 @@ func NewExecutable(
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	chasmRegistry *chasm.Registry,
 	taskTypeTagProvider TaskTypeTagProvider,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
@@ -219,6 +222,7 @@ func NewExecutable(
 		timeSource:          timeSource,
 		namespaceRegistry:   namespaceRegistry,
 		clusterMetadata:     clusterMetadata,
+		chasmRegistry:       chasmRegistry,
 		taskTypeTagProvider: taskTypeTagProvider,
 		readerID:            readerID,
 		logger: log.NewLazyLogger(
@@ -231,6 +235,7 @@ func NewExecutable(
 			task,
 			namespaceRegistry,
 			clusterMetadata.GetCurrentClusterName(),
+			chasmRegistry,
 			taskTypeTagProvider,
 		)...),
 		tracer:                     tracer,
@@ -324,6 +329,7 @@ func (e *executableImpl) Execute() (retErr error) {
 					e.GetTask(),
 					e.namespaceRegistry,
 					e.clusterMetadata.GetCurrentClusterName(),
+					e.chasmRegistry,
 					e.taskTypeTagProvider,
 				)...)
 		}
@@ -878,6 +884,7 @@ func estimateTaskMetricTags(
 	task tasks.Task,
 	namespaceRegistry namespace.Registry,
 	currentClusterName string,
+	chasmRegistry *chasm.Registry,
 	taskTypeTagProvider TaskTypeTagProvider,
 ) []metrics.Tag {
 	namespaceTag := metrics.NamespaceUnknownTag()
@@ -889,7 +896,7 @@ func estimateTaskMetricTags(
 		isActive = ns.ActiveInCluster(currentClusterName)
 	}
 
-	taskType := taskTypeTagProvider(task, isActive)
+	taskType := taskTypeTagProvider(task, isActive, chasmRegistry)
 	return []metrics.Tag{
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),

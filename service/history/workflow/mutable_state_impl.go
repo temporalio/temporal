@@ -531,7 +531,7 @@ func NewMutableStateFromDB(
 
 	if shard.GetConfig().EnableChasm() {
 		var err error
-		mutableState.chasmTree, err = chasm.NewTree(
+		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
 			shard.ChasmRegistry(),
 			shard.GetTimeSource(),
@@ -619,8 +619,7 @@ func (ms *MutableStateImpl) mustInitHSM() {
 }
 
 func (ms *MutableStateImpl) IsWorkflow() bool {
-	archetype := ms.chasmTree.Archetype()
-	return archetype == chasmworkflow.Archetype || archetype == ""
+	return ms.chasmTree.ArchetypeID() == chasm.WorkflowArchetypeID
 }
 
 func (ms *MutableStateImpl) HSM() *hsm.Node {
@@ -2615,7 +2614,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		root, ok := ms.chasmTree.(*chasm.Node)
 		softassert.That(ms.logger, ok, "chasmTree cast failed")
 
-		if root.Archetype() == "" {
+		if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
 			mutableContext := chasm.NewMutableContext(context.Background(), root)
 			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
 		}
@@ -2811,6 +2810,58 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.approximateSize += ms.executionState.Size()
 
 	ms.writeEventToCache(startEvent)
+	return nil
+}
+
+func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) (*historypb.HistoryEvent, error) {
+	opTag := tag.WorkflowActionWorkflowPaused
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionPausedEvent(identity, reason, requestID)
+	if err := ms.ApplyWorkflowExecutionPausedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+// ApplyWorkflowExecutionPausedEvent applies the paused event to the mutable state. It updates the workflow execution status to paused and sets the pause info.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error {
+	// Update workflow status.
+	if _, err := ms.UpdateWorkflowStateStatus(ms.executionState.GetState(), enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED); err != nil {
+		return err
+	}
+	// Set pause info in mutable state.
+	ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
+		PauseTime: timestamppb.New(event.GetEventTime().AsTime()),
+		Identity:  event.GetWorkflowExecutionPausedEventAttributes().GetIdentity(),
+		Reason:    event.GetWorkflowExecutionPausedEventAttributes().GetReason(),
+		RequestId: event.GetWorkflowExecutionPausedEventAttributes().GetRequestId(),
+	}
+
+	// Update approximate size of the mutable state. This will be decreased when the pause info is removed (when the workflow is unpaused)
+	ms.approximateSize += ms.executionInfo.PauseInfo.Size()
+
+	// Invalidate all the pending activities. Do not mark individual activities as paused.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.Stamp = activityInfo.Stamp + 1
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Invalidate pending workflow task by incrementing the persisted stamp.
+	// This ensures subsequent task dispatch detects the change.
+	if ms.HasPendingWorkflowTask() {
+		ms.executionInfo.WorkflowTaskStamp += 1
+		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
+	}
 	return nil
 }
 

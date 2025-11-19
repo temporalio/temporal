@@ -11,10 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/predicates"
@@ -68,6 +70,7 @@ func (s *sliceSuite) SetupTest() {
 			clock.NewRealTimeSource(),
 			s.mockNamespaceRegistry,
 			s.mockClusterMetadata,
+			chasm.NewRegistry(log.NewTestLogger()),
 			testTaskTagValueProvider,
 			nil,
 			metrics.NoopMetricsHandler,
