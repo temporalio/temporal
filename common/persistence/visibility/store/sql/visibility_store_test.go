@@ -72,7 +72,7 @@ func TestBuildQueryParams(t *testing.T) {
 					testNamespaceID,
 					tc.query,
 					sqlQC,
-					searchattribute.TestNameTypeMap,
+					searchattribute.TestNameTypeMap(),
 					&searchattribute.TestMapper{},
 				)
 				if tc.err != "" {
