@@ -51,7 +51,6 @@ type ComponentRef struct {
 
 	// componentPath and componentInitialVT are used to identify a component.
 	componentPath      []string
-	componentVT        *persistencespb.VersionedTransition
 	componentInitialVT *persistencespb.VersionedTransition
 
 	validationFn func(NodeBackend, Context, Component) error
@@ -125,7 +124,6 @@ func (r *ComponentRef) Serialize(
 		EntityVersionedTransition:           r.entityLastUpdateVT,
 		ComponentPath:                       r.componentPath,
 		ComponentInitialVersionedTransition: r.componentInitialVT,
-		ComponentVersionedTransition:        r.componentVT,
 	}
 	return pRef.Marshal()
 }
@@ -153,7 +151,6 @@ func ProtoRefToComponentRef(pRef *persistencespb.ChasmComponentRef) ComponentRef
 		},
 		archetype:          Archetype(pRef.Archetype),
 		entityLastUpdateVT: pRef.EntityVersionedTransition,
-		componentVT:        pRef.ComponentVersionedTransition,
 		componentPath:      pRef.ComponentPath,
 		componentInitialVT: pRef.ComponentInitialVersionedTransition,
 	}

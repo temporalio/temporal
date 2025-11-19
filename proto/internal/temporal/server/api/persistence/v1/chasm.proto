@@ -100,7 +100,6 @@ message ChasmComponentRef {
 
     repeated string component_path = 6;
     VersionedTransition component_initial_versioned_transition = 7;
-    VersionedTransition component_versioned_transition = 8;
 }
 
 // ChasmNexusCompletion includes details about a completed Nexus operation.
