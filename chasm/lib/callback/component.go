@@ -30,10 +30,7 @@ type Callback struct {
 	// Persisted internal state
 	*callbackspb.CallbackState
 
-	// MSPointer is a runtime-only field for accessing the underlying mutable state to get completion data.
-	// Similar to MSPointer in the Workflow component, this is set at deserialization time.
-	chasm.MSPointer
-
+	// Interface to retrieve Nexus operation completion data
 	CompletionSource chasm.Field[CompletionSource]
 }
 
@@ -76,7 +73,12 @@ func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (callbackInvokable, error) {
-	completion, err := c.GetNexusCompletion(ctx, c.RequestId)
+	target, err := c.CompletionSource.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
 		return nil, err
 	}

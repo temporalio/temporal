@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -123,10 +124,20 @@ func (w *Workflow) AddCompletionCallbacks(
 
 		// Create and add callback
 		callbackObj := callback.NewCallback(requestID, event.EventTime, &callbackspb.CallbackState{}, chasmCB)
-		// Initialize the MSPointer field for accessing the underlying mutable state
-		callbackObj.MSPointer = w.MSPointer
-		// callbackObj.CompletionSource = chasm.Field[callback.CompletionSource](chasm.NewComponentField(ctx, w))
+		// Initialize the Workflow field with a pointer to the parent Workflow component
+		// Use ComponentPointerTo instead of NewComponentField to avoid infinite recursion during tree sync.
+		// We need to manually create the Field[chasm.Component] from Field[*Workflow] since Go generics
+		// don't support covariance.
+		callbackObj.CompletionSource = chasm.Field[callback.CompletionSource](chasm.ComponentPointerTo(ctx, w))
 		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
+}
+
+func (w *Workflow) GetNexusCompletion(
+	ctx chasm.Context,
+	requestID string,
+) (nexusrpc.OperationCompletion, error) {
+	// Retrieve the completion data from the underlying mutable state via MSPointer
+	return w.MSPointer.GetNexusCompletion(ctx, requestID)
 }
