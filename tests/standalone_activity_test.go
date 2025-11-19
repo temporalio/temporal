@@ -134,8 +134,20 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 	t.Logf("Started activity %s with 1s start-to-close timeout", activityID)
 
+	// First poll: activity has not started yet
+	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:   s.Namespace().String(),
+		ActivityId:  activityID,
+		RunId:       startResp.RunId,
+		IncludeInfo: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pollResp)
+	require.NotNil(t, pollResp.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, pollResp.GetInfo().GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pollResp.GetInfo().GetRunState())
+
 	// Worker poll to start the activity
-	t.Log("Polling activity task to start it...")
 	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
@@ -147,28 +159,52 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NotNil(t, pollTaskResp)
 	require.NotEmpty(t, pollTaskResp.TaskToken)
 
-	t.Log("Activity started by worker, now waiting for start-to-close timeout to fire...")
-
-	// Wait for timeout to fire - give extra time for task processing
-	t.Log("Waiting for timer task processing (5 seconds)...")
-	time.Sleep(5 * time.Second)
-
-	// Poll for the activity execution to see if it timed out
-	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:      s.Namespace().String(),
-		ActivityId:     activityID,
-		RunId:          startResp.RunId,
-		IncludeOutcome: true,
-		IncludeInfo:    true,
+	// Second poll: activity has started
+	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:   s.Namespace().String(),
+		ActivityId:  activityID,
+		RunId:       startResp.RunId,
+		IncludeInfo: true,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+				LongPollToken: pollResp.StateChangeLongPollToken,
+			},
+		},
 	})
-
 	require.NoError(t, err)
 	require.NotNil(t, pollResp)
+	require.NotNil(t, pollResp.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, pollResp.GetInfo().GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, pollResp.GetInfo().GetRunState())
 
-	// Check if the activity timed out
-	if pollResp.Info != nil {
-		t.Logf("Activity status: %v, run state: %v", pollResp.Info.Status, pollResp.Info.RunState)
-	}
+	// // Third poll: activity has timed out
+
+	// Waiting and then issuing non-blocking poll works
+	// time.Sleep(2 * time.Second)
+	// pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+	// 	Namespace:      s.Namespace().String(),
+	// 	ActivityId:     activityID,
+	// 	RunId:          startResp.RunId,
+	// 	IncludeInfo:    true,
+	// 	IncludeOutcome: true,
+	// })
+
+	// But we should be able to long-poll for this state change
+	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:   s.Namespace().String(),
+		ActivityId:  activityID,
+		RunId:       startResp.RunId,
+		IncludeInfo: true,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+				LongPollToken: pollResp.StateChangeLongPollToken,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pollResp)
+	require.NotNil(t, pollResp.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
 
 	if pollResp.Outcome != nil {
 		if failure := pollResp.GetFailure(); failure != nil {
