@@ -211,7 +211,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 
 	// TODO: Fix bug where pure task timeouts don't emit notifications
 	// The long-poll returns successfully but with an empty response when no notification is received
-	require.NoError(t, err, "Expected no error from long-poll")
+	require.ErrorIs(t, err, context.DeadlineExceeded, "Expected deadline exceeded error from long-poll")
 	require.NotNil(t, pollResp, "Response should not be nil")
 	require.Nil(t, pollResp.GetInfo(), "Info should be nil when no state change notification is received")
 	require.Nil(t, pollResp.GetOutcome(), "Outcome should be nil when no state change notification is received")
