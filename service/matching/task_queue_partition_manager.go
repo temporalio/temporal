@@ -197,6 +197,10 @@ func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
 // unloading the partition. For stopping and unloading a partition call unloadFromEngine instead.
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
+	queue, err := pm.managerReady.Get(context.Background())
+	if err == nil {
+		queue.Stop(unloadCause)
+	}
 
 	if pm.cancelFairnessSub != nil {
 		pm.cancelFairnessSub()
@@ -214,11 +218,6 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 		vq.Stop(unloadCause)
 	}
 	pm.versionedQueuesLock.Unlock()
-
-	queue, err := pm.managerReady.Get(context.Background())
-	if err == nil {
-		queue.Stop(unloadCause)
-	}
 
 	// Then, stop user data manager to wrap up any reads/writes.
 	pm.userDataManager.Stop()
