@@ -297,7 +297,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
 		EntityId:    "entity-id",
-		Archetype:   "test-archetype",
+		ArchetypeId: 1234,
 	}
 
 	serializedRef, err := dummyRef.Marshal()
@@ -336,7 +336,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					require.Equal(t, "namespace-id", ref.NamespaceId)
 					require.Equal(t, "business-id", ref.BusinessId)
 					require.Equal(t, "entity-id", ref.EntityId)
-					require.Equal(t, "test-archetype", ref.Archetype)
+					require.Equal(t, dummyRef.ArchetypeId, ref.ArchetypeId)
 					require.Equal(t, "request-id", req.Completion.RequestId)
 
 					// Verify successful operation data

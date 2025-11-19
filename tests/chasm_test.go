@@ -160,7 +160,10 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	)
 	s.NoError(err)
 
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = 'tests.payloadStore' AND WorkflowId = '%s'", storeID)
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
 
 	var visRecord *workflowpb.WorkflowExecutionInfo
 	s.Eventually(

@@ -11,7 +11,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	clockspb "go.temporal.io/server/api/clock/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -93,7 +93,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		}),
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetype,
 		locks.PriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState, nil)
