@@ -661,7 +661,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 		}
 
 		handlerCalled := false
-		_, err := nvi.StateValidationIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+		_, err = nvi.StateValidationIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
 			handlerCalled = true
 			return &workflowservice.RespondWorkflowTaskCompletedResponse{}, nil
 		})
@@ -841,7 +841,7 @@ func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 
 	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespace"}
 	handlerCalled := false
-	_, err := nvi.NamespaceValidateIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+	_, err = nvi.NamespaceValidateIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
 		handlerCalled = true
 		return &workflowservice.StartWorkflowExecutionResponse{}, nil
 	})

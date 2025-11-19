@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
