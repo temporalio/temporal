@@ -889,7 +889,7 @@ and deployment interaction in matching and history.`,
 	)
 	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
 		"system.useRevisionNumberForWorkerVersioning",
-		false,
+		true,
 		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(

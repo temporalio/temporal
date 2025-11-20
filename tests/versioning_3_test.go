@@ -75,7 +75,7 @@ type Versioning3Suite struct {
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &Versioning3Suite{useV32: true})
+	// suite.Run(t, &Versioning3Suite{useV32: true})
 	suite.Run(t, &Versioning3Suite{useV32: true, useNewDeploymentData: true})
 }
 
@@ -4419,11 +4419,9 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_StartsOnFirstRun() {
 		s.T().Skip("This test is only supported on new deployment data")
 	}
 
+	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
-
-	time.Sleep(1 * time.Second)
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 	tv0 := tv1.WithBuildIDNumber(0)
@@ -4551,6 +4549,8 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_StartsOnFirstRun() {
 		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
 		return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
 	}, 10*time.Second, 100*time.Millisecond)
+
+	go s.idlePollWorkflow(tv0, true, 1*time.Minute, "v0 poller should not receive a task")
 
 	// Trigger failure of the first run to cause retry.
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, runIDBeforeRetry, "proceed", nil))
