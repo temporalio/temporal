@@ -538,6 +538,10 @@ func (n *Node) isComponent() bool {
 	return n.serializedNode.GetMetadata().GetComponentAttributes() != nil
 }
 
+func (n *Node) isMap() bool {
+	return n.serializedNode.GetMetadata().GetCollectionAttributes() != nil
+}
+
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -756,6 +760,19 @@ func (n *Node) syncSubComponents() error {
 			}
 			if keepChild {
 				childrenToKeep[field.name] = struct{}{}
+			}
+		case fieldKindParentPtr:
+			internalField := field.val.FieldByName(parentPtrInternalFieldName)
+			internal, ok := internalField.Interface().(parentPtrInternal)
+			if !ok {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"CHASM parent pointer's internal field is not of parentPtrInternal type",
+					fmt.Errorf("node %s, actual type: %T", n.nodeName, internalField.Interface()))
+			}
+			if internal.currentNode == nil || internal.currentNode != n {
+				internal.currentNode = n
+				internalField.Set(reflect.ValueOf(internal))
 			}
 		case fieldKindSubMap:
 			if field.val.IsNil() {
@@ -1141,6 +1158,12 @@ func (n *Node) deserializeComponentNode(
 			}
 		case fieldKindMutableState:
 			field.val.Set(reflect.ValueOf(NewMSPointer(n.backend)))
+		case fieldKindParentPtr:
+			parentPtrV := reflect.New(field.typ).Elem()
+			parentPtrV.FieldByName(parentPtrInternalFieldName).Set(reflect.ValueOf(parentPtrInternal{
+				currentNode: n,
+			}))
+			field.val.Set(parentPtrV)
 		}
 	}
 
