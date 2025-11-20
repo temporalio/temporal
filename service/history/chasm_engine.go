@@ -331,15 +331,15 @@ func (e *ChasmEngine) PollComponent(
 
 	// At this point it's possible that shard VT < requestRef VT (getExecutionLease does not
 	// guarantee that returned shard state is non-stale w.r.t. requestRef).
-	currentRef, err := e.checkPredicate(ctx, requestRef, executionLease, predicateFn)
+	satisfiedRef, err := e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
 	if err != nil {
 		return nil, err
 	}
 	// shard VT >= requestRef VT (enforced by checkPredicate)
 
-	if currentRef != nil {
+	if satisfiedRef != nil {
 		// wait condition was satisfied
-		return currentRef, nil
+		return satisfiedRef, nil
 	}
 
 	// Wait condition not satisfied; long-poll
@@ -368,74 +368,51 @@ func (e *ChasmEngine) PollComponent(
 		return nil, err
 	}
 
-	// Long-poll timeout semantics are the same as PollWorkflowExecutionUpdate: if the long-poll
-	// times out due to the server-imposed soft timeout, then return a non-error empty response
-	// indicating to a caller that they should continue long-polling. Unlike
-	// PollWorkflowExecutionUpdate we reserve 1s buffer.
-	softTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-
-	fmt.Println("⏲️ PollComponent: softTimeout", softTimeout)
-
-	stCtx, stCancel := contextutil.WithDeadlineBuffer(ctx, softTimeout, time.Second)
-	defer stCancel()
-
-	if deadline, ok := ctx.Deadline(); ok {
-		fmt.Println("⏲️ PollComponent: ctx has deadline", time.Until(deadline))
-	}
-	if stDeadline, ok := stCtx.Deadline(); ok {
-		fmt.Println("⏲️ PollComponent: stCtx has deadline", time.Until(stDeadline))
-	}
-
+	// If the long-poll times out due to the internally-imposed long-poll timeout, then we want the
+	// initiator of the long-poll to receive a non-error empty response indicating that they should
+	// continue long-polling. To achieve this, we return nil on all canceled context errors below.
+	// We assume that the parent will check for a canceled context independently (without relying on
+	// any error value we return), so that if the cancelation was due to the parent deadline rather
+	// than the internally-imposed long-poll timeout then the initiator of the long-poll will get a
+	// deadline exceeded error.
+	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, internalLongPollTimeout, time.Second)
+	defer cancel()
 	for {
 		select {
 		case notification := <-channel:
 			if notification == nil {
 				return nil, serviceerror.NewInternal("nil component notification")
 			}
-			// Received a notification. Re-acquire the lock and check the predicate.
-			_, executionLease, err := e.getExecutionLease(stCtx, requestRef)
+			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 			if err != nil {
-				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
-					return nil, ctx.Err()
-				}
-				if errors.Is(err, stCtx.Err()) {
-					// Server-imposed timeout; caller should continue long-polling.
+				if errors.Is(err, ctx.Err()) {
 					return nil, nil
 				}
 				return nil, err
 			}
-
-			newRef, err := e.checkPredicate(stCtx, requestRef, executionLease, predicateFn)
-			executionLease.GetReleaseFn()(nil)
+			func() {
+				defer executionLease.GetReleaseFn()(nil)
+				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
+			}()
 			if err != nil {
-				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
-					return nil, ctx.Err()
-				}
-				if errors.Is(err, stCtx.Err()) {
-					// Server-imposed timeout; caller should continue long-polling.
-					fmt.Println("🟡 PollComponent: server-imposed timeout I")
+				if errors.Is(err, ctx.Err()) {
 					return nil, nil
 				}
 				return nil, err
 			}
-			if newRef != nil {
-				// Wait condition was satisfied.
-				return newRef, nil
+			if satisfiedRef != nil {
+				return satisfiedRef, nil
 			}
-		case <-stCtx.Done():
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			// Server-imposed timeout; caller should continue long-polling.
-			fmt.Println("🟡 PollComponent: server-imposed timeout II")
+		case <-ctx.Done():
 			return nil, nil
 		}
 	}
 }
 
-// checkPredicate is a helper function for PollComponent. It returns (ref, err) where ref is non-nil
+// predicateSatisfied is a helper function for PollComponent. It returns (ref, err) where ref is non-nil
 // iff there's no error and predicateFn evaluates to true.
-func (e *ChasmEngine) checkPredicate(
+func (e *ChasmEngine) predicateSatisfied(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	executionLease api.WorkflowLease,
