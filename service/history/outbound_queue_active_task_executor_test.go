@@ -186,7 +186,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 				Category:    tasks.CategoryOutbound,
 				Destination: tv.Any().String(),
 				Info: &persistencespb.ChasmTaskInfo{
-					Type: tv.Any().String(),
+					TypeId: tv.Any().UInt32(),
 				},
 			}
 

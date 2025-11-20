@@ -74,7 +74,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskTypeTagValue := queues.GetStandbyTimerTaskTypeTagValue(task)
+	taskTypeTagValue := queues.GetStandbyTimerTaskTypeTagValue(task, t.shardContext.ChasmRegistry())
 
 	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),

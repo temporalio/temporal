@@ -2222,6 +2222,7 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:       true,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW: true,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:         true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED:         true,
 	}
 
 	// workflow task events will be assign event ID immediately

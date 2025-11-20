@@ -103,11 +103,7 @@ func (c *SQLQueryConverter) BuildAndExpr(exprs ...sqlparser.Expr) (sqlparser.Exp
 	}
 	wrappedExprs := make([]sqlparser.Expr, len(exprs))
 	for i, expr := range exprs {
-		if _, ok := expr.(*sqlparser.OrExpr); ok {
-			wrappedExprs[i], _ = c.BuildParenExpr(expr)
-		} else {
-			wrappedExprs[i] = expr
-		}
+		wrappedExprs[i], _ = c.BuildParenExpr(expr)
 	}
 	return query.ReduceExprs(
 		func(left, right sqlparser.Expr) sqlparser.Expr {

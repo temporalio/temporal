@@ -301,6 +301,43 @@ func (this *WorkerDeploymentLocalState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type PropagatingRevisions to the protobuf v3 wire format
+func (val *PropagatingRevisions) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type PropagatingRevisions from the protobuf v3 wire format
+func (val *PropagatingRevisions) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *PropagatingRevisions) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two PropagatingRevisions values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *PropagatingRevisions) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *PropagatingRevisions
+	switch t := that.(type) {
+	case *PropagatingRevisions:
+		that1 = t
+	case PropagatingRevisions:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type WorkerDeploymentVersionSummary to the protobuf v3 wire format
 func (val *WorkerDeploymentVersionSummary) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -663,6 +700,43 @@ func (this *SyncDrainageStatusSignalArgs) Equal(that interface{}) bool {
 	case *SyncDrainageStatusSignalArgs:
 		that1 = t
 	case SyncDrainageStatusSignalArgs:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type PropagationCompletionInfo to the protobuf v3 wire format
+func (val *PropagationCompletionInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type PropagationCompletionInfo from the protobuf v3 wire format
+func (val *PropagationCompletionInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *PropagationCompletionInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two PropagationCompletionInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *PropagationCompletionInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *PropagationCompletionInfo
+	switch t := that.(type) {
+	case *PropagationCompletionInfo:
+		that1 = t
+	case PropagationCompletionInfo:
 		that1 = &t
 	default:
 		return false

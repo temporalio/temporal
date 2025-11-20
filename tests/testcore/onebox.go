@@ -455,10 +455,10 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			fx.Provide(c.GetGrpcClientInterceptor),
-			fx.Decorate(func(base persistence.ExecutionManager) persistence.ExecutionManager {
+			fx.Decorate(func(base persistence.ExecutionManager, logger log.Logger) persistence.ExecutionManager {
 				// Wrap ExecutionManager with recorder to capture task writes
 				// This wraps the FINAL ExecutionManager after all FX processing (metrics, retries, etc.)
-				c.taskQueueRecorder = NewTaskQueueRecorder(base)
+				c.taskQueueRecorder = NewTaskQueueRecorder(base, logger)
 				return c.taskQueueRecorder
 			}),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
