@@ -220,7 +220,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		RunId:      task.GetRunID(),
 	}
 
-	weCtx, release, err := t.cache.GetOrCreateChasmEntity(
+	weCtx, release, err := t.cache.GetOrCreateChasmExecution(
 		ctx,
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),

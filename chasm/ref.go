@@ -8,35 +8,31 @@ import (
 )
 
 var (
-	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
+	defaultShardingFn = func(key ExecutionKey) string { return key.NamespaceID + "_" + key.BusinessID }
 )
 
-// EntityKey uniquely identifies a CHASM execution in the system.
-// TODO: Rename to ExecutionKey.
-type EntityKey struct {
+// ExecutionKey uniquely identifies a CHASM execution in the system.
+type ExecutionKey struct {
 	NamespaceID string
-	// TODO: Rename to EntityID.
-	BusinessID string
-	// TODO: Rename to RunID.
-	EntityID string
+	BusinessID  string
+	RunID       string
 }
 
 type ComponentRef struct {
-	EntityKey
+	ExecutionKey
 
 	// archetypeID is CHASM framework's internal ID for the type of the root component of the CHASM execution.
 	//
-	// It is used to find and validate the loaded execution has the right archetype, especially whe runID
-	// is not specified in the EntityKey.
-	// E.g. The EntityKey can be empty and the current run of the BusinessID may have a different archetype.
+	// It is used to find and validate the loaded execution has the right archetype, especially when runID
+	// is not specified in the ExecutionKey.
 	archetypeID ArchetypeID
-	// entityGoType is used for determining the ComponetRef's archetype.
-	// When CHASM deverloper needs to create a ComponentRef, they will only provide this information,
-	// and leave the work of determining archetype to the CHASM engine.
-	entityGoType reflect.Type
+	// executionGoType is used for determining the ComponetRef's archetype.
+	// When CHASM deverloper needs to create a ComponentRef, they will only provide the component type,
+	// and leave the work of determining archetypeID to the CHASM framework.
+	executionGoType reflect.Type
 
-	// entityLastUpdateVT is the consistency token for the entire entity.
-	entityLastUpdateVT *persistencespb.VersionedTransition
+	// executionLastUpdateVT is the consistency token for the entire execution.
+	executionLastUpdateVT *persistencespb.VersionedTransition
 
 	// componentType is the fully qualified component type name.
 	// It is for performing partial loading more efficiently in future versions of CHASM.
@@ -59,13 +55,13 @@ type ComponentRef struct {
 // NewComponentRef creates a new ComponentRef with a registered root component go type.
 //
 // In V1, if you don't have a ref,
-// then you can only interact with the (top level) entity.
+// then you can only interact with the (top level) execution.
 func NewComponentRef[C Component](
-	entityKey EntityKey,
+	executionKey ExecutionKey,
 ) ComponentRef {
 	return ComponentRef{
-		EntityKey:    entityKey,
-		entityGoType: reflect.TypeFor[C](),
+		ExecutionKey:    executionKey,
+		executionGoType: reflect.TypeFor[C](),
 	}
 }
 
@@ -76,9 +72,9 @@ func (r *ComponentRef) ArchetypeID(
 		return r.archetypeID, nil
 	}
 
-	rc, ok := registry.componentOf(r.entityGoType)
+	rc, ok := registry.componentOf(r.executionGoType)
 	if !ok {
-		return 0, serviceerror.NewInternal("unknown chasm component type: " + r.entityGoType.String())
+		return 0, serviceerror.NewInternal("unknown chasm component type: " + r.executionGoType.String())
 	}
 	r.archetypeID = rc.componentID
 
@@ -102,7 +98,7 @@ func (r *ComponentRef) ShardingKey(
 		return "", serviceerror.NewInternalf("unknown chasm component type id: %d", archetypeID)
 	}
 
-	return rc.shardingFn(r.EntityKey), nil
+	return rc.shardingFn(r.ExecutionKey), nil
 }
 
 func (r *ComponentRef) Serialize(
@@ -120,9 +116,9 @@ func (r *ComponentRef) Serialize(
 	pRef := persistencespb.ChasmComponentRef{
 		NamespaceId:                         r.NamespaceID,
 		BusinessId:                          r.BusinessID,
-		EntityId:                            r.EntityID,
+		RunId:                               r.RunID,
 		ArchetypeId:                         archetypeID,
-		EntityVersionedTransition:           r.entityLastUpdateVT,
+		ExecutionVersionedTransition:        r.executionLastUpdateVT,
 		ComponentPath:                       r.componentPath,
 		ComponentInitialVersionedTransition: r.componentInitialVT,
 	}
@@ -130,7 +126,7 @@ func (r *ComponentRef) Serialize(
 }
 
 // DeserializeComponentRef deserializes a byte slice into a ComponentRef.
-// Provides caller the access to information including EntityKey, Archetype, and ShardingKey.
+// Provides caller the access to information including ExecutionKey, Archetype, and ShardingKey.
 func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 	var pRef persistencespb.ChasmComponentRef
 	if err := pRef.Unmarshal(data); err != nil {
@@ -145,14 +141,14 @@ func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 // already been deserialized as part of an enclosing message.
 func ProtoRefToComponentRef(pRef *persistencespb.ChasmComponentRef) ComponentRef {
 	return ComponentRef{
-		EntityKey: EntityKey{
+		ExecutionKey: ExecutionKey{
 			NamespaceID: pRef.NamespaceId,
 			BusinessID:  pRef.BusinessId,
-			EntityID:    pRef.EntityId,
+			RunID:       pRef.RunId,
 		},
-		archetypeID:        pRef.ArchetypeId,
-		entityLastUpdateVT: pRef.EntityVersionedTransition,
-		componentPath:      pRef.ComponentPath,
-		componentInitialVT: pRef.ComponentInitialVersionedTransition,
+		archetypeID:           pRef.ArchetypeId,
+		executionLastUpdateVT: pRef.ExecutionVersionedTransition,
+		componentPath:         pRef.ComponentPath,
+		componentInitialVT:    pRef.ComponentInitialVersionedTransition,
 	}
 }

@@ -1602,10 +1602,10 @@ func (s *nodeSuite) TestGetComponent() {
 func (s *nodeSuite) TestRef() {
 	tv := testvars.New(s.T())
 	workflowKey := tv.Any().WorkflowKey()
-	entityKey := EntityKey{
+	executionKey := ExecutionKey{
 		NamespaceID: workflowKey.NamespaceID,
 		BusinessID:  workflowKey.WorkflowID,
-		EntityID:    workflowKey.RunID,
+		RunID:       workflowKey.RunID,
 	}
 	currentVT := &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: 2,
@@ -1624,7 +1624,7 @@ func (s *nodeSuite) TestRef() {
 	s.NoError(err)
 
 	chasmContext := NewContext(context.Background(), root)
-	rootComponent, err := root.Component(chasmContext, NewComponentRef[*TestComponent](entityKey))
+	rootComponent, err := root.Component(chasmContext, NewComponentRef[*TestComponent](executionKey))
 	s.NoError(err)
 	testComponent, ok := rootComponent.(*TestComponent)
 	s.True(ok)
@@ -1693,21 +1693,21 @@ func (s *nodeSuite) TestRef() {
 
 			s.NoError(err)
 			expectedRef := ComponentRef{
-				EntityKey:     entityKey,
+				ExecutionKey:  executionKey,
 				archetypeID:   archetypeID,
 				componentPath: tc.expectedPath,
 
 				// Proto fields are validated separately with ProtoEqual.
-				// entityLastUpdateVT: currentVT,
+				// executionLastUpdateVT: currentVT,
 				// componentInitialVT: tc.expectedInitalVT,
 			}
 
 			actualRef, err := DeserializeComponentRef(encodedRef)
 			s.NoError(err)
-			s.ProtoEqual(currentVT, actualRef.entityLastUpdateVT)
+			s.ProtoEqual(currentVT, actualRef.executionLastUpdateVT)
 			s.ProtoEqual(tc.expectedInitalVT, actualRef.componentInitialVT)
 
-			actualRef.entityLastUpdateVT = nil
+			actualRef.executionLastUpdateVT = nil
 			actualRef.componentInitialVT = nil
 			s.Equal(expectedRef, actualRef)
 		})
@@ -2822,10 +2822,10 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		Destination:         "destination",
 		Info:                taskInfo,
 	}
-	entityKey := EntityKey{
+	executionKey := ExecutionKey{
 		NamespaceID: chasmTask.NamespaceID,
 		BusinessID:  chasmTask.WorkflowID,
-		EntityID:    chasmTask.RunID,
+		RunID:       chasmTask.RunID,
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -2877,7 +2877,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Succeed task execution.
 	expectValidate(true, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
 	s.NoError(err)
 	s.True(backendValidtionFnCalled)
 	s.True(chasmTask.DeserializedTask.IsValid())
@@ -2885,7 +2885,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Invalid task.
 	expectValidate(false, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.True(chasmTask.DeserializedTask.IsValid())
@@ -2894,7 +2894,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	validationErr := errors.New("validation error")
 	expectValidate(false, validationErr)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(validationErr, err)
 	s.False(chasmTask.DeserializedTask.IsValid())
 
@@ -2902,7 +2902,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectValidate(true, nil)
 	executionErr := errors.New("execution error")
 	expectExecute(executionErr)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, entityKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(executionErr, err)
 	s.True(backendValidtionFnCalled)
 	s.False(chasmTask.DeserializedTask.IsValid())

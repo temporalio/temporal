@@ -50,10 +50,10 @@ func executeChasmSideEffectTask(
 	tree historyi.ChasmTree,
 	task *tasks.ChasmTask,
 ) error {
-	entityKey := chasm.EntityKey{
+	entityKey := chasm.ExecutionKey{
 		NamespaceID: task.NamespaceID,
 		BusinessID:  task.WorkflowID,
-		EntityID:    task.RunID,
+		RunID:       task.RunID,
 	}
 
 	validate := func(backend chasm.NodeBackend, _ chasm.Context, _ chasm.Component) error {

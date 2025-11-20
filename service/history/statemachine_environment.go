@@ -82,7 +82,7 @@ func getWorkflowExecutionContext(
 	}
 	// workflowCache will automatically use short context timeout when
 	// locking workflow for all background calls, we don't need a separate context here
-	weContext, release, err := workflowCache.GetOrCreateChasmEntity(
+	weContext, release, err := workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		shardContext,
 		namespaceID,

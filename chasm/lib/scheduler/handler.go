@@ -16,9 +16,9 @@ func newHandler() *handler {
 }
 
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (*schedulerpb.CreateScheduleResponse, error) {
-	resp, _, _, err := chasm.NewEntity(
+	resp, _, _, err := chasm.NewExecution(
 		ctx,
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
 			BusinessID:  req.FrontendRequest.ScheduleId,
 		},
@@ -33,7 +33,7 @@ func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateSch
 	resp, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
@@ -48,7 +48,7 @@ func (h *handler) PatchSchedule(ctx context.Context, req *schedulerpb.PatchSched
 	resp, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
@@ -63,7 +63,7 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 	resp, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
@@ -78,7 +78,7 @@ func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.Describ
 	return chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
