@@ -374,9 +374,20 @@ func (e *ChasmEngine) PollComponent(
 	// any error value we return), so that if the cancelation was due to the parent deadline rather
 	// than the internally-imposed long-poll timeout then the initiator of the long-poll will get a
 	// deadline exceeded error.
+
+	if deadline, ok := ctx.Deadline(); ok {
+		fmt.Println("⏲️  PollComponent: parent has deadline", time.Until(deadline))
+	}
+
 	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+
+	fmt.Println("⏲️  PollComponent: internal long poll timeout", internalLongPollTimeout)
+
 	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
 	defer cancel()
+	if stDeadline, ok := ctx.Deadline(); ok {
+		fmt.Println("⏲️  PollComponent: after applying internal long poll timeout has deadline", time.Until(stDeadline))
+	}
 	for {
 		select {
 		case notification := <-channel:
@@ -386,6 +397,7 @@ func (e *ChasmEngine) PollComponent(
 			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 			if err != nil {
 				if errors.Is(err, ctx.Err()) {
+					fmt.Println("🟡 PollComponent: server-imposed timeout I")
 					return nil, nil
 				}
 				return nil, err
@@ -396,6 +408,7 @@ func (e *ChasmEngine) PollComponent(
 			}()
 			if err != nil {
 				if errors.Is(err, ctx.Err()) {
+					fmt.Println("🟡 PollComponent: server-imposed timeout II")
 					return nil, nil
 				}
 				return nil, err
@@ -404,6 +417,7 @@ func (e *ChasmEngine) PollComponent(
 				return satisfiedRef, nil
 			}
 		case <-ctx.Done():
+			fmt.Println("🟡 PollComponent: server-imposed timeout III")
 			return nil, nil
 		}
 	}
