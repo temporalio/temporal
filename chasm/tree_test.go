@@ -546,7 +546,7 @@ func (s *nodeSuite) TestParentPointer_InMemory() {
 
 	testComponentFromPtr := mapSubComponent1.ParentPtr.Get(mutableContext)
 	// Asserting they actually point to the same testComponent object.
-	s.True(testComponent == testComponentFromPtr)
+	s.Same(testComponent, testComponentFromPtr)
 }
 
 func (s *nodeSuite) TestParentPointer_FromDB() {
@@ -571,13 +571,13 @@ func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
 	s.NoError(err)
 	testComponentFromPtr := subComponent1.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testComponent object.
-	s.True(testComponent == testComponentFromPtr)
+	s.Same(testComponent, testComponentFromPtr)
 
 	subComponent11, err := subComponent1.SubComponent11.Get(chasmContext)
 	s.NoError(err)
 	testSubComponent1FromPtr := subComponent11.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testSubComponent1 object.
-	s.True(subComponent1 == testSubComponent1FromPtr)
+	s.Same(subComponent1, testSubComponent1FromPtr)
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {

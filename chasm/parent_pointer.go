@@ -31,7 +31,7 @@ type parentPtrInternal struct {
 	currentNode *Node
 }
 
-// Get returns the parent component this ParentPtr points to, deserializing it if necessary.
+// Get returns the parent component, deserializing it if necessary.
 // Panics rather than returning an error, as errors are supposed to be handled by the framework as opposed to the
 // application.
 func (p ParentPtr[T]) Get(chasmContext Context) T {
@@ -43,7 +43,7 @@ func (p ParentPtr[T]) Get(chasmContext Context) T {
 	return vT
 }
 
-// Get returns the parent component this ParentPtr points to and a boolean indicating if the value was found,
+// TryGet returns the parent component and a boolean indicating if the value was found,
 // deserializing if necessary.
 // Panics rather than returning an error, as errors are supposed to be handled by the framework as opposed to the
 // application.
