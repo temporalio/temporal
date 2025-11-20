@@ -2871,7 +2871,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUnpausedEvent(
 	reason string,
 	requestID string,
 ) (*historypb.HistoryEvent, error) {
-	opTag := tag.WorkflowActionUnknown
+	opTag := tag.WorkflowActionWorkflowUnpaused
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
