@@ -41,6 +41,9 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
+	func() func(historyi.ShardContext) PersistenceRateLimiter {
+		return PersistenceRateLimiterProvider
+	},
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{

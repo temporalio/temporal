@@ -162,6 +162,7 @@ func NewEngineWithShardContext(
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	historyReplicatorPersistenceRateLimiterProvider func(historyi.ShardContext) replication.PersistenceRateLimiter,
 	testHooks testhooks.TestHooks,
 ) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -238,6 +239,7 @@ func NewEngineWithShardContext(
 			workflowCache,
 			historyEngImpl.eventsReapplier,
 			eventSerializer,
+			historyReplicatorPersistenceRateLimiterProvider(shard),
 			logger,
 		)
 		historyEngImpl.nDCHistoryImporter = ndc.NewHistoryImporter(
