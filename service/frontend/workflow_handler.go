@@ -6127,12 +6127,12 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *workflowservice.PauseWorkflowExecutionRequest) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.WorkflowPauseEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", request.GetNamespace())
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.WorkflowPauseEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", request.GetNamespace())
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
