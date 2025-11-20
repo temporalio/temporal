@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -823,7 +824,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
 	)
 }
 
-func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectInherit_RetryOfChild() {
+func (s *Versioning3Suite) TestWorkflowRetry_Pinned_lerit_RetryOfChild() {
 	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, true, true, false)
 }
 
@@ -836,7 +837,6 @@ func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectNoInherit() {
 }
 
 // TODO (Shivam): I think one may need to slightly modify this now that we are actually "inheriting" the autoupgrade version.
-
 func (s *Versioning3Suite) TestWorkflowRetry_Unpinned_ExpectNoInherit() {
 	s.testWorkflowRetry(workflow.VersioningBehaviorAutoUpgrade, false, false, false)
 }
@@ -4412,9 +4412,11 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 	s.Equal("v1", result)
 }
 
-// Verifies that a retry run starts on at least the version the first run executed on,
-// even if one task-queue partition's user data is rolled back to an older revision/version.
-func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_StartsOnFirstRun() {
+// Verifies that a retry run starts on the same version the first run executed on,
+// even if the task-queue partition's user data is rolled back to an older version.
+// If testContinueAsNew is true, tests a ContinueAsNew followed by retry; otherwise tests a direct retry of a workflow.
+// If testChildWorkflow is true, tests that a child workflow's retry doesn't bounce back (child spawned by parent with retry policy).
+func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChildWorkflow bool) {
 	if !s.useNewDeploymentData {
 		s.T().Skip("This test is only supported on new deployment data")
 	}
@@ -4435,8 +4437,18 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_StartsOnFirstRun() {
 		tv1.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
 	}, []string{}, tqTypeWf, tqTypeAct)
 
-	// Simple workflow: run an activity to ensure it's executing, then wait for a signal to fail to trigger retry.
-	wf := func(ctx workflow.Context) (string, error) {
+	// Ensure v0 poller never received a task throughout the test
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.idlePollWorkflow(tv0, true, 10*time.Second, "v0 poller should not receive a task")
+	}()
+
+	childWorkflowID := tv1.WorkflowID() + "-child"
+
+	// Child workflow: executes activity, waits for signal, then fails to trigger retry
+	childWf := func(ctx workflow.Context) (string, error) {
 		var ret string
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
@@ -4448,9 +4460,69 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_StartsOnFirstRun() {
 		if err != nil {
 			return "", err
 		}
-		// Block until instructed to proceed (and then fail to cause retry)
+		// Wait for signal and fail to trigger retry
 		workflow.GetSignalChannel(ctx, "proceed").Receive(ctx, nil)
-		return "", errors.New("explicit failure to trigger retry")
+		return "", errors.New("explicit failure to trigger child retry")
+	}
+
+	// Parent workflow that spawns child with retry policy (parent itself doesn't retry)
+	parentWf := func(ctx workflow.Context) error {
+		fut := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			TaskQueue:  tv1.TaskQueue().GetName(),
+			WorkflowID: childWorkflowID,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: time.Second,
+			},
+		}), "child-wf")
+		var val string
+		s.NoError(fut.Get(ctx, &val))
+		return nil
+	}
+
+	var wf func(workflow.Context, int) (string, error)
+	if testContinueAsNew {
+		// Workflow that does ContinueAsNew, then waits for signal to fail (triggering retry)
+		wf = func(ctx workflow.Context, runCount int) (string, error) {
+			var ret string
+			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: 30 * time.Second,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    time.Second,
+					BackoffCoefficient: 1,
+				},
+			}), "act").Get(ctx, &ret)
+			if err != nil {
+				return "", err
+			}
+
+			// Check if we should continue as new
+			if runCount == 0 {
+				// First run: do ContinueAsNew with runCount = 1
+				return "", workflow.NewContinueAsNewError(ctx, "wf-retry", 1)
+			}
+
+			// After CAN: wait for signal and fail to trigger retry
+			workflow.GetSignalChannel(ctx, "proceed").Receive(ctx, nil)
+			return "", errors.New("explicit failure to trigger retry")
+		}
+	} else {
+		// Simple workflow: run an activity to ensure it's executing, then wait for a signal to fail to trigger retry.
+		wf = func(ctx workflow.Context, runCount int) (string, error) {
+			var ret string
+			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: 30 * time.Second,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    time.Second,
+					BackoffCoefficient: 1,
+				},
+			}), "act").Get(ctx, &ret)
+			if err != nil {
+				return "", err
+			}
+			// Block until instructed to proceed (and then fail to cause retry)
+			workflow.GetSignalChannel(ctx, "proceed").Receive(ctx, nil)
+			return "", errors.New("explicit failure to trigger retry")
+		}
 	}
 	act := func() (string, error) { return "ok", nil }
 
@@ -4465,36 +4537,86 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_StartsOnFirstRun() {
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
-	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf-retry", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	if !testChildWorkflow {
+		w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf-retry", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	} else {
+		w1.RegisterWorkflowWithOptions(parentWf, workflow.RegisterOptions{Name: "parent-wf", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+		w1.RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: "child-wf", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	}
 	w1.RegisterActivityWithOptions(act, activity.RegisterOptions{Name: "act"})
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	// Start workflow with retry policy (so failure will trigger automatic retry).
-	run0, err := s.SdkClient().ExecuteWorkflow(
-		ctx,
-		sdkclient.StartWorkflowOptions{
-			TaskQueue: tv1.TaskQueue().GetName(),
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval: time.Second,
+	var wfID string
+	var runIDBeforeRetry string
+
+	if testChildWorkflow {
+		// Start parent workflow (which spawns child with retry policy)
+		_, err := s.SdkClient().ExecuteWorkflow(
+			ctx,
+			sdkclient.StartWorkflowOptions{
+				TaskQueue: tv1.TaskQueue().GetName(),
 			},
-		},
-		"wf-retry",
-	)
-	s.NoError(err)
-
-	wfID := run0.GetID()
-	runIDBeforeRetry := run0.GetRunID()
-
-	// Ensure initial run is executing on v1.
-	s.Eventually(func() bool {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, runIDBeforeRetry)
+			"parent-wf",
+		)
 		s.NoError(err)
-		if err != nil {
-			return false
+
+		// Wait for child workflow to be created and executing on v1
+		s.Eventually(func() bool {
+			desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, childWorkflowID, "")
+			if err != nil {
+				return false
+			}
+			runIDBeforeRetry = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+			return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+		}, 10*time.Second, 100*time.Millisecond)
+
+		wfID = childWorkflowID
+	} else {
+		// Start workflow with retry policy (so failure will trigger automatic retry).
+		run0, err := s.SdkClient().ExecuteWorkflow(
+			ctx,
+			sdkclient.StartWorkflowOptions{
+				TaskQueue: tv1.TaskQueue().GetName(),
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval: time.Second,
+				},
+			},
+			"wf-retry",
+			0, // runCount starts at 0
+		)
+		s.NoError(err)
+
+		wfID = run0.GetID()
+
+		if testContinueAsNew {
+			// Wait for ContinueAsNew to happen
+			s.Eventually(func() bool {
+				desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
+				s.NoError(err)
+				if err != nil {
+					return false
+				}
+				// After CAN, the run ID changes and we should see execution on v1
+				if desc.GetWorkflowExecutionInfo().GetExecution().GetRunId() != run0.GetRunID() {
+					runIDBeforeRetry = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+					return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+				}
+				return false
+			}, 10*time.Second, 100*time.Millisecond)
+		} else {
+			runIDBeforeRetry = run0.GetRunID()
+			// Ensure initial run is executing on v1.
+			s.Eventually(func() bool {
+				desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, runIDBeforeRetry)
+				s.NoError(err)
+				if err != nil {
+					return false
+				}
+				return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+			}, 10*time.Second, 100*time.Millisecond)
 		}
-		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
-	}, 10*time.Second, 100*time.Millisecond)
+	}
 
 	// Roll back the workflow task-queue user data for one partition to simulate rollback/lag.
 	currentData, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -4550,12 +4672,10 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_StartsOnFirstRun() {
 		return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
 	}, 10*time.Second, 100*time.Millisecond)
 
-	go s.idlePollWorkflow(tv0, true, 1*time.Minute, "v0 poller should not receive a task")
-
-	// Trigger failure of the first run to cause retry.
+	// Trigger failure of the run to cause retry.
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, runIDBeforeRetry, "proceed", nil))
 
-	// Wait for first run to fail. This shall only happen if the first run is executing on the v1 worker.
+	// Wait for run to fail.
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfID, runIDBeforeRetry)
 		s.NoError(err)
@@ -4565,4 +4685,33 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_StartsOnFirstRun() {
 		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	}, 10*time.Second, 100*time.Millisecond)
 
+	// Verify that retry run is still on v1 (didn't bounce back to v0)
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
+		s.NoError(err)
+		if err != nil {
+			return false
+		}
+		// After retry, there should be a new run
+		if desc.GetWorkflowExecutionInfo().GetExecution().GetRunId() != runIDBeforeRetry {
+			// Verify workflow (parent or child) is still on v1
+			return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+		}
+		return false
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Clean up the idle poller
+	wg.Wait()
+}
+
+func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_NoBounceBack() {
+	s.testRetryNoBounceBack(false, false)
+}
+
+func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_AfterCAN_NoBounceBack() {
+	s.testRetryNoBounceBack(true, false)
+}
+
+func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_ChildNoBounceBack() {
+	s.testRetryNoBounceBack(false, true)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -1230,29 +1229,13 @@ func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 	taskDirectiveRevisionNumber int64,
 ) (physicalTaskQueueManager, int64, error) {
 
-	if strings.Contains(targetDeployment.GetBuildId(), "build_id_0") {
-		fmt.Println("CHOOSE TARGET QUEUE BY FLAG")
-		fmt.Println("TARGET DEPLOYMENT SERIES NAME", targetDeployment.GetSeriesName())
-		fmt.Println("TASK DEPLOYMENT SERIES NAME", taskDeployment.GetSeriesName())
+	dcValue := pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String())
 
-		fmt.Println("--------------------------------")
-		fmt.Println("NAMESPACE", pm.Namespace().Name().String())
+	// Debug logging to track DC value
+	fmt.Printf("[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeployment=%s, targetRevision=%d, taskRevision=%d\n",
+		dcValue, targetDeployment.GetBuildId(), targetDeploymentRevisionNumber, taskDirectiveRevisionNumber)
 
-		// Debug: Print pointer addresses to see if objects are changing
-		fmt.Printf("pm pointer: %p\n", pm)
-		fmt.Printf("pm.engine pointer: %p\n", pm.engine)
-		fmt.Printf("pm.engine.config pointer: %p\n", pm.engine.config)
-		fmt.Printf("Config function pointer: %p\n", pm.engine.config.UseRevisionNumberForWorkerVersioning)
-
-		dcValue := pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String())
-		fmt.Println("DC VALUE:", dcValue)
-		fmt.Println("--------------------------------")
-
-		fmt.Println("TARGET DEPLOYMENT REVISION NUMBER", targetDeploymentRevisionNumber)
-		fmt.Println("TASK DIRECTIVE REVISION NUMBER", taskDirectiveRevisionNumber)
-	}
-
-	if pm.engine != nil && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
+	if pm.engine != nil && dcValue {
 		if targetDeployment.GetSeriesName() != taskDeployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
 			return q, targetDeploymentRevisionNumber, err
