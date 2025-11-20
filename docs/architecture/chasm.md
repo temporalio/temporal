@@ -12,4 +12,4 @@
 
 - An `Execution` has a tree structure in which each subtree is a `Component`. A component, and thus an execution, may comprise one node only.
 
-- A `ComponentRef` contains an `ExecutionKey` and a `ComponentPath` that together identify a component within an execution. The component ref contains additional information identifying (uniquely across all clusters when there is a multi-cluster configuration with failovers) a specific transition in execution history at which the component was last updated.
+- A `ComponentRef` contains an `ExecutionKey` and a `ComponentPath` that together identify a component within an execution. The component ref contains additional information identifying (uniquely across all clusters when there is a multi-cluster configuration with failovers) a specific transition in execution history.
