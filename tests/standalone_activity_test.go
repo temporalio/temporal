@@ -12,6 +12,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -182,13 +183,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 
 	// Waiting and then issuing non-blocking poll works
 	// time.Sleep(2 * time.Second)
-	// pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-	// 	Namespace:      s.Namespace().String(),
-	// 	ActivityId:     activityID,
-	// 	RunId:          startResp.RunId,
-	// 	IncludeInfo:    true,
-	// 	IncludeOutcome: true,
-	// })
 
 	// Third poll: activity has timed out
 	// This long-poll SHOULD return immediately with the timeout state change
@@ -199,11 +193,10 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 
 	fmt.Println("🟠 Third poll: activity should have timed out")
 	pollResp, err = s.FrontendClient().PollActivityExecution(longPollCtx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:      s.Namespace().String(),
-		ActivityId:     activityID,
-		RunId:          startResp.RunId,
-		IncludeInfo:    true,
-		IncludeOutcome: true,
+		Namespace:   s.Namespace().String(),
+		ActivityId:  activityID,
+		RunId:       startResp.RunId,
+		IncludeInfo: true,
 		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
 			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
 				LongPollToken: pollResp.StateChangeLongPollToken,
@@ -213,29 +206,45 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 
 	// TODO: Fix bug where pure task timeouts don't emit notifications
 	// The long-poll returns successfully but with an empty response when no notification is received
-	require.ErrorIs(t, err, context.DeadlineExceeded, "Expected deadline exceeded error from long-poll")
-	require.NotNil(t, pollResp, "Response should not be nil")
-	require.Nil(t, pollResp.GetInfo(), "Info should be nil when no state change notification is received")
-	require.Nil(t, pollResp.GetOutcome(), "Outcome should be nil when no state change notification is received")
+	var deadlineErr *serviceerror.DeadlineExceeded
+	require.ErrorAs(t, err, &deadlineErr, "Expected deadline exceeded error from long-poll")
 
-	// Once the bug is fixed, the long-poll should return immediately with:
-	// - pollResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
-	// - pollResp.GetFailure() with TimeoutFailureInfo.TimeoutType == TIMEOUT_TYPE_START_TO_CLOSE
-	if pollResp.GetOutcome() != nil {
-		if failure := pollResp.GetFailure(); failure != nil {
-			t.Logf("Activity failed with: %v", failure.GetMessage())
-			// Check if it's a timeout failure
-			if timeoutFailure := failure.GetTimeoutFailureInfo(); timeoutFailure != nil {
-				t.Logf("Timeout type: %v", timeoutFailure.GetTimeoutType())
-				require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutFailure.GetTimeoutType(),
-					"Expected start-to-close timeout (activity_attempt_timeout)")
-			} else {
-				t.Fatal("Expected timeout failure but got different failure type")
-			}
-		} else if result := pollResp.GetResult(); result != nil {
-			t.Fatal("Activity succeeded when it should have timed out")
-		}
-	}
+	// TODO: despite the long-poll failure, it has transitioned to TimedOut
+	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:   s.Namespace().String(),
+		ActivityId:  activityID,
+		RunId:       startResp.RunId,
+		IncludeInfo: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pollResp)
+	require.NotNil(t, pollResp.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
+	// require.NotNil(t, pollResp.GetFailure())
+	// require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+
+	// require.NotNil(t, pollResp, "Response should not be nil")
+	// require.Nil(t, pollResp.GetInfo(), "Info should be nil when no state change notification is received")
+	// require.Nil(t, pollResp.GetOutcome(), "Outcome should be nil when no state change notification is received")
+
+	// // Once the bug is fixed, the long-poll should return immediately with:
+	// // - pollResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+	// // - pollResp.GetFailure() with TimeoutFailureInfo.TimeoutType == TIMEOUT_TYPE_START_TO_CLOSE
+	// if pollResp.GetOutcome() != nil {
+	// 	if failure := pollResp.GetFailure(); failure != nil {
+	// 		t.Logf("Activity failed with: %v", failure.GetMessage())
+	// 		// Check if it's a timeout failure
+	// 		if timeoutFailure := failure.GetTimeoutFailureInfo(); timeoutFailure != nil {
+	// 			t.Logf("Timeout type: %v", timeoutFailure.GetTimeoutType())
+	// 			require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutFailure.GetTimeoutType(),
+	// 				"Expected start-to-close timeout (activity_attempt_timeout)")
+	// 		} else {
+	// 			t.Fatal("Expected timeout failure but got different failure type")
+	// 		}
+	// 	} else if result := pollResp.GetResult(); result != nil {
+	// 		t.Fatal("Activity succeeded when it should have timed out")
+	// 	}
+	// }
 }
 
 func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout() {
