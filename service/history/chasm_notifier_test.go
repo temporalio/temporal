@@ -45,10 +45,8 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	}
 
 	// Single notification
-	expectedRef := []byte("test-ref")
 	notifier.Notify(&ChasmExecutionNotification{
 		Key: entityKey,
-		Ref: expectedRef,
 	})
 
 	// All subscribers should receive it
@@ -57,7 +55,6 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 		case received := <-sub.channel:
 			require.NotNil(t, received, "subscriber %d", i)
 			require.Equal(t, entityKey, received.Key, "subscriber %d", i)
-			require.Equal(t, expectedRef, received.Ref, "subscriber %d", i)
 		case <-time.After(time.Second):
 			t.Fatalf("subscriber %d: timeout waiting for notification", i)
 		}
@@ -95,7 +92,6 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 	require.NoError(t, err)
 	notifier.Notify(&ChasmExecutionNotification{
 		Key: entityKey2,
-		Ref: []byte("wrong-entity"),
 	})
 	select {
 	case <-channel:
@@ -129,7 +125,6 @@ func TestChasmNotifier_UnsubscribeStopsDelivery(t *testing.T) {
 	require.NoError(t, err)
 	notifier.Notify(&ChasmExecutionNotification{
 		Key: entityKey,
-		Ref: []byte("before-unsubscribe"),
 	})
 	select {
 	case received := <-channel:
@@ -143,7 +138,6 @@ func TestChasmNotifier_UnsubscribeStopsDelivery(t *testing.T) {
 	require.NoError(t, err)
 	notifier.Notify(&ChasmExecutionNotification{
 		Key: entityKey,
-		Ref: []byte("after-unsubscribe"),
 	})
 	select {
 	case <-channel:

@@ -32,9 +32,7 @@ type (
 
 	// ChasmExecutionNotification is a notification relating to a CHASM component.
 	ChasmExecutionNotification struct {
-		// TODO(dan): confirm that we want Key in addition to the key in serialized ref
 		Key       chasm.EntityKey
-		Ref       []byte
 		timestamp time.Time
 	}
 )
