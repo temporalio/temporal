@@ -42,10 +42,11 @@ echo "Building tdbg from source..."
 mkdir -p "${TEMP_DIR}"
 cd "${TEMP_DIR}"
 
+# Remove any existing temporal directory to ensure we get the correct version
+rm -rf temporal
+
 # Clone the temporal repo at the specific version
-if [ ! -d "temporal" ]; then
-  git clone --depth 1 --branch "v${SERVER_VERSION}" https://github.com/temporalio/temporal.git
-fi
+git clone --depth 1 --branch "v${SERVER_VERSION}" https://github.com/temporalio/temporal.git
 
 cd temporal
 
@@ -53,12 +54,10 @@ cd temporal
 echo "Building tdbg for ${ARCH}..."
 GOOS=linux GOARCH=${ARCH} CGO_ENABLED=0 go build -o "${BUILD_DIR}/tdbg" ./cmd/tools/tdbg
 
-# Copy config files from the cloned temporal repo (version-specific)
+# Copy config template from the cloned temporal repo (version-specific)
 if [ "${ARCH}" = "amd64" ]; then
-  echo "Copying config files from temporal repo..."
-  cp "${TEMP_DIR}/temporal/config/dynamicconfig/docker.yaml" "${SCRIPT_DIR}/build/config_docker.yaml"
-  # config_template.yaml is now embedded in temporal-server binary (as of v1.26.0+)
-  # Only legacy-server still needs config_template.yaml for dockerize templating
+  echo "Copying config template from temporal repo..."
+  # config_template.yaml is only needed for legacy-server (dockerize templating)
   cp "${TEMP_DIR}/temporal/docker/config_template.yaml" "${SCRIPT_DIR}/build/config_template.yaml"
 fi
 

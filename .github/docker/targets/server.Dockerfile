@@ -6,10 +6,15 @@ ARG TARGETARCH
 ARG TEMPORAL_SHA=unknown
 ARG TEMPORAL_VERSION=dev
 
-# Setup temporal user and directories
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata
+
+
 RUN addgroup -g 1000 temporal && \
     adduser -u 1000 -G temporal -D temporal && \
-    mkdir -p /etc/temporal/config && \
+    mkdir -p /etc/temporal/config/dynamicconfig && \
+    touch /etc/temporal/config/dynamicconfig/docker.yaml && \
     chown -R temporal:temporal /etc/temporal/config
 
 WORKDIR /etc/temporal
@@ -17,15 +22,12 @@ WORKDIR /etc/temporal
 ENV TEMPORAL_HOME=/etc/temporal
 ENV TEMPORAL_SHA=${TEMPORAL_SHA}
 
-# Copy binaries
+
 COPY --chmod=755 ./build/${TARGETARCH}/temporal-server /usr/local/bin/
 
-# Copy configs
-COPY ./build/config_docker.yaml /etc/temporal/config/dynamicconfig/docker.yaml
 
-# Copy scripts
-COPY --chmod=755 ./scripts/entrypoint-server.sh /etc/temporal/entrypoint.sh
-COPY --chmod=755 ./scripts/start-server.sh /etc/temporal/start-server.sh
+COPY --chmod=755 ./scripts/sh/entrypoint.sh /etc/temporal/entrypoint.sh
+COPY --chmod=755 ./scripts/sh/start-temporal.sh /etc/temporal/start-temporal.sh
 
 USER temporal
 ENTRYPOINT ["/etc/temporal/entrypoint.sh"]

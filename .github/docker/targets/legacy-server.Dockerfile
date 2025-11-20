@@ -20,10 +20,14 @@ RUN apk update --no-cache \
     && chmod +x /usr/local/bin/dockerize \
     && apk del wget
 
+# Use bash for subsequent RUN commands
+SHELL ["/bin/bash", "-c"]
+
 # Setup temporal user and directories
 RUN addgroup -g 1000 temporal && \
     adduser -u 1000 -G temporal -D temporal && \
-    mkdir -p /etc/temporal/config && \
+    mkdir -p /etc/temporal/config/dynamicconfig && \
+    touch /etc/temporal/config/dynamicconfig/docker.yaml && \
     chown -R temporal:temporal /etc/temporal/config
 
 WORKDIR /etc/temporal
@@ -40,12 +44,11 @@ COPY --chmod=755 ./build/${TARGETARCH}/temporal-server /usr/local/bin/
 COPY --chmod=755 ./build/${TARGETARCH}/temporal /usr/local/bin/
 
 # Copy configs
-COPY ./build/config_docker.yaml /etc/temporal/config/dynamicconfig/docker.yaml
 COPY ./build/config_template.yaml /etc/temporal/config/config_template.yaml
 
 # Copy scripts
-COPY --chmod=755 ./scripts/entrypoint.sh /etc/temporal/entrypoint.sh
-COPY --chmod=755 ./scripts/start-temporal.sh /etc/temporal/start-temporal.sh
+COPY --chmod=755 ./scripts/bash/entrypoint.sh /etc/temporal/entrypoint.sh
+COPY --chmod=755 ./scripts/bash/start-temporal.sh /etc/temporal/start-temporal.sh
 
 USER temporal
 

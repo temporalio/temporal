@@ -12,9 +12,9 @@ BUILD_DIR="${SCRIPT_DIR}/build"
 echo "Copying schema directory..."
 
 # Create build directory if it doesn't exist
-mkdir -p "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}/temporal"
 
 # Copy schema directory from repo root
-cp -r "${REPO_ROOT}/schema" "${BUILD_DIR}/temporal"
+cp -r "${REPO_ROOT}/schema" "${BUILD_DIR}/temporal/"
 
 echo "Schema directory copied to ${BUILD_DIR}/temporal/schema"

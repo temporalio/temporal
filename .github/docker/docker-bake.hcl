@@ -30,12 +30,12 @@ variable "TAG_LATEST" {
   default = false
 }
 
-group "default" {
-  targets = ["admin-tools", "legacy-admin-tools", "server", "legacy-server"]
-}
+# Legacy targets (legacy-admin-tools, legacy-server) are for building images with server versions
+# older than v1.27.0 (3 minor versions behind v1.30.0). Once support for pre-1.27.0 versions is
+# no longer needed, these legacy targets can be removed and only the standard targets should be used.
 
 target "admin-tools" {
-  dockerfile = "admin-tools.Dockerfile"
+  dockerfile = "targets/admin-tools.Dockerfile"
   target = "temporal-admin-tools"
   tags = compact([
     "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}",
@@ -63,7 +63,7 @@ target "admin-tools" {
 }
 
 target "legacy-admin-tools" {
-  dockerfile = "legacy-admin-tools.Dockerfile"
+  dockerfile = "targets/legacy-admin-tools.Dockerfile"
   target = "temporal-admin-tools"
   tags = compact([
     "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}",
@@ -93,7 +93,7 @@ target "legacy-admin-tools" {
 }
 
 target "server" {
-  dockerfile = "server.Dockerfile"
+  dockerfile = "targets/server.Dockerfile"
   tags = compact([
     "${IMAGE_REPO}/server:${IMAGE_SHA_TAG}",
     "${IMAGE_REPO}/server:${SAFE_IMAGE_BRANCH_TAG}",
@@ -118,7 +118,7 @@ target "server" {
 }
 
 target "legacy-server" {
-  dockerfile = "legacy-server.Dockerfile"
+  dockerfile = "targets/legacy-server.Dockerfile"
   tags = compact([
     "${IMAGE_REPO}/server:${IMAGE_SHA_TAG}",
     "${IMAGE_REPO}/server:${SAFE_IMAGE_BRANCH_TAG}",
