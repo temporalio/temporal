@@ -846,23 +846,18 @@ func (e *historyEngineImpl) GetChasmEngine() chasm.Engine {
 	return e.chasmEngine
 }
 
-func (e *historyEngineImpl) NotifyChasmExecution(namespaceID, workflowID, runID string, componentRef []byte) {
+func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.EntityKey, componentRef []byte) {
 	if e.chasmEngine == nil {
 		return
 	}
 
 	if chasmEngine, ok := e.chasmEngine.(*ChasmEngine); ok && chasmEngine != nil {
-		notifier := chasmEngine.GetNotifier()
-		if notifier == nil {
-			return
+		if notifier := chasmEngine.GetNotifier(); notifier != nil {
+			notifier.Notify(&ChasmExecutionNotification{
+				Key: executionKey,
+				Ref: componentRef,
+			})
 		}
-		notifier.Notify(&ChasmExecutionNotification{
-			Key: chasm.EntityKey{
-				NamespaceID: namespaceID,
-				BusinessID:  workflowID,
-				EntityID:    runID,
-			},
-		})
 	}
 }
 
