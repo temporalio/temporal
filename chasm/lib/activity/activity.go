@@ -422,14 +422,33 @@ func (a *Activity) buildPollActivityExecutionResponse(
 		if err != nil {
 			return nil, err
 		}
-		switch v := activityOutcome.GetVariant().(type) {
-		case *activitypb.ActivityOutcome_Failed_:
-			response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
-				Failure: v.Failed.GetFailure(),
+		if activityOutcome != nil {
+			switch v := activityOutcome.GetVariant().(type) {
+			case *activitypb.ActivityOutcome_Failed_:
+				response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
+					Failure: v.Failed.GetFailure(),
+				}
+			case *activitypb.ActivityOutcome_Successful_:
+				response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
+					Result: v.Successful.GetOutput(),
+				}
 			}
-		case *activitypb.ActivityOutcome_Successful_:
-			response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
-				Result: v.Successful.GetOutput(),
+		} else {
+			shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||
+				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT ||
+				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED ||
+				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
+
+			if shouldHaveFailure {
+				attempt, err := a.Attempt.Get(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if details := attempt.GetLastFailureDetails(); details != nil {
+					response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
+						Failure: details.GetFailure(),
+					}
+				}
 			}
 		}
 	}
