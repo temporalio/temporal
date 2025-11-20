@@ -234,17 +234,6 @@ func (e *ChasmEngine) UpdateComponent(
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
 	}
 
-	// TODO(dan) For now, UpdateComponent emits execution-level notifications, and PollComponent
-	// subscribes to execution-level notifications. This means that PollComponent may be woken up
-	// unnecessarily, but it will not miss notifications. In the future we may want to change
-	// PollComponent to subscribe to component-level notifications, and change UpdateComponent so
-	// that notifications are emitted only for nodes that were mutated in the transaction.
-	fmt.Println("🟦 UpdateComponent: emitting notification")
-	e.notifier.Notify(&ChasmExecutionNotification{
-		Key: ref.EntityKey,
-		Ref: newSerializedRef,
-	})
-
 	return newSerializedRef, nil
 }
 
