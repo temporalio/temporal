@@ -3,6 +3,8 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -1073,6 +1075,18 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
+	// if strings.Contains(targetDeployment.GetBuildId(), "build_id_0") {
+	// 	fmt.Println("current", current)
+	// 	fmt.Println("currentRevisionNumber", currentRevisionNumber)
+	// 	fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
+	// 	fmt.Println("ramping", ramping)
+	// 	fmt.Println("rampingPercentage", rampingPercentage)
+	// 	fmt.Println("rampingRevisionNumber", rampingRevisionNumber)
+	// 	fmt.Println("targetDeploymentVersion", targetDeploymentVersion)
+	// 	fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
+	// 	fmt.Println("targetDeployment", targetDeployment)
+	// }
+
 	var targetDeploymentQueue physicalTaskQueueManager
 	if directive.GetAssignedBuildId() == "" && targetDeployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -1215,6 +1229,29 @@ func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 	targetDeploymentRevisionNumber int64,
 	taskDirectiveRevisionNumber int64,
 ) (physicalTaskQueueManager, int64, error) {
+
+	if strings.Contains(targetDeployment.GetBuildId(), "build_id_0") {
+		fmt.Println("CHOOSE TARGET QUEUE BY FLAG")
+		fmt.Println("TARGET DEPLOYMENT SERIES NAME", targetDeployment.GetSeriesName())
+		fmt.Println("TASK DEPLOYMENT SERIES NAME", taskDeployment.GetSeriesName())
+
+		fmt.Println("--------------------------------")
+		fmt.Println("NAMESPACE", pm.Namespace().Name().String())
+
+		// Debug: Print pointer addresses to see if objects are changing
+		fmt.Printf("pm pointer: %p\n", pm)
+		fmt.Printf("pm.engine pointer: %p\n", pm.engine)
+		fmt.Printf("pm.engine.config pointer: %p\n", pm.engine.config)
+		fmt.Printf("Config function pointer: %p\n", pm.engine.config.UseRevisionNumberForWorkerVersioning)
+
+		dcValue := pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String())
+		fmt.Println("DC VALUE:", dcValue)
+		fmt.Println("--------------------------------")
+
+		fmt.Println("TARGET DEPLOYMENT REVISION NUMBER", targetDeploymentRevisionNumber)
+		fmt.Println("TASK DIRECTIVE REVISION NUMBER", taskDirectiveRevisionNumber)
+	}
+
 	if pm.engine != nil && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
 		if targetDeployment.GetSeriesName() != taskDeployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)

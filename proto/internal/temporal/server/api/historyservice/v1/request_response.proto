@@ -98,14 +98,7 @@ message StartWorkflowExecutionRequest {
     // pass along the source deployment version and revision number to the child/continued-as-new workflow. 
     // The effective behavior of these workflows is set to AutoUpgrade prior to the dispatching of the first workflow task.
     // After the first workflow task, the effective behavior of these workflows depends on worker sent values in subsequent workflow tasks.
-    InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
-
-    message InheritedAutoUpgradeInfo {
-        // The source deployment version of the parent workflow.
-        temporal.api.deployment.v1.WorkerDeploymentVersion source_deployment_version = 1;
-        // The revision number of the source deployment version of the parent workflow.
-        int64 source_deployment_revision_number = 2;
-    }
+    temporal.api.deployment.v1.InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
 }
 
 message StartWorkflowExecutionResponse {

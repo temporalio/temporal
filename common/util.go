@@ -577,7 +577,7 @@ func CreateHistoryStartWorkflowRequest(
 
 	// Populate the inherited auto upgrade info only if the source deployment version and revision number are not nil
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
-		inheritedAutoUpgradeInfo := &historyservice.StartWorkflowExecutionRequest_InheritedAutoUpgradeInfo{
+		inheritedAutoUpgradeInfo := &deploymentpb.InheritedAutoUpgradeInfo{
 			SourceDeploymentVersion:        sourceDeploymentVersion,
 			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
 		}

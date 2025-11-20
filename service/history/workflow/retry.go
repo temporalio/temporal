@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"slices"
 	"time"
@@ -255,11 +256,29 @@ func SetupNewWorkflowForRetryOrCron(
 	// of retry, and the retried run inherited a pinned version when it started (ie. it is a child of a pinned
 	// parent, or a CaN of a pinned run, and is running on a Task Queue in the inherited version).
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY &&
-		GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		startAttr.GetInheritedPinnedVersion() != nil {
-		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
-		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+	// If the previous run had an AutoUpgrade behavior, we pass down the source deployment version and revision number to the new run.
+	// Note: We only pass down one of inheritedPinnedVersion or inheritedAutoUpgradeInfo, but not both!
+	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
+
+	fmt.Println("RETRYYYY")
+	fmt.Println(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment()))
+	fmt.Println(previousMutableState.GetVersioningRevisionNumber())
+
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+			startAttr.GetInheritedPinnedVersion() != nil {
+			inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
+			// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+		} else if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
+			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
+			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+				SourceDeploymentVersion:        sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+			}
+
+			// retries and crons always go to the same task queue, so no need to check if source version is in new task queue
+		}
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -313,6 +332,7 @@ func SetupNewWorkflowForRetryOrCron(
 		RootExecutionInfo:        rootInfo,
 		InheritedBuildId:         startAttr.InheritedBuildId,
 		InheritedPinnedVersion:   inheritedPinnedVersion,
+		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

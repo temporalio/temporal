@@ -2497,7 +2497,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	// Add InheritedAutoUpgradeInfo if source deployment version and revision number are set
 	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
-		req.InheritedAutoUpgradeInfo = &historyservice.StartWorkflowExecutionRequest_InheritedAutoUpgradeInfo{
+		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 			SourceDeploymentVersion:        sourceDeploymentVersion,
 			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
 		}
@@ -2592,7 +2592,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		startRequest.StartRequest.GetRequestId(),
 		event,
-		startRequest.GetInheritedAutoUpgradeInfo(),
 	); err != nil {
 		return nil, err
 	}
@@ -2631,7 +2630,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	execution *commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
-	inheritedAutoUpgradeInfo *historyservice.StartWorkflowExecutionRequest_InheritedAutoUpgradeInfo,
 ) error {
 	if ms.executionInfo.NamespaceId != ms.namespaceEntry.ID().String() {
 		return serviceerror.NewInternalf("applying conflicting namespace ID: %v != %v",
@@ -2851,12 +2849,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.approximateSize += ms.executionState.Size()
 
 	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
-	if inheritedAutoUpgradeInfo != nil {
-		ms.SetVersioningRevisionNumber(inheritedAutoUpgradeInfo.GetSourceDeploymentRevisionNumber())
+	if event.GetInheritedAutoUpgradeInfo() != nil {
+		fmt.Println("INHERITED AUTO UPGRADE INFO in MS")
+		fmt.Println(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion())
+		fmt.Println(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
+
+		ms.SetVersioningRevisionNumber(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
 		if ms.executionInfo.VersioningInfo == nil {
 			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		}
-		ms.executionInfo.VersioningInfo.DeploymentVersion = inheritedAutoUpgradeInfo.GetSourceDeploymentVersion()
+		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
 		// Assume AutoUpgrade behavior for the first workflow task.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	}

@@ -162,7 +162,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				execution,
 				requestID,
 				event,
-				nil,
 			); err != nil {
 				return nil, err
 			}
