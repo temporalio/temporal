@@ -889,6 +889,22 @@ func (p *metadataPersistenceClient) GetMetadata(
 	return p.persistence.GetMetadata(ctx)
 }
 
+func (p *metadataPersistenceClient) WatchNamespaces(ctx context.Context) (_ <-chan *NamespaceWatchEvent, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		metricErr := retErr
+		// WatchNotSupported isn't really a persistence error. It's just a signal that persistence doesn't support watching.
+		if errors.Is(metricErr, ErrWatchNotSupported) {
+			metricErr = nil
+		}
+		p.healthSignals.Record(CallerSegmentMissing, time.Since(startTime), metricErr)
+		p.recordRequestMetrics(metrics.PersistenceWatchNamespacesScope, caller, time.Since(startTime), metricErr)
+		p.recordDataLossMetrics(metrics.PersistenceWatchNamespacesScope, caller, metricErr, "", "")
+	}()
+	return p.persistence.WatchNamespaces(ctx)
+}
+
 func (p *metadataPersistenceClient) Close() {
 	p.persistence.Close()
 }
