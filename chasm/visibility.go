@@ -127,22 +127,15 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 
 func (v *Visibility) GetSearchAttributes(
 	chasmContext Context,
-) (map[string]*commonpb.Payload, error) {
-	sa, err := v.SA.Get(chasmContext)
-	if err != nil {
-		return nil, err
-	}
-	return sa.GetIndexedFields(), nil
+) map[string]*commonpb.Payload {
+	return v.SA.Get(chasmContext).GetIndexedFields()
 }
 
 func (v *Visibility) SetSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
-) error {
-	currentSA, err := v.SA.Get(mutableContext)
-	if err != nil {
-		return err
-	}
+) {
+	currentSA := v.SA.Get(mutableContext)
 
 	if currentSA == nil {
 		currentSA = &commonpb.SearchAttributes{}
@@ -154,28 +147,19 @@ func (v *Visibility) SetSearchAttributes(
 		customSearchAttributes,
 	)
 	v.generateTask(mutableContext)
-
-	return nil
 }
 
 func (v *Visibility) GetMemo(
 	chasmContext Context,
-) (map[string]*commonpb.Payload, error) {
-	memo, err := v.Memo.Get(chasmContext)
-	if err != nil {
-		return nil, err
-	}
-	return memo.GetFields(), nil
+) map[string]*commonpb.Payload {
+	return v.Memo.Get(chasmContext).GetFields()
 }
 
 func (v *Visibility) SetMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
-) error {
-	currentMemo, err := v.Memo.Get(mutableContext)
-	if err != nil {
-		return err
-	}
+) {
+	currentMemo := v.Memo.Get(mutableContext)
 
 	if currentMemo == nil {
 		currentMemo = &commonpb.Memo{}
@@ -187,8 +171,6 @@ func (v *Visibility) SetMemo(
 		customMemo,
 	)
 	v.generateTask(mutableContext)
-
-	return nil
 }
 
 func (v *Visibility) generateTask(

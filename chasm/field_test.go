@@ -101,8 +101,7 @@ func (s *fieldSuite) TestFieldGetSimple() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result, err := tt.field.Get(nil)
-			s.NoError(err)
+			result := tt.field.Get(nil)
 			s.Equal(tt.expected, result)
 		})
 	}
@@ -122,15 +121,13 @@ func (s *fieldSuite) TestFieldGetComponent() {
 
 	tc := c.(*TestComponent)
 
-	sc1, err := tc.SubComponent1.Get(chasmContext)
-	s.NoError(err)
+	sc1 := tc.SubComponent1.Get(chasmContext)
 	s.NotNil(sc1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-component1-data",
 	}, sc1.SubComponent1Data)
 
-	sd1, err := tc.SubData1.Get(chasmContext)
-	s.NoError(err)
+	sd1 := tc.SubData1.Get(chasmContext)
 	s.NotNil(sd1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-data1",
@@ -235,8 +232,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.Equal([]string{"SubData1"}, dResolvedPath)
 
 	// Verify we can dereference the pointers.
-	resolvedComponent, err := sc1.SubComponent2Pointer.Get(ctx)
-	s.NoError(err)
+	resolvedComponent := sc1.SubComponent2Pointer.Get(ctx)
 	s.Equal(sc2, resolvedComponent)
 
 	// TODO - this doesn't resolve, but I've manually verified the tree structure looks correct
@@ -287,8 +283,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.NoError(err)
 
 	rootComponent = rootComponentInterface.(*TestComponent)
-	sc1, err = rootComponent.SubComponent1.Get(ctx2)
-	s.NoError(err)
+	sc1 = rootComponent.SubComponent1.Get(ctx2)
 
 	// Now, add a new component and deferred pointer for it.
 	newComponent := &TestSubComponent2{
@@ -310,12 +305,10 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
-	resolved1, err := rootComponent.SubComponent11Pointer.Get(ctx2)
-	s.NoError(err)
+	resolved1 := rootComponent.SubComponent11Pointer.Get(ctx2)
 	s.Equal(existingComponent, resolved1)
 
-	resolved2, err := sc1.SubComponent2Pointer.Get(ctx2)
-	s.NoError(err)
+	resolved2 := sc1.SubComponent2Pointer.Get(ctx2)
 	s.Equal(newComponent, resolved2)
 }
 

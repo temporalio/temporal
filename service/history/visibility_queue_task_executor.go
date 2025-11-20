@@ -404,10 +404,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 
 	searchattributes := make(map[string]*commonpb.Payload)
 
-	aliasedSearchAttributes, err := visComponent.GetSearchAttributes(visTaskContext)
-	if err != nil {
-		return err
-	}
+	aliasedSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
 
 	for alias, value := range aliasedSearchAttributes {
 		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
@@ -417,10 +414,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		searchattributes[fieldName] = value
 	}
 
-	memo, err := visComponent.GetMemo(visTaskContext)
-	if err != nil {
-		return err
-	}
+	memo := visComponent.GetMemo(visTaskContext)
 	if memo == nil {
 		memo = make(map[string]*commonpb.Payload)
 	}
