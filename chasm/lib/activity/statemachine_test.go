@@ -441,9 +441,11 @@ func TestTransitionTerminated(t *testing.T) {
 		Outcome: chasm.NewDataField(ctx, outcome),
 	}
 
-	err := TransitionTerminated.Apply(activity, ctx, RecordTerminatedParams{
-		Reason:         "Test Termination",
-		WorkerIdentity: "worker",
+	err := TransitionTerminated.Apply(activity, ctx, &activitypb.TerminateActivityExecutionRequest{
+		FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
+			Reason:   "Test Termination",
+			Identity: "worker",
+		},
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)

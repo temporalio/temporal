@@ -261,14 +261,9 @@ func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.Re
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
 
-// RecordTerminatedParams holds parameters for handling termination
-type RecordTerminatedParams struct {
-	Reason         string
-	WorkerIdentity string
-}
-
-func (a *Activity) handleTerminated(ctx chasm.MutableContext, params RecordTerminatedParams) (*activitypb.TerminateActivityExecutionResponse, error) {
-	if err := TransitionTerminated.Apply(a, ctx, params); err != nil {
+func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) (
+	*activitypb.TerminateActivityExecutionResponse, error) {
+	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
 

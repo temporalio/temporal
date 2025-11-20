@@ -161,10 +161,7 @@ func (h *handler) TerminateActivityExecution(
 		ctx,
 		ref,
 		(*Activity).handleTerminated,
-		RecordTerminatedParams{
-			Reason:         frontendReq.GetReason(),
-			WorkerIdentity: frontendReq.GetIdentity(),
-		},
+		req,
 	)
 
 	if err != nil {
