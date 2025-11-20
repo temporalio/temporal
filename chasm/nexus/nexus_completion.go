@@ -15,7 +15,7 @@ const (
 	CompletionHandlerURL = "temporal://internal"
 )
 
-// NexusCompletionHandler is implemented by CHASM components that want to handle
+// CompletionHandler is implemented by CHASM components that want to handle
 // Nexus operation completion callbacks.
 type CompletionHandler interface {
 	HandleNexusCompletion(ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) error

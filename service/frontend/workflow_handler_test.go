@@ -3034,7 +3034,7 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations() {
 			_ context.Context,
 			request *manager.ListWorkflowExecutionsRequestV2,
 		) (*manager.ListWorkflowExecutionsResponse, error) {
-			s.True(strings.Contains(request.Query, defs.TemporalNamespaceDivision))
+			s.Contains(request.Query, defs.TemporalNamespaceDivision)
 			return &manager.ListWorkflowExecutionsResponse{
 				Executions: []*workflowpb.WorkflowExecutionInfo{
 					{Execution: &commonpb.WorkflowExecution{

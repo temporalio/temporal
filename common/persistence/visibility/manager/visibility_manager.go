@@ -110,16 +110,6 @@ type (
 		NextPageToken []byte
 	}
 
-	ListChasmExecutionsRequest struct {
-		ArchetypeId uint32
-		NamespaceID namespace.ID
-		Namespace   namespace.Name // namespace.Name is not persisted.
-		PageSize    int            // Maximum number of workflow executions per page
-		// Token to continue reading next page of workflow executions.
-		// Pass in empty slice for first page.
-		NextPageToken []byte
-		Query         string
-	}
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
 		NamespaceID namespace.ID

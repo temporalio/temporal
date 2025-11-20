@@ -1155,6 +1155,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		}
 	}
 
+	//nolint:staticcheck // SA1019: workflowInfo.SearchAttributes is not typed.
 	currentPausedPayload := workflowInfo.SearchAttributes.GetIndexedFields()[defs.TemporalSchedulePaused]
 	var currentPaused bool
 	if currentPausedPayload == nil ||

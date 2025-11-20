@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Set persistence package dependency on chasm package to avoid circular dependency.
+// Archetype is a type alias for chasm.Archetype to avoid circular dependency.
 type Archetype = chasm.Archetype
 
 // CreateWorkflowMode workflow creation mode

@@ -23,7 +23,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
-	searchattribute "go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/defs"
 	"go.uber.org/mock/gomock"
 )

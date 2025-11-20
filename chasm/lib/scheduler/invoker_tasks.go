@@ -16,6 +16,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmNexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -165,7 +166,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 			lastCompletionState = common.CloneProto(lcs)
 
 			// Set up the completion callback to handle workflow results.
-			cb, err := chasm.GetNexusCallback(ctx, s)
+			cb, err := chasmNexus.GetCallback(ctx, s)
 			if err != nil {
 				return struct{}{}, err
 			}
