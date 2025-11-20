@@ -1018,7 +1018,7 @@ func reapplyEvents(
 // This function is intended to pick up all the events for a child that was already initialized before the reset point.
 // Re-applying these events is needed to support reconnecting of the child with parent.
 func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.HistoryEvent) error { // nolint:revive
-	switch event.GetEventType() {                                                                  // nolint:exhaustive
+	switch event.GetEventType() { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 		childEventAttributes := event.GetStartChildWorkflowExecutionFailedEventAttributes()
 		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
