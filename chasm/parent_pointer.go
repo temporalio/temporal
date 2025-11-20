@@ -35,7 +35,11 @@ type parentPtrInternal struct {
 // Panics rather than returning an error, as errors are supposed to be handled by the framework as opposed to the
 // application.
 func (p ParentPtr[T]) Get(chasmContext Context) T {
-	vT, _ := p.TryGet(chasmContext)
+	vT, ok := p.TryGet(chasmContext)
+	if !ok {
+		// nolint:forbidigo // Panic is intended here for framework error handling.
+		panic(serviceerror.NewInternal("expect parent component value but got nil"))
+	}
 	return vT
 }
 
@@ -46,6 +50,7 @@ func (p ParentPtr[T]) Get(chasmContext Context) T {
 func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 	var nilT T
 	if p.Internal.currentNode == nil {
+		// nolint:forbidigo // Panic is intended here for framework error handling.
 		panic(serviceerror.NewInternal("parent pointer not initialized yet"))
 	}
 
@@ -58,6 +63,7 @@ func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 		parent = parent.parent
 		if parent == nil {
 			encodedPath, _ := p.Internal.currentNode.getEncodedPath()
+			// nolint:forbidigo // Panic is intended here for framework error handling.
 			panic(softassert.UnexpectedInternalErr(
 				p.Internal.currentNode.logger,
 				"unable to find parent component for CHASM component inside a map",
@@ -67,6 +73,7 @@ func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 	}
 
 	if !parent.isComponent() {
+		// nolint:forbidigo // Panic is intended here for framework error handling.
 		panic(softassert.UnexpectedInternalErr(
 			parent.logger,
 			"unexpected CHASM node that has a child component",
@@ -78,6 +85,7 @@ func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 	}
 
 	if err := parent.prepareComponentValue(chasmContext); err != nil {
+		// nolint:forbidigo // Panic is intended here for framework error handling.
 		panic(err)
 	}
 
@@ -87,7 +95,8 @@ func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 
 	vT, isT := parent.value.(T)
 	if !isT {
-		panic(serviceerror.NewInternalf("node value doesn't implement %s", reflect.TypeFor[T]().Name()))
+		// nolint:forbidigo // Panic is intended here for framework error handling.
+		panic(serviceerror.NewInternalf("parent component value doesn't implement %s", reflect.TypeFor[T]().Name()))
 	}
 	return vT, true
 }
