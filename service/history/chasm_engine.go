@@ -11,7 +11,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
@@ -376,7 +375,7 @@ func (e *ChasmEngine) PollComponent(
 	// than the internally-imposed long-poll timeout then the initiator of the long-poll will get a
 	// deadline exceeded error.
 	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, internalLongPollTimeout, time.Second)
+	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
 	defer cancel()
 	for {
 		select {
