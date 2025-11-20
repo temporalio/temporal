@@ -48,7 +48,6 @@ type (
 		forceCAN                     bool
 		// Track if async propagations are in progress (prevents CaN)
 		asyncPropagationsInProgress int
-		propagatingDelete           bool
 		// When true, all the ongoing propagations should cancel themselves
 		cancelPropagations          bool
 		unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion
@@ -354,7 +353,6 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	}
 
 	if args.AsyncPropagation {
-		d.propagatingDelete = true
 		d.asyncPropagationsInProgress++
 		workflow.Go(ctx, d.deleteVersionFromTaskQueuesAsync)
 	} else {

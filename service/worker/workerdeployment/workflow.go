@@ -73,16 +73,6 @@ func Workflow(ctx workflow.Context, unsafeWorkflowVersionGetter func() Deploymen
 		},
 	}
 
-	if workflow.GetVersion(ctx, "workflowVersionAdded", workflow.DefaultVersion, 0) >= 0 {
-		if err := workflow.MutableSideEffect(ctx, "workflowVersion",
-			func(_ workflow.Context) interface{} { return unsafeWorkflowVersionGetter() },
-			func(a, b interface{}) bool { return a == b }).
-			Get(&workflowRunner.workflowVersion); err != nil {
-			workflowRunner.logger.Error("can't get workflow version", err.Error())
-			return err
-		}
-	}
-
 	return workflowRunner.run(ctx)
 }
 
@@ -1080,9 +1070,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 				RampingSinceTime:  nil, // remove ramp for that version if it was ramping
 				RampPercentage:    0,   // remove ramp for that version if it was ramping
 				RoutingConfig:     routingConfigToSync,
-			}
-			if asyncMode {
-				currUpdateArgs.RoutingConfig = pendingRoutingConfig
 			}
 			if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs, true); err != nil {
 				return nil, err
