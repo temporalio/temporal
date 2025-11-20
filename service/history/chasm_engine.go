@@ -99,6 +99,10 @@ func (e *ChasmEngine) SetShardController(
 	e.shardController = shardController
 }
 
+func (e *ChasmEngine) GetNotifier() *ChasmNotifier {
+	return e.notifier
+}
+
 // Start starts the ChasmEngine
 func (e *ChasmEngine) Start() {
 	e.notifier.Start()
