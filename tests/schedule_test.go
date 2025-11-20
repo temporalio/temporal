@@ -23,12 +23,14 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -64,6 +66,8 @@ func TestScheduleFunctionalSuite(t *testing.T) {
 }
 
 func (s *ScheduleFunctionalSuite) SetupTest() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	s.OverrideDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"})
 	s.FunctionalTestBase.SetupTest()
 	s.dataConverter = testcore.NewTestDataConverter()
 
@@ -89,6 +93,75 @@ func (s *ScheduleFunctionalSuite) TearDownTest() {
 		s.sdkClient.Close()
 	}
 	s.FunctionalTestBase.TearDownTest()
+}
+
+func (s *ScheduleFunctionalSuite) TestStartCHASMSchedulerTemp() {
+	sid := testcore.RandomizeStr(s.T().Name() + "-sched")
+	wid := testcore.RandomizeStr(s.T().Name() + "-wf")
+	wt := testcore.RandomizeStr(s.T().Name() + "-wt")
+	// switch this to test with search attribute mapper:
+	// csaKeyword := "AliasForCustomKeywordField"
+	csaKeyword := "CustomKeywordField"
+	csaInt := "CustomIntField"
+	csaBool := "CustomBoolField"
+
+	wfMemo := payload.EncodeString("workflow memo")
+	wfSAValue := payload.EncodeString("workflow sa value")
+	schMemo := payload.EncodeString("schedule memo")
+	schSAValue := payload.EncodeString("schedule sa value")
+	schSAIntValue, _ := payload.Encode(123)
+	schSABoolValue, _ := payload.Encode(true)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(5 * time.Second)},
+			},
+			Calendar: []*schedulepb.CalendarSpec{
+				{DayOfMonth: "10", Year: "2010"},
+			},
+			CronString: []string{"11 11/11 11 11 1 2011"},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Memo: &commonpb.Memo{
+						Fields: map[string]*commonpb.Payload{"wfmemo1": wfMemo},
+					},
+					SearchAttributes: &commonpb.SearchAttributes{
+						IndexedFields: map[string]*commonpb.Payload{csaKeyword: wfSAValue},
+					},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
+		},
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				csaKeyword: schSAValue,
+				csaInt:     schSAIntValue,
+				csaBool:    schSABoolValue,
+			},
+		},
+	}
+
+	ctx := metadata.NewOutgoingContext(testcore.NewContext(), metadata.Pairs(
+		headers.ExperimentHeaderName, "*",
+	))
+	resp, err := s.FrontendClient().CreateSchedule(ctx, req)
+	s.NoError(err)
+	s.NotNil(resp.ConflictToken)
 }
 
 func (s *ScheduleFunctionalSuite) TestBasics() {
@@ -174,8 +247,13 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// create
 
+	// TODO: only when testing CHASM.
+	ctx := metadata.NewOutgoingContext(testcore.NewContext(), metadata.Pairs(
+		headers.ExperimentHeaderName, "*",
+	))
+
 	createTime := time.Now()
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 	s.cleanup(sid)
 
