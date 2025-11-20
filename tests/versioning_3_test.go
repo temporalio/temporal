@@ -2748,7 +2748,7 @@ func (s *Versioning3Suite) setRampingDeployment(
 		}
 		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
 		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) || strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()) {
+		if errors.As(err, &notFound) || (err != nil && strings.Contains(err.Error(), serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error())) {
 			return false
 		}
 		s.NoError(err)
