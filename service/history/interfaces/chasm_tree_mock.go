@@ -161,17 +161,17 @@ func (mr *MockChasmTreeMockRecorder) EachPureTask(deadline, callback any) *gomoc
 }
 
 // ExecuteSideEffectTask mocks base method.
-func (m *MockChasmTree) ExecuteSideEffectTask(ctx context.Context, registry *chasm.Registry, entityKey chasm.ExecutionKey, task *tasks.ChasmTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+func (m *MockChasmTree) ExecuteSideEffectTask(ctx context.Context, registry *chasm.Registry, executionKey chasm.ExecutionKey, task *tasks.ChasmTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteSideEffectTask", ctx, registry, entityKey, task, validate)
+	ret := m.ctrl.Call(m, "ExecuteSideEffectTask", ctx, registry, executionKey, task, validate)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ExecuteSideEffectTask indicates an expected call of ExecuteSideEffectTask.
-func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectTask(ctx, registry, entityKey, task, validate any) *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectTask(ctx, registry, executionKey, task, validate any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSideEffectTask), ctx, registry, entityKey, task, validate)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSideEffectTask", reflect.TypeOf((*MockChasmTree)(nil).ExecuteSideEffectTask), ctx, registry, executionKey, task, validate)
 }
 
 // IsDirty mocks base method.
