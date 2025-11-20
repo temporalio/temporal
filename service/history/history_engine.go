@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -127,6 +128,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
@@ -163,6 +165,7 @@ func NewEngineWithShardContext(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	testHooks testhooks.TestHooks,
+	chasmEngine chasm.Engine,
 ) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -213,6 +216,7 @@ func NewEngineWithShardContext(
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
 		testHooks:                  testHooks,
+		chasmEngine:                chasmEngine,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -836,6 +840,30 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 ) {
 
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
+}
+
+func (e *historyEngineImpl) GetChasmEngine() chasm.Engine {
+	return e.chasmEngine
+}
+
+func (e *historyEngineImpl) NotifyChasmExecution(namespaceID, workflowID, runID string, componentRef []byte) {
+	if e.chasmEngine == nil {
+		return
+	}
+
+	if chasmEngine, ok := e.chasmEngine.(*ChasmEngine); ok && chasmEngine != nil {
+		notifier := chasmEngine.GetNotifier()
+		if notifier == nil {
+			return
+		}
+		notifier.Notify(&ChasmExecutionNotification{
+			Key: chasm.EntityKey{
+				NamespaceID: namespaceID,
+				BusinessID:  workflowID,
+				EntityID:    runID,
+			},
+		})
+	}
 }
 
 func (e *historyEngineImpl) NotifyNewTasks(

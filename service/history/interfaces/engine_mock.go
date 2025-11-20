@@ -20,6 +20,7 @@ import (
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	workflow "go.temporal.io/server/api/workflow/v1"
+	chasm "go.temporal.io/server/chasm"
 	collection "go.temporal.io/server/common/collection"
 	definition "go.temporal.io/server/common/definition"
 	metrics "go.temporal.io/server/common/metrics"
@@ -171,6 +172,20 @@ func (m *MockEngine) GenerateLastHistoryReplicationTasks(ctx context.Context, re
 func (mr *MockEngineMockRecorder) GenerateLastHistoryReplicationTasks(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockEngine)(nil).GenerateLastHistoryReplicationTasks), ctx, request)
+}
+
+// GetChasmEngine mocks base method.
+func (m *MockEngine) GetChasmEngine() chasm.Engine {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChasmEngine")
+	ret0, _ := ret[0].(chasm.Engine)
+	return ret0
+}
+
+// GetChasmEngine indicates an expected call of GetChasmEngine.
+func (mr *MockEngineMockRecorder) GetChasmEngine() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmEngine", reflect.TypeOf((*MockEngine)(nil).GetChasmEngine))
 }
 
 // GetDLQMessages mocks base method.
@@ -411,6 +426,18 @@ func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *hist
 func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockEngine)(nil).MergeDLQMessages), ctx, messagesRequest)
+}
+
+// NotifyChasmExecution mocks base method.
+func (m *MockEngine) NotifyChasmExecution(namespaceID, workflowID, runID string, componentRef []byte) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyChasmExecution", namespaceID, workflowID, runID, componentRef)
+}
+
+// NotifyChasmExecution indicates an expected call of NotifyChasmExecution.
+func (mr *MockEngineMockRecorder) NotifyChasmExecution(namespaceID, workflowID, runID, componentRef any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChasmExecution", reflect.TypeOf((*MockEngine)(nil).NotifyChasmExecution), namespaceID, workflowID, runID, componentRef)
 }
 
 // NotifyNewHistoryEvent mocks base method.
