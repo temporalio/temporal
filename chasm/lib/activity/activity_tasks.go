@@ -155,9 +155,7 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 ) error {
 	retryPolicy := activity.RetryPolicy
 
-	// Only retry if MaximumAttempts is explicitly set to > 1 (0 means no retries for start-to-close timeouts)
-	// Note: MaximumAttempts == 0 should mean no retries, not unlimited retries for timeouts
-	enoughAttempts := retryPolicy.GetMaximumAttempts() > 1 && task.GetAttempt() < retryPolicy.GetMaximumAttempts()
+	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || task.GetAttempt() < retryPolicy.GetMaximumAttempts()
 	enoughTime, err := activity.hasEnoughTimeForRetry(ctx)
 	if err != nil {
 		return err
