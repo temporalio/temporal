@@ -148,7 +148,11 @@ func (f Field[T]) TryGet(chasmContext Context) (T, bool) {
 // Panics rather than returning an error, as errors are supposed to be handled by the framework as opposed to the
 // application.
 func (f Field[T]) Get(chasmContext Context) T {
-	v, _ := f.TryGet(chasmContext)
+	v, ok := f.TryGet(chasmContext)
+	if !ok {
+		// nolint:forbidigo // Panic is intended here for framework error handling.
+		panic(serviceerror.NewInternalf("field value of type %s not found", reflect.TypeFor[T]().Name()))
+	}
 	return v
 }
 
