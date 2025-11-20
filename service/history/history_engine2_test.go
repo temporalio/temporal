@@ -246,7 +246,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"Keyword01":             payload.EncodeString("random-keyword"),
 							"TemporalChangeVersion": payload.EncodeString("random-data"),
 						},
 					},
@@ -264,7 +264,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
@@ -352,7 +352,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"Keyword01":             payload.EncodeString("random-keyword"),
 							"TemporalChangeVersion": payload.EncodeString("random-data"),
 						},
 					},
@@ -670,7 +670,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"Keyword01":             payload.EncodeString("random-keyword"),
 							"TemporalChangeVersion": payload.EncodeString("random-data"),
 						},
 					},
@@ -688,7 +688,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
@@ -767,7 +767,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistor
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"Keyword01":             payload.EncodeString("random-keyword"),
 								"TemporalChangeVersion": payload.EncodeString("random-data"),
 							},
 						},
@@ -1236,7 +1236,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 			WorkflowType: &commonpb.WorkflowType{Name: "wType"},
 			TaskQueue:    &taskqueuepb.TaskQueue{Name: tl},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"AliasForCustomTextField": payload.EncodeString("search attribute value")},
+				"AliasForText01": payload.EncodeString("search attribute value")},
 			},
 		}},
 	}}
@@ -1256,7 +1256,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		// Search attribute name was mapped and saved under field name.
 		s.ProtoEqual(
 			payload.EncodeString("search attribute value"),
-			startChildEventAttributes.GetSearchAttributes().GetIndexedFields()["CustomTextField"])
+			startChildEventAttributes.GetSearchAttributes().GetIndexedFields()["Text01"])
 		return tests.UpdateWorkflowExecutionResponse, nil
 	})
 
@@ -1413,7 +1413,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 		// Search attribute name was mapped and saved under field name.
 		s.ProtoEqual(
 			payload.EncodeString("test"),
-			startEventAttributes.GetSearchAttributes().GetIndexedFields()["CustomKeywordField"])
+			startEventAttributes.GetSearchAttributes().GetIndexedFields()["Keyword01"])
 		return tests.CreateWorkflowExecutionResponse, nil
 	})
 
@@ -1432,7 +1432,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 			Identity:                 identity,
 			RequestId:                requestID,
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"CustomKeywordField": payload.EncodeString("test"),
+				"Keyword01": payload.EncodeString("test"),
 			}}},
 	})
 	s.Nil(err)

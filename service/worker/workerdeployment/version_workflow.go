@@ -49,6 +49,9 @@ type (
 		// Track if async propagations are in progress (prevents CaN)
 		asyncPropagationsInProgress int
 		propagatingDelete           bool
+		// When true, all the ongoing propagations should cancel themselves
+		cancelPropagations          bool
+		unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion
 	}
 )
 
@@ -61,6 +64,7 @@ type (
 // info.
 func VersionWorkflow(
 	ctx workflow.Context,
+	unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion,
 	unsafeRefreshIntervalGetter func() any,
 	unsafeVisibilityGracePeriodGetter func() any,
 	versionWorkflowArgs *deploymentspb.WorkerDeploymentVersionWorkflowArgs,
@@ -72,6 +76,7 @@ func VersionWorkflow(
 		logger:                            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
 		metrics:                           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
 		lock:                              workflow.NewMutex(ctx),
+		unsafeWorkflowVersionGetter:       unsafeWorkflowVersionGetter,
 		unsafeRefreshIntervalGetter:       unsafeRefreshIntervalGetter,
 		unsafeVisibilityGracePeriodGetter: unsafeVisibilityGracePeriodGetter,
 		signalHandler: &SignalHandler{
@@ -184,10 +189,13 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	if err := workflow.SetUpdateHandler(
+	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		UpdateVersionMetadata,
 		d.handleUpdateVersionMetadata,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateUpdateVersionMetadata,
+		},
 	); err != nil {
 		return err
 	}
@@ -211,13 +219,11 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
 	// there are no pending updates/signals and the state has changed.
 	err := workflow.Await(ctx, func() bool {
-		return !d.propagatingDelete &&
-			(d.deleteVersion || // version is deleted -> it's ok to drop all signals and updates.
-				// There is no pending signal or update, but the state is dirty or forceCaN is requested:
-				(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-					!d.drainageStatusSyncInProgress &&
-					d.asyncPropagationsInProgress == 0 && // Don't CaN while async propagations are in progress
-					(d.forceCAN || d.stateChanged)))
+		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
+			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
+			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
+				// And there is a force CaN or a propagated state change
+				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0)))
 	})
 	if err != nil {
 		return err
@@ -231,6 +237,14 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
 	nextArgs.VersionState = d.VersionState
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentVersionWorkflowType, nextArgs)
+}
+
+func (d *VersionWorkflowRunner) validateUpdateVersionMetadata(args *deploymentspb.UpdateVersionMetadataArgs) error {
+	if d.deleteVersion {
+		// Deployment workflow should not call this function if version is marked for deletion, but still checking for safety.
+		return temporal.NewNonRetryableApplicationError(errVersionDeleted, errVersionDeleted, nil)
+	}
+	return nil
 }
 
 func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
@@ -271,7 +285,11 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
 			LastChangedTime: now,
 			LastCheckedTime: now,
 		}
-		d.syncSummary(ctx)
+		if workflow.GetVersion(ctx, "no-draining-signal", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+			// this is not needed because startDrainage is called only from syncVersionState which sends the summary back to deployment.
+			// TODO: cleanup with sync mode
+			d.syncSummary(ctx)
+		}
 		d.setStateChanged()
 	}
 }
@@ -337,6 +355,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	if args.AsyncPropagation {
 		d.propagatingDelete = true
+		d.asyncPropagationsInProgress++
 		workflow.Go(ctx, d.deleteVersionFromTaskQueuesAsync)
 	} else {
 		err = d.deleteVersionFromTaskQueues(ctx, activityCtx)
@@ -349,10 +368,16 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	return nil
 }
 
+//nolint:revive,errcheck // In async mode the activities retry indefinitely so this function should not return error
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Context) {
-	//nolint:revive,errcheck // In async mode the activities retry indefinitely so this function should not return error
+	// If there are propagations in progress, we ask them to cancel and wait for them to do so.
+	// The reason is that the ongoing upsert propagation may overwrite the delete that we want to send here, unintentionally undoing it.
+	d.cancelPropagations = true
+	workflow.Await(ctx, func() bool { return d.asyncPropagationsInProgress == 1 }) // delete itself is counted as one
+	d.cancelPropagations = false                                                   // need to unset this in case the version is revived
+
 	d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
-	d.propagatingDelete = false
+	d.asyncPropagationsInProgress--
 }
 
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueues(ctx workflow.Context, activityCtx workflow.Context) error {
@@ -451,9 +476,9 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.lock.Unlock()
 	}()
 
-	// In case this version just got deleted, we wait until it finished propagating delete to all task queue before reviving it
+	// In case this version just got deleted, we wait until it finished propagating delete to all task queues before reviving it
 	err = workflow.Await(ctx, func() bool {
-		return !d.propagatingDelete
+		return d.asyncPropagationsInProgress == 0
 	})
 	if err != nil {
 		return err
@@ -529,6 +554,10 @@ func (d *VersionWorkflowRunner) versionDataToSync() *deploymentspb.WorkerDeploym
 
 // If routing update time has changed then we want to let the update through.
 func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersionStateUpdateArgs) error {
+	if d.deleteVersion {
+		// Deployment workflow should not call this function if version is marked for deletion, but still checking for safety.
+		return temporal.NewNonRetryableApplicationError(errVersionDeleted, errVersionDeleted, nil)
+	}
 	res := &deploymentspb.SyncVersionStateResponse{VersionState: d.VersionState}
 	if args.GetRoutingUpdateTime().AsTime().Equal(d.GetVersionState().GetRoutingUpdateTime().AsTime()) {
 		return temporal.NewApplicationError("no change", errNoChangeType, res)
@@ -551,6 +580,10 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		d.lock.Unlock()
 	}()
 
+	if err = d.validateSyncState(args); err != nil {
+		return nil, err
+	}
+
 	// wait until deployment workflow started
 	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
 	if err != nil {
@@ -565,7 +598,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	if rg := args.GetRoutingConfig(); rg != nil {
 		// ASYNC MODE: propagate full routing config
 		newStatus = d.findNewVersionStatusFromRoutingConfig(rg)
-		err = d.syncRoutingConfigToTaskQueues(ctx, args.RoutingConfig, newStatus)
+		err = d.syncTaskQueuesAsync(ctx, args.RoutingConfig, newStatus)
 		if err != nil {
 			return nil, err
 		}
@@ -814,14 +847,15 @@ func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED
 	}
 
-	v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 0)
-	if v != workflow.DefaultVersion {
-		err := d.syncVersionStatusAfterDrainageStatusChange(ctx)
-		if err != nil {
-			d.logger.Error("failed to sync version status after drainage status change", "error", err)
-		}
+	var err error
+	if d.hasMinVersion(ctx, AsyncSetCurrentAndRamping) {
+		err = d.syncTaskQueuesAsync(ctx, nil, d.VersionState.Status)
+	} else {
+		err = d.syncVersionStatusAfterDrainageStatusChange(ctx)
 	}
-
+	if err != nil {
+		d.logger.Error("failed to sync version status after drainage status change", "error", err)
+	}
 }
 
 // syncVersionStatusAfterDrainageStatusChange syncs the current version status to all task queues.
@@ -836,12 +870,13 @@ func (d *VersionWorkflowRunner) syncVersionStatusAfterDrainageStatusChange(ctx w
 	}
 
 	// Processing the drainage status change.
-	d.drainageStatusSyncInProgress = true
+	d.asyncPropagationsInProgress++
 	defer func() {
-		d.drainageStatusSyncInProgress = false
+		d.asyncPropagationsInProgress--
 		d.lock.Unlock()
 	}()
 
+	// TODO: update this to new format once the old format is deleted.
 	// Build version data with current state
 	versionData := &deploymentspb.DeploymentVersionData{
 		Version:           d.VersionState.Version,
@@ -918,8 +953,8 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 	return nil
 }
 
-// syncRoutingConfigToTaskQueues performs async propagation of routing config
-func (d *VersionWorkflowRunner) syncRoutingConfigToTaskQueues(
+// syncTaskQueuesAsync performs async propagation of routing config
+func (d *VersionWorkflowRunner) syncTaskQueuesAsync(
 	ctx workflow.Context,
 	routingConfig *deploymentpb.RoutingConfig,
 	newStatus enumspb.WorkerDeploymentVersionStatus,
@@ -961,11 +996,9 @@ func (d *VersionWorkflowRunner) syncRoutingConfigToTaskQueues(
 
 	// Start async propagation - DON'T WAIT
 	workflow.Go(ctx, func(gCtx workflow.Context) {
-		defer func() {
-			// Decrement counter when propagation completes
-			d.asyncPropagationsInProgress--
-		}()
 		d.executeAndTrackAsyncPropagation(gCtx, batches, routingConfig, versionData)
+		// Decrement counter when propagation completes
+		d.asyncPropagationsInProgress--
 	})
 
 	return nil
@@ -980,29 +1013,20 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 ) {
 	taskQueueMaxVersionsToCheck := make(map[string]int64)
 
-	// Execute all batches in parallel
-	completedBatches := 0
-	totalBatches := len(batches)
-	resultChannel := workflow.NewChannel(ctx)
-
 	for _, batch := range batches {
-		batch := batch // capture loop variable
-		workflow.Go(ctx, func(gCtx workflow.Context) {
-			result := d.executePropagationBatch(gCtx, batch, routingConfig, versionData)
-			resultChannel.Send(gCtx, result)
-		})
-	}
-
-	// Collect results from all batches
-	for i := 0; i < totalBatches; i++ {
-		var result map[string]int64
-		resultChannel.Receive(ctx, &result)
-		completedBatches++
-
+		if d.cancelPropagations {
+			// Version is deleting. no need to continue propagation. Also can skip sending signal to deployment workflow.
+			return
+		}
+		result := d.executePropagationBatch(ctx, batch, routingConfig, versionData)
 		// Merge results into taskQueueMaxVersionsToCheck
 		for _, tqName := range workflow.DeterministicKeys(result) {
 			taskQueueMaxVersionsToCheck[tqName] = result[tqName]
 		}
+	}
+	if d.cancelPropagations {
+		// Version is deleting. no need to continue propagation. Also can skip sending signal to deployment workflow.
+		return
 	}
 
 	// Wait for propagation to complete only for task queues where config changed
@@ -1021,8 +1045,11 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 		}
 	}
 
-	// Signal deployment workflow that propagation completed
-	d.signalPropagationComplete(ctx, routingConfig.GetRevisionNumber())
+	if routingConfig != nil {
+		d.syncSummary(ctx)
+		// Signal deployment workflow that routing config propagation completed
+		d.signalPropagationComplete(ctx, routingConfig.GetRevisionNumber())
+	}
 }
 
 // executePropagationBatch executes a single batch of propagation and returns task queue max versions to check
@@ -1049,16 +1076,7 @@ func (d *VersionWorkflowRunner) executePropagationBatch(
 		return make(map[string]int64)
 	}
 
-	// Only check propagation for task queues where routing config actually changed
-	// Task queues with max_version = -1 indicate no routing change, skip those
-	result := make(map[string]int64)
-	for _, tqName := range workflow.DeterministicKeys(syncRes.TaskQueueMaxVersions) {
-		maxVersion := syncRes.TaskQueueMaxVersions[tqName]
-		if maxVersion != -1 {
-			result[tqName] = maxVersion
-		}
-	}
-	return result
+	return syncRes.TaskQueueMaxVersions
 }
 
 // signalPropagationComplete sends a signal to the deployment workflow when async propagation completes
@@ -1077,4 +1095,8 @@ func (d *VersionWorkflowRunner) signalPropagationComplete(ctx workflow.Context, 
 	if err != nil {
 		d.logger.Error("could not signal propagation completion", "error", err)
 	}
+}
+
+func (d *VersionWorkflowRunner) hasMinVersion(ctx workflow.Context, version DeploymentWorkflowVersion) bool {
+	return getWorkflowVersion(ctx, d.unsafeWorkflowVersionGetter) >= version
 }

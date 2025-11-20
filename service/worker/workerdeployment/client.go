@@ -465,7 +465,10 @@ func (d *ClientImpl) UpdateVersionMetadata(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		return nil, errors.New(failure.Message)
+		if failure.GetApplicationFailureInfo().GetType() == errVersionDeleted {
+			return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, versionObj.GetBuildId(), versionObj.GetDeploymentName())
+		}
+		return nil, serviceerror.NewInternal(failure.Message)
 	}
 	success := outcome.GetSuccess()
 	if success == nil {
@@ -1186,10 +1189,6 @@ func (d *ClientImpl) update(
 	}
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	isRetryable := func(err error) bool {
-		// All updates that are admitted as the workflow is closing are considered retryable.
-		return errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error()
-	}
 
 	var outcome *updatepb.Outcome
 	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
@@ -1212,7 +1211,7 @@ func (d *ClientImpl) update(
 
 		outcome = res.GetResponse().GetOutcome()
 		return nil
-	}, policy, isRetryable)
+	}, policy, isRetryableUpdateError)
 
 	return outcome, err
 }
@@ -1382,22 +1381,6 @@ func (d *ClientImpl) updateWithStart(
 	}
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	isRetryable := func(err error) bool {
-		if errors.Is(err, errRetry) {
-			return true
-		}
-
-		// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
-		var errMultiOps *serviceerror.MultiOperationExecution
-		if errors.As(err, &errMultiOps) {
-			for _, e := range errMultiOps.OperationErrors() {
-				if e.Error() == consts.ErrWorkflowClosing.Error() {
-					return true
-				}
-			}
-		}
-		return false
-	}
 	var outcome *updatepb.Outcome
 
 	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
@@ -1431,9 +1414,27 @@ func (d *ClientImpl) updateWithStart(
 
 		outcome = updateRes.GetOutcome()
 		return nil
-	}, policy, isRetryable)
+	}, policy, isRetryableUpdateError)
 
 	return outcome, err
+}
+
+func isRetryableUpdateError(err error) bool {
+	if errors.Is(err, errRetry) || err.Error() == consts.ErrWorkflowClosing.Error() {
+		return true
+	}
+
+	// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
+	// The ErrWorkflowClosing could be nested.
+	var errMultiOps *serviceerror.MultiOperationExecution
+	if errors.As(err, &errMultiOps) {
+		for _, e := range errMultiOps.OperationErrors() {
+			if e.Error() == consts.ErrWorkflowClosing.Error() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {

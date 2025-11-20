@@ -31,8 +31,13 @@ type WorkerDeploymentSuite struct {
 }
 
 func TestWorkerDeploymentSuite(t *testing.T) {
-	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: InitialVersion})
-	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: AsyncSetCurrentAndRamping})
+	t.Parallel()
+	t.Run("v0", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: InitialVersion})
+	})
+	t.Run("v1", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: AsyncSetCurrentAndRamping})
+	})
 }
 
 func (s *WorkerDeploymentSuite) SetupTest() {

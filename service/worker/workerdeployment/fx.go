@@ -94,6 +94,11 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
+	workflowVersionGetter := func() DeploymentWorkflowVersion {
+		val := DeploymentWorkflowVersion(dynamicconfig.MatchingDeploymentWorkflowVersion.Get(s.dynamicConfig)(ns.Name().String()))
+		return val
+	}
+
 	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
 		refreshIntervalGetter := func() any {
 			return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(s.dynamicConfig)(ns.Name().String())
@@ -101,17 +106,13 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		visibilityGracePeriodGetter := func() any {
 			return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(s.dynamicConfig)(ns.Name().String())
 		}
-		return VersionWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
+		return VersionWorkflow(ctx, workflowVersionGetter, refreshIntervalGetter, visibilityGracePeriodGetter, args)
 	}
 	registry.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		maxVersionsGetter := func() int {
 			return dynamicconfig.MatchingMaxVersionsInDeployment.Get(s.dynamicConfig)(ns.Name().String())
-		}
-		workflowVersionGetter := func() DeploymentWorkflowVersion {
-			val := DeploymentWorkflowVersion(dynamicconfig.MatchingDeploymentWorkflowVersion.Get(s.dynamicConfig)(ns.Name().String()))
-			return val
 		}
 		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
 	}

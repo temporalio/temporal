@@ -34,7 +34,7 @@ func TestReplays(t *testing.T) {
 			visibilityGracePeriodGetter := func() any {
 				return 3 * time.Minute // default value for testing
 			}
-			return workerdeployment.VersionWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
+			return workerdeployment.VersionWorkflow(ctx, nil, refreshIntervalGetter, visibilityGracePeriodGetter, args)
 		}
 
 		// Create deployment workflow wrapper to match production registration

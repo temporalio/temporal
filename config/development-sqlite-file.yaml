@@ -105,7 +105,7 @@ clusterMetadata:
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
-      httpAddres: "localhost:7243"
+      httpAddress: "localhost:7243"
 
 dcRedirectionPolicy:
   policy: "noop"

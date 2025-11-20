@@ -246,8 +246,10 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	var (
 		indexName string
 		esClient  esclient.Client
+		saTypeMap searchattribute.NameTypeMap
 	)
 	if !UseSQLVisibility() {
+		saTypeMap = searchattribute.TestEsNameTypeMap()
 		clusterConfig.ESConfig = &esclient.Config{
 			Indices: map[string]string{
 				esclient.VisibilityAppName: RandomizeStr("temporal_visibility_v1_test"),
@@ -274,6 +276,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 			return nil, err
 		}
 	} else {
+		saTypeMap = searchattribute.TestNameTypeMap()
 		clusterConfig.ESConfig = nil
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
 		if storeConfig.SQL != nil {
@@ -309,7 +312,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	err := testBase.SearchAttributesManager.SaveSearchAttributes(
 		context.Background(),
 		indexName,
-		searchattribute.TestNameTypeMap.Custom(),
+		saTypeMap.Custom(),
 	)
 	if err != nil {
 		return nil, err
@@ -444,7 +447,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	logger.Info("Index created.", tag.ESIndex(esConfig.GetVisibilityIndex()))
 
 	logger.Info("Add custom search attributes for tests.")
-	_, err = esClient.PutMapping(ctx, esConfig.GetVisibilityIndex(), searchattribute.TestNameTypeMap.Custom())
+	_, err = esClient.PutMapping(ctx, esConfig.GetVisibilityIndex(), searchattribute.TestEsNameTypeMap().Custom())
 	if err != nil {
 		return err
 	}

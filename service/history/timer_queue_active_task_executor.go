@@ -74,7 +74,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
-	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable.GetTask())
+	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable.GetTask(), t.shardContext.ChasmRegistry())
 
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),

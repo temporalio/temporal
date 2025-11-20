@@ -1974,7 +1974,7 @@ func (s *WorkflowHandlerSuite) TestGetSearchAttributes() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	ctx := context.Background()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	resp, err := wh.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -3089,7 +3089,7 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	newRunID := uuid.New().String()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).Times(2)
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).Times(2)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap(), nil).Times(2)
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:              tests.Namespace.String(),

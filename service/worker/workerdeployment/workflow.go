@@ -62,12 +62,12 @@ type (
 func Workflow(ctx workflow.Context, unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion, unsafeMaxVersion func() int, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 	workflowRunner := &WorkflowRunner{
 		WorkerDeploymentWorkflowArgs: args,
-
-		a:                nil,
-		logger:           sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
-		metrics:          workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
-		lock:             workflow.NewMutex(ctx),
-		unsafeMaxVersion: unsafeMaxVersion,
+		workflowVersion:              getWorkflowVersion(ctx, unsafeWorkflowVersionGetter),
+		a:                            nil,
+		logger:                       sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
+		metrics:                      workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
+		lock:                         workflow.NewMutex(ctx),
+		unsafeMaxVersion:             unsafeMaxVersion,
 		signalHandler: &SignalHandler{
 			signalSelector: workflow.NewSelector(ctx),
 		},
@@ -84,6 +84,20 @@ func Workflow(ctx workflow.Context, unsafeWorkflowVersionGetter func() Deploymen
 	}
 
 	return workflowRunner.run(ctx)
+}
+
+func getWorkflowVersion(ctx workflow.Context, unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion) DeploymentWorkflowVersion {
+	if workflow.GetVersion(ctx, "workflowVersionAdded", workflow.DefaultVersion, 0) >= 0 {
+		var ver DeploymentWorkflowVersion
+		err := workflow.MutableSideEffect(ctx, "workflowVersion",
+			func(_ workflow.Context) interface{} { return unsafeWorkflowVersionGetter() },
+			func(a, b interface{}) bool { return a == b }).
+			Get(&ver)
+		if err == nil {
+			return ver
+		}
+	}
+	return 0
 }
 
 func (d *WorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion) bool {
@@ -426,6 +440,10 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	if err != nil {
 		return err
 	}
+	var routingConfigToSync *deploymentpb.RoutingConfig
+	if d.hasMinVersion(AsyncSetCurrentAndRamping) {
+		routingConfigToSync = d.GetState().GetRoutingConfig()
+	}
 
 	// Register task-queue worker in version workflow.
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -434,7 +452,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		TaskQueueType: args.TaskQueueType,
 		MaxTaskQueues: args.MaxTaskQueues,
 		Version:       worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
-		RoutingConfig: d.State.GetRoutingConfig(),
+		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
 		var appError *temporal.ApplicationError
@@ -839,6 +857,8 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 	}
 	// update local state
 	delete(d.State.Versions, args.Version)
+	// remove from propagating versions if it's there
+	delete(d.State.PropagatingRevisions, worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(args.GetVersion()).GetBuildId())
 	if !args.GetServerDelete() {
 		d.State.LastModifierIdentity = args.Identity
 	}

@@ -48,6 +48,7 @@ type (
 		// TODO: this is always true. cleanup code
 		useV32 bool
 		testcore.FunctionalTestBase
+		workflowVersion workerdeployment.DeploymentWorkflowVersion
 	}
 )
 
@@ -57,7 +58,12 @@ var (
 
 func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &DeploymentVersionSuite{useV32: true})
+	t.Run("v0", func(t *testing.T) {
+		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion})
+	})
+	t.Run("v1", func(t *testing.T) {
+		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	})
 }
 
 func (s *DeploymentVersionSuite) SetupSuite() {
