@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -107,7 +106,9 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	require.True(t, proto.Equal(input, pollResp.GetInput()))
 }
 
-// TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is started.
+// TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is
+// started. It also verifies that PollActivityExecution can be used to poll for a TimedOut state
+// change caused by execution of a timer task.
 func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	t := s.T()
 
@@ -135,7 +136,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NoError(t, err)
 	t.Logf("Started activity %s with 1s start-to-close timeout", activityID)
 
-	fmt.Println("🟠 First poll: activity has not started yet")
+	// First poll: activity has not started yet
 	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:   s.Namespace().String(),
 		ActivityId:  activityID,
@@ -160,7 +161,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NotNil(t, pollTaskResp)
 	require.NotEmpty(t, pollTaskResp.TaskToken)
 
-	fmt.Println("🟠 Second poll: activity should have started")
+	// Second poll: activity has started
 	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:   s.Namespace().String(),
 		ActivityId:  activityID,
@@ -178,11 +179,8 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, pollResp.GetInfo().GetStatus())
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, pollResp.GetInfo().GetRunState())
 
-	longPollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
-	fmt.Println("🟠 Third poll: activity should have timed out")
-	pollResp, err = s.FrontendClient().PollActivityExecution(longPollCtx, &workflowservice.PollActivityExecutionRequest{
+	// Third poll: activity has timed out
+	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:   s.Namespace().String(),
 		ActivityId:  activityID,
 		RunId:       startResp.RunId,
