@@ -388,7 +388,6 @@ func (a *Activity) buildPollActivityExecutionResponse(
 ) (*activitypb.PollActivityExecutionResponse, error) {
 	request := req.GetFrontendRequest()
 
-	// TODO(dan): pass ref into this function?
 	token, err := ctx.Ref(a)
 	if err != nil {
 		return nil, err
