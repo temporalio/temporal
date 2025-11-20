@@ -10,6 +10,6 @@
 
 - A single `Execution` may consist of multiple non-overlapping runs (e.g. successive non-overlapping invocations of an `Activity` or `Workflow` that share the same `businessID`, successive non-overlapping invocations of a `Workflow` by a `Scheduler`).
 
-- An `Execution` has a tree structure in which each subtree is a `Component`. A component, and thus an execution, may comprise one node only.
+- An `Execution` has a tree structure in which each subtree is a `Component`. A component, and thus an execution, may be a tree comprising one node only.
 
-- A `ComponentRef` contains an `ExecutionKey` and a `ComponentPath` that together identify a component within an execution. The component ref contains additional information identifying (uniquely across all clusters when there is a multi-cluster configuration with failovers) a specific transition in execution history.
+- A `ComponentRef` contains an `ExecutionKey`, a `ComponentPath`, and additional information identifying (uniquely across all clusters when there is a multi-cluster configuration with failovers) a specific transition in execution history. Together these identify a component within an execution.
