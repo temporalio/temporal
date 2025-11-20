@@ -128,16 +128,18 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 func (v *Visibility) GetSearchAttributes(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
-	return v.SA.Get(chasmContext).GetIndexedFields()
+	sa, _ := v.SA.TryGet(chasmContext)
+	// nil check handled by the proto getter.
+	return sa.GetIndexedFields()
 }
 
 func (v *Visibility) SetSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 ) {
-	currentSA := v.SA.Get(mutableContext)
+	currentSA, ok := v.SA.TryGet(mutableContext)
 
-	if currentSA == nil {
+	if !ok {
 		currentSA = &commonpb.SearchAttributes{}
 		v.SA = NewDataField(mutableContext, currentSA)
 	}
@@ -152,16 +154,18 @@ func (v *Visibility) SetSearchAttributes(
 func (v *Visibility) GetMemo(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
-	return v.Memo.Get(chasmContext).GetFields()
+	memo, _ := v.Memo.TryGet(chasmContext)
+	// nil check handled by the proto getter.
+	return memo.GetFields()
 }
 
 func (v *Visibility) SetMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
 ) {
-	currentMemo := v.Memo.Get(mutableContext)
+	currentMemo, ok := v.Memo.TryGet(mutableContext)
 
-	if currentMemo == nil {
+	if !ok {
 		currentMemo = &commonpb.Memo{}
 		v.Memo = NewDataField(mutableContext, currentMemo)
 	}

@@ -210,8 +210,8 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	s.Equal(5, len(invoker.GetBufferedStarts()))
 
 	// Verify the backfiller is deleted
-	res := s.scheduler.Backfillers[backfiller.BackfillId].Get(ctx)
-	s.Nil(res)
+	_, ok := s.scheduler.Backfillers[backfiller.BackfillId].TryGet(ctx)
+	s.False(ok)
 }
 
 func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
@@ -244,9 +244,8 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	// Validate completion or partial progress.
 	if c.ExpectedComplete {
 		// Backfiller should no longer be present in the backfiller map.
-		res := sched.Backfillers[backfiller.BackfillId].Get(ctx)
-		s.NoError(err)
-		s.Nil(res)
+		_, ok := sched.Backfillers[backfiller.BackfillId].TryGet(ctx)
+		s.False(ok)
 	} else {
 		// TODO - check that a pure task to continue driving backfill exists here. Because
 		// a pure task in the tree already has the physically-created status, closing the

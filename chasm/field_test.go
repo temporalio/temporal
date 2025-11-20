@@ -101,7 +101,7 @@ func (s *fieldSuite) TestFieldGetSimple() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result := tt.field.Get(nil)
+			result, _ := tt.field.TryGet(nil)
 			s.Equal(tt.expected, result)
 		})
 	}
