@@ -261,7 +261,10 @@ func findMatchWithCache(
 	} else {
 		cached = make(map[Constraints]int32, len(cvs))
 		for i := range cvs {
-			cached[cvs[i].Constraints] = int32(i)
+			// pick first one to match behavior if multiple match
+			if _, ok := cached[cvs[i].Constraints]; !ok {
+				cached[cvs[i].Constraints] = int32(i)
+			}
 		}
 		cache.Store(weakcvp, cached)
 		runtime.AddCleanup(&cvs[0], func(w weak.Pointer[ConstrainedValue]) {
