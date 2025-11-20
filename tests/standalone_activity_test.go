@@ -12,7 +12,6 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -179,15 +178,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, pollResp.GetInfo().GetStatus())
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, pollResp.GetInfo().GetRunState())
 
-	// // Third poll: activity has timed out
-
-	// Waiting and then issuing non-blocking poll works
-	// time.Sleep(2 * time.Second)
-
-	// Third poll: activity has timed out
-	// This long-poll SHOULD return immediately with the timeout state change
-	// but due to a bug where pure task timeouts don't emit notifications,
-	// this will timeout after 3 seconds with context.DeadlineExceeded
 	longPollCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
@@ -203,23 +193,11 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 			},
 		},
 	})
-
-	// TODO: Fix bug where pure task timeouts don't emit notifications
-	// The long-poll returns successfully but with an empty response when no notification is received
-	var deadlineErr *serviceerror.DeadlineExceeded
-	require.ErrorAs(t, err, &deadlineErr, "Expected deadline exceeded error from long-poll")
-
-	// TODO: despite the long-poll failure, it has transitioned to TimedOut
-	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:   s.Namespace().String(),
-		ActivityId:  activityID,
-		RunId:       startResp.RunId,
-		IncludeInfo: true,
-	})
 	require.NoError(t, err)
 	require.NotNil(t, pollResp)
 	require.NotNil(t, pollResp.GetInfo())
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
+
 	// require.NotNil(t, pollResp.GetFailure())
 	// require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 
