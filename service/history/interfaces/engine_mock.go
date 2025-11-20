@@ -429,15 +429,15 @@ func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest any) *go
 }
 
 // NotifyChasmExecution mocks base method.
-func (m *MockEngine) NotifyChasmExecution(namespaceID, workflowID, runID string, componentRef []byte) {
+func (m *MockEngine) NotifyChasmExecution(executionKey chasm.EntityKey, componentRef []byte) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyChasmExecution", namespaceID, workflowID, runID, componentRef)
+	m.ctrl.Call(m, "NotifyChasmExecution", executionKey, componentRef)
 }
 
 // NotifyChasmExecution indicates an expected call of NotifyChasmExecution.
-func (mr *MockEngineMockRecorder) NotifyChasmExecution(namespaceID, workflowID, runID, componentRef any) *gomock.Call {
+func (mr *MockEngineMockRecorder) NotifyChasmExecution(executionKey, componentRef any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChasmExecution", reflect.TypeOf((*MockEngine)(nil).NotifyChasmExecution), namespaceID, workflowID, runID, componentRef)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChasmExecution", reflect.TypeOf((*MockEngine)(nil).NotifyChasmExecution), executionKey, componentRef)
 }
 
 // NotifyNewHistoryEvent mocks base method.
