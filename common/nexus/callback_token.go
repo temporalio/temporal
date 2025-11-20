@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/nexus/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -14,11 +13,9 @@ import (
 const (
 	// Currently supported token version.
 	TokenVersion = 1
+	// Header key for the callback token in StartOperation requests.
+	CallbackTokenHeader = "Temporal-Callback-Token"
 )
-
-// CallbackTokenHeader is the HTTP header name for the Nexus callback token.
-// Deprecated: Use types.CallbackTokenHeader instead.
-const CallbackTokenHeader = types.CallbackTokenHeader
 
 // CallbackToken contains an encoded NexusOperationCompletion message.
 type CallbackToken struct {

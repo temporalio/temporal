@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	persistencetask "go.temporal.io/server/common/persistence/task"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/util"
@@ -158,7 +157,7 @@ func (r *reschedulerImpl) Reschedule(
 			// scheduled queue pre-fetches tasks,
 			// so we need to make sure the reschedule time is not before the task scheduled time
 			rescheduled.rescheduleTime = util.MaxTime(
-				rescheduled.executable.GetKey().FireTime.Add(persistencetask.ScheduledTaskMinPrecision),
+				rescheduled.executable.GetKey().FireTime.Add(common.ScheduledTaskMinPrecision),
 				now,
 			)
 			items = append(items, rescheduled)

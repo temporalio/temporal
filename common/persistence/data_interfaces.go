@@ -15,10 +15,14 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// Set persistence package dependency on chasm package to avoid circular dependency.
+type Archetype = chasm.Archetype
 
 // CreateWorkflowMode workflow creation mode
 type CreateWorkflowMode int

@@ -1,4 +1,4 @@
-package chasm
+package nexus
 
 import (
 	"encoding/base64"
@@ -6,27 +6,27 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/nexus"
 )
 
 const (
 	// Base URL for Nexus->CHASM callbacks.
-	NexusCompletionHandlerURL = "temporal://internal"
-	// Header key for the callback token in StartOperation requests.
-	callbackTokenHeader = "Temporal-Callback-Token"
+	CompletionHandlerURL = "temporal://internal"
 )
 
 // NexusCompletionHandler is implemented by CHASM components that want to handle
 // Nexus operation completion callbacks.
-type NexusCompletionHandler interface {
-	HandleNexusCompletion(ctx MutableContext, completion *persistencespb.ChasmNexusCompletion) error
+type CompletionHandler interface {
+	HandleNexusCompletion(ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) error
 }
 
-// GetNexusCallback generates a Callback message indicating a CHASM component
+// GetCallback generates a Callback message indicating a CHASM component
 // to receive Nexus operation completion callbacks. Particularly useful for
 // components that want to track a workflow start with StartWorkflowExecution.
-func GetNexusCallback(ctx Context, component Component) (*commonpb.Callback, error) {
-	if _, ok := component.(NexusCompletionHandler); !ok {
-		return nil, errors.New("component must implement NexusCompletionHandler")
+func GetCallback(ctx chasm.Context, component chasm.Component) (*commonpb.Callback, error) {
+	if _, ok := component.(CompletionHandler); !ok {
+		return nil, errors.New("component must implement HandleNexusCompletion")
 	}
 
 	ref, err := ctx.Ref(component)
@@ -36,13 +36,13 @@ func GetNexusCallback(ctx Context, component Component) (*commonpb.Callback, err
 
 	encodedRef := base64.RawURLEncoding.EncodeToString(ref)
 	headers := map[string]string{
-		callbackTokenHeader: encodedRef,
+		nexus.CallbackTokenHeader: encodedRef,
 	}
 
 	return &commonpb.Callback{
 		Variant: &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
-				Url:    NexusCompletionHandlerURL,
+				Url:    CompletionHandlerURL,
 				Header: headers,
 			},
 		},

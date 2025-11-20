@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	persistencetask "go.temporal.io/server/common/persistence/task"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -88,7 +88,7 @@ func (s *taskKeyGeneratorSuite) TestSetTaskKeys_ImmediateTasks() {
 }
 
 func (s *taskKeyGeneratorSuite) TestSetTaskKeys_ScheduledTasks() {
-	now := time.Now().Truncate(persistencetask.ScheduledTaskMinPrecision)
+	now := time.Now().Truncate(common.ScheduledTaskMinPrecision)
 	s.mockTimeSource.Update(now)
 
 	timerTasks := []tasks.Task{
@@ -97,8 +97,8 @@ func (s *taskKeyGeneratorSuite) TestSetTaskKeys_ScheduledTasks() {
 	}
 	initialTaskID := int64(s.rangeID << int64(s.rangeSizeBits))
 	expectedKeys := []tasks.Key{
-		tasks.NewKey(now.Add(persistencetask.ScheduledTaskMinPrecision), initialTaskID),
-		tasks.NewKey(now.Add(time.Minute).Add(persistencetask.ScheduledTaskMinPrecision), initialTaskID+1),
+		tasks.NewKey(now.Add(common.ScheduledTaskMinPrecision), initialTaskID),
+		tasks.NewKey(now.Add(time.Minute).Add(common.ScheduledTaskMinPrecision), initialTaskID+1),
 	}
 
 	err := s.generator.setTaskKeys(map[tasks.Category][]tasks.Task{
@@ -157,7 +157,7 @@ func (s *taskKeyGeneratorSuite) TestPeekAndGenerateTaskKey() {
 	s.Zero(nextKey.CompareTo(generatedKey))
 
 	nextTaskID++
-	now := time.Now().Truncate(persistencetask.ScheduledTaskMinPrecision)
+	now := time.Now().Truncate(common.ScheduledTaskMinPrecision)
 	s.mockTimeSource.Update(now)
 	s.generator.setTaskMinScheduledTime(now)
 	nextKey = s.generator.peekTaskKey(tasks.CategoryTimer)

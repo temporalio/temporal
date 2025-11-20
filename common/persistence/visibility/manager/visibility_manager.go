@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -121,30 +120,6 @@ type (
 		NextPageToken []byte
 		Query         string
 	}
-
-	ListChasmExecutionsResponse struct {
-		Executions []*InternalChasmRunInfo
-		// Token to read next page if there are more workflow executions beyond page size.
-		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
-		NextPageToken []byte
-	}
-
-	InternalChasmRunInfo struct {
-		BusinessID           string
-		RunID                string
-		ArchetypeId          uint32
-		StartTime            time.Time
-		CloseTime            time.Time
-		HistoryLength        int64
-		HistorySizeBytes     int64
-		StateTransitionCount int64
-
-		ChasmSearchAttributes  map[string]*commonpb.Payload
-		CustomSearchAttributes map[string]*commonpb.Payload
-		Memo                   *commonpb.Memo
-		ChasmMemo              proto.Message
-	}
-
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
 		NamespaceID namespace.ID

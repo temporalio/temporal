@@ -13,13 +13,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistencetask "go.temporal.io/server/common/persistence/task"
 	"go.temporal.io/server/common/primitives/timestamp"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -118,19 +118,19 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 			// task timestamp is lower than both scheduled queue max read level and now
 			// should be overwritten to be later than both
 			taskTimestamp:     maxReadLevel.FireTime.Add(-time.Minute),
-			expectedTimestamp: now.Add(persistencetask.ScheduledTaskMinPrecision).Truncate(persistencetask.ScheduledTaskMinPrecision),
+			expectedTimestamp: now.Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
 		},
 		{
 			// task timestamp is lower than now but higher than scheduled queue max read level
 			// should still be overwritten to be later than both
 			taskTimestamp:     now.Add(-time.Minute),
-			expectedTimestamp: now.Add(persistencetask.ScheduledTaskMinPrecision).Truncate(persistencetask.ScheduledTaskMinPrecision),
+			expectedTimestamp: now.Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
 		},
 		{
 			// task timestamp is later than both now and scheduled queue max read level
 			// should not be overwritten
 			taskTimestamp:     now.Add(time.Minute),
-			expectedTimestamp: now.Add(time.Minute).Add(persistencetask.ScheduledTaskMinPrecision).Truncate(persistencetask.ScheduledTaskMinPrecision),
+			expectedTimestamp: now.Add(time.Minute).Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
 		},
 	}
 

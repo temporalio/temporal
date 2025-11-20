@@ -18,7 +18,7 @@ type testHelper struct {
 }
 
 // newTestHelper creates a new test helper from a test name.
-func newTestHelper(testName string) *testHelper {
+func newTestHelperFromName(testName string) *testHelper {
 	return &testHelper{
 		testName: testName,
 		testHash: hashTestName(testName),
@@ -27,7 +27,7 @@ func newTestHelper(testName string) *testHelper {
 
 // NewTestHelper creates a test helper from a testing.T.
 func NewTestHelper(t testing.TB) *testHelper {
-	return newTestHelper(t.Name())
+	return newTestHelperFromName(t.Name())
 }
 
 // hashTestName generates a hash from a test name using FNV-1a (same as testvars).

@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	persistencetask "go.temporal.io/server/common/persistence/task"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -515,7 +514,7 @@ func (r *ReaderImpl) submit(
 	now := r.timeSource.Now()
 	// Persistence layer may lose precision when persisting the task, which essentially moves
 	// task fire time backward. Need to account for that when submitting the task.
-	fireTime := executable.GetKey().FireTime.Add(persistencetask.ScheduledTaskMinPrecision)
+	fireTime := executable.GetKey().FireTime.Add(common.ScheduledTaskMinPrecision)
 	if now.Before(fireTime) {
 		r.rescheduler.Add(executable, fireTime)
 		return

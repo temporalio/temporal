@@ -16,13 +16,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence/serialization"
-	persistencetask "go.temporal.io/server/common/persistence/task"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
@@ -2397,8 +2397,8 @@ func isComponentTaskExpired(
 		return false
 	}
 
-	scheduledTime := task.ScheduledTime.AsTime().Truncate(persistencetask.ScheduledTaskMinPrecision)
-	referenceTime = referenceTime.Truncate(persistencetask.ScheduledTaskMinPrecision)
+	scheduledTime := task.ScheduledTime.AsTime().Truncate(common.ScheduledTaskMinPrecision)
+	referenceTime = referenceTime.Truncate(common.ScheduledTaskMinPrecision)
 
 	return !scheduledTime.After(referenceTime)
 }
