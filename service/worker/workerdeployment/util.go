@@ -73,9 +73,11 @@ const (
 	errConflictTokenMismatchType = "errConflictTokenMismatch"
 	errFailedPrecondition        = "FailedPrecondition"
 
-	ErrVersionIsDraining         = "Version '%s' cannot be deleted since it is draining."
-	ErrVersionHasPollers         = "Version '%s' cannot be deleted since it has active pollers."
-	ErrVersionIsCurrentOrRamping = "Version '%s' cannot be deleted since it is current or ramping."
+	errVersionIsDrainingSuffix   = "cannot be deleted since it is draining"
+	ErrVersionIsDraining         = "version '%s' " + errVersionIsDrainingSuffix
+	errVersionHasPollersSuffix   = "cannot be deleted since it has active pollers"
+	ErrVersionHasPollers         = "version '%s' " + errVersionHasPollersSuffix
+	ErrVersionIsCurrentOrRamping = "version '%s' cannot be deleted since it is current or ramping"
 
 	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version '%s' is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version '%s' is missing active task queues from the current version; these would become unversioned if it is set as the current version"

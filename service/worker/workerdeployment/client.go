@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -1153,9 +1154,9 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		if failure.Message == ErrVersionIsDraining {
+		if strings.Contains(failure.Message, errVersionIsDrainingSuffix) {
 			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionIsDraining, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
-		} else if failure.Message == ErrVersionHasPollers {
+		} else if strings.Contains(failure.Message, errVersionHasPollersSuffix) {
 			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionHasPollers, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
