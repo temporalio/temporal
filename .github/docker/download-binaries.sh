@@ -37,7 +37,7 @@ echo "Downloading tctl..."
 curl -fsSL "https://github.com/temporalio/tctl/releases/download/v${TCTL_VERSION}/tctl_${TCTL_VERSION}_linux_${ARCH}.tar.gz" \
   | tar -xz -C "${BUILD_DIR}" tctl tctl-authorization-plugin
 
-# Build tdbg using GoReleaser
+# Build tdbg from source (version-specific)
 echo "Building tdbg from source..."
 mkdir -p "${TEMP_DIR}"
 cd "${TEMP_DIR}"
@@ -54,6 +54,12 @@ cd temporal
 echo "Building tdbg for ${ARCH}..."
 GOOS=linux GOARCH=${ARCH} CGO_ENABLED=0 go build -o "${BUILD_DIR}/tdbg" ./cmd/tools/tdbg
 
+# Build temporal-elasticsearch-tool if it exists using goreleaser
+if [ -d "./cmd/tools/elasticsearch" ]; then
+  echo "Building temporal-elasticsearch-tool for ${ARCH} using goreleaser..."
+  goreleaser build --single-target --id temporal-elasticsearch-tool --output "${BUILD_DIR}/temporal-elasticsearch-tool" --snapshot --clean
+fi
+
 # Copy config template from the cloned temporal repo (version-specific)
 if [ "${ARCH}" = "amd64" ]; then
   echo "Copying config template from temporal repo..."
@@ -64,6 +70,18 @@ fi
 # Clean up temp directory
 cd "${SCRIPT_DIR}"
 rm -rf "${TEMP_DIR}"
+
+# Build temporal-elasticsearch-tool from current repository
+# This tool is not available in older server versions, so we build from current repo
+echo "Building temporal-elasticsearch-tool for ${ARCH}..."
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [ -d "${REPO_ROOT}/cmd/tools/elasticsearch" ]; then
+  cd "${REPO_ROOT}"
+  GOOS=linux GOARCH=${ARCH} CGO_ENABLED=0 go build -o "${BUILD_DIR}/temporal-elasticsearch-tool" ./cmd/tools/elasticsearch
+else
+  echo "Warning: temporal-elasticsearch-tool source not found in current repository, skipping..."
+fi
+cd "${SCRIPT_DIR}"
 
 # Make binaries executable
 chmod +x "${BUILD_DIR}"/*
