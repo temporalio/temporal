@@ -164,15 +164,17 @@ const (
 
 type (
 	MutableStateTaskStore struct {
-		Session gocql.Session
-		Logger  log.Logger
+		Session    gocql.Session
+		serializer serialization.Serializer
+		logger     log.Logger
 	}
 )
 
-func NewMutableStateTaskStore(session gocql.Session, logger log.Logger) *MutableStateTaskStore {
+func NewMutableStateTaskStore(session gocql.Session, serializer serialization.Serializer, logger log.Logger) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
-		Session: session,
-		Logger:  logger,
+		Session:    session,
+		serializer: serializer,
+		logger:     logger,
 	}
 }
 
@@ -214,7 +216,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 	if !applied {
 		if previousRangeID, ok := previous["range_id"].(int64); ok && previousRangeID != request.RangeID {
 			// CreateWorkflowExecution failed because rangeID was modified
-			softassert.Sometimes(d.Logger).Debug("ShardOwnershipLost: Failed to add tasks")
+			softassert.Sometimes(d.logger).Debug("ShardOwnershipLost: Failed to add tasks")
 			return &p.ShardOwnershipLostError{
 				ShardID: request.ShardID,
 				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
@@ -512,7 +514,7 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	task := request.TaskInfo
-	datablob, err := serialization.ReplicationTaskInfoToBlob(task)
+	datablob, err := d.serializer.ReplicationTaskInfoToBlob(task)
 	if err != nil {
 		return gocql.ConvertError("PutReplicationTaskToDLQ", err)
 	}

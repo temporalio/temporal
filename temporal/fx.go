@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -140,6 +141,7 @@ var (
 		pprof.Module,
 		TraceExportModule,
 		chasm.Module,
+		serialization.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
 	)
@@ -582,6 +584,7 @@ func ApplyClusterMetadataConfigProvider(
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
+	serializer serialization.Serializer,
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
@@ -595,6 +598,7 @@ func ApplyClusterMetadataConfigProvider(
 		logger,
 		metricsHandler,
 		telemetry.NoopTracerProvider,
+		serializer,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -604,6 +608,7 @@ func ApplyClusterMetadataConfigProvider(
 		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
 		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
+		Serializer:                 serializer,
 	})
 	defer factory.Close()
 

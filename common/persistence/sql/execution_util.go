@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func applyWorkflowMutationTx(
+func (m *sqlExecutionStore) applyWorkflowMutationTx(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
@@ -58,7 +58,7 @@ func applyWorkflowMutationTx(
 		}
 	}
 
-	if err := updateExecution(ctx,
+	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
 		workflowID,
@@ -189,13 +189,12 @@ func applyWorkflowMutationTx(
 	return nil
 }
 
-func applyWorkflowSnapshotTxAsReset(
+func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsReset(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
-
 	lastWriteVersion := workflowSnapshot.LastWriteVersion
 	workflowID := workflowSnapshot.WorkflowID
 	namespaceID := workflowSnapshot.NamespaceID
@@ -227,7 +226,7 @@ func applyWorkflowSnapshotTxAsReset(
 		}
 	}
 
-	if err := updateExecution(ctx,
+	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
 		workflowID,
@@ -940,6 +939,7 @@ func assertNotCurrentExecution(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
+	serializer serialization.Serializer,
 ) error {
 	currentRow, err := tx.LockCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
@@ -953,7 +953,7 @@ func assertNotCurrentExecution(
 		}
 		return serviceerror.NewUnavailablef("assertCurrentExecution failed. Unable to load current record. Error: %v", err)
 	}
-	return assertRunIDMismatch(runID, currentRow)
+	return assertRunIDMismatch(runID, currentRow, serializer)
 }
 
 func assertRunIDAndUpdateCurrentExecution(
@@ -961,11 +961,12 @@ func assertRunIDAndUpdateCurrentExecution(
 	tx sqlplugin.Tx,
 	row sqlplugin.CurrentExecutionsRow,
 	previousRunID primitives.UUID,
+	serializer serialization.Serializer,
 ) error {
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
-			executionState, err := workflowExecutionStateFromCurrentExecutionsRow(currentRow)
+			executionState, err := workflowExecutionStateFromCurrentExecutionsRow(serializer, currentRow)
 			if err != nil {
 				return err
 			}
@@ -1019,20 +1020,29 @@ func assertCurrentExecution(
 	return assertFn(currentRow)
 }
 
-func assertRunIDMismatch(requestRunID primitives.UUID, currentRow *sqlplugin.CurrentExecutionsRow) error {
+func assertRunIDMismatch(requestRunID primitives.UUID, currentRow *sqlplugin.CurrentExecutionsRow, serializer serialization.Serializer) error {
 	// zombie workflow creation with existence of current record, this is a noop
 	if currentRow == nil {
 		return nil
 	}
 	if bytes.Equal(currentRow.RunID, requestRunID) {
-		return extractCurrentWorkflowConflictError(
-			currentRow,
-			fmt.Sprintf(
+		executionState, err := workflowExecutionStateFromCurrentExecutionsRow(serializer, currentRow)
+		if err != nil {
+			return err
+		}
+		return &p.CurrentWorkflowConditionFailedError{
+			Msg: fmt.Sprintf(
 				"assertRunIDMismatch failed. request run ID: %v, current run ID: %v",
 				requestRunID,
 				currentRow.RunID.String(),
 			),
-		)
+			RequestIDs:       executionState.RequestIds,
+			RunID:            currentRow.RunID.String(),
+			State:            currentRow.State,
+			Status:           currentRow.Status,
+			LastWriteVersion: currentRow.LastWriteVersion,
+			StartTime:        currentRow.StartTime,
+		}
 	}
 	return nil
 }
@@ -1042,7 +1052,6 @@ func updateCurrentExecution(
 	tx sqlplugin.Tx,
 	row sqlplugin.CurrentExecutionsRow,
 ) error {
-
 	result, err := tx.UpdateCurrentExecutions(ctx, &row)
 	if err != nil {
 		return serviceerror.NewUnavailablef("updateCurrentExecution failed. Error: %v", err)
@@ -1057,7 +1066,7 @@ func updateCurrentExecution(
 	return nil
 }
 
-func buildExecutionRow(
+func (m *sqlExecutionStore) buildExecutionRow(
 	namespaceID string,
 	workflowID string,
 	executionInfo *commonpb.DataBlob,
@@ -1069,7 +1078,7 @@ func buildExecutionRow(
 ) (row *sqlplugin.ExecutionsRow, err error) {
 	// TODO: double encoding execution state? executionState could've been passed to the function as
 	// *commonpb.DataBlob like executionInfo
-	stateBlob, err := serialization.WorkflowExecutionStateToBlob(executionState)
+	stateBlob, err := m.serializer.WorkflowExecutionStateToBlob(executionState)
 	if err != nil {
 		return nil, err
 	}
@@ -1112,7 +1121,7 @@ func (m *sqlExecutionStore) createExecution(
 	shardID int32,
 ) error {
 
-	row, err := buildExecutionRow(
+	row, err := m.buildExecutionRow(
 		namespaceID,
 		workflowID,
 		executionInfo,
@@ -1147,7 +1156,7 @@ func (m *sqlExecutionStore) createExecution(
 	return nil
 }
 
-func updateExecution(
+func (m *sqlExecutionStore) updateExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	namespaceID string,
@@ -1159,7 +1168,7 @@ func updateExecution(
 	dbRecordVersion int64,
 	shardID int32,
 ) error {
-	row, err := buildExecutionRow(
+	row, err := m.buildExecutionRow(
 		namespaceID,
 		workflowID,
 		executionInfo,
@@ -1188,10 +1197,11 @@ func updateExecution(
 }
 
 func workflowExecutionStateFromCurrentExecutionsRow(
+	serializer serialization.Serializer,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (*persistencespb.WorkflowExecutionState, error) {
 	if len(row.Data) > 0 && row.DataEncoding != "" {
-		return serialization.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
+		return serializer.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
 	// Old records don't have the serialized WorkflowExecutionState stored in DB.

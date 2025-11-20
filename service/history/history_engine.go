@@ -126,6 +126,7 @@ type (
 		searchAttributesValidator  *searchattribute.Validator
 		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
+		taskSerializer             serialization.TaskSerializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
@@ -151,6 +152,7 @@ func NewEngineWithShardContext(
 	workflowCache wcache.Cache,
 	replicationProgressCache replication.ProgressCache,
 	eventSerializer serialization.Serializer,
+	taskSerializer serialization.TaskSerializer,
 	queueProcessorFactories []QueueFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
@@ -203,6 +205,7 @@ func NewEngineWithShardContext(
 		persistenceVisibilityMgr:   persistenceVisibilityMgr,
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
+		taskSerializer:             taskSerializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
@@ -1017,7 +1020,7 @@ func (e *historyEngineImpl) AddTasks(
 	return addtasks.Invoke(
 		ctx,
 		e.shardContext,
-		e.eventSerializer,
+		e.taskSerializer,
 		int(e.config.NumberOfShards),
 		request,
 		e.taskCategoryRegistry,

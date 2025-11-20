@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -50,6 +51,7 @@ func NewManager(
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	visibilityManager, err := newVisibilityManagerFromDataStoreConfig(
 		persistenceCfg.GetVisibilityStoreConfig(),
@@ -68,6 +70,7 @@ func NewManager(
 		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 	if err != nil {
 		return nil, err
@@ -94,6 +97,7 @@ func NewManager(
 		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 	if err != nil {
 		return nil, err
@@ -178,6 +182,7 @@ func newVisibilityManagerFromDataStoreConfig(
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	visStore, err := newVisibilityStoreFromDataStoreConfig(
 		dsConfig,
@@ -192,6 +197,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 	if err != nil {
 		return nil, err
@@ -227,6 +233,7 @@ func newVisibilityStoreFromDataStoreConfig(
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (store.VisibilityStore, error) {
 	var (
 		visStore store.VisibilityStore
@@ -241,6 +248,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			visibilityEnableUnifiedQueryConverter,
 			logger,
 			metricsHandler,
+			serializer,
 		)
 	} else if dsConfig.Elasticsearch != nil {
 		visStore, err = elasticsearch.NewVisibilityStore(
