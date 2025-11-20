@@ -145,7 +145,7 @@ func Invoke(
 
 	// copy pause info to the response if it exists
 	if executionInfo.PauseInfo != nil {
-		result.WorkflowExecutionInfo.PauseInfo = &workflowpb.WorkflowExecutionPauseInfo{
+		result.WorkflowExtendedInfo.PauseInfo = &workflowpb.WorkflowExecutionPauseInfo{
 			PausedTime: executionInfo.PauseInfo.PauseTime,
 			Identity:   executionInfo.PauseInfo.Identity,
 			Reason:     executionInfo.PauseInfo.Reason,

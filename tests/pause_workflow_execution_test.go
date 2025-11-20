@@ -92,7 +92,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
 		info := desc.GetWorkflowExecutionInfo()
 		require.NotNil(t, info)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
-		if pauseInfo := info.GetPauseInfo(); pauseInfo != nil {
+		if pauseInfo := desc.GetWorkflowExtendedInfo().GetPauseInfo(); pauseInfo != nil {
 			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
 			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
 		}
