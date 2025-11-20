@@ -194,10 +194,10 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	})
 
 	// TODO(dan): will complete this test in a different PR
-	// require.NoError(t, err)
-	// require.NotNil(t, pollResp)
-	// require.NotNil(t, pollResp.GetInfo())
-	// require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
+	require.NoError(t, err)
+	require.NotNil(t, pollResp)
+	require.NotNil(t, pollResp.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
 	// failure := pollResp.GetInfo().GetLastFailure()
 	// require.NotNil(t, failure)
 	// timeoutFailure := failure.GetTimeoutFailureInfo()
