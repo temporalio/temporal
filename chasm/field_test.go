@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
@@ -173,11 +175,15 @@ func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node
 }
 
 func (s *fieldSuite) TestDeferredPointerResolution() {
-	th := NewTestHelper(s.T())
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	s.nodeBackend = &MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 1 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
-		HandleGetWorkflowKey:      th.Any().WorkflowKey(),
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
 	}
 
 	// Create component structure that will simulate NewEntity scenario.
@@ -247,11 +253,15 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 }
 
 func (s *fieldSuite) TestMixedPointerScenario() {
-	th := NewTestHelper(s.T())
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	s.nodeBackend = &MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 1 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
-		HandleGetWorkflowKey:      th.Any().WorkflowKey(),
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
 	}
 
 	existingComponent := &TestSubComponent11{
@@ -319,11 +329,15 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 }
 
 func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
-	th := NewTestHelper(s.T())
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	s.nodeBackend = &MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 1 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
-		HandleGetWorkflowKey:      th.Any().WorkflowKey(),
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
 	}
 
 	s.logger.(*testlogger.TestLogger).

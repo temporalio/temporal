@@ -17,7 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	chasmNexus "go.temporal.io/server/chasm/nexus"
+	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -372,7 +372,7 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	}
 }
 
-var _ chasmNexus.CompletionHandler = &Scheduler{}
+var _ chasmnexus.CompletionHandler = &Scheduler{}
 
 func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExecutionStatus {
 	switch failure.FailureInfo.(type) {

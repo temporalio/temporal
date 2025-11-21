@@ -3,6 +3,7 @@ package chasm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -240,15 +242,16 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 }
 
 func (s *nodeSuite) TestCollectionAttributes() {
-	th := NewTestHelper(s.T())
+	runID1 := fmt.Sprintf("workflow_id_%d", 1)
+	runID2 := fmt.Sprintf("workflow_id_%d", 2)
 	sc1 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
-			RunId: th.WorkflowIDWithNumber(1),
+			RunId: runID1,
 		},
 	}
 	sc2 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
-			RunId: th.WorkflowIDWithNumber(2),
+			RunId: runID2,
 		},
 	}
 
@@ -425,18 +428,17 @@ func (s *nodeSuite) TestCollectionAttributes() {
 }
 
 func (s *nodeSuite) TestPointerAttributes() {
-	th := NewTestHelper(s.T())
 	var persistedNodes map[string]*persistencespb.ChasmNode
 
 	sc11 := &TestSubComponent11{
 		SubComponent11Data: &protoMessageType{
-			RunId: th.WorkflowIDWithNumber(11),
+			RunId: fmt.Sprintf("workflow_id_%d", 11),
 		},
 	}
 
 	sc1 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
-			RunId: th.WorkflowIDWithNumber(1),
+			RunId: fmt.Sprintf("workflow_id_%d", 1),
 		},
 		SubComponent11: NewComponentField(nil, sc11),
 	}
@@ -1597,8 +1599,11 @@ func (s *nodeSuite) TestGetComponent() {
 }
 
 func (s *nodeSuite) TestRef() {
-	th := NewTestHelper(s.T())
-	workflowKey := th.Any().WorkflowKey()()
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	entityKey := EntityKey{
 		NamespaceID: workflowKey.NamespaceID,
 		BusinessID:  workflowKey.WorkflowID,
@@ -1777,12 +1782,11 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 
 func (s *nodeSuite) TestCloseTransaction_Success() {
 	node := s.testComponentTree()
-	th := NewTestHelper(s.T())
 	chasmCtx := NewMutableContext(context.Background(), node)
 	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
-	tc.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: th.Any().String()}
+	tc.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: primitives.NewUUID().String()}
 
 	mutations, err := node.CloseTransaction()
 	s.NoError(err)
@@ -2781,7 +2785,6 @@ func (s *nodeSuite) TestExecutePureTask() {
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
-	th := NewTestHelper(s.T())
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -2809,8 +2812,13 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		},
 	}
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         th.Any().WorkflowKey()(),
+		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: s.timeSource.Now(),
 		TaskID:              123,
 		Category:            tasks.CategoryOutbound,
@@ -2904,7 +2912,6 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {
-	th := NewTestHelper(s.T())
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount:          1,
@@ -2921,8 +2928,13 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		},
 	}
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         th.Any().WorkflowKey()(),
+		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: s.timeSource.Now(),
 		TaskID:              123,
 		Category:            tasks.CategoryTransfer,
@@ -2972,8 +2984,13 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	// Succeed validation as valid for a sub component.
 	childTaskInfo := taskInfo
 	childTaskInfo.Path = []string{"SubComponent1"}
+	childWorkflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	childChasmTask := &tasks.ChasmTask{
-		WorkflowKey:         th.Any().WorkflowKey()(),
+		WorkflowKey:         childWorkflowKey,
 		VisibilityTimestamp: s.timeSource.Now(),
 		TaskID:              124,
 		Category:            tasks.CategoryTransfer,

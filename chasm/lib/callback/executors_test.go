@@ -18,7 +18,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	chasmNexus "go.temporal.io/server/chasm/nexus"
+	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -570,7 +570,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					Callback: &callbackspb.Callback{
 						Variant: &callbackspb.Callback_Nexus_{
 							Nexus: &callbackspb.Callback_Nexus{
-								Url:    chasmNexus.CompletionHandlerURL,
+								Url:    chasmnexus.CompletionHandlerURL,
 								Header: headers,
 							},
 						},

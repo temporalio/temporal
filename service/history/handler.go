@@ -20,7 +20,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
-	chasmNexus "go.temporal.io/server/chasm/nexus"
+	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2394,10 +2394,10 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// this similarly as we would a pure task (holding an exclusive lock), as the
 	// assumption is that the accessed component will be recording (or generating a
 	// task) based on this result.
-	_, _, err := chasm.UpdateComponent[chasmNexus.CompletionHandler](
+	_, _, err := chasm.UpdateComponent[chasmnexus.CompletionHandler](
 		ctx,
 		request.GetCompletion().GetComponentRef(),
-		func(c chasmNexus.CompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+		func(c chasmnexus.CompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
 		completion)
