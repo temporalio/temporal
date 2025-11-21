@@ -257,8 +257,10 @@ type Task struct {
 	Version          int64                  `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`
 	StartedTime      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
 	StartVersion     int64                  `protobuf:"varint,13,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Reference to the associated Chasm component, if provided.
+	ComponentRef  []byte `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Task) Reset() {
@@ -380,6 +382,13 @@ func (x *Task) GetStartVersion() int64 {
 		return x.StartVersion
 	}
 	return 0
+}
+
+func (x *Task) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
 }
 
 type QueryTask struct {
@@ -679,7 +688,7 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"endEventId\x12*\n" +
 	"\x11end_event_version\x18\a \x01(\x03R\x0fendEventVersion\x12+\n" +
 	"\x11persistence_token\x18\b \x01(\fR\x10persistenceToken\x12]\n" +
-	"\x11version_histories\x18\t \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistoriesJ\x04\b\x01\x10\x02\"\xfd\x03\n" +
+	"\x11version_histories\x18\t \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistoriesJ\x04\b\x01\x10\x02\"\xa2\x04\n" +
 	"\x04Task\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -696,7 +705,8 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	" \x01(\x03R\x0estartedEventId\x12\x18\n" +
 	"\aversion\x18\v \x01(\x03R\aversion\x12=\n" +
 	"\fstarted_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12#\n" +
-	"\rstart_version\x18\r \x01(\x03R\fstartVersion\"f\n" +
+	"\rstart_version\x18\r \x01(\x03R\fstartVersion\x12#\n" +
+	"\rcomponent_ref\x18\x0e \x01(\fR\fcomponentRef\"f\n" +
 	"\tQueryTask\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +

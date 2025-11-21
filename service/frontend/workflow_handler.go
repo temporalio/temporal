@@ -1284,6 +1284,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		nil,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1434,15 +1435,22 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref
+	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
+	var componentRef []byte
+	if workflowID == "" {
+		componentRef, err = activity.ToRef(namespaceID.String(), activityID, runID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1456,6 +1464,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1620,14 +1629,21 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref
+	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
+	var componentRef []byte
+	if workflowID == "" {
+		componentRef, err = activity.ToRef(namespaceID.String(), activityID, runID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1641,6 +1657,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1818,6 +1835,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		nil,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {

@@ -112,45 +112,6 @@ func nextBackoffInterval(
 	return interval, enumspb.RETRY_STATE_IN_PROGRESS
 }
 
-func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
-	if failure == nil {
-		return true
-	}
-
-	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
-		return false
-	}
-
-	if failure.GetTimeoutFailureInfo() != nil {
-		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
-		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return !slices.Contains(
-				nonRetryableTypes,
-				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
-			)
-		}
-
-		return false
-	}
-
-	if failure.GetServerFailureInfo() != nil {
-		return !failure.GetServerFailureInfo().GetNonRetryable()
-	}
-
-	if failure.GetApplicationFailureInfo() != nil {
-		if failure.GetApplicationFailureInfo().GetNonRetryable() {
-			return false
-		}
-
-		return !slices.Contains(
-			nonRetryableTypes,
-			failure.GetApplicationFailureInfo().GetType(),
-		)
-	}
-	return true
-}
-
 // Helpers for creating new retry/cron workflows:
 
 func SetupNewWorkflowForRetryOrCron(
@@ -331,4 +292,44 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 
 	return nil
+}
+
+// isRetryable determines if a failure is retryable based on its type and non-retryable types list.
+func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
+	if failure == nil {
+		return true
+	}
+
+	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
+		return false
+	}
+
+	if failure.GetTimeoutFailureInfo() != nil {
+		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
+		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+			return !slices.Contains(
+				nonRetryableTypes,
+				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
+			)
+		}
+
+		return false
+	}
+
+	if failure.GetServerFailureInfo() != nil {
+		return !failure.GetServerFailureInfo().GetNonRetryable()
+	}
+
+	if failure.GetApplicationFailureInfo() != nil {
+		if failure.GetApplicationFailureInfo().GetNonRetryable() {
+			return false
+		}
+
+		return !slices.Contains(
+			nonRetryableTypes,
+			failure.GetApplicationFailureInfo().GetType(),
+		)
+	}
+	return true
 }

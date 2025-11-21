@@ -48,11 +48,8 @@ func Invoke(
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			activityRefProto,
-			(*activity.Activity).RecordActivityTaskStarted,
-			activity.RecordActivityTaskStartedParams{
-				VersionDirective: request.GetVersionDirective(),
-				WorkerIdentity:   request.GetPollRequest().GetIdentity(),
-			},
+			(*activity.Activity).HandleStarted,
+			request,
 		)
 
 		if err != nil {
@@ -217,7 +214,7 @@ func recordActivityTaskStarted(
 		// The workflow transition happens only if the workflow task of the same execution would go
 		// to the poller deployment. Otherwise, it means the activity is independently versioned, we
 		// allow it to start without affecting the workflow.
-		wftDepVer, err := getDeploymentVersionForWorkflowId(ctx,
+		wftDepVer, err := getDeploymentVersionForWorkflowID(ctx,
 			request.NamespaceId,
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -288,7 +285,7 @@ func recordActivityTaskStarted(
 
 // TODO (Shahab): move this method to a better place
 // TODO: cache this result (especially if the answer is true)
-func getDeploymentVersionForWorkflowId(
+func getDeploymentVersionForWorkflowID(
 	ctx context.Context,
 	namespaceID string,
 	taskQueueName string,

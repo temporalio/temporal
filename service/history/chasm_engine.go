@@ -302,7 +302,7 @@ func (e *ChasmEngine) PollComponent(
 	// Wait condition not satisfied; long-poll
 
 	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
-		namespace.ID(requestRef.EntityKey.NamespaceID),
+		namespace.ID(requestRef.NamespaceID),
 	)
 	if err != nil {
 		return nil, err
