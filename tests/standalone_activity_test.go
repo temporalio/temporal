@@ -29,36 +29,15 @@ import (
 // TODO(fred) add tests for retries when we implement search attributes
 
 var (
-	defaultInput = &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("json/plain"),
-				},
-				Data: []byte("test-activity-input"),
-			},
-		},
-	}
-
-	defaultResult = payloads.EncodeString("Done")
-
-	defaultFailure = &failurepb.Failure{
+	defaultInput            = payloads.EncodeString("Input")
+	defaultHeartbeatDetails = payloads.EncodeString("Heartbeat Details")
+	defaultResult           = payloads.EncodeString("Done")
+	defaultFailure          = &failurepb.Failure{
 		Message: "Failed Activity",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 			Type:         "Test",
 			NonRetryable: true,
 		}},
-	}
-
-	defaultHeartbeatDetails = &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("json/plain"),
-				},
-				Data: []byte("test-heartbeat-detail"),
-			},
-		},
 	}
 )
 
@@ -75,7 +54,6 @@ func TestStandaloneActivityTestSuite(t *testing.T) {
 
 func (s *standaloneActivityTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuite()
-	s.tv = testvars.New(s.T())
 	s.OverrideDynamicConfig(
 		dynamicconfig.EnableChasm,
 		true,
@@ -84,6 +62,11 @@ func (s *standaloneActivityTestSuite) SetupSuite() {
 	s.chasmEngine, err = s.FunctionalTestBase.GetTestCluster().Host().ChasmEngine()
 	s.Require().NoError(err)
 	s.Require().NotNil(s.chasmEngine)
+}
+
+func (s *standaloneActivityTestSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+	s.tv = testvars.New(s.T())
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCompleted() {
@@ -253,8 +236,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
 		enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 		enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
 	)
-	require.NotNil(t, pollResp.Input)
-	require.Equal(t, "test-activity-input", string(pollResp.Input.Payloads[0].Data))
+	protorequire.ProtoEqual(t, defaultInput, pollResp.Input)
 	// TODO(dan): test IncludeOutcome
 }
 
@@ -335,8 +317,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 			enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			enumspb.PENDING_ACTIVITY_STATE_STARTED,
 		)
-		require.NotNil(t, activityPollResp.Input)
-		require.Equal(t, "test-activity-input", string(activityPollResp.Input.Payloads[0].Data))
+		protorequire.ProtoEqual(t, defaultInput, activityPollResp.Input)
 
 	case <-ctx.Done():
 		t.Fatal("PollActivityExecution timed out")
@@ -424,58 +405,37 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 		startResp, err := s.startActivity(ctx, activityID, taskQueue)
 		require.NoError(t, err)
 
-		activityPollDone := make(chan struct{})
-		var activityPollResp *workflowservice.PollActivityExecutionResponse
-		var activityPollErr error
-		var taskError error
+		pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
 
-		go func() {
-			defer close(activityPollDone)
-			activityPollResp, activityPollErr = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-				Namespace:      s.Namespace().String(),
-				ActivityId:     activityID,
-				RunId:          startResp.RunId,
-				IncludeInfo:    true,
-				IncludeInput:   true,
-				IncludeOutcome: true,
-				WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitCompletion{
-					WaitCompletion: &workflowservice.PollActivityExecutionRequest_CompletionWaitOptions{},
-				},
-			})
-		}()
+		err = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken)
+		require.NoError(t, err)
 
-		// Worker picks up activity task and completes it
-		go func() {
-			pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
-			if err != nil {
-				taskError = err
-				return
-			}
+		activityPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeInfo:    true,
+			IncludeInput:   true,
+			IncludeOutcome: true,
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitCompletion{
+				WaitCompletion: &workflowservice.PollActivityExecutionRequest_CompletionWaitOptions{},
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, activityPollResp)
+		require.NotNil(t, activityPollResp.Info)
+		s.assertActivityExecutionInfo(
+			t,
+			activityPollResp.Info,
+			activityID,
+			startResp.RunId,
+			tc.expectedStatus,
+			enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
+		)
 
-			taskError = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken)
-		}()
-
-		select {
-		case <-activityPollDone:
-			require.NoError(t, activityPollErr)
-			require.NotNil(t, activityPollResp)
-			require.NotNil(t, activityPollResp.Info)
-			s.assertActivityExecutionInfo(
-				t,
-				activityPollResp.Info,
-				activityID,
-				startResp.RunId,
-				tc.expectedStatus,
-				enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
-			)
-
-			protorequire.ProtoEqual(t, defaultInput, activityPollResp.GetInput())
-			tc.completionValidationFn(t, activityPollResp)
-		case <-ctx.Done():
-			t.Fatal("PollActivityExecution timed out")
-		}
-
-		require.NoError(t, taskError)
+		protorequire.ProtoEqual(t, defaultInput, activityPollResp.GetInput())
+		tc.completionValidationFn(t, activityPollResp)
 	}
 }
 
