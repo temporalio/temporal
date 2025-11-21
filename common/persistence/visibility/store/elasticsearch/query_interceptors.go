@@ -6,6 +6,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
@@ -19,11 +20,13 @@ type (
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		seenNamespaceDivision          bool
+		chasmMapper                    *chasm.VisibilitySearchAttributesMapper
 	}
 
 	valuesInterceptor struct {
 		namespace               namespace.Name
 		searchAttributesTypeMap searchattribute.NameTypeMap
+		chasmMapper             *chasm.VisibilitySearchAttributesMapper
 	}
 )
 
@@ -31,21 +34,26 @@ func NewNameInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      namespaceName,
 		searchAttributesTypeMap:        saTypeMap,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		seenNamespaceDivision:          false,
+		chasmMapper:                    chasmMapper,
 	}
 }
 
 func NewValuesInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *valuesInterceptor {
 	return &valuesInterceptor{
 		namespace:               namespaceName,
 		searchAttributesTypeMap: saTypeMap,
+		chasmMapper:             chasmMapper,
 	}
 }
 
@@ -55,7 +63,8 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	if err != nil {
 		return "", err
 	}
-	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper, ni.searchAttributesTypeMap)
+	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper,
+		ni.searchAttributesTypeMap, ni.chasmMapper)
 	if err != nil {
 		return "", err
 	}
@@ -86,9 +95,19 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 }
 
 func (vi *valuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
-	fieldType, err := vi.searchAttributesTypeMap.GetType(fieldName)
-	if err != nil {
-		return nil, query.NewConverterError("invalid search attribute: %s", name)
+	var fieldType enumspb.IndexedValueType
+	var err error
+
+	if sadefs.IsChasmSearchAttribute(fieldName) {
+		fieldType, err = vi.chasmMapper.GetType(fieldName)
+		if err != nil {
+			return nil, query.NewConverterError("invalid search attribute: %s", name)
+		}
+	} else {
+		fieldType, err = vi.searchAttributesTypeMap.GetType(fieldName)
+		if err != nil {
+			return nil, query.NewConverterError("invalid search attribute: %s", name)
+		}
 	}
 
 	var result []interface{}

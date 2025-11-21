@@ -34,7 +34,7 @@ func newFieldNameAggInterceptor(
 	saMapperProvider searchattribute.MapperProvider,
 ) *fieldNameAggInterceptor {
 	return &fieldNameAggInterceptor{
-		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider),
+		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider, nil),
 		names:           make(map[string]bool),
 	}
 }
@@ -125,7 +125,7 @@ func getQueryFieldsLegacy(
 	queryString string,
 ) ([]string, error) {
 	fnInterceptor := newFieldNameAggInterceptor(namespaceName, saNameType, saMapperProvider)
-	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType)
+	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType, nil)
 	_, err := queryConverter.ConvertWhereOrderBy(queryString)
 	if err != nil {
 		var converterErr *query.ConverterError

@@ -144,7 +144,7 @@ type (
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
 		currentSA   map[string]VisibilityValue
-		currentMemo map[string]VisibilityValue
+		currentMemo proto.Message
 
 		needsPointerResolution bool
 	}
@@ -1473,7 +1473,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
 		newMemo := memoProvider.Memo(immutableContext)
-		if !maps.EqualFunc(n.currentMemo, newMemo, isVisibilityValueEqual) {
+		if !proto.Equal(n.currentMemo, newMemo) {
 			needUpdate = true
 		}
 		n.currentMemo = newMemo

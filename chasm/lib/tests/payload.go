@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -154,11 +155,6 @@ func (s *PayloadStore) SearchAttributes(
 }
 
 // Memo implements chasm.VisibilityMemoProvider interface
-func (s *PayloadStore) Memo(
-	_ chasm.Context,
-) map[string]chasm.VisibilityValue {
-	return map[string]chasm.VisibilityValue{
-		TotalCountMemoFieldName: chasm.VisibilityValueInt64(s.State.TotalCount),
-		TotalSizeMemoFieldName:  chasm.VisibilityValueInt64(s.State.TotalSize),
-	}
+func (s *PayloadStore) Memo(_ chasm.Context) proto.Message {
+	return s.State
 }

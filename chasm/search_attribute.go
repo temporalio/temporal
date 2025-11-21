@@ -1,10 +1,12 @@
 package chasm
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
@@ -381,4 +383,167 @@ func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValu
 		Field: s.field,
 		Value: VisibilityValueStringSlice(value),
 	}
+}
+
+// SearchAttributeMap wraps search attribute values with type-safe access.
+type SearchAttributesMap struct {
+	values map[string]VisibilityValue
+}
+
+// NewSearchAttributeMap creates a new SearchAttributeMap from raw values.
+func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesMap {
+	return SearchAttributesMap{values: values}
+}
+
+// GetBool returns the boolean value for a given SearchAttributeBool. If not found or map is nil, second parameter is false.
+func (m SearchAttributesMap) GetBool(sa SearchAttributeBool) (bool, bool) {
+	if m.values == nil {
+		return false, false
+	}
+
+	alias := sa.definition().alias
+	boolValue, ok := m.values[alias].(VisibilityValueBool)
+	if !ok {
+		return false, false
+	}
+
+	return bool(boolValue), true
+}
+
+// GetInt returns the int value for a given SearchAttributeInt. If not found or map is nil, second parameter is false.
+func (m SearchAttributesMap) GetInt(sa SearchAttributeInt) (int, bool) {
+	if m.values == nil {
+		return 0, false
+	}
+
+	alias := sa.definition().alias
+	intValue, ok := m.values[alias].(VisibilityValueInt)
+	if !ok {
+		return 0, false
+	}
+
+	return int(intValue), true
+}
+
+// GetDouble returns the double value for a given SearchAttributeDouble. If not found or map is nil, second parameter is false.
+func (m SearchAttributesMap) GetDouble(sa SearchAttributeDouble) (float64, bool) {
+	if m.values == nil {
+		return 0, false
+	}
+
+	alias := sa.definition().alias
+	doubleValue, ok := m.values[alias].(VisibilityValueFloat64)
+	if !ok {
+		return 0, false
+	}
+
+	return float64(doubleValue), true
+}
+
+// GetKeyword returns the string value for a given SearchAttributeKeyword. If not found or map is nil, second parameter is false.
+func (m SearchAttributesMap) GetKeyword(sa SearchAttributeKeyword) (string, bool) {
+	if m.values == nil {
+		return "", false
+	}
+
+	alias := sa.definition().alias
+	stringValue, ok := m.values[alias].(VisibilityValueString)
+	if !ok {
+		return "", false
+	}
+
+	return string(stringValue), true
+}
+
+// GetDateTime returns the time value for a given SearchAttributeDateTime. If not found or map is nil, second parameter is false.
+func (m SearchAttributesMap) GetDateTime(sa SearchAttributeDateTime) (time.Time, bool) {
+	if m.values == nil {
+		return time.Time{}, false
+	}
+
+	alias := sa.definition().alias
+	timeValue, ok := m.values[alias].(VisibilityValueTime)
+	if !ok {
+		return time.Time{}, false
+	}
+
+	return time.Time(timeValue), true
+}
+
+// GetKeywordList returns the string list value for a given SearchAttributeKeywordList. If not found or map is nil, second parameter is false.
+func (m SearchAttributesMap) GetKeywordList(sa SearchAttributeKeywordList) ([]string, bool) {
+	if m.values == nil {
+		return nil, false
+	}
+
+	alias := sa.definition().alias
+	keywordListValue, ok := m.values[alias].(VisibilityValueStringSlice)
+	if !ok {
+		return nil, false
+	}
+
+	return []string(keywordListValue), true
+}
+
+// convertToVisibilityValue converts a value to VisibilityValue based on its runtime type.
+func convertToVisibilityValue(value interface{}) VisibilityValue {
+	switch val := value.(type) {
+	case int:
+		return VisibilityValueInt64(int64(val))
+	case int32:
+		return VisibilityValueInt64(int64(val))
+	case int64:
+		return VisibilityValueInt64(val)
+	case float32:
+		return VisibilityValueFloat64(float64(val))
+	case float64:
+		return VisibilityValueFloat64(val)
+	case bool:
+		return VisibilityValueBool(val)
+	case time.Time:
+		return VisibilityValueTime(val)
+	case string:
+		// Try to parse as datetime first
+		if parsedTime, err := time.Parse(time.RFC3339, val); err == nil {
+			return VisibilityValueTime(parsedTime)
+		}
+		return VisibilityValueString(val)
+	case []byte:
+		return VisibilityValueByteSlice(val)
+	case []string:
+		return VisibilityValueStringSlice(val)
+	default:
+		// Return as string if type is unknown
+		return VisibilityValueString(fmt.Sprintf("%v", val))
+	}
+}
+
+// AliasChasmSearchAttributes converts search attribute values to VisibilityValue and aliases field names.
+// It takes a map of field names to interface{} values, converts them to VisibilityValue based on their runtime type,
+// and then aliases the field names using the mapper.
+func AliasChasmSearchAttributes(
+	chasmSearchAttributes map[string]interface{},
+	mapper *VisibilitySearchAttributesMapper,
+) (map[string]VisibilityValue, error) {
+	if len(chasmSearchAttributes) == 0 {
+		return nil, nil
+	}
+
+	chasmSAs := make(map[string]VisibilityValue, len(chasmSearchAttributes))
+	for fieldName, value := range chasmSearchAttributes {
+		visibilityValue := convertToVisibilityValue(value)
+		aliasName, err := mapper.Alias(fieldName)
+		if err != nil {
+			// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field, search attribute is not registered.
+			// IMPORTANT: Chasm search attributes must be registered with the CHASM Registry using the WithSearchAttributes() option.
+			var invalidArgumentErr *serviceerror.InvalidArgument
+			if errors.As(err, &invalidArgumentErr) {
+				continue
+			}
+			return nil, err
+		}
+		chasmSAs[aliasName] = visibilityValue
+	}
+
+	return chasmSAs, nil
 }

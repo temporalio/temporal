@@ -81,6 +81,15 @@ func (r *Registry) ComponentFqnByID(id uint32) (string, bool) {
 	return fqn, ok
 }
 
+// ComponentByID returns the registrable component for a given archetype ID.
+func (r *Registry) ComponentByID(id uint32) (*RegistrableComponent, bool) {
+	fqn, ok := r.componentFqnByID[id]
+	if !ok {
+		return nil, false
+	}
+	return r.component(fqn)
+}
+
 // ComponentIDFor converts registered component instance to component type ID.
 // This method should only be used by CHASM framework internal code,
 // NOT CHASM library developers.
@@ -134,6 +143,15 @@ func (r *Registry) taskFor(taskInstance any) (*RegistrableTask, bool) {
 func (r *Registry) componentOf(componentGoType reflect.Type) (*RegistrableComponent, bool) {
 	rc, ok := r.componentByGoType[componentGoType]
 	return rc, ok
+}
+
+// ArchetypeIDOf returns the ArchetypeID for the given component Go type.
+func (r *Registry) ArchetypeIDOf(componentGoType reflect.Type) (ArchetypeID, bool) {
+	rc, ok := r.componentByGoType[componentGoType]
+	if !ok {
+		return UnspecifiedArchetypeID, false
+	}
+	return rc.componentID, true
 }
 
 func (r *Registry) taskOf(taskGoType reflect.Type) (*RegistrableTask, bool) {

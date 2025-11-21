@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -64,6 +65,8 @@ func newMySQLQueryConverter(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *QueryConverterLegacy {
 	return newQueryConverterInternal(
 		&mysqlQueryConverter{},
@@ -72,6 +75,8 @@ func newMySQLQueryConverter(
 		saTypeMap,
 		saMapper,
 		queryString,
+		chasmMapper,
+		archetypeID,
 	)
 }
 
