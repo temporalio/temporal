@@ -110,7 +110,7 @@ func (s *PayloadStore) GetPayload(
 	key string,
 ) (*commonpb.Payload, error) {
 	if field, ok := s.Payloads[key]; ok {
-		return field.Get(chasmContext)
+		return field.Get(chasmContext), nil
 	}
 	return nil, serviceerror.NewNotFoundf("payload not found with key: %s", key)
 }
@@ -124,10 +124,7 @@ func (s *PayloadStore) RemovePayload(
 	}
 
 	field := s.Payloads[key]
-	payload, err := field.Get(mutableContext)
-	if err != nil {
-		return nil, err
-	}
+	payload := field.Get(mutableContext)
 	s.State.TotalCount--
 	s.State.TotalSize -= int64(len(payload.Data))
 	delete(s.Payloads, key)

@@ -149,20 +149,14 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 				InvokerState: common.CloneProto(i.InvokerState),
 			}
 
-			s, err := i.Scheduler.Get(ctx)
-			if err != nil {
-				return struct{}{}, err
-			}
+			s := i.Scheduler.Get(ctx)
 			scheduler = &Scheduler{
 				SchedulerState:     common.CloneProto(s.SchedulerState),
 				cacheConflictToken: s.cacheConflictToken,
 				compiledSpec:       s.compiledSpec,
 			}
 
-			lcs, err := s.LastCompletionResult.Get(ctx)
-			if err != nil {
-				return struct{}{}, err
-			}
+			lcs := s.LastCompletionResult.Get(ctx)
 			lastCompletionState = common.CloneProto(lcs)
 
 			// Set up the completion callback to handle workflow results.
@@ -200,10 +194,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 		ctx,
 		invokerRef,
 		func(i *Invoker, ctx chasm.MutableContext, _ any) (struct{}, error) {
-			s, err := i.Scheduler.Get(ctx)
-			if err != nil {
-				return struct{}{}, err
-			}
+			s := i.Scheduler.Get(ctx)
 
 			i.recordExecuteResult(ctx, &result)
 			s.recordActionResult(&schedulerActionResult{starts: startResults})
@@ -387,10 +378,7 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) error {
-	scheduler, err := invoker.Scheduler.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to read component: %w", err)
-	}
+	scheduler := invoker.Scheduler.Get(ctx)
 
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()

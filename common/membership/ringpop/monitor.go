@@ -348,6 +348,8 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 			set[net.JoinHostPort(host.RPCAddress.String(), convert.Uint16ToString(host.RPCPort))] = struct{}{}
 		}
 
+		nextPageToken = resp.NextPageToken
+
 		// Stop iterating once we have either 500 unique ip:port combos or there is no more results.
 		if nextPageToken == nil || len(set) >= 500 {
 			bootstrapHostPorts := make([]string, 0, len(set))

@@ -302,11 +302,7 @@ func (s *Scheduler) getIdleExpiration(
 
 func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 	for _, field := range s.Backfillers {
-		backfiller, err := field.Get(ctx)
-		if err != nil {
-			continue
-		}
-
+		backfiller := field.Get(ctx)
 		var policy enumspb.ScheduleOverlapPolicy
 		switch request := backfiller.GetRequest().(type) {
 		case *schedulerpb.BackfillerState_BackfillRequest:
@@ -391,10 +387,7 @@ func (s *Scheduler) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	info *persistencespb.ChasmNexusCompletion,
 ) error {
-	invoker, err := s.Invoker.Get(ctx)
-	if err != nil {
-		return err
-	}
+	invoker := s.Invoker.Get(ctx)
 
 	workflowID := invoker.WorkflowID(info.RequestId)
 	if workflowID == "" {
@@ -443,7 +436,7 @@ func (s *Scheduler) HandleNexusCompletion(
 
 	// Record the completed action into Scheduler's metadata. This updates
 	// RecentActions and RunningWorkflows.
-	s.recordCompletedAction(ctx, scheduleTime, workflowID, wfStatus)
+	s.recordCompletedAction(scheduleTime, workflowID, wfStatus)
 
 	return nil
 }
@@ -451,7 +444,6 @@ func (s *Scheduler) HandleNexusCompletion(
 // recordCompletedAction ensures that the given action is recorded in
 // RecentActions and cleaned up from other state.
 func (s *Scheduler) recordCompletedAction(
-	ctx chasm.MutableContext,
 	scheduleTime time.Time,
 	workflowID string,
 	workflowStatus enumspb.WorkflowExecutionStatus,

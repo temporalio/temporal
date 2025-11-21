@@ -1169,7 +1169,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	// before calling this method.
 	s.taskKeyManager.drainTaskRequests()
 
-	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
+	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
 	updatedShardInfo.RangeId++
 	if isStealing {
 		updatedShardInfo.StolenSinceRenew++
@@ -1200,7 +1200,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		tag.PreviousShardRangeID(s.shardInfo.RangeId),
 	)
 
-	s.shardInfo = trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(updatedShardInfo))
+	s.shardInfo = trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(updatedShardInfo))
 	s.taskKeyManager.setRangeID(s.shardInfo.RangeId)
 
 	return nil
@@ -1257,7 +1257,7 @@ func (s *ContextImpl) updateShardInfo(
 	s.lastUpdated = now
 	s.tasksCompletedSinceLastUpdate = 0
 
-	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
+	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
 	request := &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
@@ -1290,7 +1290,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	s.rLock()
 	defer s.rUnlock()
 
-	queueStates := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo)).QueueStates
+	queueStates := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo)).QueueStates
 	emitShardLagLog := s.config.EmitShardLagLog()
 
 	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
@@ -1803,7 +1803,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		return err
 	}
 	*ownershipChanged = resp.ShardInfo.Owner != s.owner
-	shardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(resp.ShardInfo))
+	shardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(resp.ShardInfo))
 	shardInfo.Owner = s.owner
 
 	// initialize the cluster current time to be the same as ack level
@@ -2288,6 +2288,7 @@ func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnersh
 }
 
 func trimShardInfo(
+	cfg *configs.Config,
 	allClusterInfo map[string]cluster.ClusterInformation,
 	shardInfo *persistencespb.ShardInfo,
 ) *persistencespb.ShardInfo {
@@ -2295,7 +2296,7 @@ func trimShardInfo(
 		for readerID := range shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates {
 			clusterID, _ := ReplicationReaderIDToClusterShardID(readerID)
 			_, clusterInfo, found := clusterNameInfoFromClusterID(allClusterInfo, clusterID)
-			if !found || !clusterInfo.Enabled {
+			if !found || !cluster.IsReplicationEnabledForCluster(clusterInfo, cfg.EnableSeparateReplicationEnableFlag()) {
 				delete(shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates, readerID)
 			}
 		}

@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -924,7 +923,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
 			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
 			if err != nil {
-				return errors.New(fmt.Sprintf("error determining child task queue presence in inherited version: %s", err.Error()))
+				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
 			if !newTQInPinnedVersion {
 				inheritedPinnedVersion = nil
