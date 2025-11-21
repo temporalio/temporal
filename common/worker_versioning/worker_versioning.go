@@ -767,6 +767,8 @@ func ValidateTaskVersionDirective(
 	wfDeployment *deploymentpb.Deployment,
 	scheduledDeployment *deploymentpb.Deployment,
 ) error {
+	// TODO: consider using activity and wft Stamp for simplifying validation here.
+
 	// Effective behavior and deployment of the workflow when History scheduled the WFT.
 	directiveBehavior := directive.GetBehavior()
 	if directiveBehavior != wfBehavior &&
