@@ -38,10 +38,10 @@ type UnprocessableTaskError struct {
 }
 
 // NewUnprocessableTaskError returns a new UnprocessableTaskError from given message.
-func NewUnprocessableTaskError(message string) UnprocessableTaskError {
-	return UnprocessableTaskError{Message: message}
+func NewUnprocessableTaskError(message string) *UnprocessableTaskError {
+	return &UnprocessableTaskError{Message: message}
 }
 
-func (e UnprocessableTaskError) Error() string {
+func (e *UnprocessableTaskError) Error() string {
 	return "unprocessable task: " + e.Message
 }

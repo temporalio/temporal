@@ -204,7 +204,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 
 			if tc.retryable {
-				require.NotErrorAs(t, err, &queueserrors.UnprocessableTaskError{})
+				var target *queueserrors.UnprocessableTaskError
+				require.NotErrorAs(t, err, &target)
 			} else {
 				require.NoError(t, err)
 			}
