@@ -165,7 +165,7 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// Issue a query with reject condition so that paused workflows return QueryRejected with PAUSED status.
+	// Issue a query to the paused workflow. It should return QueryRejected with WORKFLOW_EXECUTION_STATUS_PAUSED status.
 	queryReq := &workflowservice.QueryWorkflowRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
@@ -175,7 +175,6 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 		Query: &querypb.WorkflowQuery{
 			QueryType: "__stack_trace",
 		},
-		QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 	}
 	queryResp, err := s.FrontendClient().QueryWorkflow(ctx, queryReq)
 	s.NoError(err)
