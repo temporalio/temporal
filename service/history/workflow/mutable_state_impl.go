@@ -2908,7 +2908,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 		}
 
 		// Check activity scheduled time and generate activity retry task if scheduled time is in the future.
-		if ai.ScheduledTime.AsTime().After(ms.timeSource.Now().UTC()) {
+		if ai.GetScheduledTime().AsTime().After(ms.timeSource.Now().UTC()) {
 			if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
 				return err
 			}
