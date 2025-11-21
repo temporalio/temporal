@@ -320,17 +320,17 @@ func (e *ChasmEngine) PollComponent(
 	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
 	defer cancel()
 
-	for {
-		// For now, PollComponent subscribes to execution-level notifications. Suppose that an
-		// execution consists of one component A, and A has subcomponent B. Subscribers interested
-		// only in component B may be woken up unnecessarily due to changes in parts of A that do
-		// not also belong to B, but they will not miss notifications.
-		ch, err := e.notifier.Subscribe(requestRef.EntityKey)
-		if err != nil {
-			return nil, err
-		}
-		executionLease.GetReleaseFn()(nil)
+	// For now, PollComponent subscribes to execution-level notifications. Suppose that an
+	// execution consists of one component A, and A has subcomponent B. Subscribers interested
+	// only in component B may be woken up unnecessarily due to changes in parts of A that do
+	// not also belong to B, but they will not miss notifications.
+	ch, err := e.notifier.Subscribe(requestRef.EntityKey)
+	if err != nil {
+		return nil, err
+	}
+	executionLease.GetReleaseFn()(nil)
 
+	for {
 		select {
 		case <-ch:
 			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
