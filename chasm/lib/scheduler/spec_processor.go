@@ -36,6 +36,9 @@ type (
 			manual bool,
 			limit *int,
 		) (*ProcessedTimeRange, error)
+
+		// GetNextTime provides a peek at the next time in the spec following 'after'.
+		GetNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error)
 	}
 
 	SpecProcessorImpl struct {
@@ -91,7 +94,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	// Manual (backfill/patch) runs are always buffered here.
 	if !scheduler.useScheduledAction(false) && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
-		next, err := s.getNextTime(scheduler, end)
+		next, err := s.GetNextTime(scheduler, end)
 		if err != nil {
 			return nil, err
 		}
@@ -104,16 +107,25 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	}
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
+
+	// lastAction is used to set the high water mark for future ProcessTimeRange
+	// invocations. The code below will set a "last action" even when none is taken,
+	// simply to indicate that processing can permanently skip that period of time
+	// (e.g., it was prior to an update or past a catchup).
 	lastAction := end
+
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
-	for next, err = s.getNextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
+	for next, err = s.GetNextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.GetNextTime(scheduler, next.Next) {
 		lastAction = next.Next
 
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
+			s.logger.Warn("ProcessBuffer skipped an action due to update time",
+				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
+				tag.NewTimeTag("droppedActionTime", next.Next))
 			continue
 		}
 
@@ -160,8 +172,8 @@ func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 	return max(cw.AsDuration(), tweakables.MinCatchupWindow)
 }
 
-// getNextTime returns the next time result, or an error if the schedule cannot be compiled.
-func (s *SpecProcessorImpl) getNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
+// GetNextTime returns the next time result, or an error if the schedule cannot be compiled.
+func (s *SpecProcessorImpl) GetNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
 	spec, err := scheduler.getCompiledSpec(s.specBuilder)
 	if err != nil {
 		s.logger.Error("Invalid schedule", tag.Error(err))
