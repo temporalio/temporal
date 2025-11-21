@@ -451,17 +451,7 @@ func buildCallbackInfosFromChasm(
 
 	result := make([]*workflowpb.CallbackInfo, 0, len(wf.Callbacks))
 	for _, field := range wf.Callbacks {
-		callback, err := field.Get(chasmCtx)
-		if err != nil {
-			logger.Error(
-				"failed to load callback from CHASM tree",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
-				tag.Error(err),
-			)
-			return nil, serviceerror.NewInternal("failed to construct describe response")
-		}
+		callback := field.Get(chasmCtx)
 
 		callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, outboundQueueCBPool)
 		if err != nil {
