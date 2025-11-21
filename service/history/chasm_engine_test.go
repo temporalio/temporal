@@ -615,7 +615,12 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	).Times(1)
 
 	// Expect the notification when the component is updated
-	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).DoAndReturn(
+		func(key chasm.EntityKey, ref []byte) {
+			// Actually trigger the notifier so PollComponent wakes up
+			s.notifier.Notify(key)
+		},
+	).Times(1)
 
 	updateErr := make(chan error, 1)
 	updateActivity := func() {
