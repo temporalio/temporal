@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -87,7 +88,7 @@ func (b *BackfillerTaskExecutor) Execute(
 		return queues.NewUnprocessableTaskError(fmt.Sprintf("unknown backfill type: %v", backfiller.RequestType()))
 	}
 	if err != nil {
-		return queues.NewUnprocessableTaskError(fmt.Sprintf("failed to process backfill: %w", err))
+		return queues.NewUnprocessableTaskError(fmt.Sprintf("failed to process backfill: %s", err.Error()))
 	}
 
 	// Enqueue new BufferedStarts on the Invoker, if we have any.

@@ -12,8 +12,7 @@ func TestListInfo(t *testing.T) {
 	scheduler, ctx, _ := setupSchedulerForTest(t)
 
 	// Generator maintains the FutureActionTimes list, set that up first.
-	generator, err := scheduler.Generator.Get(ctx)
-	require.NoError(t, err)
+	generator := scheduler.Generator.Get(ctx)
 	expectedFutureTimes := []*timestamppb.Timestamp{timestamppb.Now(), timestamppb.Now()}
 	generator.FutureActionTimes = expectedFutureTimes
 

@@ -19,11 +19,8 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -140,18 +137,9 @@ func CreateScheduler(
 	)
 
 	// Update visibility with custom attributes.
-	visibility, err := sched.Visibility.Get(ctx)
-	if err != nil {
-		return nil, nil, ErrUnprocessable
-	}
-	err = visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
-	if err != nil {
-		return nil, nil, ErrUnprocessable
-	}
-	err = visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
-	if err != nil {
-		return nil, nil, ErrUnprocessable
-	}
+	visibility := sched.Visibility.Get(ctx)
+	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, &schedulerpb.CreateScheduleResponse{
 		FrontendResponse: &workflowservice.CreateScheduleResponse{
@@ -569,14 +557,8 @@ func (s *Scheduler) Update(
 	//
 	// TODO - we could also easily support allowing the customer to update their
 	// memo here.
-	visibility, err := s.Visibility.Get(ctx)
-	if err != nil {
-		return nil, ErrUnprocessable
-	}
-	err = visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
-	if err != nil {
-		return nil, ErrUnprocessable
-	}
+	visibility := s.Visibility.Get(ctx)
+	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
 
 	s.Schedule = common.CloneProto(req.FrontendRequest.Schedule)
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
@@ -671,10 +653,7 @@ func (s *Scheduler) ListInfo(
 	spec.Interval = util.SliceHead(spec.Interval, listInfoSpecFieldLimit)
 	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
 
-	generator, err := s.Generator.Get(ctx)
-	if err != nil {
-		return nil, ErrUnprocessable
-	}
+	generator := s.Generator.Get(ctx)
 
 	return &schedulepb.ScheduleListInfo{
 		Spec:              spec,

@@ -87,8 +87,7 @@ func (s *schedulerSuite) SetupTest() {
 	_, err = s.node.CloseTransaction()
 
 	// Advance Generator's high water mark to 'now'.
-	generator, err := s.scheduler.Generator.Get(ctx)
-	s.NoError(err)
+	generator := s.scheduler.Generator.Get(ctx)
 	generator.LastProcessedTime = timestamppb.New(now)
 
 	// Set up future action times.

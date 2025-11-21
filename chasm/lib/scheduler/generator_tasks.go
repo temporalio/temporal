@@ -91,7 +91,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
 		return queues.NewUnprocessableTaskError(
-			fmt.Sprintf("failed to process a time range: %w", err))
+			fmt.Sprintf("failed to process a time range: %s", err.Error()))
 	}
 
 	// Enqueue newly-generated buffered starts.
@@ -103,7 +103,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 	if err := g.updateFutureActionTimes(ctx, generator, scheduler); err != nil {
 		return queues.NewUnprocessableTaskError(
-			fmt.Sprintf("failed to update future action times: %w", err))
+			fmt.Sprintf("failed to update future action times: %s", err.Error()))
 	}
 
 	// Check if the schedule has gone idle.

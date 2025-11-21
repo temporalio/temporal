@@ -23,7 +23,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/queues"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
@@ -527,10 +527,10 @@ func startWorkflowSearchAttributes(
 
 	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
-		fields[searchattribute.TemporalScheduledStartTime] = p
+		fields[sadefs.TemporalScheduledStartTime] = p
 	}
 	if p, err := payload.Encode(scheduler.ScheduleId); err == nil {
-		fields[searchattribute.TemporalScheduledById] = p
+		fields[sadefs.TemporalScheduledById] = p
 	}
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,

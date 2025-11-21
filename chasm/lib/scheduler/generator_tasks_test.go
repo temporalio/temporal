@@ -46,7 +46,9 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 	// Execute the generate task.
 	generator := sched.Generator.Get(ctx)
 	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.ErrorIs(err, queues.UnprocessableTaskError{})
+	s.ErrorIs(err, queues.UnprocessableTaskError{
+		Message: "failed to process a time range: processTimeRange bug",
+	})
 }
 
 func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
@@ -90,12 +92,11 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 func (s *generatorTasksSuite) TestUpdateFutureActionTimes_UnlimitedActions() {
 	ctx := s.newMutableContext()
 	sched := s.scheduler
-	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
+	generator := sched.Generator.Get(ctx)
 
 	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
 
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.NoError(err)
 
 	s.NotEmpty(generator.FutureActionTimes)
@@ -105,14 +106,13 @@ func (s *generatorTasksSuite) TestUpdateFutureActionTimes_UnlimitedActions() {
 func (s *generatorTasksSuite) TestUpdateFutureActionTimes_LimitedActions() {
 	ctx := s.newMutableContext()
 	sched := s.scheduler
-	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
+	generator := sched.Generator.Get(ctx)
 
 	sched.Schedule.State.LimitedActions = true
 	sched.Schedule.State.RemainingActions = 2
 	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
 
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.NoError(err)
 
 	s.Len(generator.FutureActionTimes, 2)
@@ -121,8 +121,7 @@ func (s *generatorTasksSuite) TestUpdateFutureActionTimes_LimitedActions() {
 func (s *generatorTasksSuite) TestUpdateFutureActionTimes_SkipsBeforeUpdateTime() {
 	ctx := s.newMutableContext()
 	sched := s.scheduler
-	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
+	generator := sched.Generator.Get(ctx)
 
 	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
 
@@ -131,7 +130,7 @@ func (s *generatorTasksSuite) TestUpdateFutureActionTimes_SkipsBeforeUpdateTime(
 	updateTime := baseTime.Add(defaultInterval / 2)
 	sched.Info.UpdateTime = timestamppb.New(updateTime)
 
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.NoError(err)
 
 	s.Require().NotEmpty(generator.FutureActionTimes)
