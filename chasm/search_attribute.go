@@ -5,7 +5,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	sadefs "go.temporal.io/server/common/searchattribute/defs"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 // CHASM Search Attribute User Guide:

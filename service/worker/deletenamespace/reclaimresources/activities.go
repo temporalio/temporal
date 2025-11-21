@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	sadefs "go.temporal.io/server/common/searchattribute/defs"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 

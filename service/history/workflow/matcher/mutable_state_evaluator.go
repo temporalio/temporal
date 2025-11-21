@@ -6,7 +6,7 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	sadefs "go.temporal.io/server/common/searchattribute/defs"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
 )
 

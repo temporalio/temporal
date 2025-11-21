@@ -1,4 +1,4 @@
-package defs
+package sadefs
 
 import (
 	"fmt"
