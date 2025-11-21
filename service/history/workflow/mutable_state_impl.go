@@ -3143,7 +3143,7 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
 
 	// Re-scheduling pending workflow and activity tasks.
-	err = ms.reschedulePendingWorkflowTask(true)
+	err = ms.reschedulePendingWorkflowTask()
 	if err != nil {
 		return err
 	}
@@ -5056,7 +5056,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 
 	// Finally, reschedule the pending workflow task if so requested.
 	if requestReschedulePendingWorkflowTask {
-		return ms.reschedulePendingWorkflowTask(true)
+		return ms.reschedulePendingWorkflowTask()
 	}
 	return nil
 }
@@ -8505,7 +8505,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// - reschedule the pending WFT so the old one is invalided
 	ms.ClearStickyTaskQueue()
 
-	err := ms.reschedulePendingWorkflowTask(true)
+	err := ms.reschedulePendingWorkflowTask()
 	if err != nil {
 		return err
 	}
@@ -8562,7 +8562,7 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 
 // reschedulePendingWorkflowTask reschedules the pending WFT if it is not started yet.
 // The currently scheduled WFT will be rejected when attempting to start because its stamp changed.
-func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks bool) error {
+func (ms *MutableStateImpl) reschedulePendingWorkflowTask() error {
 	// If the WFT is started but not finished, we let it run its course
 	// - once it's completed, failed or timed out a new one will be scheduled.
 	if !ms.HasPendingWorkflowTask() || ms.HasStartedWorkflowTask() {
@@ -8578,14 +8578,12 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks
 		return nil
 	}
 
-	if invalidatePendingTasks {
-		// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
-		// We don't invalidate speculative WFTs because they are very latency sensitive.
-		ms.executionInfo.WorkflowTaskStamp += 1
+	// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
+	// We don't invalidate speculative WFTs because they are very latency sensitive.
+	ms.executionInfo.WorkflowTaskStamp += 1
 
-		// Reset the attempt; forcing a non-transient workflow task to be scheduled.
-		ms.executionInfo.WorkflowTaskAttempt = 1
-	}
+	// Reset the attempt; forcing a non-transient workflow task to be scheduled.
+	ms.executionInfo.WorkflowTaskAttempt = 1
 
 	return ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(pendingTask.ScheduledEventID)
 }
