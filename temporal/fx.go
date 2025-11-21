@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
@@ -639,7 +640,7 @@ func ApplyClusterMetadataConfigProvider(
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
 		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
-			indexSearchAttributes[ds.GetIndexName()] = searchattribute.GetDBIndexSearchAttributes(visCSAOverride)
+			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 		}
 	}
 

@@ -36,6 +36,7 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
@@ -150,7 +151,7 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	attrPayloadFromResponse, attrExist := openExecution.GetSearchAttributes().GetIndexedFields()[testSearchAttributeKey]
 	s.True(attrExist)
 	s.Equal(attrPayload.GetData(), attrPayloadFromResponse.GetData())
-	attrType, typeSet := attrPayloadFromResponse.GetMetadata()[searchattribute.MetadataType]
+	attrType, typeSet := attrPayloadFromResponse.GetMetadata()[sadefs.MetadataType]
 	s.True(typeSet)
 	s.True(len(attrType) > 0)
 }
@@ -287,7 +288,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
 		s.True(ok)
 		s.Equal(expectedPayload.GetData(), respAttr.GetData())
-		attrType, typeSet := respAttr.GetMetadata()[searchattribute.MetadataType]
+		attrType, typeSet := respAttr.GetMetadata()[sadefs.MetadataType]
 		s.True(typeSet)
 		s.True(len(attrType) > 0)
 	}
@@ -688,7 +689,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	pageSize := int32(testcore.DefaultPageSize)
 
 	// order by CloseTime asc
-	query1 := fmt.Sprintf(queryTemplate, wt, searchattribute.CloseTime, asc)
+	query1 := fmt.Sprintf(queryTemplate, wt, sadefs.CloseTime, asc)
 	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
@@ -1240,9 +1241,9 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.NoError(err)
 	expectedSearchAttributes, _ := searchattribute.Encode(
 		map[string]interface{}{
-			"CustomDoubleField":             22.0878,
-			searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
-			searchattribute.BuildIds:        []string{worker_versioning.UnversionedSearchAttribute},
+			"CustomDoubleField":    22.0878,
+			sadefs.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+			sadefs.BuildIds:        []string{worker_versioning.UnversionedSearchAttribute},
 		},
 		nil,
 	)
@@ -1535,13 +1536,13 @@ func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 				s.NoError(err)
 				s.Equal(22.0878, doubleVal)
 
-				binaryChecksumsBytes := fields[searchattribute.BinaryChecksums]
+				binaryChecksumsBytes := fields[sadefs.BinaryChecksums]
 				var binaryChecksums []string
 				err = payload.Decode(binaryChecksumsBytes, &binaryChecksums)
 				s.NoError(err)
 				s.Equal([]string{"binary-v1", "binary-v2"}, binaryChecksums)
 
-				buildIdsBytes := fields[searchattribute.BuildIds]
+				buildIdsBytes := fields[sadefs.BuildIds]
 				var buildIds []string
 				err = payload.Decode(buildIdsBytes, &buildIds)
 				s.NoError(err)
@@ -1558,10 +1559,10 @@ func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 
 func (s *AdvancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttributes {
 	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
-		"CustomTextField":               "another string",
-		"CustomIntField":                123,
-		"CustomDoubleField":             22.0878,
-		searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+		"CustomTextField":      "another string",
+		"CustomIntField":       123,
+		"CustomDoubleField":    22.0878,
+		sadefs.BinaryChecksums: []string{"binary-v1", "binary-v2"},
 	}, nil)
 	s.NoError(err)
 	return searchAttributes
@@ -2506,7 +2507,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	listRequest := &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 1,
-		Query:           fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, scheduleID),
+		Query:           fmt.Sprintf(`%s = "%s"`, sadefs.ScheduleID, scheduleID),
 	}
 
 	s.Eventually(func() bool {
@@ -2518,14 +2519,14 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		return listResponse.Schedules[0].ScheduleId == scheduleID
 	}, 30*time.Second, 1*time.Second)
 
-	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, scheduleID)
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, sadefs.ScheduleID, scheduleID)
 	listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 	s.NoError(err)
 	s.Len(listResponse.Schedules, 1)
 	s.Equal(listResponse.Schedules[0].ScheduleId, scheduleID)
 
 	// Test 2: List schedule with custom "scheduleId" search attribute
-	s.addCustomKeywordSearchAttribute(ctx, searchattribute.ScheduleID)
+	s.addCustomKeywordSearchAttribute(ctx, sadefs.ScheduleID)
 
 	// Create the schedule with the new search attribute and verify it can be listed
 	customScheduleID := "test-schedule-" + uuid.New()
@@ -2535,14 +2536,14 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	schedule.ScheduleId = customScheduleID
 	schedule.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			searchattribute.ScheduleID: payload.EncodeString(customSearchAttrValue),
+			sadefs.ScheduleID: payload.EncodeString(customSearchAttrValue),
 		},
 	}
 
 	_, err = s.FrontendClient().CreateSchedule(ctx, schedule)
 	s.NoError(err)
 
-	listRequest.Query = fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
+	listRequest.Query = fmt.Sprintf(`%s = "%s"`, sadefs.ScheduleID, customSearchAttrValue)
 	s.Eventually(func() bool {
 		listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 		if err != nil || len(listResponse.Schedules) != 1 {
@@ -2552,7 +2553,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		return listResponse.Schedules[0].ScheduleId == customScheduleID
 	}, 30*time.Second, 1*time.Second)
 
-	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, customSearchAttrValue)
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, sadefs.ScheduleID, customSearchAttrValue)
 	listResponse, err = s.FrontendClient().ListSchedules(ctx, listRequest)
 	s.NoError(err)
 	s.Len(listResponse.Schedules, 1)
@@ -2595,7 +2596,7 @@ func (s *AdvancedVisibilitySuite) getBuildIds(ctx context.Context, execution *co
 		Execution: execution,
 	})
 	s.NoError(err)
-	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.BuildIds]
+	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[sadefs.BuildIds]
 	if !found {
 		return []string{}
 	}

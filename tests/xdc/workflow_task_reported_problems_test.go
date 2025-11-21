@@ -19,7 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -75,7 +75,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 		require.NoError(t, err)
 
 		if shouldExist {
-			saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
+			saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
 			require.True(t, ok)
 			require.NotEmpty(t, saValues)
 			require.Len(t, saValues, 2)
@@ -87,7 +87,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) checkReportedProblemsSear
 			require.Equal(t, expectedCategory, category)
 			require.Equal(t, expectedCause, cause)
 		} else {
-			_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
+			_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
 			require.False(t, ok)
 		}
 	}, 20*time.Second, 500*time.Millisecond)
@@ -233,7 +233,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
+		_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
 		require.False(t, ok)
 	}, 5*time.Second, 500*time.Millisecond)
 
@@ -252,7 +252,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
-		saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(searchattribute.TemporalReportedProblems))
+		saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
 		require.True(t, ok)
 		require.NotEmpty(t, saValues)
 		require.Len(t, saValues, 2)
