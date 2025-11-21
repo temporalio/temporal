@@ -834,23 +834,15 @@ message ResetChildInfo {
 }
 
 message WorkflowPauseInfo {
-    // List of activities that are to be paused.
-    repeated ActivityPauseInfo activity_pause_infos = 1;
-}
+    // The time when the workflow was paused.
+    google.protobuf.Timestamp pause_time = 1;
 
-message ActivityPauseInfo {
-    // The time when the activity pause info was updated.
-    google.protobuf.Timestamp update_time = 1;
+    // The identity of the actor that paused the workflow.
+    string identity = 2;
 
-    // The type of the activity.
-    string activity_type = 2;
+    // The reason for pausing the workflow.
+    string reason = 3;
 
-    // The identity of the actor that paused the activity.
-    string identity = 3;
-
-    // The ID of the request that paused the activity. Duplicates pause requests with the same ID will succeed.
+    // A unique identifier for this pause request (for idempotency checks)
     string request_id = 4;
-
-    // The reason for the pause.
-    string reason = 5;
 }

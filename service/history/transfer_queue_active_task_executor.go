@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -20,7 +19,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -101,7 +99,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskType := queues.GetActiveTransferTaskTypeTagValue(task)
+	taskType := queues.GetActiveTransferTaskTypeTagValue(task, t.shardContext.ChasmRegistry())
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
@@ -925,7 +923,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
 			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
 			if err != nil {
-				return errors.New(fmt.Sprintf("error determining child task queue presence in inherited version: %s", err.Error()))
+				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
 			if !newTQInPinnedVersion {
 				inheritedPinnedVersion = nil
@@ -1149,7 +1147,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 		t.shardContext,
 		t.cache,
 		wfKey,
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetype,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -1265,7 +1263,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
-			chasmworkflow.Archetype,
+			chasm.WorkflowArchetype,
 			locks.PriorityLow,
 		)
 		if err != nil {

@@ -39,7 +39,7 @@ func (s *componentRefSuite) SetupTest() {
 	s.NoError(err)
 }
 
-func (s *componentRefSuite) TestArchetype() {
+func (s *componentRefSuite) TestArchetypeID() {
 	tv := testvars.New(s.T())
 	entityKey := EntityKey{
 		tv.NamespaceID().String(),
@@ -48,13 +48,13 @@ func (s *componentRefSuite) TestArchetype() {
 	}
 	ref := NewComponentRef[*TestComponent](entityKey)
 
-	archetype, err := ref.Archetype(s.registry)
+	archetypeID, err := ref.ArchetypeID(s.registry)
 	s.NoError(err)
 
 	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
 
-	s.Equal(rc.FqType(), archetype.String())
+	s.Equal(rc.componentID, archetypeID)
 }
 
 func (s *componentRefSuite) TestShardingKey() {
@@ -107,7 +107,7 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 
 	rootRc, ok := s.registry.ComponentFor(&TestComponent{})
 	s.True(ok)
-	s.Equal(rootRc.FqType(), deserializedRef.archetype.String())
+	s.Equal(rootRc.componentID, deserializedRef.archetypeID)
 
 	s.Equal(ref.EntityKey, deserializedRef.EntityKey)
 	s.Equal(ref.componentPath, deserializedRef.componentPath)

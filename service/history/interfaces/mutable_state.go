@@ -116,6 +116,7 @@ type (
 			attachRequestID string,
 			attachCompletionCallbacks []*commonpb.Callback,
 			links []*commonpb.Link,
+			identity string,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
@@ -212,6 +213,8 @@ type (
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 
 		IsWorkflowExecutionRunning() bool
+		AddWorkflowExecutionPausedEvent(identity string, reason string, requestID string) (*historypb.HistoryEvent, error)
+		ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)

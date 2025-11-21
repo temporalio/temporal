@@ -156,4 +156,5 @@ type unusedDependencies struct {
 	persistence.HistoryTaskQueueManager
 	cache.Cache
 	chasm.Engine
+	ChasmRegistry *chasm.Registry
 }

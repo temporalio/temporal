@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -341,7 +341,9 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			shardContext.EXPECT().GetConfig().Return(cfg).AnyTimes()
 			mockMetadata := cluster.NewMockMetadata(p.Controller)
 			mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+			mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 			shardContext.EXPECT().GetClusterMetadata().Return(mockMetadata).AnyTimes()
+			shardContext.EXPECT().ChasmRegistry().Return(chasm.NewRegistry(logger)).AnyTimes()
 
 			shardID := int32(1)
 			historyArchivalState := p.HistoryConfig.NamespaceArchivalState
@@ -452,7 +454,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-				chasmworkflow.Archetype,
+				chasm.WorkflowArchetype,
 				gomock.Any(),
 			).Return(
 				workflowContext,
@@ -513,6 +515,8 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				timeSource,
 				namespaceRegistry,
 				mockMetadata,
+				shardContext.ChasmRegistry(),
+				queues.GetTaskTypeTagValue,
 				logger,
 				metrics.NoopMetricsHandler,
 				telemetry.NoopTracer,

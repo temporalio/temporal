@@ -2393,7 +2393,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// this similarly as we would a pure task (holding an exclusive lock), as the
 	// assumption is that the accessed component will be recording (or generating a
 	// task) based on this result.
-	_, _, err := chasm.UpdateComponent[chasm.NexusCompletionHandler](
+	_, _, err := chasm.UpdateComponent(
 		ctx,
 		request.GetCompletion().GetComponentRef(),
 		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {

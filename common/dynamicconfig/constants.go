@@ -1292,6 +1292,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		5*time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
+		"matching.deploymentWorkflowVersion",
+		0,
+		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
+	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
 		1000,
@@ -1384,6 +1389,11 @@ an optional feature and also requires a metrics collection system that can handl
 		"history.enableReplicationStream",
 		true,
 		`EnableReplicationStream turn on replication stream`,
+	)
+	EnableSeparateReplicationEnableFlag = NewGlobalBoolSetting(
+		"history.enableSeparateReplicationEnableFlag",
+		false,
+		`EnableSeparateReplicationEnableFlag controls whether to use the new ReplicationEnabled flag to control replication streams separately from cluster connectivity. When false, falls back to using only the Enabled flag for both connectivity and replication.`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",
@@ -2260,6 +2270,11 @@ the number of children greater than or equal to this threshold`,
 		"history.workflowTaskRetryMaxInterval",
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
+	)
+	EnableWorkflowTaskStampIncrementOnFailure = NewGlobalBoolSetting(
+		"history.enableWorkflowTaskStampIncrementOnFailure",
+		false,
+		`EnableWorkflowTaskStampIncrementOnFailure controls whether the workflow task stamp is incremented when a workflow task fails and is rescheduled`,
 	)
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
 		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",

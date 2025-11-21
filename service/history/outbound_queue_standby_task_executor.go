@@ -57,7 +57,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskType := queues.GetOutboundTaskTypeTagValue(task, false)
+	taskType := queues.GetOutboundTaskTypeTagValue(task, false, e.shardContext.ChasmRegistry())
 	namespaceTag, _ := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),

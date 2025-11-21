@@ -1034,6 +1034,10 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	}
 
 	taskID := uuid.New()
+	queryResultCh := make(chan *queryResult, 1)
+	e.queryResults.Set(taskID, queryResultCh)
+	defer e.queryResults.Delete(taskID)
+
 	resp, err := pm.DispatchQueryTask(ctx, taskID, queryRequest)
 
 	// if we get a response or error it means that query task was handled by forwarding to another matching host
@@ -1044,10 +1048,6 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 	// if we get here it means that dispatch of query task has occurred locally
 	// must wait on result channel to get query result
-	queryResultCh := make(chan *queryResult, 1)
-	e.queryResults.Set(taskID, queryResultCh)
-	defer e.queryResults.Delete(taskID)
-
 	select {
 	case result := <-queryResultCh:
 		if result.internalError != nil {
@@ -2352,20 +2352,32 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
 	defer cancel()
 
-	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
-
-	// if we get a response or error it means that the Nexus task was handled by forwarding to another matching host
-	// this remote host's result can be returned directly
-	if resp != nil || err != nil {
-		return resp, err
-	}
-
-	// if we get here it means that dispatch of query task has occurred locally
-	// must wait on result channel to get query result
+	// First allocate a result channel and register it so that when the task is completed locally (without forwarding) the
+	// result can be sent on this channel.
 	resultCh := make(chan *nexusResult, 1)
 	e.nexusResults.Set(taskID, resultCh)
 	defer e.nexusResults.Delete(taskID)
 
+	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
+
+	if err != nil {
+		if ctx.Err() != nil {
+			// The context deadline has expired if it reaches here; return an explicit timeout response to the caller.
+			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
+				RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
+			}}, nil
+		}
+		return resp, err
+	}
+
+	// If we get a response it means that the Nexus task was handled by forwarding to another matching host this remote
+	// host's result can be returned directly.
+	if resp != nil {
+		return resp, nil
+	}
+
+	// If we get here it means that task dispatch has occurred locally.
+	// Must wait on result channel to get query result.
 	select {
 	case result := <-resultCh:
 		if result.internalError != nil {
@@ -3310,6 +3322,8 @@ func clearVersionFromRoutingConfig(
 	oldCurrent := oldVd.GetCurrentSinceTime() != nil
 	newCurrent := newVd.GetCurrentSinceTime() != nil
 	if oldCurrent != newCurrent || newCurrent {
+		//nolint:staticcheck // SA1019
+		rc.CurrentVersion = ""
 		rc.CurrentDeploymentVersion = nil
 		rc.CurrentVersionChangedTime = nil
 	}

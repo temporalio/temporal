@@ -51,7 +51,7 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			mergedOpts, hasChanges, err := MergeAndApply(mutableState, opts, req.GetUpdateMask())
+			mergedOpts, hasChanges, err := MergeAndApply(mutableState, opts, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -88,6 +88,7 @@ func MergeAndApply(
 	ms historyi.MutableState,
 	opts *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
+	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
 	mergedOpts, err := mergeWorkflowExecutionOptions(
@@ -109,7 +110,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil)
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity)
 	if err != nil {
 		return nil, hasChanges, err
 	}

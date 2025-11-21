@@ -10,6 +10,7 @@ var (
 	WorkflowActionWorkflowTimeout       = workflowAction("add-workflow-timeout-event")
 	WorkflowActionWorkflowTerminated    = workflowAction("add-workflow-terminated-event")
 	WorkflowActionWorkflowContinueAsNew = workflowAction("add-workflow-continue-as-new-event")
+	WorkflowActionWorkflowPaused        = workflowAction("add-workflow-paused-event")
 
 	// workflow cancellation / sign / update-options
 	WorkflowActionWorkflowCancelRequested        = workflowAction("add-workflow-cancel-requested-event")
