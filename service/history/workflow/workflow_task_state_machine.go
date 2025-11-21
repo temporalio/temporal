@@ -940,6 +940,9 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
 		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
+		if m.ms.config.EnableWorkflowTaskStampIncrementOnFailure() {
+			m.ms.executionInfo.WorkflowTaskStamp += 1
+		}
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
@@ -1027,7 +1030,6 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 
 	// NOTE:
 	// - do not update executionInfo.TaskQueue!
-	// - do not update executionInfo.WorkflowTaskStamp (only changed when rescheduling workflow task)
 
 	m.ms.logger.Debug("Workflow task updated",
 		tag.WorkflowScheduledEventID(workflowTask.ScheduledEventID),

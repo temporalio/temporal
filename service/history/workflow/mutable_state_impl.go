@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
@@ -226,6 +227,21 @@ type (
 		// generated and used to delete them when the workflow task completes. Not persisted to storage.
 		wftScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 		wftStartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
+
+		// In-memory storage for CHASM pure tasks. These are set when CHASM pure tasks are generated and used to
+		// delete them when then are no longer needed. (i.e. when the task's scheduled time is after that of the
+		// earliest valid CHASM pure task's).
+		//
+		// Those pure tasks are mostly reverse ordered by their scheduled time (the VisibilityTimestamp field).
+		// Since a physical pure task is only generated when there's no other pure task with an earlier scheduled time,
+		// simply appending new pure tasks to the end of the slice maintains the order.
+		//
+		// NOTE: shard context may move those tasks' scheduled time to the future if they are earlier than the timer queue's
+		// max read level (otherwise those tasks won't be loaded), which may potentially break the reverse order.
+		// That is fine, however, as in the worst case we just delete fewer tasks than we could have, but we will never delete
+		// tasks that are still needed (all tasks deleted are those having an earlier scheduled time than what's needed).
+		// Task deletion is just a best-effort optimization after all, so not complicating the logic to account for that here.
+		chasmPureTasks []*tasks.ChasmTaskPure
 
 		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -516,7 +532,7 @@ func NewMutableStateFromDB(
 
 	if shard.GetConfig().EnableChasm() {
 		var err error
-		mutableState.chasmTree, err = chasm.NewTree(
+		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
 			shard.ChasmRegistry(),
 			shard.GetTimeSource(),
@@ -604,8 +620,7 @@ func (ms *MutableStateImpl) mustInitHSM() {
 }
 
 func (ms *MutableStateImpl) IsWorkflow() bool {
-	archetype := ms.chasmTree.Archetype()
-	return archetype == chasmworkflow.Archetype || archetype == ""
+	return ms.chasmTree.ArchetypeID() == chasm.WorkflowArchetypeID
 }
 
 func (ms *MutableStateImpl) HSM() *hsm.Node {
@@ -2597,8 +2612,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
-		mutableContext := chasm.NewMutableContext(context.Background(), ms.chasmTree.(*chasm.Node))
-		ms.chasmTree.(*chasm.Node).SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, ms))
+		root, ok := ms.chasmTree.(*chasm.Node)
+		softassert.That(ms.logger, ok, "chasmTree cast failed")
+
+		if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
+			mutableContext := chasm.NewMutableContext(context.Background(), root)
+			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
+		}
 	}
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -2794,6 +2814,58 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
+func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) (*historypb.HistoryEvent, error) {
+	opTag := tag.WorkflowActionWorkflowPaused
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionPausedEvent(identity, reason, requestID)
+	if err := ms.ApplyWorkflowExecutionPausedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+// ApplyWorkflowExecutionPausedEvent applies the paused event to the mutable state. It updates the workflow execution status to paused and sets the pause info.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error {
+	// Update workflow status.
+	if _, err := ms.UpdateWorkflowStateStatus(ms.executionState.GetState(), enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED); err != nil {
+		return err
+	}
+	// Set pause info in mutable state.
+	ms.executionInfo.PauseInfo = &persistencespb.WorkflowPauseInfo{
+		PauseTime: timestamppb.New(event.GetEventTime().AsTime()),
+		Identity:  event.GetWorkflowExecutionPausedEventAttributes().GetIdentity(),
+		Reason:    event.GetWorkflowExecutionPausedEventAttributes().GetReason(),
+		RequestId: event.GetWorkflowExecutionPausedEventAttributes().GetRequestId(),
+	}
+
+	// Update approximate size of the mutable state. This will be decreased when the pause info is removed (when the workflow is unpaused)
+	ms.approximateSize += ms.executionInfo.PauseInfo.Size()
+
+	// Invalidate all the pending activities. Do not mark individual activities as paused.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.Stamp = activityInfo.Stamp + 1
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Invalidate pending workflow task by incrementing the persisted stamp.
+	// This ensures subsequent task dispatch detects the change.
+	if ms.HasPendingWorkflowTask() {
+		ms.executionInfo.WorkflowTaskStamp += 1
+		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
+	}
+	return nil
+}
+
 func (ms *MutableStateImpl) addCompletionCallbacks(
 	event *historypb.HistoryEvent,
 	requestID string,
@@ -2968,10 +3040,10 @@ func (ms *MutableStateImpl) updateBinaryChecksumSearchAttribute() error {
 	if exeInfo.SearchAttributes == nil {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
-	if proto.Equal(exeInfo.SearchAttributes[searchattribute.BinaryChecksums], checksumsPayload) {
+	if proto.Equal(exeInfo.SearchAttributes[sadefs.BinaryChecksums], checksumsPayload) {
 		return nil // unchanged
 	}
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.BinaryChecksums: checksumsPayload})
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.BinaryChecksums: checksumsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -3139,7 +3211,7 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	if searchAttributes == nil {
 		return []string{}, nil
 	}
-	saPayload, found := searchAttributes[searchattribute.BuildIds]
+	saPayload, found := searchAttributes[sadefs.BuildIds]
 	if !found {
 		return []string{}, nil
 	}
@@ -3247,7 +3319,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 			return err
 		}
 		if len(buildIds) == 0 || len(saPayload.GetData()) <= maxSearchAttributeValueSize {
-			ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.BuildIds: saPayload})
+			ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.BuildIds: saPayload})
 			break
 		}
 		if len(buildIds) == 1 {
@@ -3272,21 +3344,21 @@ func (ms *MutableStateImpl) saveDeploymentSearchAttributes(deployment, version, 
 		return err
 	}
 	if len(deploymentPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[searchattribute.TemporalWorkerDeployment] = deploymentPayload
+		saPayloads[sadefs.TemporalWorkerDeployment] = deploymentPayload
 	}
 	versionPayload, err := searchattribute.EncodeValue(version, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	if err != nil {
 		return err
 	}
 	if len(versionPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[searchattribute.TemporalWorkerDeploymentVersion] = versionPayload
+		saPayloads[sadefs.TemporalWorkerDeploymentVersion] = versionPayload
 	}
 	behaviorPayload, err := searchattribute.EncodeValue(behavior, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	if err != nil {
 		return err
 	}
 	if len(behaviorPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[searchattribute.TemporalWorkflowVersioningBehavior] = behaviorPayload
+		saPayloads[sadefs.TemporalWorkflowVersioningBehavior] = behaviorPayload
 	}
 	ms.updateSearchAttributes(saPayloads)
 	return nil
@@ -3298,15 +3370,15 @@ func (ms *MutableStateImpl) addBuildIdAndDeploymentInfoToSearchAttributesWithNoV
 	if err != nil {
 		return false, err
 	}
-	existingDeployment, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkerDeployment)
+	existingDeployment, err := ms.loadSearchAttributeString(sadefs.TemporalWorkerDeployment)
 	if err != nil {
 		return false, err
 	}
-	existingVersion, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkerDeploymentVersion)
+	existingVersion, err := ms.loadSearchAttributeString(sadefs.TemporalWorkerDeploymentVersion)
 	if err != nil {
 		return false, err
 	}
-	existingBehavior, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkflowVersioningBehavior)
+	existingBehavior, err := ms.loadSearchAttributeString(sadefs.TemporalWorkflowVersioningBehavior)
 	if err != nil {
 		return false, err
 	}
@@ -4906,6 +4978,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	attachRequestID string,
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
+	identity string,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
@@ -4916,6 +4989,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		attachRequestID,
 		attachCompletionCallbacks,
 		links,
+		identity,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	prevEffectiveDeployment := ms.GetEffectiveDeployment()
@@ -5764,7 +5838,9 @@ func (ms *MutableStateImpl) RetryActivity(
 			activityInfo.RequestId = ""
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
-			activityInfo.Stamp++
+			if ms.config.EnableActivityRetryStampIncrement() {
+				activityInfo.Stamp++
+			}
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -5838,12 +5914,14 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState historyi.MutableState) error {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
+			isActivityRetryStampIncrementEnabled := ms.config.EnableActivityRetryStampIncrement()
 			ai = UpdateActivityInfoForRetries(
 				activityInfo,
 				mutableStateImpl.GetCurrentVersion(),
 				nextAttempt,
 				mutableStateImpl.truncateRetryableActivityFailure(activityFailure),
 				timestamppb.New(nextScheduledTime),
+				isActivityRetryStampIncrementEnabled,
 			)
 		}
 		return nil
@@ -5926,11 +6004,11 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
-	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalPauseInfo], pauseInfoPayload) {
+	if proto.Equal(exeInfo.SearchAttributes[sadefs.TemporalPauseInfo], pauseInfoPayload) {
 		return nil // unchanged
 	}
 
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalPauseInfo: pauseInfoPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -5959,7 +6037,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
-	decodedA, err := searchattribute.DecodeValue(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	decodedA, err := searchattribute.DecodeValue(exeInfo.SearchAttributes[sadefs.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		return err
 	}
@@ -5977,7 +6055,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	// Log the search attribute change
 	ms.logReportedProblemsChange(existingProblems, reportedProblems)
 
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -5986,7 +6064,7 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 		return nil
 	}
 
-	temporalReportedProblems := ms.executionInfo.SearchAttributes[searchattribute.TemporalReportedProblems]
+	temporalReportedProblems := ms.executionInfo.SearchAttributes[sadefs.TemporalReportedProblems]
 	if temporalReportedProblems == nil {
 		return nil
 	}
@@ -5997,7 +6075,7 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 	ms.executionInfo.LastWorkflowTaskFailure = nil
 
 	// Just remove the search attribute entirely for now
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: nil})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -6006,23 +6084,14 @@ func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload []s
 	if oldPayload == nil && newPayload != nil {
 		// Adding search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute added",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.NewStringsTag("reported-problems", newPayload))
 	} else if oldPayload != nil && newPayload == nil {
 		// Removing search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute removed",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.NewStringsTag("previous-reported-problems", oldPayload))
 	} else if oldPayload != nil && newPayload != nil {
 		// Updating search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute updated",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.NewStringsTag("previous-reported-problems", oldPayload),
 			tag.NewStringsTag("reported-problems", newPayload))
 	}
@@ -6037,9 +6106,6 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 	decoded, err := searchattribute.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		ms.logger.Error("Failed to decode TemporalReportedProblems payload for logging",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.Error(err))
 		softassert.Fail(ms.logger, "Failed to decode TemporalReportedProblems payload for logging")
 		return []string{}
@@ -6047,10 +6113,7 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 
 	problems, ok := decoded.([]string)
 	if !ok {
-		ms.logger.Error("TemporalReportedProblems payload decoded to unexpected type for logging",
-			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
-			tag.WorkflowID(ms.executionInfo.WorkflowId),
-			tag.WorkflowRunID(ms.executionState.RunId))
+		ms.logger.Error("TemporalReportedProblems payload decoded to unexpected type for logging")
 		softassert.Fail(ms.logger, "TemporalReportedProblems payload decoded to unexpected type for logging")
 		return []string{}
 	}
@@ -6131,14 +6194,47 @@ func (ms *MutableStateImpl) AddTasks(
 			ms.logger.Info("Dropped long duration scheduled task.", tasks.Tags(task)...)
 			continue
 		}
+
+		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
+			ms.chasmPureTasks = append(ms.chasmPureTasks, chasmPureTask)
+			maxPureTasks := ms.config.ChasmMaxInMemoryPureTasks()
+			if len(ms.chasmPureTasks) > maxPureTasks {
+				// Since tasks are reverse ordered by their scheduled time, tasks in the beginning are those
+				// - Generated a long time ago
+				// - Scheduled time is far in the future
+				// both types of tasks are likely to already be persisted in DB and best-effort deletion won't help,
+				// so drop them from the in-memory list first.
+				ms.chasmPureTasks = ms.chasmPureTasks[len(ms.chasmPureTasks)-maxPureTasks:]
+			}
+		}
+
 		ms.InsertTasks[category] = append(ms.InsertTasks[category], task)
 	}
 }
 
 func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
-	insterTasks := ms.InsertTasks
+	insertTasks := ms.InsertTasks
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
-	return insterTasks
+	return insertTasks
+}
+
+func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+	for lastTaskIdx := len(ms.chasmPureTasks) - 1; lastTaskIdx >= 0; lastTaskIdx-- {
+		task := ms.chasmPureTasks[lastTaskIdx]
+		if !task.GetVisibilityTime().Before(maxScheduledTime) {
+			ms.chasmPureTasks = ms.chasmPureTasks[:lastTaskIdx+1]
+			return
+		}
+
+		ms.BestEffortDeleteTasks[tasks.CategoryTimer] = append(
+			ms.BestEffortDeleteTasks[tasks.CategoryTimer],
+			task.GetKey(),
+		)
+	}
+
+	// If we reach here, all tasks have visibility time before maxScheduledTime
+	// and need to be deleted.
+	ms.chasmPureTasks = ms.chasmPureTasks[:0]
 }
 
 func (ms *MutableStateImpl) SetUpdateCondition(
@@ -8365,7 +8461,7 @@ func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningB
 // If there is a pending workflow task that is not started yet, it'll be rescheduled after
 // transition start.
 // This method must be called with a version different from the effective version.
-func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) error {
+func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment, revisionNumber int64) error {
 	wfBehavior := ms.GetEffectiveVersioningBehavior()
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		// WF is pinned so we reject the transition.
@@ -8413,7 +8509,17 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		),
 	).Record(1)
 
+	ms.SetVersioningRevisionNumber(revisionNumber)
+
 	return nil
+}
+
+func (ms *MutableStateImpl) GetVersioningRevisionNumber() int64 {
+	return ms.GetExecutionInfo().GetVersioningInfo().GetRevisionNumber()
+}
+
+func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
+	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

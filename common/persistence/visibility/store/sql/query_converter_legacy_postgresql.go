@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -32,7 +33,7 @@ var (
 )
 
 var _ sqlparser.Expr = (*pgCastExpr)(nil)
-var _ pluginQueryConverter = (*pgQueryConverter)(nil)
+var _ pluginQueryConverterLegacy = (*pgQueryConverter)(nil)
 
 func (node *pgCastExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("%v::%v", node.Value, node.Type)
@@ -44,7 +45,7 @@ func newPostgreSQLQueryConverter(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
-) *QueryConverter {
+) *QueryConverterLegacy {
 	return newQueryConverterInternal(
 		&pgQueryConverter{},
 		namespaceName,
@@ -196,14 +197,14 @@ func (c *pgQueryConverter) buildSelectStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	pageSize int,
-	token *pageToken,
+	token *pageTokenLegacy,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 
@@ -217,10 +218,10 @@ func (c *pgQueryConverter) buildSelectStmt(
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				searchattribute.GetSqlDbColName(searchattribute.RunID),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
+				sadefs.GetSqlDbColName(sadefs.RunID),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
@@ -246,8 +247,8 @@ func (c *pgQueryConverter) buildSelectStmt(
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
 		sqlparser.String(c.getCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(sadefs.StartTime),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 	), queryArgs
 }
 
@@ -261,7 +262,7 @@ func (c *pgQueryConverter) buildCountStmt(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("(%s = ?)", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 

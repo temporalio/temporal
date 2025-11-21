@@ -9,13 +9,14 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
 	sqliteQueryConverter struct{}
 )
 
-var _ pluginQueryConverter = (*sqliteQueryConverter)(nil)
+var _ pluginQueryConverterLegacy = (*sqliteQueryConverter)(nil)
 
 const (
 	keywordListTypeFtsTableName = "executions_visibility_fts_keyword_list"
@@ -28,7 +29,7 @@ func newSqliteQueryConverter(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
-) *QueryConverter {
+) *QueryConverterLegacy {
 	return newQueryConverterInternal(
 		&sqliteQueryConverter{},
 		namespaceName,
@@ -205,14 +206,14 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	pageSize int,
-	token *pageToken,
+	token *pageTokenLegacy,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 
@@ -226,10 +227,10 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				searchattribute.GetSqlDbColName(searchattribute.RunID),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
+				sadefs.GetSqlDbColName(sadefs.RunID),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
@@ -255,8 +256,8 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
 		sqlparser.String(c.getCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(sadefs.StartTime),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 	), queryArgs
 }
 
@@ -301,7 +302,7 @@ func (c *sqliteQueryConverter) buildCountStmt(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("(%s = ?)", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 

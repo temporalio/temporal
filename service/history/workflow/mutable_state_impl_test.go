@@ -32,7 +32,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
@@ -919,7 +919,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	s.NoError(err)
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	err = s.mutableState.StartDeploymentTransition(deployment)
+	err = s.mutableState.StartDeploymentTransition(deployment, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
@@ -969,7 +969,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1008,7 +1008,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1050,7 +1050,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
@@ -1090,6 +1090,7 @@ func (s *mutableStateSuite) verifyWorkflowOptionsUpdatedEventAttr(
 	s.Equal(expectedOverride.GetPinnedVersion(), actualOverride.GetPinnedVersion())                             //nolint:staticcheck // SA1019: worker versioning v0.31
 
 	s.Equal(actualAttr.GetUnsetVersioningOverride(), expectedAttr.GetUnsetVersioningOverride())
+	s.Equal(actualAttr.GetIdentity(), expectedAttr.GetIdentity())
 }
 
 func (s *mutableStateSuite) verifyOverrides(
@@ -1120,10 +1121,11 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	id := uuid.New()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set pinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil, id)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1131,12 +1133,14 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
 			VersioningOverride:      pinnedOptions2.GetVersioningOverride(),
 			UnsetVersioningOverride: false,
+			Identity:                id,
 		},
 	)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
 
 	// unset pinned override with boolean
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
+	id = uuid.New()
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1144,6 +1148,7 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
 			VersioningOverride:      nil,
 			UnsetVersioningOverride: true,
+			Identity:                id,
 		},
 	)
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
@@ -1153,10 +1158,11 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	id := uuid.New()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set unpinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil, id)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1164,12 +1170,14 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
 			VersioningOverride:      unpinnedOptions.GetVersioningOverride(),
 			UnsetVersioningOverride: false,
+			Identity:                id,
 		},
 	)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
 
 	// unset pinned override with empty
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
+	id = uuid.New()
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1177,6 +1185,7 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
 			VersioningOverride:      nil,
 			UnsetVersioningOverride: true,
+			Identity:                id,
 		},
 	)
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
@@ -1186,9 +1195,10 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	id := uuid.New()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1196,12 +1206,13 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
 			VersioningOverride:      pinnedOptions3.GetVersioningOverride(),
 			UnsetVersioningOverride: false,
+			Identity:                id,
 		},
 	)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that transition fails
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
@@ -1211,9 +1222,10 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	id := uuid.New()
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil, id)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1221,12 +1233,13 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
 			VersioningOverride:      pinnedOptions3.GetVersioningOverride(),
 			UnsetVersioningOverride: false,
+			Identity:                id,
 		},
 	)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that redirect fails - should be its own test
-	err = s.mutableState.StartDeploymentTransition(deployment2)
+	err = s.mutableState.StartDeploymentTransition(deployment2, 0)
 	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here -- good
@@ -1263,7 +1276,8 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3)
 
 	// now we unset the override and check that the base deployment/behavior is in effect
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
+	id = uuid.New()
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, id)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1271,6 +1285,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		&historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
 			VersioningOverride:      nil,
 			UnsetVersioningOverride: true,
+			Identity:                id,
 		},
 	)
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil)
@@ -1403,6 +1418,356 @@ func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 		return float64((s.mutableState.executionInfo.LastUpdateTime.AsTime().UnixNano() / int64(time.Second)) - 1)
 	}
 	s.False(s.mutableState.shouldInvalidateCheckum())
+}
+
+func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
+	s.SetupSubTest()
+	cases := []struct {
+		name          string
+		currentState  enumsspb.WorkflowExecutionState
+		currentStatus enumspb.WorkflowExecutionStatus
+		toState       enumsspb.WorkflowExecutionState
+		toStatus      enumspb.WorkflowExecutionStatus
+		wantErr       bool
+	}{
+		{
+			name:         "created-> {running, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {running, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {running, completed}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr:      true,
+		},
+		// CREATED -> CREATED (allowed for RUNNING/PAUSED)
+		{
+			name:         "created-> {created, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {created, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      true,
+		},
+		{
+			name:         "created-> {created, completed} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr:      true,
+		},
+		// CREATED -> COMPLETED (allowed only for TERMINATED/TIMED_OUT/CONTINUED_AS_NEW)
+		{
+			name:         "created-> {completed, terminated}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {completed, timed_out}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {completed, continued_as_new}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+			wantErr:      false,
+		},
+		// CREATED -> ZOMBIE (allowed for RUNNING/PAUSED)
+		{
+			name:         "created-> {zombie, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "created-> {zombie, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		// RUNNING state transitions
+		{
+			name:         "running-> {created, running} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      true,
+		},
+		{
+			name:         "running-> {running, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "running-> {running, terminated} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      true,
+		},
+		{
+			name:         "running-> {completed, completed}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr:      false,
+		},
+		{
+			name:         "running-> {completed, paused} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      true,
+		},
+		{
+			name:         "running-> {zombie, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "running-> {zombie, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "running-> {zombie, terminated} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      true,
+		},
+		// COMPLETED state transitions
+		{
+			name:          "completed-> {completed, sameStatus} (no-op)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			wantErr:       false,
+		},
+		{
+			name:          "completed-> {created, running} (invalid)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:       true,
+		},
+		{
+			name:          "completed-> {running, running} (invalid)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:       true,
+		},
+		{
+			name:          "completed-> {zombie, running} (invalid)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:       true,
+		},
+		{
+			name:          "completed-> {completed, differentStatus} (invalid)",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			toState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			wantErr:       true,
+		},
+		// ZOMBIE state transitions
+		{
+			name:         "zombie-> {created, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "zombie-> {created, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      true,
+		},
+		{
+			name:         "zombie-> {running, paused}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      false,
+		},
+		{
+			name:         "zombie-> {completed, terminated}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      false,
+		},
+		{
+			name:         "zombie-> {completed, paused} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			wantErr:      true,
+		},
+		{
+			name:         "zombie-> {zombie, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+		{
+			name:         "zombie-> {zombie, terminated} (invalid)",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			wantErr:      true,
+		},
+		// VOID state (no validation)
+		{
+			name:         "void-> {running, running}",
+			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
+			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			wantErr:      false,
+		},
+	}
+
+	for _, c := range cases {
+		s.Run(c.name, func() {
+			s.SetupSubTest()
+			s.mutableState.executionState.State = c.currentState
+			// default current status to RUNNING unless specified
+			curStatus := c.currentStatus
+			if curStatus == 0 {
+				curStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+			}
+			s.mutableState.executionState.Status = curStatus
+			_, err := s.mutableState.UpdateWorkflowStateStatus(c.toState, c.toStatus)
+			if c.wantErr {
+				s.Error(err)
+			} else {
+				s.NoError(err)
+			}
+			if !c.wantErr { // if the transition was successful, verify the state and status are updated.
+				s.Equal(c.toState, s.mutableState.executionState.State)
+				s.Equal(c.toStatus, s.mutableState.executionState.Status)
+			}
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
+	s.SetupSubTest()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	// Complete another WFT to obtain a valid completed event id for scheduling an activity.
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		worker_versioning.StampFromBuildId("b1"),
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	// Schedule an activity (pending) using the completed WFT event id.
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		completedEvent.GetEventId(),
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "act-1",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    tq,
+		},
+		false,
+	)
+	s.NoError(err)
+	prevActivityStamp := activityInfo.Stamp
+
+	// Create a pending workflow task.
+	pendingWFT, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	prevWFTStamp := pendingWFT.Stamp
+
+	// Pause and assert stamps incremented.
+	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.New())
+	s.NoError(err)
+
+	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+	s.True(ok)
+	s.Greater(updatedActivityInfo.Stamp, prevActivityStamp)
+
+	wftInfo := s.mutableState.GetPendingWorkflowTask()
+	s.NotNil(wftInfo)
+	s.Greater(wftInfo.Stamp, prevWFTStamp)
+
+	// assert the event is marked as 'worker may ignore' so that older SDKs can safely ignore it.
+	s.True(pausedEvent.GetWorkerMayIgnore())
+}
+
+func (s *mutableStateSuite) TestPauseWorkflowExecution_FailStateValidation() {
+	s.SetupSubTest()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Simulate a completed workflow where transitioning status to PAUSED is invalid.
+	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	prevStatus := s.mutableState.executionState.Status
+
+	_, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "test_reason", uuid.New())
+	s.Error(err)
+	// Status should remain unchanged and PauseInfo should not be set when validation fails.
+	s.Equal(prevStatus, s.mutableState.executionState.Status)
+	s.Nil(s.mutableState.executionInfo.PauseInfo)
 }
 
 func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
@@ -2382,6 +2747,7 @@ func (s *mutableStateSuite) TestRetryWorkflowTask_WithNextRetryDelay() {
 }
 func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.EnableActivityRetryStampIncrement = dynamicconfig.GetBoolPropertyFn(true)
 
 	// scheduling, starting & completing workflow task is omitted here
 
@@ -2448,6 +2814,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 
 func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.EnableActivityRetryStampIncrement = dynamicconfig.GetBoolPropertyFn(true)
 
 	workflowTaskCompletedEventID := int64(4)
 	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
@@ -2796,7 +3163,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			},
 			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
-				mockChasmTree.EXPECT().Archetype().Return(chasm.Archetype("mock-archetype")).AnyTimes()
+				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
@@ -3390,7 +3757,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 }
 
 func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
-	payload, found := s.mutableState.executionInfo.SearchAttributes[searchattribute.BuildIds]
+	payload, found := s.mutableState.executionInfo.SearchAttributes[sadefs.BuildIds]
 	if !found {
 		return []string{}
 	}
@@ -4221,7 +4588,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				}
 
 				mockChasmTree := historyi.NewMockChasmTree(s.controller)
-				mockChasmTree.EXPECT().Archetype().Return(chasm.Archetype("mock-archetype")).AnyTimes()
+				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
@@ -4374,14 +4741,14 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
 
 	// Is workflow, should not generate retention task
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
-	mockChasmTree.EXPECT().Archetype().Return(chasmworkflow.Archetype).Times(1)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).Times(1)
 	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
 
 	// Now make the mutable state non-workflow.
-	mockChasmTree.EXPECT().Archetype().Return(chasm.Archetype("test-archetype")).Times(2) // One time for each CloseTransactionAsMutation call
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).Times(2) // One time for each CloseTransactionAsMutation call
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -5356,5 +5723,84 @@ func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 
 	for _, requestID := range testRequestIDs {
 		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
+	}
+}
+
+func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
+	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(5)
+	totalTasks := 2 * s.mockConfig.ChasmMaxInMemoryPureTasks()
+
+	visTimestamp := s.mockShard.GetTimeSource().Now()
+	for i := 0; i < totalTasks; i++ {
+		task := &tasks.ChasmTaskPure{
+			VisibilityTimestamp: visTimestamp,
+			Category:            tasks.CategoryTimer,
+		}
+		s.mutableState.AddTasks(task)
+		s.LessOrEqual(len(s.mutableState.chasmPureTasks), s.mockConfig.ChasmMaxInMemoryPureTasks())
+
+		visTimestamp = visTimestamp.Add(-time.Minute)
+	}
+
+	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(2)
+	s.mutableState.AddTasks(&tasks.ChasmTaskPure{
+		VisibilityTimestamp: visTimestamp,
+		Category:            tasks.CategoryTimer,
+	})
+	s.Len(s.mutableState.chasmPureTasks, 2)
+}
+
+func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
+	now := s.mockShard.GetTimeSource().Now()
+
+	testCases := []struct {
+		name              string
+		maxScheduledTime  time.Time
+		expectedRemaining int
+	}{
+		{
+			name:              "none",
+			maxScheduledTime:  now,
+			expectedRemaining: 3,
+		},
+		{
+			name:              "paritial",
+			maxScheduledTime:  now.Add(2 * time.Minute),
+			expectedRemaining: 2,
+		},
+		{
+			name:              "all",
+			maxScheduledTime:  now.Add(5 * time.Minute),
+			expectedRemaining: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mutableState.chasmPureTasks = []*tasks.ChasmTaskPure{
+				{
+					VisibilityTimestamp: now.Add(3 * time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+				{
+					VisibilityTimestamp: now.Add(2 * time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+				{
+					VisibilityTimestamp: now.Add(time.Minute),
+					Category:            tasks.CategoryTimer,
+				},
+			}
+			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
+
+			s.mutableState.DeleteCHASMPureTasks(tc.maxScheduledTime)
+
+			s.Len(s.mutableState.chasmPureTasks, tc.expectedRemaining)
+			for _, task := range s.mutableState.chasmPureTasks {
+				s.False(task.VisibilityTimestamp.Before(tc.maxScheduledTime))
+			}
+
+			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
+		})
 	}
 }

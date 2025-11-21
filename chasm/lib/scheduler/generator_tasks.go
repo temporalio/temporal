@@ -49,16 +49,10 @@ func (g *GeneratorTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.GeneratorTask,
 ) error {
-	scheduler, err := generator.Scheduler.Get(ctx)
-	if err != nil {
-		return ErrUnprocessable
-	}
+	scheduler := generator.Scheduler.Get(ctx)
 	logger := newTaggedLogger(g.baseLogger, scheduler)
 
-	invoker, err := scheduler.Invoker.Get(ctx)
-	if err != nil {
-		return ErrUnprocessable
-	}
+	invoker := scheduler.Invoker.Get(ctx)
 
 	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -150,7 +150,7 @@ func (r *resetterImpl) getBaseBranchToken(
 		r.namespaceID,
 		r.workflowID,
 		r.baseRunID,
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetype,
 	)
 	switch err.(type) {
 	case nil:

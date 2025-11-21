@@ -116,6 +116,7 @@ type (
 			attachRequestID string,
 			attachCompletionCallbacks []*commonpb.Callback,
 			links []*commonpb.Link,
+			identity string,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
@@ -212,6 +213,8 @@ type (
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 
 		IsWorkflowExecutionRunning() bool
+		AddWorkflowExecutionPausedEvent(identity string, reason string, requestID string) (*historypb.HistoryEvent, error)
+		ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
@@ -286,6 +289,8 @@ type (
 
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
+		DeleteCHASMPureTasks(maxScheduledTime time.Time)
+
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 
@@ -355,7 +360,9 @@ type (
 		// activities.
 		// If there is a pending workflow task that is not started yet, it'll be rescheduled after
 		// transition start.
-		StartDeploymentTransition(deployment *deploymentpb.Deployment) error
+		StartDeploymentTransition(deployment *deploymentpb.Deployment, revisionNumber int64) error
+		GetVersioningRevisionNumber() int64
+		SetVersioningRevisionNumber(revisionNumber int64)
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent

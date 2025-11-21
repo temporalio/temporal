@@ -323,8 +323,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 
 func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	ctx := s.newMutableContext()
-	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := s.scheduler.Invoker.Get(ctx)
 
 	// Set up initial state
 	invoker.BufferedStarts = c.InitialBufferedStarts
@@ -342,7 +341,7 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 
 	// Create engine context for side effect task execution
 	engineCtx := s.newEngineContext()
-	err = s.executor.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	err := s.executor.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -22,6 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -29,12 +32,14 @@ type (
 		sqlStore                       persistencesql.SqlStore
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
+
+		enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn
 	}
 )
 
 var _ store.VisibilityStore = (*VisibilityStore)(nil)
 
-var maxTime, _ = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
+var maxDatetime, _ = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
 
 // NewSQLVisibilityStore creates an instance of VisibilityStore
 func NewSQLVisibilityStore(
@@ -42,6 +47,7 @@ func NewSQLVisibilityStore(
 	r resolver.ServiceResolver,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) (*VisibilityStore, error) {
@@ -54,6 +60,8 @@ func NewSQLVisibilityStore(
 		sqlStore:                       persistencesql.NewSqlStore(db, logger),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+
+		enableUnifiedQueryConverter: enableUnifiedQueryConverter,
 	}, nil
 }
 
@@ -161,6 +169,21 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
+	if s.enableUnifiedQueryConverter() {
+		return s.listWorkflowExecutions(ctx, request)
+	}
+	return s.listWorkflowExecutionsLegacy(ctx, request)
+}
+
+func (s *VisibilityStore) listWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	sqlQC, err := NewSQLQueryConverter(s.GetName())
+	if err != nil {
+		return nil, err
+	}
+
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, err
@@ -171,7 +194,89 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	converter := NewQueryConverter(
+	queryParams, err := buildQueryParams(
+		request.Namespace,
+		request.NamespaceID,
+		request.Query,
+		sqlQC,
+		saTypeMap,
+		saMapper,
+	)
+	if err != nil {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
+		// only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
+	pageToken, err := sqlplugin.DeserializeVisibilityPageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	queryString, queryArgs := sqlQC.BuildSelectStmt(queryParams, request.PageSize, pageToken)
+	selectFilter := &sqlplugin.VisibilitySelectFilter{
+		Query:     queryString,
+		QueryArgs: queryArgs,
+	}
+
+	rows, err := s.sqlStore.DB.SelectFromVisibility(ctx, *selectFilter)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("ListWorkflowExecutions operation failed. Select failed: %v", err))
+	}
+	if len(rows) == 0 {
+		return &store.InternalListWorkflowExecutionsResponse{}, nil
+	}
+
+	var infos = make([]*store.InternalWorkflowExecutionInfo, len(rows))
+	for i, row := range rows {
+		infos[i], err = s.rowToInfo(&row, request.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var nextPageToken []byte
+	if len(rows) > 0 && len(rows) == request.PageSize {
+		lastRow := rows[len(rows)-1]
+		closeTime := maxDatetime
+		if lastRow.CloseTime != nil {
+			closeTime = *lastRow.CloseTime
+		}
+		nextPageToken, err = sqlplugin.SerializeVisibilityPageToken(&sqlplugin.VisibilityPageToken{
+			CloseTime: closeTime,
+			StartTime: lastRow.StartTime,
+			RunID:     lastRow.RunID,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &store.InternalListWorkflowExecutionsResponse{
+		Executions:    infos,
+		NextPageToken: nextPageToken,
+	}, nil
+}
+
+func (s *VisibilityStore) listWorkflowExecutionsLegacy(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
@@ -209,11 +314,11 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	var nextPageToken []byte
 	if len(rows) == request.PageSize {
 		lastRow := rows[len(rows)-1]
-		closeTime := maxTime
+		closeTime := maxDatetime
 		if lastRow.CloseTime != nil {
 			closeTime = *lastRow.CloseTime
 		}
-		nextPageToken, err = serializePageToken(&pageToken{
+		nextPageToken, err = serializePageTokenLegacy(&pageTokenLegacy{
 			CloseTime: closeTime,
 			StartTime: lastRow.StartTime,
 			RunID:     lastRow.RunID,
@@ -232,6 +337,16 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
+	if s.enableUnifiedQueryConverter() {
+		return s.countWorkflowExecutions(ctx, request)
+	}
+	return s.countWorkflowExecutionsLegacy(ctx, request)
+}
+
+func (s *VisibilityStore) countWorkflowExecutionsLegacy(
+	ctx context.Context,
+	request *manager.CountWorkflowExecutionsRequest,
+) (*manager.CountWorkflowExecutionsResponse, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, err
@@ -242,7 +357,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 		return nil, err
 	}
 
-	converter := NewQueryConverter(
+	converter := NewQueryConverterLegacy(
 		s.GetName(),
 		request.Namespace,
 		request.NamespaceID,
@@ -261,7 +376,69 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	}
 
 	if len(selectFilter.GroupBy) > 0 {
-		return s.countGroupByWorkflowExecutions(ctx, selectFilter, saTypeMap)
+		return s.countGroupByWorkflowExecutions(ctx, selectFilter)
+	}
+
+	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("CountWorkflowExecutions operation failed. Query failed: %v", err))
+	}
+
+	return &manager.CountWorkflowExecutionsResponse{Count: count}, nil
+}
+
+func (s *VisibilityStore) countWorkflowExecutions(
+	ctx context.Context,
+	request *manager.CountWorkflowExecutionsRequest,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	sqlQC, err := NewSQLQueryConverter(s.GetName())
+	if err != nil {
+		return nil, err
+	}
+
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams, err := buildQueryParams(
+		request.Namespace,
+		request.NamespaceID,
+		request.Query,
+		sqlQC,
+		saTypeMap,
+		saMapper,
+	)
+	if err != nil {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
+		// only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
+	queryString, queryArgs := sqlQC.BuildCountStmt(queryParams)
+	groupBy := make([]string, 0, len(queryParams.GroupBy)+1)
+	for _, field := range queryParams.GroupBy {
+		groupBy = append(groupBy, field.FieldName)
+	}
+
+	selectFilter := &sqlplugin.VisibilitySelectFilter{
+		Query:     queryString,
+		QueryArgs: queryArgs,
+		GroupBy:   groupBy,
+	}
+
+	if len(selectFilter.GroupBy) > 0 {
+		return s.countGroupByWorkflowExecutions(ctx, selectFilter)
 	}
 
 	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
@@ -276,9 +453,12 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
 	selectFilter *sqlplugin.VisibilitySelectFilter,
-	saTypeMap searchattribute.NameTypeMap,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	var err error
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
 	groupByTypes := make([]enumspb.IndexedValueType, len(selectFilter.GroupBy))
 	for i, fieldName := range selectFilter.GroupBy {
 		groupByTypes[i], err = saTypeMap.GetType(fieldName)
@@ -471,7 +651,7 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		// TODO: CHASM search attributes are not in the typeMap and SQL only stores raw values (no metadata).
 		// The Encode() call below will fail to add type metadata, causing decode issues.
-		if searchattribute.IsChasmSearchAttribute(name) {
+		if sadefs.IsChasmSearchAttribute(name) {
 			continue
 		}
 		tp, err := saTypeMap.GetType(name)
@@ -512,4 +692,40 @@ func (s *VisibilityStore) AddSearchAttributes(
 ) error {
 	// SQL Visibility does not support modifying schema to add search attributes at this moment.
 	return serviceerror.NewUnimplemented("AddSearchAttributes operation not supported in SQL visibility")
+}
+
+func buildQueryParams(
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	queryString string,
+	sqlQC *SQLQueryConverter,
+	saTypeMap searchattribute.NameTypeMap,
+	saMapper searchattribute.Mapper,
+) (*query.QueryParams[sqlparser.Expr], error) {
+	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper)
+	queryParams, err := c.Convert(queryString)
+	if err != nil {
+		return nil, err
+	}
+
+	nsFilterExpr, err := sqlQC.ConvertComparisonExpr(
+		sqlparser.EqualStr,
+		query.NamespaceIDSAColumn,
+		namespaceID.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams.QueryExpr, err = sqlQC.BuildAndExpr(nsFilterExpr, queryParams.QueryExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// ORDER BY is not support in SQL visibility store
+	if len(queryParams.OrderBy) > 0 {
+		return nil, query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage)
+	}
+
+	return queryParams, nil
 }

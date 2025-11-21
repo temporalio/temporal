@@ -17,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
@@ -177,7 +178,7 @@ func (s *Scheduler) NewRangeBackfiller(
 	backfiller.Request = &schedulerpb.BackfillerState_BackfillRequest{
 		BackfillRequest: request,
 	}
-	s.addBackfiller(ctx, backfiller)
+	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
@@ -191,18 +192,8 @@ func (s *Scheduler) NewImmediateBackfiller(
 	backfiller.Request = &schedulerpb.BackfillerState_TriggerRequest{
 		TriggerRequest: request,
 	}
-	s.addBackfiller(ctx, backfiller)
-	return backfiller
-}
-
-// addBackfiller adds the backfiller to the scheduler tree, and adds a task to
-// kick off backfill processing.
-func (s *Scheduler) addBackfiller(
-	ctx chasm.MutableContext,
-	backfiller *Backfiller,
-) {
 	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
-	ctx.AddTask(backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+	return backfiller
 }
 
 // useScheduledAction returns true when the Scheduler should allow scheduled
@@ -340,11 +331,7 @@ func (s *Scheduler) getIdleExpiration(
 
 func (s *Scheduler) hasMoreAllowAllBackfills(ctx chasm.Context) bool {
 	for _, field := range s.Backfillers {
-		backfiller, err := field.Get(ctx)
-		if err != nil {
-			continue
-		}
-
+		backfiller := field.Get(ctx)
 		var policy enumspb.ScheduleOverlapPolicy
 		switch request := backfiller.GetRequest().(type) {
 		case *schedulerpb.BackfillerState_BackfillRequest:
@@ -410,7 +397,7 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	}
 }
 
-var _ chasm.NexusCompletionHandler = &Scheduler{}
+var _ chasmnexus.CompletionHandler = &Scheduler{}
 
 func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExecutionStatus {
 	switch failure.FailureInfo.(type) {
@@ -429,10 +416,7 @@ func (s *Scheduler) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	info *persistencespb.ChasmNexusCompletion,
 ) error {
-	invoker, err := s.Invoker.Get(ctx)
-	if err != nil {
-		return err
-	}
+	invoker := s.Invoker.Get(ctx)
 
 	workflowID := invoker.WorkflowID(info.RequestId)
 	if workflowID == "" {
@@ -481,7 +465,7 @@ func (s *Scheduler) HandleNexusCompletion(
 
 	// Record the completed action into Scheduler's metadata. This updates
 	// RecentActions and RunningWorkflows.
-	s.recordCompletedAction(ctx, scheduleTime, workflowID, wfStatus)
+	s.recordCompletedAction(scheduleTime, workflowID, wfStatus)
 
 	return nil
 }
@@ -489,7 +473,6 @@ func (s *Scheduler) HandleNexusCompletion(
 // recordCompletedAction ensures that the given action is recorded in
 // RecentActions and cleaned up from other state.
 func (s *Scheduler) recordCompletedAction(
-	ctx chasm.MutableContext,
 	scheduleTime time.Time,
 	workflowID string,
 	workflowStatus enumspb.WorkflowExecutionStatus,
