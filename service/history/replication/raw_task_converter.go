@@ -386,7 +386,7 @@ func generateStateReplicationTask(
 	workflowCache wcache.Cache,
 	action func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
-	wfContext, release, err := workflowCache.GetOrCreateChasmEntity(
+	wfContext, release, err := workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		shardContext,
 		namespace.ID(workflowKey.NamespaceID),

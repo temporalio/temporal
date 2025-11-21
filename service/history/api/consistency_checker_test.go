@@ -85,7 +85,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	released := false
 	releaseFn := func(err error) { released = true }
 
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		ctx,
 		s.shardContext,
 		namespace.ID(s.namespaceID),

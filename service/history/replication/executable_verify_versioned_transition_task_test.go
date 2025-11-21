@@ -278,7 +278,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 	if err == nil {
 		wfCtx.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(mutableState, err)
 	}
-	s.wfcache.EXPECT().GetOrCreateChasmEntity(
+	s.wfcache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		shardContext,
 		namespace.ID(namespaceId),

@@ -449,7 +449,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					p.LoadMutableStateError,
 				).AnyTimes()
 			}
-			workflowCache.EXPECT().GetOrCreateChasmEntity(
+			workflowCache.EXPECT().GetOrCreateChasmExecution(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),

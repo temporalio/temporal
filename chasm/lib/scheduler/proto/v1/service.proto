@@ -9,22 +9,22 @@ import "temporal/server/api/routing/v1/extension.proto";
 
 service SchedulerService {
     rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse) {
-        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
     }
 
     rpc UpdateSchedule(UpdateScheduleRequest) returns (UpdateScheduleResponse) {
-        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
     }
 
     rpc PatchSchedule(PatchScheduleRequest) returns (PatchScheduleResponse) {
-        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
     }
 
     rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse) {
-        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
     }
 
     rpc DescribeSchedule(DescribeScheduleRequest) returns (DescribeScheduleResponse) {
-        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.schedule_id";
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
     }
 }

@@ -246,10 +246,10 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			// Create ComponentRef
-			ref := chasm.NewComponentRef[*Callback](chasm.EntityKey{
+			ref := chasm.NewComponentRef[*Callback](chasm.ExecutionKey{
 				NamespaceID: "namespace-id",
 				BusinessID:  "workflow-id",
-				EntityID:    "run-id",
+				RunID:       "run-id",
 			})
 
 			// Create context with engine
@@ -349,7 +349,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 	dummyRef := persistencespb.ChasmComponentRef{
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
-		EntityId:    "entity-id",
+		RunId:       "run-id",
 		ArchetypeId: 1234,
 	}
 
@@ -605,11 +605,11 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					HandleRef: func(component chasm.Component) ([]byte, error) {
 						return []byte{}, nil
 					},
-					HandleExecutionKey: func() chasm.EntityKey {
-						return chasm.EntityKey{
+					HandleExecutionKey: func() chasm.ExecutionKey {
+						return chasm.ExecutionKey{
 							NamespaceID: "namespace-id",
 							BusinessID:  "workflow-id",
-							EntityID:    "run-id",
+							RunID:       "run-id",
 						}
 					},
 				}
@@ -655,10 +655,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 
 			// Create ComponentRef
-			ref := chasm.NewComponentRef[*Callback](chasm.EntityKey{
+			ref := chasm.NewComponentRef[*Callback](chasm.ExecutionKey{
 				NamespaceID: "namespace-id",
 				BusinessID:  "workflow-id",
-				EntityID:    "run-id",
+				RunID:       "run-id",
 			})
 
 			// Create context with engine
