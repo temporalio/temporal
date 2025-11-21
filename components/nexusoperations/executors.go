@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
 
@@ -180,7 +181,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		RequestId:   args.requestID,
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
+		return fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
 	header := nexus.Header(args.header)

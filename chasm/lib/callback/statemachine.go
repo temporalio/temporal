@@ -31,7 +31,11 @@ var TransitionRescheduled = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{Attempt: cb.Attempt})
+		ctx.AddTask(
+			cb,
+			chasm.TaskAttributes{Destination: cb.Callback.GetNexus().GetUrl()},
+			&callbackspb.InvocationTask{Attempt: cb.Attempt},
+		)
 		return nil
 	},
 )
@@ -60,7 +64,11 @@ var TransitionAttemptFailed = chasm.NewTransition(
 				},
 			},
 		}
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		ctx.AddTask(
+			cb,
+			chasm.TaskAttributes{ScheduledTime: nextAttemptScheduleTime},
+			&callbackspb.BackoffTask{Attempt: cb.Attempt},
+		)
 		return nil
 	},
 )
@@ -84,7 +92,6 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
@@ -100,7 +107,6 @@ var TransitionSucceeded = chasm.NewTransition(
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = nil
-		ctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )

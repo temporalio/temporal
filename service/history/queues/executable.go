@@ -106,25 +106,6 @@ const (
 	taskCriticalLogMetricAttempts = 30
 )
 
-// UnprocessableTaskError is an indicator that an executor does not know how to handle a task. Considered terminal.
-type UnprocessableTaskError struct {
-	Message string
-}
-
-// NewUnprocessableTaskError returns a new UnprocessableTaskError from given message.
-func NewUnprocessableTaskError(message string) UnprocessableTaskError {
-	return UnprocessableTaskError{Message: message}
-}
-
-func (e UnprocessableTaskError) Error() string {
-	return "unprocessable task: " + e.Message
-}
-
-// IsTerminalTaskError marks this error as terminal to be handled appropriately.
-func (UnprocessableTaskError) IsTerminalTaskError() bool {
-	return true
-}
-
 type (
 	executableImpl struct {
 		tasks.Task

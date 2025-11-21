@@ -31,12 +31,6 @@ func (GrouperNamespaceID) Predicate(keys []any) tasks.Predicate {
 
 var _ Grouper = GrouperNamespaceID{}
 
-// NamespaceIDAndDestination is the key for grouping tasks by namespace ID and destination.
-type NamespaceIDAndDestination struct {
-	NamespaceID string
-	Destination string
-}
-
 type GrouperStateMachineNamespaceIDAndDestination struct {
 }
 
