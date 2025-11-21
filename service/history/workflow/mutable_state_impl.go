@@ -3143,7 +3143,7 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
 
 	// Re-scheduling pending workflow and activity tasks.
-	err = ms.reschedulePendingWorkflowTask(false)
+	err = ms.reschedulePendingWorkflowTask(true)
 	if err != nil {
 		return err
 	}
@@ -3157,6 +3157,16 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 			// TODO: skip task generation also when activity is in backoff period
 			continue
 		}
+
+		// need to update stamp so the passive side regenerate the task
+		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
+			info.Stamp++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
 		// we only need to resend the activities to matching, no need to update timer tasks.
 		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
 		if err != nil {
@@ -5054,6 +5064,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 func (ms *MutableStateImpl) updateVersioningOverride(
 	override *workflowpb.VersioningOverride,
 ) (bool, error) {
+	previousEffectiveDeployment := ms.GetEffectiveDeployment()
+	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	var requestReschedulePendingWorkflowTask bool
 
 	if override != nil {
@@ -5117,8 +5129,6 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		ms.GetExecutionInfo().WorkerDeploymentName = ""
 	}
 
-	previousEffectiveDeployment := ms.GetEffectiveDeployment()
-	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
@@ -8495,7 +8505,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// - reschedule the pending WFT so the old one is invalided
 	ms.ClearStickyTaskQueue()
 
-	err := ms.reschedulePendingWorkflowTask(false)
+	err := ms.reschedulePendingWorkflowTask(true)
 	if err != nil {
 		return err
 	}
@@ -8531,8 +8541,17 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 			// activity already started
 			continue
 		}
+
+		// need to update stamp so the passive side regenerate the task
+		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
+			info.Stamp++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
-		err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
 		if err != nil {
 			return err
 		}
@@ -8565,7 +8584,7 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks
 		ms.executionInfo.WorkflowTaskStamp += 1
 
 		// Reset the attempt; forcing a non-transient workflow task to be scheduled.
-		ms.executionInfo.Attempt = 1
+		ms.executionInfo.WorkflowTaskAttempt = 1
 	}
 
 	return ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(pendingTask.ScheduledEventID)
