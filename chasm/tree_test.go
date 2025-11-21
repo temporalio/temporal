@@ -513,6 +513,68 @@ func (s *nodeSuite) TestPointerAttributes() {
 	})
 }
 
+func (s *nodeSuite) TestParentPointer_InMemory() {
+	node := s.testComponentTree()
+
+	s.assertParentPointer(node)
+
+	// Additionally also test parentPtr for components inside a map.
+
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	mapSubComponent1 := &TestSubComponent1{}
+	// Try using the testComponent we get from the ParentPtr for the mutation.
+	testComponent.SubComponents = Map[string, *TestSubComponent1]{
+		"mapSubComponent1": NewComponentField(mutableContext, mapSubComponent1),
+	}
+
+	s.Panics(func() {
+		_ = mapSubComponent1.ParentPtr.Get(mutableContext)
+	})
+
+	// Sync structure initializes the parent pointer
+	err = node.syncSubComponents()
+	s.NoError(err)
+
+	testComponentFromPtr := mapSubComponent1.ParentPtr.Get(mutableContext)
+	// Asserting they actually point to the same testComponent object.
+	s.Same(testComponent, testComponentFromPtr)
+}
+
+func (s *nodeSuite) TestParentPointer_FromDB() {
+	serializedNodes := testComponentSerializedNodes()
+
+	node, err := s.newTestTree(serializedNodes)
+	s.NoError(err)
+
+	s.assertParentPointer(node)
+}
+
+func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
+	chasmContext := NewContext(context.Background(), testComponentNode)
+	component, err := testComponentNode.Component(chasmContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	_, found := testComponent.ParentPtr.TryGet(chasmContext)
+	s.False(found)
+
+	subComponent1, err := testComponent.SubComponent1.Get(chasmContext)
+	s.NoError(err)
+	testComponentFromPtr := subComponent1.ParentPtr.Get(chasmContext)
+	// Asserting they actually point to the same testComponent object.
+	s.Same(testComponent, testComponentFromPtr)
+
+	subComponent11, err := subComponent1.SubComponent11.Get(chasmContext)
+	s.NoError(err)
+	testSubComponent1FromPtr := subComponent11.ParentPtr.Get(chasmContext)
+	// Asserting they actually point to the same testSubComponent1 object.
+	s.Same(subComponent1, testSubComponent1FromPtr)
+}
+
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	node := s.testComponentTree()
 

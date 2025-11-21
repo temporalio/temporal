@@ -31,6 +31,7 @@ type (
 		SubComponentInterfacePointer Field[Component]
 
 		MSPointer MSPointer
+		ParentPtr ParentPtr[*TestComponent]
 
 		Visibility Field[*Visibility]
 	}
@@ -44,12 +45,16 @@ type (
 		SubData11            Field[*protoMessageType] // Random proto message.
 		SubComponent2Pointer Field[*TestSubComponent2]
 		DataPointer          Field[*protoMessageType]
+
+		ParentPtr ParentPtr[*TestComponent]
 	}
 
 	TestSubComponent11 struct {
 		UnimplementedComponent
 
 		SubComponent11Data *protoMessageType
+
+		ParentPtr ParentPtr[*TestSubComponent1]
 	}
 
 	TestSubComponent2 struct {
