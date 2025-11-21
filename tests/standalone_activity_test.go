@@ -486,7 +486,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
+			t := s.T()
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			t.Cleanup(cancel)
 
