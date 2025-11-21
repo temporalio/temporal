@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,7 +52,6 @@ type chasmEngineSuite struct {
 	entityCache    wcache.Cache
 	registry       *chasm.Registry
 	config         *configs.Config
-	notifier       *ChasmNotifier
 
 	engine *ChasmEngine
 }
@@ -112,13 +112,11 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
-	s.notifier = NewChasmNotifier(metrics.NoopMetricsHandler)
-
 	s.engine = newChasmEngine(
 		s.entityCache,
 		s.registry,
 		s.config,
-		s.notifier,
+		NewChasmNotifier(metrics.NoopMetricsHandler),
 	)
 	s.engine.SetShardController(s.mockShardController)
 }
@@ -586,6 +584,10 @@ func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 // TestPollComponent_Success_Wait tests the waiting behavior of PollComponent when the predicate is
 // not immediately satisfied.
 func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
+	const numUpdatesTotal = 3
+	const updateAtWhichSatisfied = 2   // 0-indexed, so 3rd update
+	const updateCountWhenSatisfied = 3 // 1-indexed count for mock
+
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -598,49 +600,53 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	)
 	expectedActivityID := tv.ActivityID()
 
-	// GetWorkflowExecution is called for initial predicate check
-	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
-		}, nil).Times(1)
+	var updateCount atomic.Int32
 
-	// UpdateWorkflowExecution for the update
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+			var info *persistencespb.ActivityInfo
+			if updateCount.Load() < updateCountWhenSatisfied {
+				info = &persistencespb.ActivityInfo{}
+			} else {
+				info = &persistencespb.ActivityInfo{ActivityId: expectedActivityID}
+			}
+			return &persistence.GetWorkflowExecutionResponse{
+				State: s.buildPersistenceMutableState(ref.EntityKey, info),
+			}, nil
+		},
+	).AnyTimes()
+
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(
-			_ context.Context,
-			request *persistence.UpdateWorkflowExecutionRequest,
-		) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			updateCount.Add(1)
 			return tests.UpdateWorkflowExecutionResponse, nil
 		},
-	).Times(1)
+	).Times(numUpdatesTotal)
 
-	// Expect the notification when the component is updated
 	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).DoAndReturn(
 		func(key chasm.EntityKey, ref []byte) {
-			// Actually trigger the notifier so PollComponent wakes up
-			s.notifier.Notify(key)
+			s.engine.notifier.Notify(key)
 		},
-	).Times(1)
+	).Times(numUpdatesTotal)
 
-	updateAtWhichSatisfied := 2
-	update := 0
-
-	updateErr := make(chan error, 1)
+	updateErr := make(chan error, numUpdatesTotal)
 	updateActivity := func() {
-		_, err := s.engine.UpdateComponent(
-			context.Background(),
-			ref,
-			func(ctx chasm.MutableContext, component chasm.Component) error {
-				tc, ok := component.(*testComponent)
-				s.True(ok)
-				if update == updateAtWhichSatisfied {
-					tc.ActivityInfo.ActivityId = expectedActivityID
-				}
-				update++
-				return nil
-			},
-		)
-		updateErr <- err
+		for currentUpdate := range numUpdatesTotal {
+			_, err := s.engine.UpdateComponent(
+				context.Background(),
+				ref,
+				func(ctx chasm.MutableContext, component chasm.Component) error {
+					tc, ok := component.(*testComponent)
+					s.True(ok)
+					if currentUpdate == updateAtWhichSatisfied {
+						tc.ActivityInfo.ActivityId = expectedActivityID
+					}
+					return nil
+				},
+			)
+			updateErr <- err
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 
 	pollErr := make(chan error)
@@ -664,7 +670,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	go pollComponent()
 	go updateActivity()
 
-	for range updateAtWhichSatisfied {
+	for range numUpdatesTotal {
 		s.NoError(<-updateErr)
 	}
 	s.NoError(<-pollErr)
