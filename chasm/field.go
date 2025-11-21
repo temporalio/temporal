@@ -70,7 +70,7 @@ func DataPointerTo[D proto.Message](
 
 // TryGet returns the value of the field and a boolean indicating if the value was found, deserializing if necessary.
 // Panics rather than returning an error, as errors are supposed to be handled by the framework as opposed to the
-// application.
+// application, even if the error is an application bug.
 func (f Field[T]) TryGet(chasmContext Context) (T, bool) {
 	var nilT T
 
@@ -146,7 +146,7 @@ func (f Field[T]) TryGet(chasmContext Context) (T, bool) {
 
 // Get returns the value of the field, deserializing it if necessary.
 // Panics rather than returning an error, as errors are supposed to be handled by the framework as opposed to the
-// application.
+// application, even if the error is an application bug.
 func (f Field[T]) Get(chasmContext Context) T {
 	v, ok := f.TryGet(chasmContext)
 	if !ok {
