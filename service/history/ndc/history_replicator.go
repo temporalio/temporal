@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -96,15 +97,16 @@ type (
 	}
 
 	HistoryReplicatorImpl struct {
-		shardContext      historyi.ShardContext
-		clusterMetadata   cluster.Metadata
-		historySerializer serialization.Serializer
-		metricsHandler    metrics.Handler
-		namespaceRegistry namespace.Registry
-		workflowCache     wcache.Cache
-		eventsReapplier   EventsReapplier
-		transactionMgr    TransactionManager
-		logger            log.Logger
+		shardContext           historyi.ShardContext
+		clusterMetadata        cluster.Metadata
+		historySerializer      serialization.Serializer
+		metricsHandler         metrics.Handler
+		namespaceRegistry      namespace.Registry
+		workflowCache          wcache.Cache
+		eventsReapplier        EventsReapplier
+		transactionMgr         TransactionManager
+		persistenceRateLimiter quotas.RateLimiter
+		logger                 log.Logger
 
 		mutableStateMapper *MutableStateMapperImpl
 		newResetter        workflowResetterProvider
@@ -123,21 +125,23 @@ func NewHistoryReplicator(
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	eventSerializer serialization.Serializer,
+	persistenceRateLimiter quotas.RateLimiter,
 	logger log.Logger,
 ) *HistoryReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentHistoryReplicator)
 	transactionMgr := NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false)
 	replicator := &HistoryReplicatorImpl{
-		shardContext:      shardContext,
-		clusterMetadata:   shardContext.GetClusterMetadata(),
-		historySerializer: eventSerializer,
-		metricsHandler:    shardContext.GetMetricsHandler(),
-		namespaceRegistry: shardContext.GetNamespaceRegistry(),
-		workflowCache:     workflowCache,
-		transactionMgr:    transactionMgr,
-		eventsReapplier:   eventsReapplier,
-		logger:            logger,
+		shardContext:           shardContext,
+		clusterMetadata:        shardContext.GetClusterMetadata(),
+		historySerializer:      eventSerializer,
+		metricsHandler:         shardContext.GetMetricsHandler(),
+		namespaceRegistry:      shardContext.GetNamespaceRegistry(),
+		workflowCache:          workflowCache,
+		transactionMgr:         transactionMgr,
+		eventsReapplier:        eventsReapplier,
+		persistenceRateLimiter: persistenceRateLimiter,
+		logger:                 logger,
 
 		mutableStateMapper: NewMutableStateMapping(
 			shardContext,
@@ -192,6 +196,7 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
+	_ = r.persistenceRateLimiter.Wait(ctx) // WaitN(ctx, tokens) based on the request events size?
 
 	task, err := newReplicationTaskFromRequest(
 		r.clusterMetadata,
@@ -210,6 +215,8 @@ func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
 	ctx context.Context,
 	request *historyi.BackfillHistoryEventsRequest,
 ) error {
+	_ = r.persistenceRateLimiter.Wait(ctx) // WaitN(ctx, tokens) based on the request events size?
+
 	task, err := newReplicationTaskFromBatch(
 		r.clusterMetadata,
 		r.logger,
@@ -404,6 +411,8 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 	newEvents []*historypb.HistoryEvent,
 	newRunID string,
 ) error {
+	_ = r.persistenceRateLimiter.Wait(ctx) // WaitN(ctx, tokens) based on the request events size?
+
 	task, err := newReplicationTaskFromBatch(
 		r.clusterMetadata,
 		r.logger,
