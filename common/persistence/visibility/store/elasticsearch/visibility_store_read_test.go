@@ -18,8 +18,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -43,6 +45,12 @@ type (
 		mockProcessor                      *MockProcessor
 		mockMetricsHandler                 *metrics.MockHandler
 		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
+		chasmRegistry                      *chasm.Registry
+	}
+
+	// Test component for CHASM visibility tests
+	testChasmComponent struct {
+		chasm.UnimplementedComponent
 	}
 )
 
@@ -120,11 +128,32 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
+
+	// Setup CHASM registry for tests
+	library := chasm.NewMockLibrary(s.controller)
+	library.EXPECT().Name().Return("TestLibrary").AnyTimes()
+	rc := chasm.NewRegistrableComponent[*testChasmComponent](
+		"TestComponent",
+		chasm.WithSearchAttributes(
+			chasm.NewSearchAttributeBool("ChasmCompleted", chasm.SearchAttributeFieldBool01),
+			chasm.NewSearchAttributeKeyword("ChasmStatus", chasm.SearchAttributeFieldKeyword01),
+			chasm.NewSearchAttributeInt("ChasmCount", chasm.SearchAttributeFieldInt01),
+			chasm.NewSearchAttributeDouble("ChasmScore", chasm.SearchAttributeFieldDouble01),
+			chasm.NewSearchAttributeDateTime("ChasmStartTime", chasm.SearchAttributeFieldDateTime01),
+		),
+	)
+	library.EXPECT().Components().Return([]*chasm.RegistrableComponent{rc}).AnyTimes()
+	library.EXPECT().Tasks().Return(nil).AnyTimes()
+	s.chasmRegistry = chasm.NewRegistry(log.NewNoopLogger())
+	err := s.chasmRegistry.Register(library)
+	s.NoError(err)
+
 	s.visibilityStore = &VisibilityStore{
 		esClient:                       s.mockESClient,
 		index:                          testIndex,
 		searchAttributesProvider:       searchattribute.NewTestEsProvider(),
 		searchAttributesMapperProvider: s.mockSearchAttributesMapperProvider,
+		chasmRegistry:                  s.chasmRegistry,
 		processor:                      s.mockProcessor,
 		processorAckTimeout:            esProcessorAckTimeout,
 		disableOrderByClause:           visibilityDisableOrderByClause,
@@ -139,6 +168,10 @@ func (s *ESVisibilitySuite) SetupTest() {
 
 func (s *ESVisibilitySuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func (tc *testChasmComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
 }
 
 func (s *ESVisibilitySuite) TestGetListFieldSorter() {
@@ -299,97 +332,97 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 	s.visibilityStore.searchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
 
 	query := `WorkflowId = 'wid'`
-	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"WorkflowId":"wid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' or WorkflowId = 'another-wid'`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"term":{"WorkflowId":"wid"}},{"term":{"WorkflowId":"another-wid"}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' order by StartTime desc`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"WorkflowId":"wid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"StartTime":{"order":"desc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `WorkflowId = 'wid' and CloseTime is null`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' or CloseTime is null`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"term":{"WorkflowId":"wid"}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `CloseTime is null order by CloseTime desc`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"CloseTime":{"order":"desc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `StartTime = "2018-06-07T15:04:05.123456789-08:00"`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"StartTime":{"query":"2018-06-07T15:04:05.123456789-08:00"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},{"range":{"StartTime":{"from":"2018-06-07T15:04:05+00:00","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `ExecutionTime < 1000000`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `ExecutionTime between 1 and 2`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.000000001Z","include_lower":true,"include_upper":true,"to":"1970-01-01T00:00:00.000000002Z"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `ExecutionTime < 1000000 or ExecutionTime > 2000000`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}},{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.002Z","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `order by ExecutionTime`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by StartTime desc, CloseTime asc`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"StartTime":{"order":"desc"}},{"CloseTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomTextField desc`
-	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "invalid query: unable to convert 'order by' column name: unable to sort by field of Text type, use field of type Keyword")
 
 	query = `order by CustomIntField asc`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"CustomIntField":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `ExecutionTime < "unable to parse"`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal(err.Error(), "invalid query: unable to convert filter expression: unable to convert values of comparison expression: invalid value for search attribute ExecutionTime of type Datetime: \"unable to parse\"")
@@ -397,63 +430,63 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 
 	// invalid union injection
 	query = `WorkflowId = 'wid' union select * from dummy`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.Error(err)
 	s.Nil(queryParams)
 }
 
 func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper() {
 	query := `WorkflowId = 'wid'`
-	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"WorkflowId":"wid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = "`AliasForCustomKeywordField` = 'pid'"
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"CustomKeywordField":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = "`AliasWithHyphenFor-CustomKeywordField` = 'pid'"
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"CustomKeywordField":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `CustomKeywordField = 'pid'`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"CustomKeywordField":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `AliasForUnknownField = 'pid'`
-	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left side of \"AliasForUnknownField = 'pid'\": invalid search attribute: AliasForUnknownField")
 
 	query = `order by ExecutionTime`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by AliasForCustomKeywordField asc`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"CustomKeywordField":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomKeywordField asc`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.JSONEq(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.NotNil(queryParams.Sorter)
 
 	query = `order by AliasForUnknownField asc`
-	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert 'order by' column name: invalid search attribute: AliasForUnknownField")
@@ -462,20 +495,20 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper() {
 
 func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper_Error() {
 	query := `WorkflowId = 'wid'`
-	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"WorkflowId":"wid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `ProductId = 'pid'`
-	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left side of \"ProductId = 'pid'\": invalid search attribute: ProductId")
 
 	query = `order by ExecutionTime`
-	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
@@ -586,7 +619,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			got, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, tc.query)
+			got, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, tc.query, nil, 0)
 			if tc.err != "" {
 				s.Error(err)
 				s.ErrorContains(err, tc.err)
@@ -606,7 +639,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		Hits: &elastic.SearchHits{
 			TotalHits: &elastic.TotalHits{},
 		}}
-	resp, err := s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1)
+	resp, err := s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -629,14 +662,14 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	}
 	searchResult.Hits.Hits = []*elastic.SearchHit{searchHit}
 	searchResult.Hits.TotalHits.Value = 1
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil)
 	s.NoError(err)
 	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SearchAfter: []interface{}{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"}})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for last page hits
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(1, len(resp.Executions))
@@ -647,7 +680,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		searchResult.Hits.Hits = append(searchResult.Hits.Hits, searchHit)
 	}
 	numOfHits := len(searchResult.Hits.Hits)
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits, nil)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
@@ -657,7 +690,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(int64(1547596872371234567), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
 	// for last page
-	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1)
+	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(numOfHits, len(resp.Executions))
@@ -720,7 +753,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
 	// test for open
-	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -744,7 +777,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
-	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
+	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -764,7 +797,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	// test for error case
 	docSource = []byte(`corrupted data`)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
+	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
 	s.Error(err)
 	s.Nil(info)
 }
@@ -782,7 +815,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
           "CustomIntField": [111,222],
           "CustomBoolField": true,
           "UnknownField": "random"}`)
-	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
 	s.NoError(err)
 	s.NotNil(info)
 	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &saTypeMap, true)
@@ -826,7 +859,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
           "CustomBoolField": true,
           "UnknownField": "random"}`)
 
-	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
 	s.NoError(err)
 	s.NotNil(info)
 
@@ -1848,4 +1881,446 @@ func (s *ESVisibilitySuite) Test_parsePageTokenValue() {
 			s.Equal(tc.res, res)
 		})
 	}
+}
+
+func (s *ESVisibilitySuite) Test_convertQueryLegacy_ChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":     "ChasmCompleted",
+			"TemporalKeyword01":  "ChasmStatus",
+			"TemporalInt01":      "ChasmCount",
+			"TemporalDouble01":   "ChasmScore",
+			"TemporalDatetime01": "ChasmStartTime",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"TemporalInt01":      enumspb.INDEXED_VALUE_TYPE_INT,
+			"TemporalDouble01":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			"TemporalDatetime01": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+	)
+
+	queryStr := `ChasmCompleted = true`
+	queryParams, err := s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	// Legacy converter uses "match" for non-KEYWORD types, "term" for KEYWORD types
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"TemporalBool01":{"query":true}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	queryStr = `ChasmStatus = 'active'`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"TemporalKeyword01":"active"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	queryStr = `ChasmCount = 42`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"TemporalInt01":{"query":42}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	queryStr = `ChasmScore = 3.14`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"TemporalDouble01":{"query":3.14}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	queryStr = `ChasmStartTime = "2018-06-07T15:04:05.123456789-08:00"`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"TemporalDatetime01":{"query":"2018-06-07T15:04:05.123456789-08:00"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	queryStr = `ChasmCompleted = true order by ChasmStatus asc`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"TemporalBool01":{"query":true}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.JSONEq(`[{"TemporalKeyword01":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+
+	queryStr = `ChasmStatus = 'active' and WorkflowId = 'wid'`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"term":{"TemporalKeyword01":"active"}},{"term":{"WorkflowId":"wid"}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	queryStr = `UnknownChasmField = 'value'`
+	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, queryStr, chasmMapper, chasm.UnspecifiedArchetypeID)
+	s.Error(err)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Contains(err.Error(), "invalid search attribute: UnknownChasmField")
+}
+
+func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":    "ChasmCompleted",
+			"TemporalKeyword01": "ChasmStatus",
+			"TemporalInt01":     "ChasmCount",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"TemporalInt01":     enumspb.INDEXED_VALUE_TYPE_INT,
+		},
+	)
+
+	namespaceIDQuery := elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String())
+
+	testCases := []struct {
+		name  string
+		query string
+		want  *esQueryParams
+		err   string
+	}{
+		{
+			name:  "chasm bool attribute",
+			query: "ChasmCompleted = true",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					elastic.NewBoolQuery().Filter(
+						namespaceDivisionIsNull,
+						elastic.NewTermQuery("TemporalBool01", true),
+					),
+				),
+				Sorter:  []elastic.Sorter{},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "chasm keyword attribute",
+			query: "ChasmStatus = 'active'",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					elastic.NewBoolQuery().Filter(
+						namespaceDivisionIsNull,
+						elastic.NewTermQuery("TemporalKeyword01", "active"),
+					),
+				),
+				Sorter:  []elastic.Sorter{},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "chasm int attribute",
+			query: "ChasmCount = 42",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					elastic.NewBoolQuery().Filter(
+						namespaceDivisionIsNull,
+						elastic.NewTermQuery("TemporalInt01", int64(42)),
+					),
+				),
+				Sorter:  []elastic.Sorter{},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "chasm attribute with order by",
+			query: "ChasmCompleted = true ORDER BY ChasmStatus",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					elastic.NewBoolQuery().Filter(
+						namespaceDivisionIsNull,
+						elastic.NewTermQuery("TemporalBool01", true),
+					),
+				),
+				Sorter:  []elastic.Sorter{elastic.NewFieldSort("TemporalKeyword01")},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "chasm and regular attribute",
+			query: "ChasmStatus = 'active' AND WorkflowId = 'wid'",
+			want: &esQueryParams{
+				Query: elastic.NewBoolQuery().Filter(
+					namespaceIDQuery,
+					elastic.NewBoolQuery().Filter(
+						namespaceDivisionIsNull,
+						elastic.NewBoolQuery().Filter(
+							elastic.NewTermQuery("TemporalKeyword01", "active"),
+							elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
+						),
+					),
+				),
+				Sorter:  []elastic.Sorter{},
+				GroupBy: []string{},
+			},
+		},
+		{
+			name:  "invalid chasm attribute",
+			query: "UnknownChasmField = 'value'",
+			err:   query.InvalidExpressionErrMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			got, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, tc.query, chasmMapper, chasm.UnspecifiedArchetypeID)
+			if tc.err != "" {
+				s.Error(err)
+				s.ErrorContains(err, tc.err)
+				var invalidArgumentErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgumentErr)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.want, got)
+			}
+		})
+	}
+}
+
+func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":    "ChasmCompleted",
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	request := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    testPageSize,
+	}
+
+	matchNamespaceQuery := elastic.NewTermQuery(sadefs.NamespaceID, request.NamespaceID.String())
+
+	request.Query = `ChasmCompleted = true`
+	filterQuery := elastic.NewTermQuery("TemporalBool01", true)
+	boolQuery := elastic.NewBoolQuery().Filter(
+		matchNamespaceQuery,
+		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
+	)
+	p, err := s.visibilityStore.BuildChasmSearchParameters(
+		&manager.ListChasmExecutionsRequest{
+			NamespaceID: testNamespaceID,
+			Namespace:   testNamespace,
+			PageSize:    testPageSize,
+			Query:       request.Query,
+		},
+		s.visibilityStore.GetListFieldSorter,
+		chasmMapper,
+	)
+	s.NoError(err)
+	s.Equal(&client.SearchParameters{
+		Index:       testIndex,
+		Query:       boolQuery,
+		SearchAfter: nil,
+		PageSize:    testPageSize,
+		Sorter:      defaultSorter,
+	}, p)
+
+	request.Query = `ChasmStatus = 'active' ORDER BY ChasmStatus`
+	filterQuery = elastic.NewTermQuery("TemporalKeyword01", "active")
+	boolQuery = elastic.NewBoolQuery().Filter(
+		matchNamespaceQuery,
+		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
+	)
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
+	p, err = s.visibilityStore.BuildChasmSearchParameters(
+		&manager.ListChasmExecutionsRequest{
+			NamespaceID: testNamespaceID,
+			Namespace:   testNamespace,
+			PageSize:    testPageSize,
+			Query:       request.Query,
+		},
+		s.visibilityStore.GetListFieldSorter,
+		chasmMapper,
+	)
+	s.NoError(err)
+	s.Equal(&client.SearchParameters{
+		Index:       testIndex,
+		Query:       boolQuery,
+		SearchAfter: nil,
+		PageSize:    testPageSize,
+		Sorter: []elastic.Sorter{
+			elastic.NewFieldSort("TemporalKeyword01").Asc(),
+			elastic.NewFieldSort(sadefs.RunID).Desc(),
+		},
+	}, p)
+}
+
+func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":     "ChasmCompleted",
+			"TemporalKeyword01":  "ChasmStatus",
+			"TemporalInt01":      "ChasmCount",
+			"TemporalDouble01":   "ChasmScore",
+			"TemporalDatetime01": "ChasmStartTime",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"TemporalInt01":      enumspb.INDEXED_VALUE_TYPE_INT,
+			"TemporalDouble01":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			"TemporalDatetime01": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+	)
+
+	saTypeMap := searchattribute.TestEsNameTypeMap()
+	docSource := []byte(`{
+		"ExecutionStatus": "Completed",
+		"NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+		"RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
+		"StartTime": "2021-06-11T15:04:07.980-07:00",
+		"WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
+		"WorkflowType": "TestWorkflowExecute",
+		"TemporalBool01": true,
+		"TemporalKeyword01": "active",
+		"TemporalInt01": 42,
+		"TemporalDouble01": 3.14,
+		"TemporalDatetime01": "2018-06-07T15:04:05.123456789-08:00"
+	}`)
+
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, chasmMapper)
+	s.NoError(err)
+	s.NotNil(info)
+	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
+	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
+	s.Equal("TestWorkflowExecute", info.TypeName)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
+
+	s.NotNil(info.ChasmSearchAttributes)
+	s.Len(info.ChasmSearchAttributes, 5)
+	completedVal, ok := info.ChasmSearchAttributes["ChasmCompleted"].(chasm.VisibilityValueBool)
+	s.True(ok)
+	s.True(bool(completedVal))
+	statusVal, ok := info.ChasmSearchAttributes["ChasmStatus"].(chasm.VisibilityValueString)
+	s.True(ok)
+	s.Equal("active", string(statusVal))
+	countVal, ok := info.ChasmSearchAttributes["ChasmCount"].(chasm.VisibilityValueInt64)
+	s.True(ok)
+	s.Equal(int64(42), int64(countVal))
+	scoreVal, ok := info.ChasmSearchAttributes["ChasmScore"].(chasm.VisibilityValueFloat64)
+	s.True(ok)
+	s.InDelta(3.14, float64(scoreVal), 0.001)
+	expectedTime, err := time.Parse(time.RFC3339Nano, "2018-06-07T15:04:05.123456789-08:00")
+	s.NoError(err)
+	timeVal, ok := info.ChasmSearchAttributes["ChasmStartTime"].(chasm.VisibilityValueTime)
+	s.True(ok)
+	s.Equal(expectedTime, time.Time(timeVal))
+}
+
+func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes_NoMapper() {
+	saTypeMap := searchattribute.TestEsNameTypeMap()
+	docSource := []byte(`{
+		"ExecutionStatus": "Completed",
+		"NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+		"RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
+		"StartTime": "2021-06-11T15:04:07.980-07:00",
+		"WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
+		"WorkflowType": "TestWorkflowExecute",
+		"TemporalBool01": true,
+		"TemporalKeyword01": "active"
+	}`)
+
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
+	s.NoError(err)
+	s.NotNil(info)
+	s.Nil(info.ChasmSearchAttributes)
+}
+
+func (s *ESVisibilitySuite) TestNameInterceptor_ChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":    "ChasmCompleted",
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	ni := NewNameInterceptor(
+		testNamespace,
+		searchattribute.TestEsNameTypeMap(),
+		s.mockSearchAttributesMapperProvider,
+		chasmMapper,
+	)
+
+	fieldName, err := ni.Name("ChasmCompleted", query.FieldNameFilter)
+	s.NoError(err)
+	s.Equal("TemporalBool01", fieldName)
+
+	fieldName, err = ni.Name("ChasmStatus", query.FieldNameFilter)
+	s.NoError(err)
+	s.Equal("TemporalKeyword01", fieldName)
+
+	fieldName, err = ni.Name("ChasmStatus", query.FieldNameSorter)
+	s.NoError(err)
+	s.Equal("TemporalKeyword01", fieldName)
+
+	_, err = ni.Name("UnknownChasmField", query.FieldNameFilter)
+	s.Error(err)
+	var converterErr *query.ConverterError
+	s.ErrorAs(err, &converterErr)
+}
+
+func (s *ESVisibilitySuite) TestValuesInterceptor_ChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":     "ChasmCompleted",
+			"TemporalKeyword01":  "ChasmStatus",
+			"TemporalInt01":      "ChasmCount",
+			"TemporalDouble01":   "ChasmScore",
+			"TemporalDatetime01": "ChasmStartTime",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"TemporalInt01":      enumspb.INDEXED_VALUE_TYPE_INT,
+			"TemporalDouble01":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			"TemporalDatetime01": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+	)
+
+	vi := NewValuesInterceptor(
+		testNamespace,
+		searchattribute.TestEsNameTypeMap(),
+		chasmMapper,
+	)
+
+	values, err := vi.Values("ChasmCompleted", "TemporalBool01", true)
+	s.NoError(err)
+	s.Len(values, 1)
+	s.Equal(true, values[0])
+
+	values, err = vi.Values("ChasmStatus", "TemporalKeyword01", "active")
+	s.NoError(err)
+	s.Len(values, 1)
+	s.Equal("active", values[0])
+
+	values, err = vi.Values("ChasmCount", "TemporalInt01", int64(42))
+	s.NoError(err)
+	s.Len(values, 1)
+	s.Equal(int64(42), values[0])
+
+	values, err = vi.Values("ChasmScore", "TemporalDouble01", 3.14)
+	s.NoError(err)
+	s.Len(values, 1)
+	s.InDelta(3.14, values[0], 0.0001)
+
+	testTime := time.Unix(0, 1528358645123456789).UTC()
+	values, err = vi.Values("ChasmStartTime", "TemporalDatetime01", testTime.UnixNano())
+	s.NoError(err)
+	s.Len(values, 1)
+	s.Equal("2018-06-07T08:04:05.123456789Z", values[0])
+
+	_, err = vi.Values("ChasmCompleted", "TemporalBool01", "not-a-bool")
+	s.Error(err)
+	var converterErr *query.ConverterError
+	s.ErrorAs(err, &converterErr)
 }

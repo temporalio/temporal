@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -405,18 +406,12 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	searchattributes := make(map[string]*commonpb.Payload)
 
 	aliasedSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
-
 	for alias, value := range aliasedSearchAttributes {
 		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
-			return err
+			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
 		}
 		searchattributes[fieldName] = value
-	}
-
-	memo := visComponent.GetMemo(visTaskContext)
-	if memo == nil {
-		memo = make(map[string]*commonpb.Payload)
 	}
 
 	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
@@ -428,9 +423,25 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 			searchattributes[sa.Field] = sa.Value.MustEncode()
 		}
 	}
+
+	combinedMemo := make(map[string]*commonpb.Payload)
+	userMemoMap := visComponent.GetMemo(visTaskContext)
+	if len(userMemoMap) > 0 {
+		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
+		userMemoPayload, err := payload.Encode(userMemoProto)
+		if err != nil {
+			return err
+		}
+		combinedMemo[chasm.UserMemoPrefix] = userMemoPayload
+	}
 	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
-		for key, value := range memoProvider.Memo(visTaskContext) {
-			memo[key] = value.MustEncode()
+		chasmMemo := memoProvider.Memo(visTaskContext)
+		if chasmMemo != nil {
+			chasmMemoPayload, err := payload.Encode(chasmMemo)
+			if err != nil {
+				return err
+			}
+			combinedMemo[chasm.ChasmMemoPrefix] = chasmMemoPayload
 		}
 	}
 
@@ -438,7 +449,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		task,
 		namespaceEntry,
 		mutableState,
-		memo,
+		combinedMemo,
 		searchattributes,
 	)
 

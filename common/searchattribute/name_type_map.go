@@ -34,6 +34,13 @@ func buildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.Inde
 	return indexNameTypeMap
 }
 
+// NewNameTypeMap creates a new NameTypeMap with the given custom search attributes.
+func NewNameTypeMap(customSearchAttributes map[string]enumspb.IndexedValueType) NameTypeMap {
+	return NameTypeMap{
+		customSearchAttributes: customSearchAttributes,
+	}
+}
+
 func (m NameTypeMap) System() map[string]enumspb.IndexedValueType {
 	system := sadefs.System()
 	predefined := sadefs.Predefined()

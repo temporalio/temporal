@@ -67,6 +67,21 @@ func (mr *MockVisibilityManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockVisibilityManager)(nil).Close))
 }
 
+// CountChasmExecutions mocks base method.
+func (m *MockVisibilityManager) CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*CountChasmExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountChasmExecutions", ctx, request)
+	ret0, _ := ret[0].(*CountChasmExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountChasmExecutions indicates an expected call of CountChasmExecutions.
+func (mr *MockVisibilityManagerMockRecorder) CountChasmExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountChasmExecutions", reflect.TypeOf((*MockVisibilityManager)(nil).CountChasmExecutions), ctx, request)
+}
+
 // CountWorkflowExecutions mocks base method.
 func (m *MockVisibilityManager) CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -165,6 +180,21 @@ func (m *MockVisibilityManager) HasStoreName(stName string) bool {
 func (mr *MockVisibilityManagerMockRecorder) HasStoreName(stName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStoreName", reflect.TypeOf((*MockVisibilityManager)(nil).HasStoreName), stName)
+}
+
+// ListChasmExecutions mocks base method.
+func (m *MockVisibilityManager) ListChasmExecutions(ctx context.Context, request *ListChasmExecutionsRequest) (*ListChasmExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListChasmExecutions", ctx, request)
+	ret0, _ := ret[0].(*ListChasmExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListChasmExecutions indicates an expected call of ListChasmExecutions.
+func (mr *MockVisibilityManagerMockRecorder) ListChasmExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListChasmExecutions", reflect.TypeOf((*MockVisibilityManager)(nil).ListChasmExecutions), ctx, request)
 }
 
 // ListWorkflowExecutions mocks base method.

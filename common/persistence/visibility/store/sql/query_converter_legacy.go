@@ -9,6 +9,7 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -47,6 +48,9 @@ type (
 		queryString   string
 
 		seenNamespaceDivision bool
+
+		chasmMapper *chasm.VisibilitySearchAttributesMapper
+		archetypeID chasm.ArchetypeID
 	}
 
 	queryParamsLegacy struct {
@@ -97,6 +101,8 @@ func newQueryConverterInternal(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *QueryConverterLegacy {
 	return &QueryConverterLegacy{
 		pluginQueryConverterLegacy: pqc,
@@ -107,6 +113,9 @@ func newQueryConverterInternal(
 		queryString:                queryString,
 
 		seenNamespaceDivision: false,
+
+		chasmMapper: chasmMapper,
+		archetypeID: archetypeID,
 	}
 }
 
@@ -222,13 +231,23 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 
 	// This logic comes from elasticsearch/visibility_store.go#convertQuery function.
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
-	// then add "is null" query to it.
+	// try setting the namespace division filter based on the archetype ID,
+	// else filter by null (no division).
 	if !c.seenNamespaceDivision {
-		namespaceDivisionExpr := &sqlparser.IsExpr{
-			Operator: sqlparser.IsNullStr,
-			Expr: newColName(
-				sadefs.GetSqlDbColName(sadefs.TemporalNamespaceDivision),
-			),
+		var namespaceDivisionExpr sqlparser.Expr
+		if c.archetypeID != chasm.UnspecifiedArchetypeID {
+			namespaceDivisionExpr = &sqlparser.ComparisonExpr{
+				Operator: sqlparser.EqualStr,
+				Left:     newColName(sadefs.GetSqlDbColName(sadefs.TemporalNamespaceDivision)),
+				Right:    sqlparser.NewStrVal([]byte(strconv.Itoa(int(c.archetypeID)))),
+			}
+		} else {
+			namespaceDivisionExpr = &sqlparser.IsExpr{
+				Operator: sqlparser.IsNullStr,
+				Expr: newColName(
+					sadefs.GetSqlDbColName(sadefs.TemporalNamespaceDivision),
+				),
+			}
 		}
 		if sel.Where.Expr == nil {
 			sel.Where.Expr = namespaceDivisionExpr
@@ -425,7 +444,8 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 		)
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap)
+
+	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap, c.chasmMapper)
 	if err != nil {
 		return nil, query.NewConverterError(
 			"%s: column name '%s' is not a valid search attribute",

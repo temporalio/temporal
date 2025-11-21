@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -15,6 +17,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -32,6 +35,7 @@ type (
 		shardController shard.Controller
 		registry        *chasm.Registry
 		config          *configs.Config
+		visibilityMgr   manager.VisibilityManager
 	}
 
 	newExecutionParams struct {
@@ -67,11 +71,13 @@ func newChasmEngine(
 	executionCache cache.Cache,
 	registry *chasm.Registry,
 	config *configs.Config,
+	visibilityMgr manager.VisibilityManager,
 ) *ChasmEngine {
 	return &ChasmEngine{
 		executionCache: executionCache,
 		registry:       registry,
 		config:         config,
+		visibilityMgr:  visibilityMgr,
 	}
 }
 
@@ -627,4 +633,76 @@ func (e *ChasmEngine) getExecutionLease(
 	}
 
 	return shardContext, executionLease, err
+}
+
+// ListExecutions implements the Engine interface for visibility queries.
+func (e *ChasmEngine) ListExecutions(
+	ctx context.Context,
+	archetypeType reflect.Type,
+	request *chasm.ListExecutionsRequest,
+) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+	archetypeID, ok := e.registry.ArchetypeIDOf(archetypeType)
+	if !ok {
+		return nil, serviceerror.NewInternal("unknown chasm component type: " + archetypeType.String())
+	}
+
+	visReq := &manager.ListChasmExecutionsRequest{
+		ArchetypeID:   archetypeID,
+		NamespaceID:   namespace.ID(request.NamespaceID),
+		Namespace:     namespace.Name(request.NamespaceName),
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+		Query:         request.Query,
+	}
+
+	resp, err := e.visibilityMgr.ListChasmExecutions(ctx, visReq)
+	if err != nil {
+		return nil, err
+	}
+
+	executions := make([]*chasm.ExecutionInfo[*commonpb.Payload], len(resp.Executions))
+	for i, exec := range resp.Executions {
+		executions[i] = &chasm.ExecutionInfo[*commonpb.Payload]{
+			BusinessID:             exec.BusinessID,
+			RunID:                  exec.RunID,
+			StartTime:              exec.StartTime,
+			CloseTime:              exec.CloseTime,
+			HistoryLength:          exec.HistoryLength,
+			HistorySizeBytes:       exec.HistorySizeBytes,
+			StateTransitionCount:   exec.StateTransitionCount,
+			ChasmSearchAttributes:  chasm.NewSearchAttributesMap(exec.ChasmSearchAttributes),
+			CustomSearchAttributes: exec.CustomSearchAttributes,
+			Memo:                   exec.Memo,
+			ChasmMemo:              exec.ChasmMemo,
+		}
+	}
+
+	return &chasm.ListExecutionsResponse[*commonpb.Payload]{
+		Executions:    executions,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+// CountExecutions implements the Engine interface for visibility queries.
+func (e *ChasmEngine) CountExecutions(
+	ctx context.Context,
+	archetypeType reflect.Type,
+	request *chasm.CountExecutionsRequest,
+) (*chasm.CountExecutionsResponse, error) {
+	archetypeID, ok := e.registry.ArchetypeIDOf(archetypeType)
+	if !ok {
+		return nil, serviceerror.NewInternal("unknown chasm component type: " + archetypeType.String())
+	}
+
+	resp, err := e.visibilityMgr.CountChasmExecutions(ctx, &manager.CountChasmExecutionsRequest{
+		ArchetypeID: archetypeID,
+		NamespaceID: namespace.ID(request.NamespaceID),
+		Namespace:   namespace.Name(request.NamespaceName),
+		Query:       request.Query,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &chasm.CountExecutionsResponse{Count: resp.Count}, nil
 }

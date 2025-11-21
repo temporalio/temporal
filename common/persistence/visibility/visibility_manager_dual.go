@@ -159,6 +159,19 @@ func (v *VisibilityManagerDual) ListWorkflowExecutions(
 	)
 }
 
+func (v *VisibilityManagerDual) ListChasmExecutions(
+	ctx context.Context,
+	request *manager.ListChasmExecutionsRequest,
+) (*manager.ListChasmExecutionsResponse, error) {
+	return dualReadWrapper(
+		ctx,
+		v,
+		request,
+		request.Namespace,
+		manager.VisibilityManager.ListChasmExecutions,
+	)
+}
+
 func (v *VisibilityManagerDual) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
@@ -169,6 +182,19 @@ func (v *VisibilityManagerDual) CountWorkflowExecutions(
 		request,
 		request.Namespace,
 		manager.VisibilityManager.CountWorkflowExecutions,
+	)
+}
+
+func (v *VisibilityManagerDual) CountChasmExecutions(
+	ctx context.Context,
+	request *manager.CountChasmExecutionsRequest,
+) (*manager.CountChasmExecutionsResponse, error) {
+	return dualReadWrapper(
+		ctx,
+		v,
+		request,
+		request.Namespace,
+		manager.VisibilityManager.CountChasmExecutions,
 	)
 }
 

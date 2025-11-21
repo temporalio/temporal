@@ -3,14 +3,18 @@ package visibility
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
@@ -138,6 +142,81 @@ func (p *visibilityManagerImpl) ListWorkflowExecutions(
 	}
 
 	return p.convertInternalListResponse(response)
+}
+
+func (p *visibilityManagerImpl) ListChasmExecutions(
+	ctx context.Context,
+	request *manager.ListChasmExecutionsRequest,
+) (*manager.ListChasmExecutionsResponse, error) {
+	response, err := p.store.ListChasmExecutions(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	executions := make([]*manager.ChasmExecutionInfo, 0, len(response.Executions))
+	for _, exec := range response.Executions {
+		combinedMemo, err := deserializeMemo(exec.Memo)
+		if err != nil {
+			return nil, err
+		}
+
+		var userMemo *commonpb.Memo
+		var chasmMemoPayload *commonpb.Payload
+
+		// Check if archetype matches to decide how to split memo
+		requestedArchetypeIDStr := strconv.Itoa(int(request.ArchetypeID))
+		archetypeMatches := false
+		if archetypePayload, ok := exec.SearchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
+			var archetypeIDStr string
+			if err := payload.Decode(archetypePayload, &archetypeIDStr); err == nil {
+				archetypeMatches = (archetypeIDStr == requestedArchetypeIDStr)
+			}
+		}
+
+		if archetypeMatches && combinedMemo != nil {
+			// Archetype matches - split memo into user and chasm parts
+			userPayload := combinedMemo.Fields[chasm.UserMemoPrefix]
+			if err := payload.Decode(userPayload, &userMemo); err != nil {
+				p.logger.Error("failed to decode user memo", tag.Error(err))
+				userMemo = nil
+			}
+			chasmMemoPayload = combinedMemo.Fields[chasm.ChasmMemoPrefix]
+		} else {
+			// Archetype doesn't match or no combined memo - return entire memo as user memo
+			userMemo = combinedMemo
+			chasmMemoPayload = nil
+		}
+
+		executions = append(executions, &manager.ChasmExecutionInfo{
+			BusinessID:             exec.WorkflowID,
+			RunID:                  exec.RunID,
+			StartTime:              exec.StartTime,
+			CloseTime:              exec.CloseTime,
+			HistoryLength:          exec.HistoryLength,
+			HistorySizeBytes:       exec.HistorySizeBytes,
+			StateTransitionCount:   exec.StateTransitionCount,
+			ChasmSearchAttributes:  exec.ChasmSearchAttributes,
+			CustomSearchAttributes: exec.SearchAttributes.GetIndexedFields(),
+			Memo:                   userMemo,
+			ChasmMemo:              chasmMemoPayload,
+		})
+	}
+
+	return &manager.ListChasmExecutionsResponse{
+		Executions:    executions,
+		NextPageToken: response.NextPageToken,
+	}, nil
+}
+
+func (p *visibilityManagerImpl) CountChasmExecutions(
+	ctx context.Context,
+	request *manager.CountChasmExecutionsRequest,
+) (*manager.CountChasmExecutionsResponse, error) {
+	response, err := p.store.CountChasmExecutions(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 func (p *visibilityManagerImpl) CountWorkflowExecutions(

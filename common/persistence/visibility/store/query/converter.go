@@ -5,12 +5,14 @@ package query
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -58,6 +60,8 @@ type (
 		namespaceName namespace.Name
 		saTypeMap     searchattribute.NameTypeMap
 		saMapper      searchattribute.Mapper
+		chasmMapper   *chasm.VisibilitySearchAttributesMapper
+		archetypeID   chasm.ArchetypeID
 
 		seenNamespaceDivision bool
 	}
@@ -150,6 +154,20 @@ func (c *QueryConverter[ExprT]) WithSearchAttributeInterceptor(
 	return c
 }
 
+func (c *QueryConverter[ExprT]) WithChasmMapper(
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+) *QueryConverter[ExprT] {
+	c.chasmMapper = chasmMapper
+	return c
+}
+
+func (c *QueryConverter[ExprT]) WithArchetypeID(
+	archetypeID chasm.ArchetypeID,
+) *QueryConverter[ExprT] {
+	c.archetypeID = archetypeID
+	return c
+}
+
 func (c *QueryConverter[ExprT]) SeenNamespaceDivision() bool {
 	return c.seenNamespaceDivision
 }
@@ -163,17 +181,29 @@ func (c *QueryConverter[ExprT]) Convert(
 	}
 
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
-	// then add "is null" query to it.
+	// try setting the namespace division filter based on the archetype ID,
+	// else filter by null (no division).
 	var namespaceDivisionExpr ExprT
 	if !c.seenNamespaceDivision {
 		nsDivisionCol := NamespaceDivisionSAColumn()
 		if err := c.saInterceptor.Intercept(nsDivisionCol); err != nil {
 			return nil, err
 		}
-		namespaceDivisionExpr, err = c.storeQC.ConvertIsExpr(
-			sqlparser.IsNullStr,
-			nsDivisionCol,
-		)
+
+		if c.archetypeID != chasm.UnspecifiedArchetypeID {
+			// For CHASM queries, filter by archetype ID
+			namespaceDivisionExpr, err = c.storeQC.ConvertComparisonExpr(
+				sqlparser.EqualStr,
+				nsDivisionCol,
+				strconv.Itoa(int(c.archetypeID)),
+			)
+		} else {
+			// For regular workflow queries, filter by null (no division)
+			namespaceDivisionExpr, err = c.storeQC.ConvertIsExpr(
+				sqlparser.IsNullStr,
+				nsDivisionCol,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -476,6 +506,22 @@ func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
 		fieldName, fieldType = fn, ft
 		return true
 	}
+	// resolveChasmSA only returns true if `alias` is a CHASM search attribute.
+	resolveChasmSA := func(alias string) bool {
+		if c.chasmMapper == nil {
+			return false
+		}
+		fn, err := c.chasmMapper.Field(alias)
+		if err != nil {
+			return false
+		}
+		ft, err := c.chasmMapper.GetType(fn)
+		if err != nil {
+			return false
+		}
+		fieldName, fieldType = fn, ft
+		return true
+	}
 
 	var err error
 	fieldName = alias
@@ -483,12 +529,16 @@ func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
 	if sadefs.IsMappable(alias) && resolveCSA(alias) {
 		return
 	}
-	// Second, check if it's a system/reserved search attribute.
+	// Second, check if it's a CHASM search attribute.
+	if resolveChasmSA(alias) {
+		return
+	}
+	// Third, check if it's a system/reserved search attribute.
 	fieldType, err = c.saTypeMap.GetType(fieldName)
 	if err == nil {
 		return
 	}
-	// Third, check for special aliases or adding/removing the `Temporal` prefix.
+	// Fourth, check for special aliases or adding/removing the `Temporal` prefix.
 	if strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID {
 		fieldName = sadefs.WorkflowID
 	} else if strings.HasPrefix(fieldName, sadefs.ReservedPrefix) {

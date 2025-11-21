@@ -42,6 +42,7 @@ type (
 		ExecutionDuration    *time.Duration
 		StateTransitionCount *int64
 		Memo                 []byte
+		ChasmMemo            []byte
 		Encoding             string
 		TaskQueue            string
 		SearchAttributes     *VisibilitySearchAttributes
