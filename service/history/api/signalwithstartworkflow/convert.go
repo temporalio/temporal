@@ -39,5 +39,5 @@ func ConvertToStartRequest(
 		Priority:                 request.GetPriority(),
 	}
 
-	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, nil, now)
+	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, nil, now, nil, 0)
 }

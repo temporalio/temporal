@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -1073,6 +1074,18 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
+	// if strings.Contains(targetDeployment.GetBuildId(), "build_id_0") {
+	// 	fmt.Println("current", current)
+	// 	fmt.Println("currentRevisionNumber", currentRevisionNumber)
+	// 	fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
+	// 	fmt.Println("ramping", ramping)
+	// 	fmt.Println("rampingPercentage", rampingPercentage)
+	// 	fmt.Println("rampingRevisionNumber", rampingRevisionNumber)
+	// 	fmt.Println("targetDeploymentVersion", targetDeploymentVersion)
+	// 	fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
+	// 	fmt.Println("targetDeployment", targetDeployment)
+	// }
+
 	var targetDeploymentQueue physicalTaskQueueManager
 	if directive.GetAssignedBuildId() == "" && targetDeployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -1215,7 +1228,14 @@ func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 	targetDeploymentRevisionNumber int64,
 	taskDirectiveRevisionNumber int64,
 ) (physicalTaskQueueManager, int64, error) {
-	if pm.engine != nil && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
+
+	dcValue := pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String())
+
+	// Debug logging to track DC value
+	fmt.Printf("[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeployment=%s, targetRevision=%d, taskRevision=%d\n",
+		dcValue, targetDeployment.GetBuildId(), targetDeploymentRevisionNumber, taskDirectiveRevisionNumber)
+
+	if pm.engine != nil && dcValue {
 		if targetDeployment.GetSeriesName() != taskDeployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
 			return q, targetDeploymentRevisionNumber, err
