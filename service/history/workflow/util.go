@@ -11,7 +11,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
@@ -309,7 +308,7 @@ func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.Mutable
 				continue
 			}
 			// Convert CHASM callback to API callback
-			cbSpec, err := ChasmCallbackToAPICallback(cb)
+			cbSpec, err := cb.ToAPICallback()
 			if err != nil {
 				return nil, err
 			}
@@ -345,27 +344,4 @@ func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Ca
 		}
 	}
 	return res, nil
-}
-
-// ChasmCallbackToAPICallback converts a CHASM callback proto to API callback proto.
-func ChasmCallbackToAPICallback(cb *chasmcallback.Callback) (*commonpb.Callback, error) {
-	// Convert CHASM callback proto to API callback proto
-	chasmCB := cb.GetCallback()
-	res := &commonpb.Callback{
-		Links: chasmCB.GetLinks(),
-	}
-
-	// CHASM currently only supports Nexus callbacks
-	if variant, ok := chasmCB.Variant.(*callbackspb.Callback_Nexus_); ok {
-		res.Variant = &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{
-				Url:    variant.Nexus.GetUrl(),
-				Header: variant.Nexus.GetHeader(),
-			},
-		}
-		return res, nil
-	}
-
-	// This should not happen as CHASM only supports Nexus callbacks currently
-	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/nexus"
@@ -136,4 +138,27 @@ func (c *Callback) saveResult(
 			fmt.Sprintf("unrecognized callback result %v", input.result),
 		)
 	}
+}
+
+// ToAPICallback converts a CHASM callback to API callback proto.
+func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
+	// Convert CHASM callback proto to API callback proto
+	chasmCB := c.GetCallback()
+	res := &commonpb.Callback{
+		Links: chasmCB.GetLinks(),
+	}
+
+	// CHASM currently only supports Nexus callbacks
+	if variant, ok := chasmCB.Variant.(*callbackspb.Callback_Nexus_); ok {
+		res.Variant = &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: variant.Nexus.GetHeader(),
+			},
+		}
+		return res, nil
+	}
+
+	// This should not happen as CHASM only supports Nexus callbacks currently
+	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }

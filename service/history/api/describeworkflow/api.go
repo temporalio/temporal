@@ -507,7 +507,7 @@ func buildChasmCallbackInfo(
 		return nil, nil
 	}
 
-	cbSpec, err := workflow.ChasmCallbackToAPICallback(cb)
+	cbSpec, err := cb.ToAPICallback()
 	if err != nil {
 		return nil, err
 	}
