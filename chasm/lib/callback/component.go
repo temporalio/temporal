@@ -102,7 +102,7 @@ func (c *Callback) loadInvocationArgs(
 		nexus:      variant,
 		completion: completion,
 		workflowID: ctx.ExecutionKey().BusinessID,
-		runID:      ctx.ExecutionKey().EntityID,
+		runID:      ctx.ExecutionKey().RunID,
 		attempt:    c.Attempt,
 	}, nil
 }

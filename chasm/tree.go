@@ -1208,17 +1208,17 @@ func (n *Node) Ref(
 		if node.value == component {
 			workflowKey := node.backend.GetWorkflowKey()
 			ref := ComponentRef{
-				EntityKey: EntityKey{
+				ExecutionKey: ExecutionKey{
 					NamespaceID: workflowKey.NamespaceID,
 					BusinessID:  workflowKey.WorkflowID,
-					EntityID:    workflowKey.RunID,
+					RunID:       workflowKey.RunID,
 				},
 				archetypeID: n.ArchetypeID(),
 				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 				// Using VersionedTransition of the entire tree might be too strict.
-				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
-				componentPath:      path,
-				componentInitialVT: node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+				executionLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
+				componentPath:         path,
+				componentInitialVT:    node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
 			}
 			return ref.Serialize(n.registry)
 		}
@@ -2326,15 +2326,15 @@ func (n *Node) IsStateDirty() bool {
 func (n *Node) IsStale(
 	ref ComponentRef,
 ) error {
-	// The point of this method to access the private entityLastUpdateVT field in componentRef,
+	// The point of this method to access the private executionLastUpdateVT field in componentRef,
 	// and avoid exposing it in the public CHASM interface.
-	if ref.entityLastUpdateVT == nil {
+	if ref.executionLastUpdateVT == nil {
 		return nil
 	}
 
 	return transitionhistory.StalenessCheck(
 		n.backend.GetExecutionInfo().TransitionHistory,
-		ref.entityLastUpdateVT,
+		ref.executionLastUpdateVT,
 	)
 }
 
@@ -2899,16 +2899,16 @@ func (n *Node) ValidateSideEffectTask(
 }
 
 // ExecuteSideEffectTask executes the given ChasmTask on its associated node
-// without holding the entity lock.
+// without holding the execution lock.
 //
 // WARNING: This method *must not* access the node's properties without first
-// locking the entity.
+// locking the execution.
 //
 // ctx should have a CHASM engine already set.
 func (n *Node) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *Registry,
-	entityKey EntityKey,
+	executionKey ExecutionKey,
 	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
 ) (retErr error) {
@@ -2960,11 +2960,11 @@ func (n *Node) ExecuteSideEffectTask(
 	}
 
 	ref := ComponentRef{
-		EntityKey:          entityKey,
-		archetypeID:        n.ArchetypeID(),
-		entityLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
-		componentPath:      taskInfo.Path,
-		componentInitialVT: taskInfo.ComponentInitialVersionedTransition,
+		ExecutionKey:          executionKey,
+		archetypeID:           n.ArchetypeID(),
+		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
+		componentPath:         taskInfo.Path,
+		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's executor.
 		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),

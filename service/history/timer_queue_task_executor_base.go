@@ -90,7 +90,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		RunId:      task.GetRunID(),
 	}
 
-	weContext, release, err := t.cache.GetOrCreateChasmEntity(
+	weContext, release, err := t.cache.GetOrCreateChasmExecution(
 		ctx,
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),

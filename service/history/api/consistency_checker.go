@@ -249,7 +249,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 
-	wfContext, release, err := c.workflowCache.GetOrCreateChasmEntity(
+	wfContext, release, err := c.workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),

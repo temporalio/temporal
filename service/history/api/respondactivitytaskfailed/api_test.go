@@ -416,7 +416,7 @@ func (s *workflowSuite) setupWorkflowContext(mutableState *historyi.MockMutableS
 
 func (s *workflowSuite) setupCache() *wcache.MockCache {
 	workflowCache := wcache.NewMockCache(s.controller)
-	workflowCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.WorkflowArchetype, locks.PriorityHigh).
+	workflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.WorkflowArchetype, locks.PriorityHigh).
 		Return(s.workflowContext, wcache.NoopReleaseFn, nil).AnyTimes()
 	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).Return(wcache.NoopReleaseFn, nil).AnyTimes()
 	return workflowCache

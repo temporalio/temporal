@@ -1791,7 +1791,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	wfCtx.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), gomock.Any())
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
@@ -1899,7 +1899,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
@@ -2002,7 +2002,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
@@ -2108,7 +2108,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).AnyTimes()
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil).AnyTimes()
 
@@ -2187,7 +2187,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmPureTimerTask_Valid
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).AnyTimes()
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil).AnyTimes()
 

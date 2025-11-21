@@ -382,7 +382,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
-	s.False(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
+	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 
 	// Second call: Override the default value of dynamic configs.

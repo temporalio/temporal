@@ -46,7 +46,7 @@ type (
 			lockPriority locks.Priority,
 		) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error)
 
-		GetOrCreateChasmEntity(
+		GetOrCreateChasmExecution(
 			ctx context.Context,
 			shardContext historyi.ShardContext,
 			namespaceID namespace.ID,
@@ -157,7 +157,7 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	execution *commonpb.WorkflowExecution,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
-	return c.GetOrCreateChasmEntity(
+	return c.GetOrCreateChasmExecution(
 		ctx,
 		shardContext,
 		namespaceID,
@@ -212,7 +212,7 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	return weReleaseFn, err
 }
 
-func (c *cacheImpl) GetOrCreateChasmEntity(
+func (c *cacheImpl) GetOrCreateChasmExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
