@@ -450,7 +450,7 @@ func (e *ChasmEngine) handleConflictPolicy(
 		return chasm.ExecutionKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
-				newExecutionParams.executionRef.ExecutionKey.BusinessID,
+				newExecutionParams.executionRef.BusinessID,
 				currentRunInfo.RunID,
 				conflictPolicy,
 			),
@@ -500,7 +500,7 @@ func (e *ChasmEngine) handleReusePolicy(
 			return chasm.ExecutionKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 				fmt.Sprintf(
 					"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
-					newExecutionParams.executionRef.ExecutionKey.BusinessID,
+					newExecutionParams.executionRef.BusinessID,
 					currentRunInfo.RunID,
 					reusePolicy,
 				),
@@ -513,7 +513,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		return chasm.ExecutionKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
-				newExecutionParams.executionRef.ExecutionKey.BusinessID,
+				newExecutionParams.executionRef.BusinessID,
 				currentRunInfo.RunID,
 				reusePolicy,
 			),
@@ -610,9 +610,9 @@ func (e *ChasmEngine) getExecutionLease(
 			return true
 		},
 		definition.NewWorkflowKey(
-			ref.ExecutionKey.NamespaceID,
-			ref.ExecutionKey.BusinessID,
-			ref.ExecutionKey.RunID,
+			ref.NamespaceID,
+			ref.BusinessID,
+			ref.RunID,
 		),
 		chasm.Archetype(archetype),
 		lockPriority,
