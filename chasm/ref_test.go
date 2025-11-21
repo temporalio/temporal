@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -8,8 +9,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
 )
 
@@ -40,11 +41,10 @@ func (s *componentRefSuite) SetupTest() {
 }
 
 func (s *componentRefSuite) TestArchetypeID() {
-	tv := testvars.New(s.T())
 	entityKey := EntityKey{
-		tv.NamespaceID().String(),
-		tv.WorkflowID(),
-		tv.RunID(),
+		NamespaceID: primitives.NewUUID().String(),
+		BusinessID:  primitives.NewUUID().String(),
+		EntityID:    primitives.NewUUID().String(),
 	}
 	ref := NewComponentRef[*TestComponent](entityKey)
 
@@ -58,11 +58,10 @@ func (s *componentRefSuite) TestArchetypeID() {
 }
 
 func (s *componentRefSuite) TestShardingKey() {
-	tv := testvars.New(s.T())
 	entityKey := EntityKey{
-		tv.NamespaceID().String(),
-		tv.WorkflowID(),
-		tv.RunID(),
+		NamespaceID: primitives.NewUUID().String(),
+		BusinessID:  primitives.NewUUID().String(),
+		EntityID:    primitives.NewUUID().String(),
 	}
 	ref := NewComponentRef[*TestComponent](entityKey)
 
@@ -76,23 +75,22 @@ func (s *componentRefSuite) TestShardingKey() {
 }
 
 func (s *componentRefSuite) TestSerializeDeserialize() {
-	tv := testvars.New(s.T())
 	entityKey := EntityKey{
-		tv.NamespaceID().String(),
-		tv.WorkflowID(),
-		tv.RunID(),
+		NamespaceID: primitives.NewUUID().String(),
+		BusinessID:  primitives.NewUUID().String(),
+		EntityID:    primitives.NewUUID().String(),
 	}
 	ref := ComponentRef{
 		EntityKey:    entityKey,
 		entityGoType: reflect.TypeFor[*TestComponent](),
 		entityLastUpdateVT: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: tv.Namespace().FailoverVersion(),
-			TransitionCount:          tv.Any().Int64(),
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
 		},
-		componentPath: []string{tv.Any().String(), tv.Any().String()},
+		componentPath: []string{primitives.NewUUID().String(), primitives.NewUUID().String()},
 		componentInitialVT: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: tv.Namespace().FailoverVersion(),
-			TransitionCount:          tv.Any().Int64(),
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
 		},
 	}
 

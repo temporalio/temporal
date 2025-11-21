@@ -3,9 +3,9 @@ package shard
 import (
 	"time"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -97,7 +97,7 @@ func (m *taskKeyManager) getExclusiveReaderHighWatermark(
 	m.setTaskMinScheduledTime(
 		// TODO: Truncation here is just to make sure task scheduled time has the same precision as the old logic.
 		// Remove this truncation once we validate the rest of the code can worker correctly with higher precision.
-		m.timeSource.Now().Add(m.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision),
+		m.timeSource.Now().Add(m.config.TimerProcessorMaxTimeShift()).Truncate(common.ScheduledTaskMinPrecision),
 	)
 
 	nextTaskKey := m.generator.peekTaskKey(category)
@@ -112,7 +112,7 @@ func (m *taskKeyManager) getExclusiveReaderHighWatermark(
 		// TODO: Truncation here is just to make sure task scheduled time has the same precision as the old logic.
 		// Remove this truncation once we validate the rest of the code can worker correctly with higher precision.
 		exclusiveReaderHighWatermark.FireTime = exclusiveReaderHighWatermark.FireTime.
-			Truncate(persistence.ScheduledTaskMinPrecision)
+			Truncate(common.ScheduledTaskMinPrecision)
 	}
 
 	return exclusiveReaderHighWatermark

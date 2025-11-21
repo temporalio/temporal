@@ -3,6 +3,7 @@ package chasm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"sort"
@@ -22,10 +23,10 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
@@ -241,16 +242,16 @@ func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 }
 
 func (s *nodeSuite) TestCollectionAttributes() {
-	tv := testvars.New(s.T())
-
+	runID1 := fmt.Sprintf("workflow_id_%d", 1)
+	runID2 := fmt.Sprintf("workflow_id_%d", 2)
 	sc1 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
-			RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
+			RunId: runID1,
 		},
 	}
 	sc2 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
-			RunId: tv.WithWorkflowIDNumber(2).WorkflowID(),
+			RunId: runID2,
 		},
 	}
 
@@ -425,19 +426,17 @@ func (s *nodeSuite) TestCollectionAttributes() {
 }
 
 func (s *nodeSuite) TestPointerAttributes() {
-	tv := testvars.New(s.T())
-
 	var persistedNodes map[string]*persistencespb.ChasmNode
 
 	sc11 := &TestSubComponent11{
 		SubComponent11Data: &protoMessageType{
-			RunId: tv.WithWorkflowIDNumber(11).WorkflowID(),
+			RunId: fmt.Sprintf("workflow_id_%d", 11),
 		},
 	}
 
 	sc1 := &TestSubComponent1{
 		SubComponent1Data: &protoMessageType{
-			RunId: tv.WithWorkflowIDNumber(1).WorkflowID(),
+			RunId: fmt.Sprintf("workflow_id_%d", 1),
 		},
 		SubComponent11: NewComponentField(nil, sc11),
 	}
@@ -1595,8 +1594,11 @@ func (s *nodeSuite) TestGetComponent() {
 }
 
 func (s *nodeSuite) TestRef() {
-	tv := testvars.New(s.T())
-	workflowKey := tv.Any().WorkflowKey()
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	entityKey := EntityKey{
 		NamespaceID: workflowKey.NamespaceID,
 		BusinessID:  workflowKey.WorkflowID,
@@ -1773,13 +1775,11 @@ func (s *nodeSuite) TestSerializeDeserializeTask() {
 
 func (s *nodeSuite) TestCloseTransaction_Success() {
 	node := s.testComponentTree()
-	tv := testvars.New(s.T())
-
 	chasmCtx := NewMutableContext(context.Background(), node)
 	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
-	tc.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: tv.Any().String()}
+	tc.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: primitives.NewUUID().String()}
 
 	mutations, err := node.CloseTransaction()
 	s.NoError(err)
@@ -2775,8 +2775,6 @@ func (s *nodeSuite) TestExecutePureTask() {
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
-	tv := testvars.New(s.T())
-
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -2804,8 +2802,13 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		},
 	}
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         tv.Any().WorkflowKey(),
+		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: s.timeSource.Now(),
 		TaskID:              123,
 		Category:            tasks.CategoryOutbound,
@@ -2899,8 +2902,6 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 }
 
 func (s *nodeSuite) TestValidateSideEffectTask() {
-	tv := testvars.New(s.T())
-
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
 			TransitionCount:          1,
@@ -2917,8 +2918,13 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		},
 	}
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         tv.Any().WorkflowKey(),
+		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: s.timeSource.Now(),
 		TaskID:              123,
 		Category:            tasks.CategoryTransfer,
@@ -2968,8 +2974,13 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	// Succeed validation as valid for a sub component.
 	childTaskInfo := taskInfo
 	childTaskInfo.Path = []string{"SubComponent1"}
+	childWorkflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	childChasmTask := &tasks.ChasmTask{
-		WorkflowKey:         tv.Any().WorkflowKey(),
+		WorkflowKey:         childWorkflowKey,
 		VisibilityTimestamp: s.timeSource.Now(),
 		TaskID:              124,
 		Category:            tasks.CategoryTransfer,

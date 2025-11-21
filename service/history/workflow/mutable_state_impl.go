@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
@@ -3039,10 +3040,10 @@ func (ms *MutableStateImpl) updateBinaryChecksumSearchAttribute() error {
 	if exeInfo.SearchAttributes == nil {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
-	if proto.Equal(exeInfo.SearchAttributes[searchattribute.BinaryChecksums], checksumsPayload) {
+	if proto.Equal(exeInfo.SearchAttributes[sadefs.BinaryChecksums], checksumsPayload) {
 		return nil // unchanged
 	}
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.BinaryChecksums: checksumsPayload})
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.BinaryChecksums: checksumsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -3210,7 +3211,7 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	if searchAttributes == nil {
 		return []string{}, nil
 	}
-	saPayload, found := searchAttributes[searchattribute.BuildIds]
+	saPayload, found := searchAttributes[sadefs.BuildIds]
 	if !found {
 		return []string{}, nil
 	}
@@ -3318,7 +3319,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 			return err
 		}
 		if len(buildIds) == 0 || len(saPayload.GetData()) <= maxSearchAttributeValueSize {
-			ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.BuildIds: saPayload})
+			ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.BuildIds: saPayload})
 			break
 		}
 		if len(buildIds) == 1 {
@@ -3343,21 +3344,21 @@ func (ms *MutableStateImpl) saveDeploymentSearchAttributes(deployment, version, 
 		return err
 	}
 	if len(deploymentPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[searchattribute.TemporalWorkerDeployment] = deploymentPayload
+		saPayloads[sadefs.TemporalWorkerDeployment] = deploymentPayload
 	}
 	versionPayload, err := searchattribute.EncodeValue(version, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	if err != nil {
 		return err
 	}
 	if len(versionPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[searchattribute.TemporalWorkerDeploymentVersion] = versionPayload
+		saPayloads[sadefs.TemporalWorkerDeploymentVersion] = versionPayload
 	}
 	behaviorPayload, err := searchattribute.EncodeValue(behavior, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	if err != nil {
 		return err
 	}
 	if len(behaviorPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[searchattribute.TemporalWorkflowVersioningBehavior] = behaviorPayload
+		saPayloads[sadefs.TemporalWorkflowVersioningBehavior] = behaviorPayload
 	}
 	ms.updateSearchAttributes(saPayloads)
 	return nil
@@ -3369,15 +3370,15 @@ func (ms *MutableStateImpl) addBuildIdAndDeploymentInfoToSearchAttributesWithNoV
 	if err != nil {
 		return false, err
 	}
-	existingDeployment, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkerDeployment)
+	existingDeployment, err := ms.loadSearchAttributeString(sadefs.TemporalWorkerDeployment)
 	if err != nil {
 		return false, err
 	}
-	existingVersion, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkerDeploymentVersion)
+	existingVersion, err := ms.loadSearchAttributeString(sadefs.TemporalWorkerDeploymentVersion)
 	if err != nil {
 		return false, err
 	}
-	existingBehavior, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkflowVersioningBehavior)
+	existingBehavior, err := ms.loadSearchAttributeString(sadefs.TemporalWorkflowVersioningBehavior)
 	if err != nil {
 		return false, err
 	}
@@ -6003,11 +6004,11 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
-	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalPauseInfo], pauseInfoPayload) {
+	if proto.Equal(exeInfo.SearchAttributes[sadefs.TemporalPauseInfo], pauseInfoPayload) {
 		return nil // unchanged
 	}
 
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalPauseInfo: pauseInfoPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -6036,7 +6037,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 
-	decodedA, err := searchattribute.DecodeValue(exeInfo.SearchAttributes[searchattribute.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	decodedA, err := searchattribute.DecodeValue(exeInfo.SearchAttributes[sadefs.TemporalReportedProblems], enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
 	if err != nil {
 		return err
 	}
@@ -6054,7 +6055,7 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	// Log the search attribute change
 	ms.logReportedProblemsChange(existingProblems, reportedProblems)
 
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: reportedProblemsPayload})
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -6063,7 +6064,7 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 		return nil
 	}
 
-	temporalReportedProblems := ms.executionInfo.SearchAttributes[searchattribute.TemporalReportedProblems]
+	temporalReportedProblems := ms.executionInfo.SearchAttributes[sadefs.TemporalReportedProblems]
 	if temporalReportedProblems == nil {
 		return nil
 	}
@@ -6074,7 +6075,7 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 	ms.executionInfo.LastWorkflowTaskFailure = nil
 
 	// Just remove the search attribute entirely for now
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalReportedProblems: nil})
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: nil})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 

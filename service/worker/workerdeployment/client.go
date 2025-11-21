@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
@@ -1439,7 +1440,7 @@ func isRetryableUpdateError(err error) bool {
 
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
 	return sa
 }
 
@@ -1656,7 +1657,7 @@ func makeDeploymentQuery(version string) string {
 	var statusFilter string
 	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(version))
 	statusFilter = "= 'Running'"
-	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
+	return fmt.Sprintf("%s %s AND %s %s", sadefs.BuildIds, deploymentFilter, sadefs.ExecutionStatus, statusFilter)
 }
 
 func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -197,7 +198,7 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider_Success() {
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryTimer,
 		InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
-		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(common.ScheduledTaskMinPrecision), 0),
 		BatchSize:           testQueueOptions.BatchSize(),
 		NextPageToken:       currentPageToken,
 	}).Return(&persistence.GetHistoryTasksResponse{

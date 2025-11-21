@@ -20,6 +20,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2396,7 +2397,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		request.GetCompletion().GetComponentRef(),
-		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+		func(c chasmnexus.CompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
 		completion)
