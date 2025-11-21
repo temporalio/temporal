@@ -2899,16 +2899,33 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 
 	// Reschedule any pending activities
 	for _, ai := range ms.GetPendingActivityInfos() {
-		// we only need to resend the activities to matching, no need to update timer tasks.
-		if err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId); err != nil {
+		// Bump activity stamp to force replication so that the passive cluster can recreate the activity task.
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.Stamp = activityInfo.Stamp + 1
+			return nil
+		}); err != nil {
 			return err
+		}
+
+		// Check activity scheduled time and generate activity retry task if scheduled time is in the future.
+		if ai.ScheduledTime.AsTime().After(ms.timeSource.Now().UTC()) {
+			if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
+				return err
+			}
+		} else {
+			// Generate activity task to resend the activity to matching immediately.
+			if err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId); err != nil {
+				return err
+			}
 		}
 	}
 
 	// Schedule a new workflow task
-	_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
-	if err != nil {
-		return err
+	if !ms.HasPendingWorkflowTask() {
+		_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Update approximate size of the mutable state.
