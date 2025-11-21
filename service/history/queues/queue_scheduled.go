@@ -61,7 +61,7 @@ func NewScheduledQueue(
 				TaskCategory:        category,
 				InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
 				ExclusiveMaxTaskKey: tasks.NewKey(
-					r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision),
+					r.ExclusiveMax.FireTime.Add(common.ScheduledTaskMinPrecision),
 					0,
 				),
 				BatchSize:     options.BatchSize(),
@@ -295,7 +295,7 @@ func IsTimeExpired(
 	// NOTE: Persistence layer may lose precision when persisting the task, which essentially moves
 	// task fire time backward. But we are already performing truncation here, so doesn't need to
 	// account for that.
-	referenceTime = util.MaxTime(referenceTime, task.GetKey().FireTime).Truncate(persistence.ScheduledTaskMinPrecision)
-	testingTime = testingTime.Truncate(persistence.ScheduledTaskMinPrecision)
+	referenceTime = util.MaxTime(referenceTime, task.GetKey().FireTime).Truncate(common.ScheduledTaskMinPrecision)
+	testingTime = testingTime.Truncate(common.ScheduledTaskMinPrecision)
 	return !testingTime.After(referenceTime)
 }

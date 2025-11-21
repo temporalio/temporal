@@ -8,7 +8,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 var maxDatetime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
@@ -168,10 +168,10 @@ func (c *queryConverter) BuildSelectStmt(
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				searchattribute.GetSqlDbColName(searchattribute.RunID),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
+				sadefs.GetSqlDbColName(sadefs.RunID),
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 			),
 		)
@@ -196,8 +196,8 @@ func (c *queryConverter) BuildSelectStmt(
 		strings.Join(sqlplugin.DbFields, ", "),
 		whereString,
 		sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(sadefs.StartTime),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 	)
 	queryArgs = append(queryArgs, pageSize)
 
@@ -217,7 +217,7 @@ func (c *queryConverter) BuildCountStmt(
 
 	groupBy := make([]string, 0, len(queryParams.GroupBy)+1)
 	for _, field := range queryParams.GroupBy {
-		groupBy = append(groupBy, searchattribute.GetSqlDbColName(field.FieldName))
+		groupBy = append(groupBy, sadefs.GetSqlDbColName(field.FieldName))
 	}
 
 	groupByClause := ""
@@ -266,6 +266,6 @@ func buildFtsSelectStmt(
 
 func buildFtsQueryString(fieldName string, values ...string) string {
 	// FTS query format: 'colName : ("token1" OR "token2" OR ...)'
-	colName := searchattribute.GetSqlDbColName(fieldName)
+	colName := sadefs.GetSqlDbColName(fieldName)
 	return fmt.Sprintf(`%s : ("%s")`, colName, strings.Join(values, `" OR "`))
 }
