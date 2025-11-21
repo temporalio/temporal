@@ -1309,6 +1309,26 @@ func (c *clientImpl) UnpauseActivity(
 	return response, nil
 }
 
+func (c *clientImpl) UnpauseWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.UnpauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UnpauseWorkflowExecutionResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetUnpauseRequest().GetWorkflowId())
+	var response *historyservice.UnpauseWorkflowExecutionResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.UnpauseWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) UpdateActivityOptions(
 	ctx context.Context,
 	request *historyservice.UpdateActivityOptionsRequest,

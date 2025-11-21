@@ -947,6 +947,20 @@ func (c *metricClient) UnpauseActivity(
 	return c.client.UnpauseActivity(ctx, request, opts...)
 }
 
+func (c *metricClient) UnpauseWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.UnpauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientUnpauseWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateActivityOptions(
 	ctx context.Context,
 	request *historyservice.UpdateActivityOptionsRequest,
