@@ -1,9 +1,14 @@
 package callback
 
 import (
+	"fmt"
+	"net/http"
+
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log"
 	"go.uber.org/fx"
 )
 
@@ -14,14 +19,31 @@ func register(
 	return registry.Register(library)
 }
 
-// httpCallerProviderProvider adapts the HSM callbacks HTTPCallerProvider to the CHASM callback HTTPCallerProvider.
-// Since both types have the same signature, we just need to wrap the function.
-func httpCallerProviderProvider(hsmProvider callbacks.HTTPCallerProvider) HTTPCallerProvider {
-	return func(dest queues.NamespaceIDAndDestination) HTTPCaller {
-		hsmCaller := hsmProvider(dest)
-		// Convert callbacks.HTTPCaller to callback.HTTPCaller
-		return HTTPCaller(hsmCaller)
+// httpCallerProviderProvider provides an HTTPCallerProvider for CHASM callbacks.
+func httpCallerProviderProvider(
+	clusterMetadata cluster.Metadata,
+	rpcFactory common.RPCFactory,
+	httpClientCache *cluster.FrontendHTTPClientCache,
+	logger log.Logger,
+) (HTTPCallerProvider, error) {
+	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
+	if err != nil {
+		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
+	defaultClient := &http.Client{}
+
+	m := collection.NewOnceMap(func(NamespaceIDAndDestination) HTTPCaller {
+		return func(r *http.Request) (*http.Response, error) {
+			return routeRequest(r,
+				clusterMetadata,
+				httpClientCache,
+				defaultClient,
+				localClient,
+				logger,
+			)
+		}
+	})
+	return m.Get, nil
 }
 
 var Module = fx.Module(

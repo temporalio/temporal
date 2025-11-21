@@ -17,7 +17,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -239,10 +238,6 @@ func Invoke(
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
 	}
 
-	// Collect callbacks from both CHASM and HSM sources
-	// A single execution could have callbacks in both places, so we need to check both
-	var callbackInfos []*workflowpb.CallbackInfo
-
 	// Check for CHASM callbacks (regardless of feature flag setting)
 	// Only process CHASM callbacks if we have an actual chasm.Node (not a noopChasmTree)
 	if mutableState.ChasmEnabled() {
@@ -258,7 +253,7 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		callbackInfos = append(callbackInfos, chasmCallbackInfos...)
+		result.Callbacks = append(result.Callbacks, chasmCallbackInfos...)
 	}
 
 	// Check for HSM callbacks
@@ -273,9 +268,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	callbackInfos = append(callbackInfos, hsmCallbackInfos...)
-
-	result.Callbacks = callbackInfos
+	result.Callbacks = append(result.Callbacks, hsmCallbackInfos...)
 
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
@@ -435,7 +428,7 @@ func buildCallbackInfosFromChasm(
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	logger log.Logger,
 ) ([]*workflowpb.CallbackInfo, error) {
-	component, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
+	wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
 	if err != nil {
 		logger.Error(
 			"failed to get workflow component from CHASM tree",
@@ -443,17 +436,6 @@ func buildCallbackInfosFromChasm(
 			tag.WorkflowID(executionInfo.WorkflowId),
 			tag.WorkflowRunID(executionState.RunId),
 			tag.Error(err),
-		)
-		return nil, serviceerror.NewInternal("failed to construct describe response")
-	}
-
-	wf, ok := component.(*chasmworkflow.Workflow)
-	if !ok {
-		logger.Error(
-			"expected workflow component but got different type",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(executionInfo.WorkflowId),
-			tag.WorkflowRunID(executionState.RunId),
 		)
 		return nil, serviceerror.NewInternal("failed to construct describe response")
 	}

@@ -27,7 +27,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -93,8 +92,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			},
 			expectedMetricOutcome: "unknown-error",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				require.Error(t, err)
-				var destDownErr *queues.DestinationDownError
+				var destDownErr *DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
 			},
@@ -106,8 +104,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			},
 			expectedMetricOutcome: "status:500",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				require.Error(t, err)
-				var destDownErr *queues.DestinationDownError
+				var destDownErr *DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
 			},
@@ -242,7 +239,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				namespaceRegistry: nsRegistry,
 				metricsHandler:    metricsHandler,
 				logger:            logger,
-				httpCallerProvider: func(nid queues.NamespaceIDAndDestination) HTTPCaller {
+				httpCallerProvider: func(nid NamespaceIDAndDestination) HTTPCaller {
 					return tc.caller
 				},
 				chasmEngine: mockEngine,
@@ -458,8 +455,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "internal error, reference-id:")
+				require.ErrorContains(t, err, "internal error, reference-id:")
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
 			},
 		},
@@ -483,8 +479,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "internal error, reference-id:")
+				require.ErrorContains(t, err, "internal error, reference-id:")
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 		},
@@ -504,8 +499,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue: "invalid-base64!!!",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "internal error, reference-id:")
+				require.ErrorContains(t, err, "internal error, reference-id:")
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 		},
@@ -525,8 +519,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue: base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "internal error, reference-id:")
+				require.ErrorContains(t, err, "internal error, reference-id:")
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 		},

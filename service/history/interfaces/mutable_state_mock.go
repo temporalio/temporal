@@ -32,6 +32,7 @@ import (
 	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
 	workflow0 "go.temporal.io/server/api/workflow/v1"
 	chasm "go.temporal.io/server/chasm"
+	workflow1 "go.temporal.io/server/chasm/lib/workflow"
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
@@ -1610,10 +1611,10 @@ func (mr *MockMutableStateMockRecorder) ChasmTree() *gomock.Call {
 }
 
 // ChasmWorkflowComponent mocks base method.
-func (m *MockMutableState) ChasmWorkflowComponent(ctx context.Context) (chasm.Component, chasm.MutableContext, error) {
+func (m *MockMutableState) ChasmWorkflowComponent(ctx context.Context) (*workflow1.Workflow, chasm.MutableContext, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ChasmWorkflowComponent", ctx)
-	ret0, _ := ret[0].(chasm.Component)
+	ret0, _ := ret[0].(*workflow1.Workflow)
 	ret1, _ := ret[1].(chasm.MutableContext)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -1626,10 +1627,10 @@ func (mr *MockMutableStateMockRecorder) ChasmWorkflowComponent(ctx any) *gomock.
 }
 
 // ChasmWorkflowComponentReadOnly mocks base method.
-func (m *MockMutableState) ChasmWorkflowComponentReadOnly(ctx context.Context) (chasm.Component, chasm.Context, error) {
+func (m *MockMutableState) ChasmWorkflowComponentReadOnly(ctx context.Context) (*workflow1.Workflow, chasm.Context, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ChasmWorkflowComponentReadOnly", ctx)
-	ret0, _ := ret[0].(chasm.Component)
+	ret0, _ := ret[0].(*workflow1.Workflow)
 	ret1, _ := ret[1].(chasm.Context)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

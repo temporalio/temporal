@@ -8,7 +8,6 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -85,7 +84,7 @@ func (c *Callback) loadInvocationArgs(
 
 	variant := c.GetCallback().GetNexus()
 	if variant == nil {
-		return nil, queues.NewUnprocessableTaskError(
+		return nil, NewUnprocessableTaskError(
 			fmt.Sprintf("unprocessable callback variant: %v", variant),
 		)
 	}
@@ -134,7 +133,7 @@ func (c *Callback) saveResult(
 		})
 		return nil, err
 	default:
-		return nil, queues.NewUnprocessableTaskError(
+		return nil, NewUnprocessableTaskError(
 			fmt.Sprintf("unrecognized callback result %v", input.result),
 		)
 	}

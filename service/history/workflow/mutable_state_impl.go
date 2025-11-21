@@ -651,27 +651,35 @@ func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 }
 
 // ChasmWorkflowComponent gets the root workflow component from the CHASM tree.
-// Returns both the workflow component and the CHASM mutable context.
-// This method is for write operations.
-func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (chasm.Component, chasm.MutableContext, error) {
+// Returns the workflow component (which is *chasmworkflow.Workflow) and the CHASM mutable context.
+// This method is for write operations. Callers can type assert to *chasmworkflow.Workflow if needed.
+func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error) {
 	chasmCtx := chasm.NewMutableContext(ctx, ms.chasmTree.(*chasm.Node))
 	rootComponent, err := ms.chasmTree.ComponentByPath(chasmCtx, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	return rootComponent, chasmCtx, nil
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
+	}
+	return wf, chasmCtx, nil
 }
 
 // ChasmWorkflowComponentReadOnly gets the root workflow component from the CHASM tree.
 // Returns both the workflow component and a read-only CHASM context.
 // This method is for read-only operations.
-func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) (chasm.Component, chasm.Context, error) {
+func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error) {
 	chasmCtx := chasm.NewContext(ctx, ms.chasmTree.(*chasm.Node))
 	rootComponent, err := ms.chasmTree.ComponentByPath(chasmCtx, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	return rootComponent, chasmCtx, nil
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
+	}
+	return wf, chasmCtx, nil
 }
 
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
@@ -2360,6 +2368,7 @@ func (ms *MutableStateImpl) HasRequestID(
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
+	ctx context.Context,
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution *commonpb.WorkflowExecution,
 	previousExecutionState historyi.MutableState,
@@ -2400,7 +2409,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// for other fields as well.
 	runTimeout := command.GetWorkflowRunTimeout()
 
-	completionCallbacks, err := getCompletionCallbacksAsProtoSlice(previousExecutionState)
+	completionCallbacks, err := getCompletionCallbacksAsProtoSlice(ctx, previousExecutionState)
 	if err != nil {
 		return nil, err
 	}
@@ -2887,11 +2896,8 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 					Header: variant.Nexus.GetHeader(),
 				},
 			}
-		case *commonpb.Callback_Internal_:
-			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
-			if err != nil {
-				return err
-			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unknown callback variant: %T", cb.Variant)
 		}
 		machine := callbacks.NewCallback(requestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
 		id := ""
@@ -2917,17 +2923,13 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
 ) error {
-	component, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
 	if err != nil {
 		return err
 	}
-	wf, ok := component.(*chasmworkflow.Workflow)
-	if !ok {
-		return serviceerror.NewInternalf("expected workflow component, but got %T", component)
-	}
 
 	maxCallbacksPerWorkflow := ms.config.MaxCHASMCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
-	return wf.AddCompletionCallbacks(ctx, event, requestID, completionCallbacks, maxCallbacksPerWorkflow, chasm.NewMSPointer(ms))
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
@@ -5326,6 +5328,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
+		ctx,
 		parentInfo,
 		&newExecution,
 		ms,
@@ -6173,7 +6176,7 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 	}
 
 	// Process CHASM callbacks if CHASM is enabled. Note that we check ChasmEnabled() rather than
-	// chasmCallbacksEnabled() to ensure that callbacks created when both CHASM and CHASM callbacks
+	// chasmCallbacksEnabled() to ensure that callbacks created when both HSM and CHASM callbacks
 	// were enabled can still be triggered even if the EnableCHASMCallbacks dynamic config is later
 	// turned off. Once created in CHASM, callbacks should always be processed as long as CHASM is enabled.
 	if ms.ChasmEnabled() {
@@ -6210,13 +6213,9 @@ func (ms *MutableStateImpl) processCloseCallbacksHsm() error {
 
 // processCloseCallbacksChasm triggers "WorkflowClosed" callbacks using the CHASM implementation.
 func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
-	component, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
 	if err != nil {
 		return err
-	}
-	wf, ok := component.(*chasmworkflow.Workflow)
-	if !ok {
-		return serviceerror.NewInternalf("expected workflow component, but got %T", component)
 	}
 
 	return wf.ProcessCloseCallbacks(ctx)

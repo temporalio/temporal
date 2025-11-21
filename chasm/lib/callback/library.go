@@ -9,19 +9,16 @@ type (
 	Library struct {
 		chasm.UnimplementedLibrary
 
-		Config                 *Config
 		InvocationTaskExecutor *InvocationTaskExecutor
 		BackoffTaskExecutor    *BackoffTaskExecutor
 	}
 )
 
 func newLibrary(
-	config *Config,
 	InvocationTaskExecutor *InvocationTaskExecutor,
 	BackoffTaskExecutor *BackoffTaskExecutor,
 ) *Library {
 	return &Library{
-		Config:                 config,
 		InvocationTaskExecutor: InvocationTaskExecutor,
 		BackoffTaskExecutor:    BackoffTaskExecutor,
 	}

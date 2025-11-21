@@ -4,14 +4,13 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -76,14 +75,12 @@ func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
 // maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
-// msPointer is used to initialize the MSPointer field for accessing the underlying mutable state.
 func (w *Workflow) AddCompletionCallbacks(
 	ctx chasm.MutableContext,
-	event *historypb.HistoryEvent,
+	eventTime *timestamppb.Timestamp,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
 	maxCallbacksPerWorkflow int,
-	msPointer chasm.MSPointer,
 ) error {
 	// Check CHASM max callbacks limit
 	currentCallbackCount := len(w.Callbacks)
@@ -113,17 +110,14 @@ func (w *Workflow) AddCompletionCallbacks(
 					Header: variant.Nexus.GetHeader(),
 				},
 			}
-		case *commonpb.Callback_Internal_:
-			err := proto.Unmarshal(cb.GetInternal().GetData(), chasmCB)
-			if err != nil {
-				return err
-			}
+		default:
+			return fmt.Errorf("unsupported callback variant: %T", variant)
 		}
 
 		id := fmt.Sprintf("cb-%s-%d", requestID, idx)
 
 		// Create and add callback
-		callbackObj := callback.NewCallback(requestID, event.EventTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
 		// Initialize the Workflow field with a pointer to the parent Workflow component
 		// Use ComponentPointerTo instead of NewComponentField to avoid infinite recursion during tree sync.
 		// We need to manually create the Field[chasm.Component] from Field[*Workflow] since Go generics

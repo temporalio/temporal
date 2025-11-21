@@ -13,7 +13,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -278,7 +277,7 @@ func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.His
 	return false
 }
 
-func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.Callback, error) {
+func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.MutableState) ([]*commonpb.Callback, error) {
 	coll := callbacks.MachineCollection(ms.HSM())
 	result := make([]*commonpb.Callback, 0, coll.Size())
 	for _, node := range coll.List() {
@@ -297,35 +296,30 @@ func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.C
 	}
 
 	// Collect CHASM callbacks
-	if msImpl, ok := ms.(*MutableStateImpl); ok {
-		if msImpl.ChasmEnabled() {
-			component, ctx, err := msImpl.ChasmWorkflowComponent(context.Background())
+	if ms.ChasmEnabled() {
+		wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, field := range wf.Callbacks {
+			cb, err := field.Get(ctx)
 			if err != nil {
 				return nil, err
 			}
-			wf, ok := component.(*chasmworkflow.Workflow)
-			if !ok {
-				return nil, serviceerror.NewInternalf("expected workflow component, but got %T", component)
+			// Only include callbacks in STANDBY state (not already triggered)
+			if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+				continue
 			}
-
-			for _, field := range wf.Callbacks {
-				cb, err := field.Get(ctx)
-				if err != nil {
-					return nil, err
-				}
-				// Only include callbacks in STANDBY state (not already triggered)
-				if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
-					continue
-				}
-				// Convert CHASM callback to API callback
-				cbSpec, err := ChasmCallbackToAPICallback(cb)
-				if err != nil {
-					return nil, err
-				}
-				result = append(result, cbSpec)
+			// Convert CHASM callback to API callback
+			cbSpec, err := ChasmCallbackToAPICallback(cb)
+			if err != nil {
+				return nil, err
 			}
+			result = append(result, cbSpec)
 		}
 	}
+	// }
 
 	return result, nil
 }

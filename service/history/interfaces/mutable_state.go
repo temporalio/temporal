@@ -24,6 +24,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -325,8 +326,8 @@ type (
 		IsWorkflow() bool
 		ChasmTree() ChasmTree
 		ChasmEnabled() bool
-		ChasmWorkflowComponent(ctx context.Context) (chasm.Component, chasm.MutableContext, error)
-		ChasmWorkflowComponentReadOnly(ctx context.Context) (chasm.Component, chasm.Context, error)
+		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
+		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
 
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
