@@ -6151,3 +6151,26 @@ func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *
 
 	return &workflowservice.PauseWorkflowExecutionResponse{}, nil
 }
+
+func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request *workflowservice.UnpauseWorkflowExecutionRequest) (_ *workflowservice.UnpauseWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, historyErr := wh.historyClient.UnpauseWorkflowExecution(ctx, &historyservice.UnpauseWorkflowExecutionRequest{
+		NamespaceId:    namespaceID.String(),
+		UnpauseRequest: request,
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+
+	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
+}
