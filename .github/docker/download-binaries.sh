@@ -61,7 +61,8 @@ if [ -d "./cmd/tools/elasticsearch" ]; then
 fi
 
 # Copy config template from the cloned temporal repo (version-specific)
-if [ "${ARCH}" = "amd64" ]; then
+# Only copy once (for the first architecture built)
+if [ ! -f "${SCRIPT_DIR}/build/config_template.yaml" ]; then
   echo "Copying config template from temporal repo..."
   # config_template.yaml is only needed for legacy-server (dockerize templating)
   cp "${TEMP_DIR}/temporal/docker/config_template.yaml" "${SCRIPT_DIR}/build/config_template.yaml"

@@ -31,7 +31,7 @@ fi
 
 # Support "bash" argument for debugging (drops into shell instead of starting server)
 for arg in "$@"; do
-    if [ "${arg}" = "bash" ]; then
+    if [ "${arg}" = "sh" ]; then
         sh
         exit 0
     fi
