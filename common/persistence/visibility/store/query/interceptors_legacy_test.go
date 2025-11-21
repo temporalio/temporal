@@ -104,7 +104,7 @@ func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldVal
 		nil,
 		nil,
 		NewRangeCondConverter(fnInterceptor, fvInterceptor, false),
-		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]struct{}{sqlparser.EqualStr: {}, sqlparser.InStr: {}}, testNameTypeMap),
+		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]struct{}{sqlparser.EqualStr: {}, sqlparser.InStr: {}}, testNameTypeMap, nil),
 		nil)
 	return NewConverterLegacy(fnInterceptor, whereConverter)
 }

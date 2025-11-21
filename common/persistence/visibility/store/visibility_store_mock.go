@@ -67,6 +67,21 @@ func (mr *MockVisibilityStoreMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockVisibilityStore)(nil).Close))
 }
 
+// CountChasmExecutions mocks base method.
+func (m *MockVisibilityStore) CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*manager.CountChasmExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountChasmExecutions", ctx, request)
+	ret0, _ := ret[0].(*manager.CountChasmExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountChasmExecutions indicates an expected call of CountChasmExecutions.
+func (mr *MockVisibilityStoreMockRecorder) CountChasmExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountChasmExecutions", reflect.TypeOf((*MockVisibilityStore)(nil).CountChasmExecutions), ctx, request)
+}
+
 // CountWorkflowExecutions mocks base method.
 func (m *MockVisibilityStore) CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -137,6 +152,21 @@ func (m *MockVisibilityStore) GetWorkflowExecution(ctx context.Context, request 
 func (mr *MockVisibilityStoreMockRecorder) GetWorkflowExecution(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockVisibilityStore)(nil).GetWorkflowExecution), ctx, request)
+}
+
+// ListChasmExecutions mocks base method.
+func (m *MockVisibilityStore) ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListChasmExecutions", ctx, request)
+	ret0, _ := ret[0].(*InternalListWorkflowExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListChasmExecutions indicates an expected call of ListChasmExecutions.
+func (mr *MockVisibilityStoreMockRecorder) ListChasmExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListChasmExecutions", reflect.TypeOf((*MockVisibilityStore)(nil).ListChasmExecutions), ctx, request)
 }
 
 // ListWorkflowExecutions mocks base method.

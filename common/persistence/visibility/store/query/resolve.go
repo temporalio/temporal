@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -12,14 +13,15 @@ import (
 // ResolveSearchAttributeAlias resolves the search attribute alias for the given name. The process is:
 //  1. If the name has the "Temporal", skip mapping to a custom search attribute.
 //  2. If the search attribute exists in the visibility mapper, pass it through.
-//  3. If it exists as a system / predefined attribute, map it.
-//     3.1 Some pre-defined attributes are already defined with the Temporal prefix, so both options need to be checked.
-//  4. In the future, also need to lookup in the CHASM archetype search attribute mapping
+//  3. If the search attribute exists in the CHASM mapper, pass it through.
+//  4. If it exists as a system / predefined attribute, map it.
+//     4.1 Some pre-defined attributes are already defined with the Temporal prefix, so both options need to be checked.
 func ResolveSearchAttributeAlias(
 	name string,
 	ns namespace.Name,
 	mapper searchattribute.Mapper,
 	saTypeMap searchattribute.NameTypeMap,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) (string, enumspb.IndexedValueType, error) {
 	if sadefs.IsMappable(name) {
 		// First check if the visibility mapper can handle this field (e.g., custom search attributes)
@@ -34,6 +36,11 @@ func ResolveSearchAttributeAlias(
 			// ScheduleID is not defined, transform to WorkflowID
 			saType, _ := saTypeMap.GetType(sadefs.WorkflowID)
 			return sadefs.WorkflowID, saType, nil
+		}
+
+		fieldName, fieldType = tryChasmMapper(name, chasmMapper)
+		if fieldName != "" {
+			return fieldName, fieldType, nil
 		}
 	}
 
@@ -72,6 +79,23 @@ func tryVisibilityMapper(
 		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 	}
 
+	return fieldName, fieldType
+}
+
+func tryChasmMapper(name string, chasmMapper *chasm.VisibilitySearchAttributesMapper) (string, enumspb.IndexedValueType) {
+	if chasmMapper == nil {
+		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+	}
+
+	fieldName, err := chasmMapper.Field(name)
+	if err != nil {
+		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+	}
+
+	fieldType, err := chasmMapper.GetType(fieldName)
+	if err != nil {
+		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+	}
 	return fieldName, fieldType
 }
 

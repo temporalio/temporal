@@ -116,6 +116,16 @@ func (m *visibilityManagerRateLimited) ListWorkflowExecutions(
 	return m.delegate.ListWorkflowExecutions(ctx, request)
 }
 
+func (m *visibilityManagerRateLimited) ListChasmExecutions(
+	ctx context.Context,
+	request *manager.ListChasmExecutionsRequest,
+) (*manager.ListChasmExecutionsResponse, error) {
+	if ok := allow(ctx, "ListChasmExecutions", m.readRateLimiter); !ok {
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return m.delegate.ListChasmExecutions(ctx, request)
+}
+
 func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
@@ -124,6 +134,16 @@ func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.CountWorkflowExecutions(ctx, request)
+}
+
+func (m *visibilityManagerRateLimited) CountChasmExecutions(
+	ctx context.Context,
+	request *manager.CountChasmExecutionsRequest,
+) (*manager.CountChasmExecutionsResponse, error) {
+	if ok := allow(ctx, "CountChasmExecutions", m.readRateLimiter); !ok {
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return m.delegate.CountChasmExecutions(ctx, request)
 }
 
 func (m *visibilityManagerRateLimited) GetWorkflowExecution(

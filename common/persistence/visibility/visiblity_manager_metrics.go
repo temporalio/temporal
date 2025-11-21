@@ -129,12 +129,40 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 	return response, m.updateErrorMetric(handler, err)
 }
 
+func (m *visibilityManagerMetrics) ListChasmExecutions(
+	ctx context.Context,
+	request *manager.ListChasmExecutionsRequest,
+) (*manager.ListChasmExecutionsResponse, error) {
+	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListChasmExecutionsScope)
+	response, err := m.delegate.ListChasmExecutions(ctx, request)
+	elapsed := time.Since(startTime)
+	if elapsed > m.slowQueryThreshold() {
+		m.logger.Warn("List query exceeded threshold",
+			tag.NewDurationTag("duration", elapsed),
+			tag.NewStringTag("visibility-query", request.Query),
+			tag.NewStringerTag("namespace", request.Namespace),
+		)
+	}
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	return response, m.updateErrorMetric(handler, err)
+}
+
 func (m *visibilityManagerMetrics) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceCountWorkflowExecutionsScope)
 	response, err := m.delegate.CountWorkflowExecutions(ctx, request)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	return response, m.updateErrorMetric(handler, err)
+}
+
+func (m *visibilityManagerMetrics) CountChasmExecutions(
+	ctx context.Context,
+	request *manager.CountChasmExecutionsRequest,
+) (*manager.CountChasmExecutionsResponse, error) {
+	handler, startTime := m.tagScope(metrics.VisibilityPersistenceCountChasmExecutionsScope)
+	response, err := m.delegate.CountChasmExecutions(ctx, request)
 	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
 	return response, m.updateErrorMetric(handler, err)
 }

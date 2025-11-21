@@ -641,9 +641,16 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 			s.True(paused)
 
 			s.Len(request.Memo.Fields, 1)
-			err = payload.Decode(request.Memo.Fields[testComponentPausedSAName], &paused)
+
+			// Memo should contain "__chasm__" key with encoded proto message
+			chasmMemoPayload, ok := request.Memo.Fields[chasm.ChasmMemoPrefix]
+			s.True(ok, "Expected %s key in memo", chasm.ChasmMemoPrefix)
+
+			// Decode the chasm memo proto message
+			var chasmMemoProto persistencespb.WorkflowExecutionState
+			err = payload.Decode(chasmMemoPayload, &chasmMemoProto)
 			s.NoError(err)
-			s.True(paused)
+			s.NotEmpty(chasmMemoProto.RunId)
 
 			return nil
 		},
