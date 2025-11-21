@@ -9,7 +9,7 @@ import (
 
 func TestMemoryClient(t *testing.T) {
 	c := dynamicconfig.NewMemoryClient()
-	k := dynamicconfig.Key("key")
+	k := dynamicconfig.MakeKey("key")
 
 	// plain override
 	assert.Nil(t, c.GetValue(k))
@@ -44,7 +44,7 @@ func TestMemoryClient(t *testing.T) {
 
 func TestMemoryClientSubscriptions(t *testing.T) {
 	c := dynamicconfig.NewMemoryClient()
-	k := dynamicconfig.Key("key")
+	k := dynamicconfig.MakeKey("key")
 
 	calls := 0
 
