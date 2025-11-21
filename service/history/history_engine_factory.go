@@ -25,27 +25,27 @@ type (
 	HistoryEngineFactoryParams struct {
 		fx.In
 
-		ClientBean                                      client.Bean
-		MatchingClient                                  resource.MatchingClient
-		SdkClientFactory                                sdk.ClientFactory
-		EventNotifier                                   events.Notifier
-		Config                                          *configs.Config
-		RawMatchingClient                               resource.MatchingRawClient
-		WorkflowCache                                   wcache.Cache
-		ReplicationProgressCache                        replication.ProgressCache
-		EventSerializer                                 serialization.Serializer
-		QueueFactories                                  []QueueFactory `group:"queueFactory"`
-		ReplicationTaskFetcherFactory                   replication.TaskFetcherFactory
-		ReplicationTaskExecutorProvider                 replication.TaskExecutorProvider
-		TracerProvider                                  trace.TracerProvider
-		PersistenceVisibilityMgr                        manager.VisibilityManager
-		EventBlobCache                                  persistence.XDCCache
-		TaskCategoryRegistry                            tasks.TaskCategoryRegistry
-		ReplicationDLQWriter                            replication.DLQWriter
-		CommandHandlerRegistry                          *workflow.CommandHandlerRegistry
-		OutboundQueueCBPool                             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
-		HistoryReplicatorPersistenceRateLimiterProvider func(historyi.ShardContext) replication.PersistenceRateLimiter
-		TestHooks                                       testhooks.TestHooks
+		ClientBean                      client.Bean
+		MatchingClient                  resource.MatchingClient
+		SdkClientFactory                sdk.ClientFactory
+		EventNotifier                   events.Notifier
+		Config                          *configs.Config
+		RawMatchingClient               resource.MatchingRawClient
+		WorkflowCache                   wcache.Cache
+		ReplicationProgressCache        replication.ProgressCache
+		EventSerializer                 serialization.Serializer
+		QueueFactories                  []QueueFactory `group:"queueFactory"`
+		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
+		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
+		TracerProvider                  trace.TracerProvider
+		PersistenceVisibilityMgr        manager.VisibilityManager
+		EventBlobCache                  persistence.XDCCache
+		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		ReplicationDLQWriter            replication.DLQWriter
+		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
+		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		PersistenceRateLimiter          replication.PersistenceRateLimiter
+		TestHooks                       testhooks.TestHooks
 	}
 
 	historyEngineFactory struct {
@@ -78,7 +78,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ReplicationDLQWriter,
 		f.CommandHandlerRegistry,
 		f.OutboundQueueCBPool,
-		f.HistoryReplicatorPersistenceRateLimiterProvider,
+		f.PersistenceRateLimiter,
 		f.TestHooks,
 	)
 }
