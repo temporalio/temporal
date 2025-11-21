@@ -334,7 +334,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 		VisibilityTimestamp: s.now,
 		TaskID:              s.mustGenerateTaskID(),
 		Info: &persistencespb.ChasmTaskInfo{
-			Type: "Testlib.TestSideEffectTask",
+			TypeId: 1234,
 			Data: &commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			},
@@ -2835,6 +2835,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 			mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil)
 			mockShard.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
+			mockShard.EXPECT().ChasmRegistry().Return(chasm.NewRegistry(log.NewTestLogger())).AnyTimes()
 
 			var highWatermarkTaskId int64
 			if c.CloseTaskIsAcked {
@@ -3046,6 +3047,7 @@ func (s *transferQueueActiveTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		s.mockNamespaceCache,
 		s.mockClusterMetadata,
+		s.mockShard.ChasmRegistry(),
 		queues.GetTaskTypeTagValue,
 		nil,
 		metrics.NoopMetricsHandler,

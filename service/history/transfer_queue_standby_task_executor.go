@@ -30,7 +30,6 @@ import (
 
 const (
 	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
-	firstWorkflowTaskVerificationFailedMsg     = "Failed to verify first workflow task scheduled"
 )
 
 type (
@@ -80,7 +79,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
+	taskType := queues.GetStandbyTransferTaskTypeTagValue(task, t.shardContext.ChasmRegistry())
 	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),

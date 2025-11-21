@@ -41,8 +41,20 @@ func (a Any) Int() int {
 	return randInt(a.testHash, 3, 3, 3)
 }
 
+func (a Any) Int32() int32 {
+	return int32(a.Int())
+}
+
+func (a Any) UInt32() uint32 {
+	return uint32(a.Int())
+}
+
 func (a Any) Int64() int64 {
 	return int64(a.Int())
+}
+
+func (a Any) UInt64() uint64 {
+	return uint64(a.Int())
 }
 
 func (a Any) EventID() int64 {

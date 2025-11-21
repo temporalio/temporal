@@ -11,8 +11,9 @@ import (
 type Config struct {
 	NumberOfShards int32
 
-	EnableReplicationStream dynamicconfig.BoolPropertyFn
-	HistoryReplicationDLQV2 dynamicconfig.BoolPropertyFn
+	EnableReplicationStream             dynamicconfig.BoolPropertyFn
+	EnableSeparateReplicationEnableFlag dynamicconfig.BoolPropertyFn
+	HistoryReplicationDLQV2             dynamicconfig.BoolPropertyFn
 
 	RPS                                         dynamicconfig.IntPropertyFn
 	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
@@ -247,6 +248,7 @@ type Config struct {
 	WorkflowTaskHeartbeatTimeout                     dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	WorkflowTaskCriticalAttempts                     dynamicconfig.IntPropertyFn
 	WorkflowTaskRetryMaxInterval                     dynamicconfig.DurationPropertyFn
+	EnableWorkflowTaskStampIncrementOnFailure        dynamicconfig.BoolPropertyFn
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 	EnableDropRepeatedWorkflowTaskFailures           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -402,8 +404,9 @@ func NewConfig(
 	cfg := &Config{
 		NumberOfShards: numberOfShards,
 
-		EnableReplicationStream: dynamicconfig.EnableReplicationStream.Get(dc),
-		HistoryReplicationDLQV2: dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
+		EnableReplicationStream:             dynamicconfig.EnableReplicationStream.Get(dc),
+		EnableSeparateReplicationEnableFlag: dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
+		HistoryReplicationDLQV2:             dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
 		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
@@ -624,6 +627,7 @@ func NewConfig(
 		WorkflowTaskHeartbeatTimeout:                     dynamicconfig.WorkflowTaskHeartbeatTimeout.Get(dc),
 		WorkflowTaskCriticalAttempts:                     dynamicconfig.WorkflowTaskCriticalAttempts.Get(dc),
 		WorkflowTaskRetryMaxInterval:                     dynamicconfig.WorkflowTaskRetryMaxInterval.Get(dc),
+		EnableWorkflowTaskStampIncrementOnFailure:        dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Get(dc),
 		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 		EnableDropRepeatedWorkflowTaskFailures:           dynamicconfig.EnableDropRepeatedWorkflowTaskFailures.Get(dc),
 

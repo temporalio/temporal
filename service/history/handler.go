@@ -2393,7 +2393,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// this similarly as we would a pure task (holding an exclusive lock), as the
 	// assumption is that the accessed component will be recording (or generating a
 	// task) based on this result.
-	_, _, err := chasm.UpdateComponent[chasm.NexusCompletionHandler](
+	_, _, err := chasm.UpdateComponent(
 		ctx,
 		request.GetCompletion().GetComponentRef(),
 		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
@@ -2610,4 +2610,36 @@ func (h *Handler) ResetActivity(
 		return nil, h.convertError(err)
 	}
 	return response, nil
+}
+
+// PauseWorkflowExecution is used to pause a running workflow execution.  This results in
+// WorkflowExecutionPaused event recorded in the history.
+func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (_ *historyservice.PauseWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.GetPauseRequest().GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err2 := engine.PauseWorkflowExecution(ctx, request)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return resp, nil
 }

@@ -1378,8 +1378,8 @@ second per poller by one physical queue manager`,
 	MatchingEnableWorkerPluginMetrics = NewGlobalBoolSetting(
 		"matching.enableWorkerPluginMetrics",
 		false,
-		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics. 
-The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is 
+		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics.
+The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
 
@@ -1389,6 +1389,11 @@ an optional feature and also requires a metrics collection system that can handl
 		"history.enableReplicationStream",
 		true,
 		`EnableReplicationStream turn on replication stream`,
+	)
+	EnableSeparateReplicationEnableFlag = NewGlobalBoolSetting(
+		"history.enableSeparateReplicationEnableFlag",
+		false,
+		`EnableSeparateReplicationEnableFlag controls whether to use the new ReplicationEnabled flag to control replication streams separately from cluster connectivity. When false, falls back to using only the Enabled flag for both connectivity and replication.`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",
@@ -1652,13 +1657,13 @@ NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicate
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
 		500,
-		`The base number of pending tasks count for a task group to be moved to the next level reader. 
+		`The base number of pending tasks count for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
 	)
 	QueueMoveGroupTaskCountMultiplier = NewGlobalFloatSetting(
 		"history.queueMoveGroupTaskCountMultiplier",
 		3.0,
-		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader. 
+		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
 	)
 
@@ -2265,6 +2270,11 @@ the number of children greater than or equal to this threshold`,
 		"history.workflowTaskRetryMaxInterval",
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
+	)
+	EnableWorkflowTaskStampIncrementOnFailure = NewGlobalBoolSetting(
+		"history.enableWorkflowTaskStampIncrementOnFailure",
+		false,
+		`EnableWorkflowTaskStampIncrementOnFailure controls whether the workflow task stamp is incremented when a workflow task fails and is rescheduled`,
 	)
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
 		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
@@ -2932,5 +2942,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkerCommandsEnabled",
 		false,
 		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
+	)
+
+	WorkflowPauseEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkflowPauseEnabled",
+		false,
+		`WorkflowPauseEnabled is a "feature enable" flag. When enabled it allows clients to pause workflows.`,
 	)
 )

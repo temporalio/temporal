@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -59,25 +58,15 @@ func (b *BackfillerTaskExecutor) Execute(
 ) error {
 	defer func() { backfiller.Attempt++ }()
 
-	scheduler, err := backfiller.Scheduler.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
-	}
+	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
 
-	invoker, err := scheduler.Invoker.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
-	}
+	invoker := scheduler.Invoker.Get(ctx)
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
 	tweakables := b.config.Tweakables(scheduler.Namespace)
-	limit, err := b.allowedBufferedStarts(ctx, backfiller, scheduler, invoker, tweakables)
+	limit, err := b.allowedBufferedStarts(ctx, scheduler, invoker, tweakables)
 	if err != nil {
 		return err
 	}
@@ -132,7 +121,7 @@ func (b *BackfillerTaskExecutor) rescheduleBackfill(ctx chasm.MutableContext, ba
 
 // processBackfill processes a Backfiller's BackfillRequest.
 func (b *BackfillerTaskExecutor) processBackfill(
-	ctx chasm.MutableContext,
+	_ chasm.MutableContext,
 	scheduler *Scheduler,
 	backfiller *Backfiller,
 	limit int,
@@ -186,7 +175,7 @@ func (b *BackfillerTaskExecutor) backoffDelay(backfiller *Backfiller) time.Durat
 
 // processTrigger processes a Backfiller's TriggerImmediatelyRequest.
 func (b *BackfillerTaskExecutor) processTrigger(
-	ctx chasm.MutableContext,
+	_ chasm.MutableContext,
 	scheduler *Scheduler,
 	backfiller *Backfiller,
 ) (result backfillProgressResult, err error) {
@@ -220,7 +209,6 @@ func (b *BackfillerTaskExecutor) processTrigger(
 // buffer, taking into account buffer limits and concurrent backfills.
 func (b *BackfillerTaskExecutor) allowedBufferedStarts(
 	ctx chasm.Context,
-	backfiller *Backfiller,
 	scheduler *Scheduler,
 	invoker *Invoker,
 	tweakables Tweakables,
@@ -228,10 +216,7 @@ func (b *BackfillerTaskExecutor) allowedBufferedStarts(
 	// Count the number of Backfillers active.
 	backfillerCount := 0
 	for _, field := range scheduler.Backfillers {
-		b, err := field.Get(ctx)
-		if err != nil {
-			return 0, err
-		}
+		b := field.Get(ctx)
 
 		// Don't count trigger-immediately requests, as they only fire a single start.
 		if b.RequestType() == RequestTypeBackfill {

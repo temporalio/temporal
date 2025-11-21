@@ -286,7 +286,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					"foo": {
 						RoutingConfig: &deploymentpb.RoutingConfig{
 							CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: "v1"},
-							CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(-time.Hour)),
+							CurrentVersionChangedTime: t2,
 						},
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							v1.GetBuildId(): {},
@@ -295,7 +295,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					"bar": {
 						RoutingConfig: &deploymentpb.RoutingConfig{
 							CurrentDeploymentVersion:  nil,
-							CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+							CurrentVersionChangedTime: t3,
 						},
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
 					},
@@ -309,7 +309,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 						RoutingConfig: &deploymentpb.RoutingConfig{
 							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
 							RampingVersionPercentage:            30,
-							RampingVersionPercentageChangedTime: timestamp.TimePtr(time.Now().Add(-time.Hour)),
+							RampingVersionPercentageChangedTime: t2,
 						},
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
 							v1.GetBuildId(): {},
@@ -319,7 +319,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 						RoutingConfig: &deploymentpb.RoutingConfig{
 							RampingDeploymentVersion:            nil,
 							RampingVersionPercentage:            20,
-							RampingVersionPercentageChangedTime: timestamp.TimePtr(time.Now()),
+							RampingVersionPercentageChangedTime: t3,
 						},
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
 					},

@@ -28,7 +28,7 @@ func TestSearchAttributeInterceptor(t *testing.T) {
 	interceptor := &testSearchAttributeInterceptor{}
 	c := NewNilQueryConverter(
 		"",
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 	).WithSearchAttributeInterceptor(interceptor)
 
