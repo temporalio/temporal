@@ -28,7 +28,7 @@ func Invoke(
 
 	unpauseRequest := req.GetUnpauseRequest()
 	if unpauseRequest == nil {
-		return nil, serviceerror.NewInvalidArgument("pause request is nil.")
+		return nil, serviceerror.NewInvalidArgument("unpause request is nil.")
 	}
 
 	if err := validateUnpauseRequest(unpauseRequest, shard); err != nil {
