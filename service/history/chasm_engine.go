@@ -62,17 +62,6 @@ var ChasmEngineModule = fx.Options(
 	fx.Provide(func(impl *ChasmEngine) chasm.Engine { return impl }),
 	fx.Invoke(func(lc fx.Lifecycle, impl *ChasmEngine, shardController shard.Controller) {
 		impl.SetShardController(shardController)
-
-		lc.Append(fx.Hook{
-			OnStart: func(context.Context) error {
-				impl.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				impl.Stop()
-				return nil
-			},
-		})
 	}),
 )
 
@@ -100,16 +89,6 @@ func (e *ChasmEngine) SetShardController(
 
 func (e *ChasmEngine) GetNotifier() *ChasmNotifier {
 	return e.notifier
-}
-
-// Start starts the ChasmEngine
-func (e *ChasmEngine) Start() {
-	e.notifier.Start()
-}
-
-// Stop stops the ChasmEngine
-func (e *ChasmEngine) Stop() {
-	e.notifier.Stop()
 }
 
 func (e *ChasmEngine) NewEntity(
@@ -304,13 +283,8 @@ func (e *ChasmEngine) PollComponent(
 	}
 
 	// hold lock until return or subscription established
-	released := false
-	defer func() {
-		if !released {
-			// read-only operation; don't pass error
-			executionLease.GetReleaseFn()(nil)
-		}
-	}()
+	// TODO(dan): this will probably be called when its already been release; ok?
+	defer executionLease.GetReleaseFn()(nil)
 
 	// At this point it's possible that shard VT < requestRef VT (getExecutionLease does not
 	// guarantee that returned shard state is non-stale w.r.t. requestRef).
@@ -326,23 +300,6 @@ func (e *ChasmEngine) PollComponent(
 	}
 
 	// Wait condition not satisfied; long-poll
-
-	// TODO(dan) For now, UpdateComponent emits execution-level notifications, and PollComponent
-	// subscribes to execution-level notifications. This means that PollComponent may be woken up
-	// unnecessarily, but it will not miss notifications. In the future we may want to change
-	// PollComponent to subscribe to component-level notifications, and change UpdateComponent so
-	// that notifications are emitted only for nodes that were mutated in the transaction.
-	channel, subscriberID, err := e.notifier.Subscribe(requestRef.EntityKey)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = e.notifier.Unsubscribe(requestRef.EntityKey, subscriberID)
-	}()
-
-	// Release the lock, now that we are subscribed
-	executionLease.GetReleaseFn()(nil)
-	released = true
 
 	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(requestRef.EntityKey.NamespaceID),
@@ -362,12 +319,20 @@ func (e *ChasmEngine) PollComponent(
 	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
 	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
 	defer cancel()
+
 	for {
+		// For now, PollComponent subscribes to execution-level notifications. Suppose that an
+		// execution consists of one component A, and A has subcomponent B. Subscribers interested
+		// only in component B may be woken up unnecessarily due to changes in parts of A that do
+		// not also belong to B, but they will not miss notifications.
+		ch, err := e.notifier.Subscribe(requestRef.EntityKey)
+		if err != nil {
+			return nil, err
+		}
+		executionLease.GetReleaseFn()(nil)
+
 		select {
-		case notification := <-channel:
-			if notification == nil {
-				return nil, serviceerror.NewInternal("nil component notification")
-			}
+		case <-ch:
 			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 			if err != nil {
 				if errors.Is(err, ctx.Err()) {

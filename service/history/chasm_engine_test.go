@@ -14,7 +14,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -113,12 +112,7 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
-	s.notifier = NewChasmNotifier(
-		clock.NewRealTimeSource(),
-		metrics.NoopMetricsHandler,
-		s.config,
-	)
-	s.notifier.Start()
+	s.notifier = NewChasmNotifier(metrics.NoopMetricsHandler)
 
 	s.engine = newChasmEngine(
 		s.entityCache,
@@ -131,12 +125,6 @@ func (s *chasmEngineSuite) SetupTest() {
 
 func (s *chasmEngineSuite) SetupSubTest() {
 	s.initAssertions()
-}
-
-func (s *chasmEngineSuite) TearDownTest() {
-	if s.notifier != nil {
-		s.notifier.Stop()
-	}
 }
 
 func (s *chasmEngineSuite) initAssertions() {
