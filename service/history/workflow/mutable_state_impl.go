@@ -8565,7 +8565,7 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks
 		ms.executionInfo.WorkflowTaskStamp += 1
 
 		// Reset the attempt; forcing a non-transient workflow task to be scheduled.
-		ms.executionInfo.Attempt = 1
+		ms.executionInfo.WorkflowTaskAttempt = 1
 	}
 
 	return ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(pendingTask.ScheduledEventID)
