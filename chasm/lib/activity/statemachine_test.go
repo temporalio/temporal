@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/payloads"
-	"google.golang.org/protobuf/proto"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -184,22 +184,19 @@ func TestTransitionRescheduled(t *testing.T) {
 				Outcome: chasm.NewDataField(ctx, outcome),
 			}
 
-			err := TransitionRescheduled.Apply(activity, ctx, rescheduleInfo{
+			err := TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
 				retryInterval: tc.expectedRetryInterval,
 				failure:       createStartToCloseTimeoutFailure(),
 			})
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, activity.Status)
 			require.Equal(t, tc.startingAttemptCount+1, attemptState.Count)
-			require.True(t, proto.Equal(
-				durationpb.New(tc.expectedRetryInterval),
-				attemptState.GetCurrentRetryInterval(),
-			), "retry intervals should be equal")
+			protorequire.ProtoEqual(t, durationpb.New(tc.expectedRetryInterval), attemptState.GetCurrentRetryInterval())
 
 			// Verify attempt state failure details updated correctly
 			lastFailureDetails := attemptState.GetLastFailureDetails()
 			require.NotNil(t, lastFailureDetails.GetFailure())
-			require.Equal(t, lastFailureDetails.GetTime(), attemptState.GetLastAttemptCompleteTime())
+			require.Equal(t, lastFailureDetails.GetTime(), attemptState.GetLastCompleteTime())
 			// This should remain nil on intermediate retry attempts. The final attempt goes directly via TransitionTimedOut.
 			require.Nil(t, outcome.GetVariant())
 
@@ -317,7 +314,7 @@ func TestTransitionTimedout(t *testing.T) {
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
 				// Timeout failure is recorded in outcome but not attempt state
 				require.Nil(t, attemptState.GetLastFailureDetails())
-				require.Nil(t, attemptState.GetLastAttemptCompleteTime())
+				require.Nil(t, attemptState.GetLastCompleteTime())
 				require.NotNil(t, outcome.GetFailed().GetFailure())
 				// do something
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
@@ -325,7 +322,7 @@ func TestTransitionTimedout(t *testing.T) {
 				// are no more retries. Retries go through TransitionRescheduled.
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetFailure())
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
-				require.NotNil(t, attemptState.GetLastAttemptCompleteTime())
+				require.NotNil(t, attemptState.GetLastCompleteTime())
 				require.Nil(t, attemptState.GetCurrentRetryInterval())
 
 				failure, ok := outcome.GetVariant().(*activitypb.ActivityOutcome_Failed_)
@@ -371,8 +368,8 @@ func TestTransitionCompleted(t *testing.T) {
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
-	require.NotNil(t, attemptState.GetLastAttemptCompleteTime())
-	require.True(t, proto.Equal(payload, outcome.GetSuccessful().GetOutput()))
+	require.NotNil(t, attemptState.GetLastCompleteTime())
+	protorequire.ProtoEqual(t, payload, outcome.GetSuccessful().GetOutput())
 }
 
 func TestTransitionFailed(t *testing.T) {
@@ -415,10 +412,10 @@ func TestTransitionFailed(t *testing.T) {
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
-	require.NotNil(t, attemptState.GetLastAttemptCompleteTime())
-	require.True(t, proto.Equal(heartbeatDetails, heartbeatState.GetDetails()))
+	require.NotNil(t, attemptState.GetLastCompleteTime())
+	protorequire.ProtoEqual(t, heartbeatDetails, heartbeatState.GetDetails())
 	require.NotNil(t, heartbeatState.GetRecordedTime())
-	require.True(t, proto.Equal(failure, attemptState.GetLastFailureDetails().GetFailure()))
+	protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
 	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
 	require.Nil(t, outcome.GetFailed())
 }

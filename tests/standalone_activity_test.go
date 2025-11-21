@@ -20,9 +20,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -128,6 +128,7 @@ func (s *standaloneActivityTestSuite) TestActivityCompletedByID() {
 		RunId:      runID,
 		ActivityId: activityID,
 		Result:     defaultResult,
+		Identity:   s.tv.WorkerIdentity(),
 	})
 	require.NoError(t, err)
 
@@ -176,6 +177,7 @@ func (s *standaloneActivityTestSuite) TestActivityFailedWithLastHeartbeat() {
 		TaskToken:            pollTaskResp.TaskToken,
 		Failure:              defaultFailure,
 		LastHeartbeatDetails: defaultHeartbeatDetails,
+		Identity:             s.tv.WorkerIdentity(),
 	})
 	require.NoError(t, err)
 
@@ -200,6 +202,7 @@ func (s *standaloneActivityTestSuite) TestActivityFailedByID() {
 		RunId:      runID,
 		ActivityId: activityID,
 		Failure:    defaultFailure,
+		Identity:   s.tv.WorkerIdentity(),
 	})
 	require.NoError(t, err)
 
@@ -388,7 +391,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 				return err
 			},
 			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
-				require.True(t, proto.Equal(defaultResult, response.GetResult()))
+				protorequire.ProtoEqual(t, defaultResult, response.GetResult())
 			},
 		},
 		{
@@ -404,8 +407,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 				return err
 			},
 			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
-				require.True(t, proto.Equal(defaultFailure, response.GetInfo().GetLastFailure()))
-				require.True(t, proto.Equal(&failurepb.Failure{}, response.GetFailure()))
+				protorequire.ProtoEqual(t, defaultFailure, response.GetInfo().GetLastFailure())
+				protorequire.ProtoEqual(t, &failurepb.Failure{}, response.GetFailure())
 			},
 		},
 	}
@@ -466,7 +469,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 				enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
 			)
 
-			require.True(t, proto.Equal(defaultInput, activityPollResp.GetInput()))
+			protorequire.ProtoEqual(t, defaultInput, activityPollResp.GetInput())
 			tc.completionValidationFn(t, activityPollResp)
 		case <-ctx.Done():
 			t.Fatal("PollActivityExecution timed out")
@@ -717,7 +720,7 @@ func (s *standaloneActivityTestSuite) pollActivityTaskAndValidate(
 	})
 	require.NoError(t, err)
 	require.Equal(t, activityID, pollTaskResp.GetActivityId())
-	require.True(t, proto.Equal(s.tv.ActivityType(), pollTaskResp.GetActivityType()))
+	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
 	require.EqualValues(t, 1, pollTaskResp.Attempt)
 
 	activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
@@ -774,7 +777,7 @@ func (s *standaloneActivityTestSuite) validateCompletion(
 	require.Nil(t, info.GetLastFailure())
 	require.Nil(t, info.GetHeartbeatDetails())
 	require.Nil(t, info.GetLastHeartbeatTime())
-	require.True(t, proto.Equal(defaultResult, activityResp.GetResult()))
+	protorequire.ProtoEqual(t, defaultResult, activityResp.GetResult())
 }
 
 func (s *standaloneActivityTestSuite) validateFailure(
@@ -803,11 +806,11 @@ func (s *standaloneActivityTestSuite) validateFailure(
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
-	require.True(t, proto.Equal(defaultFailure, info.GetLastFailure()))
-	require.True(t, proto.Equal(&failurepb.Failure{}, activityResp.GetFailure()))
+	protorequire.ProtoEqual(t, defaultFailure, info.GetLastFailure())
+	protorequire.ProtoEqual(t, &failurepb.Failure{}, activityResp.GetFailure())
 
 	if expectedHeartbeatDetails != nil {
-		require.True(t, proto.Equal(expectedHeartbeatDetails, info.GetHeartbeatDetails()))
+		protorequire.ProtoEqual(t, expectedHeartbeatDetails, info.GetHeartbeatDetails())
 	}
 }
 
@@ -822,8 +825,7 @@ func (s *standaloneActivityTestSuite) validateBaseActivityResponse(
 	require.Equal(t, s.tv.ActivityType(), response.GetInfo().GetActivityType())
 	require.Equal(t, expectedRunID, response.RunId)
 	require.NotNil(t, response.GetInfo().GetScheduledTime())
-	require.True(t, proto.Equal(defaultInput, response.GetInput()))
-
+	protorequire.ProtoEqual(t, defaultInput, response.GetInput())
 }
 
 func (s *standaloneActivityTestSuite) startActivity(ctx context.Context, activityID string, taskQueue string) (*workflowservice.StartActivityExecutionResponse, error) {

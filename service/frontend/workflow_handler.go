@@ -30,7 +30,6 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -1445,15 +1444,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	}
 
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref
+	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
 	var componentRef []byte
 	if workflowID == "" {
-		componentRef, err = (&persistencespb.ChasmComponentRef{
-			NamespaceId: namespaceID.String(),
-			BusinessId:  activityID,
-			EntityId:    runID,
-			Archetype:   "activity.activity",
-		}).Marshal()
-
+		componentRef, err = activity.ToRef(namespaceID.String(), activityID, runID)
 		if err != nil {
 			return nil, err
 		}
@@ -1643,15 +1637,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	}
 
 	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref
+	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
 	var componentRef []byte
 	if workflowID == "" {
-		componentRef, err = (&persistencespb.ChasmComponentRef{
-			NamespaceId: namespaceID.String(),
-			BusinessId:  activityID,
-			EntityId:    runID,
-			Archetype:   "activity.activity",
-		}).Marshal()
-
+		componentRef, err = activity.ToRef(namespaceID.String(), activityID, runID)
 		if err != nil {
 			return nil, err
 		}
