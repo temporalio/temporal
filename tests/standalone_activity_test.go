@@ -486,47 +486,48 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 	}
 
 	for _, tc := range testCases {
-		t := s.T()
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		t.Cleanup(cancel)
+		s.T().Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			t.Cleanup(cancel)
 
-		activityID := s.tv.ActivityID()
-		taskQueue := s.tv.TaskQueue().String()
+			activityID := s.tv.ActivityID()
+			taskQueue := s.tv.TaskQueue().String()
 
-		startResp, err := s.startActivity(ctx, activityID, taskQueue)
-		require.NoError(t, err)
+			startResp, err := s.startActivity(ctx, activityID, taskQueue)
+			require.NoError(t, err)
 
-		pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
-		require.NoError(t, err)
+			pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
 
-		err = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken)
-		require.NoError(t, err)
+			err = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken)
+			require.NoError(t, err)
 
-		activityPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-			Namespace:      s.Namespace().String(),
-			ActivityId:     activityID,
-			RunId:          startResp.RunId,
-			IncludeInfo:    true,
-			IncludeInput:   true,
-			IncludeOutcome: true,
-			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitCompletion{
-				WaitCompletion: &workflowservice.PollActivityExecutionRequest_CompletionWaitOptions{},
-			},
+			activityPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+				Namespace:      s.Namespace().String(),
+				ActivityId:     activityID,
+				RunId:          startResp.RunId,
+				IncludeInfo:    true,
+				IncludeInput:   true,
+				IncludeOutcome: true,
+				WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitCompletion{
+					WaitCompletion: &workflowservice.PollActivityExecutionRequest_CompletionWaitOptions{},
+				},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, activityPollResp)
+			require.NotNil(t, activityPollResp.Info)
+			s.assertActivityExecutionInfo(
+				t,
+				activityPollResp.Info,
+				activityID,
+				startResp.RunId,
+				tc.expectedStatus,
+				enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
+			)
+
+			protorequire.ProtoEqual(t, defaultInput, activityPollResp.GetInput())
+			tc.completionValidationFn(t, activityPollResp)
 		})
-		require.NoError(t, err)
-		require.NotNil(t, activityPollResp)
-		require.NotNil(t, activityPollResp.Info)
-		s.assertActivityExecutionInfo(
-			t,
-			activityPollResp.Info,
-			activityID,
-			startResp.RunId,
-			tc.expectedStatus,
-			enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
-		)
-
-		protorequire.ProtoEqual(t, defaultInput, activityPollResp.GetInput())
-		tc.completionValidationFn(t, activityPollResp)
 	}
 }
 
