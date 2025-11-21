@@ -100,7 +100,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
 	s.NoError(err)
-	prtnMgr.managerReady.Set(s.tqMgr, nil)
+	prtnMgr.defaultQueueFuture.Set(s.tqMgr, nil)
 }
 
 /*

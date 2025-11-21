@@ -2986,7 +2986,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	defaultQ, err := tqm.(*taskQueuePartitionManagerImpl).managerReady.Get(context.Background())
+	defaultQ, err := tqm.(*taskQueuePartitionManagerImpl).defaultQueueFuture.Get(context.Background())
 	s.Require().NoError(err)
 	tlmImpl := defaultQ.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
@@ -3223,7 +3223,7 @@ func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
 
 // getPhysicalTaskQueueManagerImpl extracts the physicalTaskQueueManagerImpl for the given PhysicalTaskQueueKey
 func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQueueKey) *physicalTaskQueueManagerImpl {
-	defaultQ, err := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).managerReady.Get(context.Background())
+	defaultQ, err := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueueFuture.Get(context.Background())
 	s.Require().NoError(err)
 	pgMgr := defaultQ.(*physicalTaskQueueManagerImpl)
 	return pgMgr

@@ -61,14 +61,16 @@ type (
 		matchingClient      matchingservice.MatchingServiceClient
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// TODO(stephanos): move cache out of partition manager
-		cache cache.Cache // non-nil for root-partition
+		cache      cache.Cache // non-nil for root-partition
+		autoEnable bool
 
-		fairnessState persistencespb.TaskQueueTypeUserData_FairnessState // Set once on initialization and read only after
-		managerReady  *future.FutureImpl[physicalTaskQueueManager]
+		fairnessState      persistencespb.TaskQueueTypeUserData_FairnessState // Set once on initialization and read only after
+		defaultQueueFuture *future.FutureImpl[physicalTaskQueueManager]
+		initCtx            context.Context
+		initCancel         func()
 
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
-		cancelAutoEnableSub func()
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
@@ -100,19 +102,20 @@ func newTaskQueuePartitionManager(
 		tqConfig,
 		partition.TaskQueue().TaskType())
 	pm := &taskQueuePartitionManagerImpl{
-		engine:           e,
-		partition:        partition,
-		ns:               ns,
-		config:           tqConfig,
-		logger:           logger,
-		throttledLogger:  throttledLogger,
-		matchingClient:   e.matchingRawClient,
-		metricsHandler:   metricsHandler,
-		versionedQueues:  make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
-		userDataManager:  userDataManager,
-		rateLimitManager: rateLimitManager,
-		managerReady:     future.NewFuture[physicalTaskQueueManager](),
+		engine:             e,
+		partition:          partition,
+		ns:                 ns,
+		config:             tqConfig,
+		logger:             logger,
+		throttledLogger:    throttledLogger,
+		matchingClient:     e.matchingRawClient,
+		metricsHandler:     metricsHandler,
+		versionedQueues:    make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		userDataManager:    userDataManager,
+		rateLimitManager:   rateLimitManager,
+		defaultQueueFuture: future.NewFuture[physicalTaskQueueManager](),
 	}
+	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
 	if pm.partition.IsRoot() {
 		pm.cache = cache.New(10000, &cache.Options{
@@ -123,26 +126,28 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) initialize(ctx context.Context) {
+var errDefaultQueueNotInit = serviceerror.NewInternal("defaultQueue is not initializaed")
+
+func (pm *taskQueuePartitionManagerImpl) initialize() {
 	unload := func(bool) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
-	err := pm.userDataManager.WaitUntilInitialized(ctx)
+	err := pm.userDataManager.WaitUntilInitialized(pm.initCtx)
 	if err != nil {
-		pm.managerReady.Set(nil, err)
+		pm.defaultQueueFuture.Set(nil, err)
 		return
 	}
 	data, _, err := pm.getPerTypeUserData()
 	if err != nil {
-		pm.managerReady.Set(nil, err)
+		pm.defaultQueueFuture.Set(nil, err)
 		return
 	}
 
-	pm.config.AutoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableSub(unload)
+	pm.autoEnable = pm.config.AutoEnable()
 	pm.fairnessState = data.GetFairnessState()
 	switch {
-	case !pm.config.AutoEnable || pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
+	case !pm.autoEnable || pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
 		var fairness bool
 		fairness, pm.cancelFairnessSub = pm.config.EnableFairnessSub(unload)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
@@ -163,23 +168,25 @@ func (pm *taskQueuePartitionManagerImpl) initialize(ctx context.Context) {
 			pm.config.EnableFairness = true
 		}
 	default:
-		pm.managerReady.Set(nil, serviceerror.NewInternal("Unknown FairnessState in UserData"))
+		pm.defaultQueueFuture.Set(nil, serviceerror.NewInternal("Unknown FairnessState in UserData"))
 		return
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
 	if err != nil {
-		pm.managerReady.Set(nil, err)
+		pm.defaultQueueFuture.Set(nil, err)
 		return
 	}
 	defaultQ.Start()
-	pm.managerReady.Set(defaultQ, nil)
+	pm.defaultQueueFuture.Set(defaultQ, nil)
 }
 
-func (pm *taskQueuePartitionManagerImpl) MustGetDefaultQueue(ctx context.Context) physicalTaskQueueManager {
-	queue, err := pm.managerReady.Get(ctx)
+func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	queue, err := pm.defaultQueueFuture.Get(ctx)
 	if err != nil {
-		softassert.Fail(pm.logger, "mustGetDefaultQueue: "+err.Error())
+		softassert.Fail(pm.logger, "defaultQueue used but not initialized or initialization failed", tag.Error(err))
 	}
 	return queue
 }
@@ -187,7 +194,7 @@ func (pm *taskQueuePartitionManagerImpl) MustGetDefaultQueue(ctx context.Context
 func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
-	go pm.initialize(context.Background())
+	go pm.initialize()
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
@@ -197,7 +204,8 @@ func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager
 // Stop does not unload the partition from matching engine. It is intended to be called by matching engine when
 // unloading the partition. For stopping and unloading a partition call unloadFromEngine instead.
 func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
-	queue, err := pm.managerReady.Get(context.Background())
+	pm.initCancel()
+	queue, err := pm.defaultQueueFuture.Get(context.Background())
 	if err == nil {
 		queue.Stop(unloadCause)
 	}
@@ -207,9 +215,6 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	}
 	if pm.cancelNewMatcherSub != nil {
 		pm.cancelNewMatcherSub()
-	}
-	if pm.cancelAutoEnableSub != nil {
-		pm.cancelAutoEnableSub()
 	}
 
 	pm.versionedQueuesLock.Lock()
@@ -233,11 +238,14 @@ func (pm *taskQueuePartitionManagerImpl) Namespace() *namespace.Namespace {
 }
 
 func (pm *taskQueuePartitionManagerImpl) MarkAlive() {
-	pm.MustGetDefaultQueue(context.Background()).MarkAlive()
+	dbq := pm.defaultQueue()
+	if dbq != nil {
+		dbq.MarkAlive()
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Context) error {
-	queue, err := pm.managerReady.Get(ctx)
+	queue, err := pm.defaultQueueFuture.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -251,8 +259,8 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	directive := params.taskInfo.GetVersionDirective()
 
-	if pm.Partition().IsRoot() && pm.config.AutoEnable && pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED {
-		if params.taskInfo.Priority != nil && (params.taskInfo.Priority.FairnessKey != "" || params.taskInfo.Priority.PriorityKey != int32(0)) {
+	if pm.Partition().IsRoot() && pm.autoEnable && pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED {
+		if params.taskInfo.Priority.GetFairnessKey() != "" || params.taskInfo.Priority.GetPriorityKey() != int32(0) {
 			updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 				data := common.CloneProto(old)
 				perType := data.GetPerType()[int32(pm.Partition().TaskType())]
@@ -261,7 +269,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 			}
 			_, err := pm.userDataManager.UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
 			if err != nil {
-				pm.logger.Error("could not update userdata for autoenable: " + err.Error())
+				pm.logger.Error("could not update userdata for autoenable", tag.Error(err))
 			}
 		}
 	}
@@ -282,7 +290,10 @@ reredirectTask:
 		}
 	}
 
-	dbq := pm.MustGetDefaultQueue(ctx)
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return "", false, errDefaultQueueNotInit
+	}
 	if dbq != syncMatchQueue {
 		// default queue should stay alive even if requests go to other queues
 		dbq.MarkAlive()
@@ -353,7 +364,10 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	pollMetadata *pollMetadata,
 ) (*internalTask, bool, error) {
 	var err error
-	dbq := pm.MustGetDefaultQueue(ctx)
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, false, errDefaultQueueNotInit
+	}
 	versionSetUsed := false
 	deployment, err := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
 	if err != nil {
@@ -605,7 +619,10 @@ reredirectTask:
 		return nil, err
 	}
 
-	dbq := pm.MustGetDefaultQueue(ctx)
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, errDefaultQueueNotInit
+	}
 	if dbq != syncMatchQueue {
 		// default queue should stay alive even if requests go to other queues
 		dbq.MarkAlive()
@@ -640,7 +657,10 @@ reredirectTask:
 		return nil, err
 	}
 
-	dbq := pm.MustGetDefaultQueue(ctx)
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, errDefaultQueueNotInit
+	}
 	if dbq != syncMatchQueue {
 		// default queue should stay alive even if requests go to other queues
 		dbq.MarkAlive()
@@ -664,7 +684,11 @@ func (pm *taskQueuePartitionManagerImpl) GetConfig() *taskQueueConfig {
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
-	ret := pm.MustGetDefaultQueue(context.Background()).GetAllPollerInfo()
+	dbq := pm.defaultQueue()
+	var ret []*taskqueuepb.PollerInfo
+	if dbq != nil {
+		ret = dbq.GetAllPollerInfo()
+	}
 	pm.versionedQueuesLock.RLock()
 	defer pm.versionedQueuesLock.RUnlock()
 	for _, vq := range pm.versionedQueues {
@@ -681,7 +705,8 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 }
 
 func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {
-	if pm.MustGetDefaultQueue(context.Background()).HasPollerAfter(accessTime) {
+	dbq := pm.defaultQueue()
+	if dbq != nil && dbq.HasPollerAfter(accessTime) {
 		return true
 	}
 	pm.versionedQueuesLock.RLock()
@@ -696,7 +721,11 @@ func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time)
 
 func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTime time.Time) bool {
 	if buildId == "" {
-		return pm.MustGetDefaultQueue(context.Background()).HasPollerAfter(accessTime)
+		dbq := pm.defaultQueue()
+		if dbq != nil && dbq.HasPollerAfter(accessTime) {
+			return true
+		}
+		return false
 	}
 	pm.versionedQueuesLock.RLock()
 	// TODO: support v3 versioning
@@ -714,9 +743,13 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 			Pollers: pm.GetAllPollerInfo(),
 		},
 	}
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, errDefaultQueueNotInit
+	}
 	if includeTaskQueueStatus {
 		//nolint:staticcheck // SA1019: [cleanup-wv-3.1]
-		resp.DescResponse.TaskQueueStatus = pm.MustGetDefaultQueue(context.Background()).LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
+		resp.DescResponse.TaskQueueStatus = dbq.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		perTypeUserData, _, err := pm.getPerTypeUserData()
@@ -770,7 +803,11 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 	for b := range buildIds {
 		if b == "" {
-			versions[pm.MustGetDefaultQueue(ctx).QueueKey().Version()] = true
+			dbq := pm.defaultQueue()
+			if dbq == nil {
+				return nil, errDefaultQueueNotInit
+			}
+			versions[dbq.QueueKey().Version()] = true
 		} else {
 			found := false
 			for k := range pm.versionedQueues {
@@ -912,8 +949,9 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	version := unloadedDbq.QueueKey().Version()
 
 	if !version.IsVersioned() {
+		dbq := pm.defaultQueue()
 		// this is the default queue, unload the whole partition if it is not healthy
-		if pm.MustGetDefaultQueue(context.Background()) == unloadedDbq {
+		if dbq != nil && dbq == unloadedDbq {
 			pm.unloadFromEngine(unloadCause)
 		}
 		return
@@ -937,7 +975,11 @@ func (pm *taskQueuePartitionManagerImpl) unloadFromEngine(unloadCause unloadCaus
 
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string, deployment *deploymentpb.Deployment) (physicalTaskQueueManager, error) {
 	if buildId == "" {
-		return pm.MustGetDefaultQueue(ctx), nil
+		dbq := pm.defaultQueue()
+		if dbq == nil {
+			return nil, errDefaultQueueNotInit
+		}
+		return dbq, nil
 	}
 
 	return pm.getVersionedQueue(ctx, "", buildId, deployment, true)
@@ -1095,7 +1137,10 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	deploymentData := perTypeUserData.GetDeploymentData()
 	taskDirectiveRevisionNumber := directive.GetRevisionNumber()
 
-	dbq := pm.MustGetDefaultQueue(ctx)
+	dbq := pm.defaultQueue()
+	if dbq == nil {
+		return nil, nil, nil, 0, errDefaultQueueNotInit
+	}
 
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -1258,7 +1303,10 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	if versionSet != "" {
-		spoolQueue = pm.MustGetDefaultQueue(ctx)
+		spoolQueue = pm.defaultQueue()
+		if spoolQueue == nil {
+			return nil, nil, nil, 0, errDefaultQueueNotInit
+		}
 		syncMatchQueue, err = pm.getVersionedQueue(ctx, versionSet, "", nil, true)
 		if err != nil {
 			return nil, nil, nil, 0, err
@@ -1381,12 +1429,18 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.Vers
 	// Update rateLimits if any change is userData.
 	pm.rateLimitManager.UserDataChanged()
 
-	if !pm.managerReady.Ready() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	defaultQ, err := pm.defaultQueueFuture.Get(ctx)
+	//Initialization error or not ready yet
+	if err != nil {
 		return
 	}
+
 	taskType := int32(pm.Partition().TaskType())
 	if to.GetData().GetPerType()[taskType].GetFairnessState() != pm.fairnessState {
 		pm.unloadFromEngine(unloadCauseConfigChange)
+		return
 	}
 
 	// Notify all queues so they can re-evaluate their backlog.
@@ -1397,5 +1451,5 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.Vers
 	pm.versionedQueuesLock.RUnlock()
 
 	// Do this one in this goroutine.
-	pm.MustGetDefaultQueue(context.Background()).UserDataChanged()
+	defaultQ.UserDataChanged()
 }

@@ -82,7 +82,7 @@ type (
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		AutoEnableSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		AutoEnable                               dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -150,8 +150,7 @@ type (
 		EnableFairness             bool
 		EnableFairnessSub          func(func(bool)) (bool, func())
 		EnableMigration            func() bool
-		AutoEnable                 bool
-		AutoEnableSub              func(func(bool)) (bool, func())
+		AutoEnable                 func() bool
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -311,7 +310,7 @@ func NewConfig(
 		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
 		MaxFairnessKeyWeightOverrides:            dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
-		AutoEnableSub:                            dynamicconfig.MatchingAutoEnable.Subscribe(dc),
+		AutoEnable:                               dynamicconfig.MatchingAutoEnableV2.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
 		AdminNamespaceToPartitionRateSub:               dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Subscribe(dc),
@@ -359,8 +358,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		EnableMigration: func() bool {
 			return config.EnableMigration(ns.String(), taskQueueName, taskType)
 		},
-		AutoEnableSub: func(cb func(bool)) (bool, func()) {
-			return config.AutoEnableSub(ns.String(), taskQueueName, taskType, cb)
+		AutoEnable: func() bool {
+			return config.AutoEnable(ns.String(), taskQueueName, taskType)
 		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
