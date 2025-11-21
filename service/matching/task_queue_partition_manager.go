@@ -1432,7 +1432,7 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.Vers
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	defaultQ, err := pm.defaultQueueFuture.Get(ctx)
-	//Initialization error or not ready yet
+	// Initialization error or not ready yet
 	if err != nil {
 		return
 	}
