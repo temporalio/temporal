@@ -303,10 +303,7 @@ func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.Mutable
 		}
 
 		for _, field := range wf.Callbacks {
-			cb, err := field.Get(ctx)
-			if err != nil {
-				return nil, err
-			}
+			cb := field.Get(ctx)
 			// Only include callbacks in STANDBY state (not already triggered)
 			if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
 				continue

@@ -51,10 +51,7 @@ func (w *Workflow) LifecycleState(
 func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
 	// Iterate through all callbacks and schedule WorkflowClosed ones
 	for _, field := range w.Callbacks {
-		cb, err := field.Get(ctx)
-		if err != nil {
-			return err
-		}
+		cb := field.Get(ctx)
 		// Only process callbacks in STANDBY state (not already triggered)
 		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
 			continue
