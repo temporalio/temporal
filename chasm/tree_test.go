@@ -341,12 +341,10 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			}
 
 			chasmContext := NewMutableContext(context.Background(), rootNode)
-			sc1Des, err := sc1Field.Get(chasmContext)
-			s.NoError(err)
+			sc1Des := sc1Field.Get(chasmContext)
 			s.Equal(sc1.SubComponent1Data.GetRunId(), sc1Des.SubComponent1Data.GetRunId())
 
-			sc2Des, err := sc2Field.Get(chasmContext)
-			s.NoError(err)
+			sc2Des := sc2Field.Get(chasmContext)
 			s.Equal(sc2.SubComponent1Data.GetRunId(), sc2Des.SubComponent1Data.GetRunId())
 		})
 
@@ -486,13 +484,11 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.NotNil(testComponent.MSPointer)
 
 		chasmContext := NewMutableContext(context.Background(), rootNode)
-		sc11Des, err := testComponent.SubComponent11Pointer.Get(chasmContext)
-		s.NoError(err)
+		sc11Des := testComponent.SubComponent11Pointer.Get(chasmContext)
 		s.NotNil(sc11Des)
 		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
 
-		ifacePtr, err := testComponent.SubComponentInterfacePointer.Get(chasmContext)
-		s.NoError(err)
+		ifacePtr := testComponent.SubComponentInterfacePointer.Get(chasmContext)
 		s.NotNil(ifacePtr)
 
 		sc1ptr, ok := ifacePtr.(*TestSubComponent1)
@@ -652,8 +648,7 @@ func (s *nodeSuite) TestFieldInterface() {
 	tc := node.value.(*testComponent)
 
 	chasmContext := NewMutableContext(context.Background(), node)
-	sc1, err := tc.SubComponent1.Get(chasmContext)
-	s.NoError(err)
+	sc1 := tc.SubComponent1.Get(chasmContext)
 	s.NotNil(sc1)
 	s.Equal("sub-component1-data", sc1.GetData())
 }
@@ -1633,10 +1628,8 @@ func (s *nodeSuite) TestRef() {
 	s.True(ok)
 	archetypeID := rc.componentID
 
-	subComponent1, err := testComponent.SubComponent1.Get(chasmContext)
-	s.NoError(err)
-	subComponent11, err := subComponent1.SubComponent11.Get(chasmContext)
-	s.NoError(err)
+	subComponent1 := testComponent.SubComponent1.Get(chasmContext)
+	subComponent11 := subComponent1.SubComponent11.Get(chasmContext)
 
 	testCases := []struct {
 		name             string
@@ -1798,8 +1791,7 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	s.Len(mutations.DeletedNodes, 1)
 	s.Contains(mutations.DeletedNodes, "SubData1", "SubData1 was removed and must be in DeletedNodes")
 
-	sc1, err := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
-	s.NoError(err)
+	sc1 := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
 	s.NotNil(sc1)
 
 	mutations, err = node.CloseTransaction()
@@ -2136,8 +2128,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	// Add a valid outbound side effect task to a sub-component.
 	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
-	subComponent2, err := testComponent.SubComponent2.Get(mutableContext)
-	s.NoError(err)
+	subComponent2 := testComponent.SubComponent2.Get(mutableContext)
 	mutableContext.AddTask(
 		subComponent2,
 		TaskAttributes{Destination: "destination"},
@@ -2525,8 +2516,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		},
 	)
 
-	sc1, err := testComponent.SubComponent1.Get(mutableContext)
-	s.NoError(err)
+	sc1 := testComponent.SubComponent1.Get(mutableContext)
 
 	mutableContext.AddTask(
 		sc1,

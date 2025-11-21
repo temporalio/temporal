@@ -44,9 +44,8 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 	).Return(nil, errors.New("processTimeRange bug"))
 
 	// Execute the generate task.
-	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	generator := sched.Generator.Get(ctx)
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.True(common.IsInternalError(err))
 }
 
@@ -54,8 +53,7 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	ctx := s.newMutableContext()
 	sched := s.scheduler
 
-	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
+	generator := sched.Generator.Get(ctx)
 
 	// Use a real SpecProcessor implementation.
 	specProcessor := newTestSpecProcessor(s.controller)
@@ -67,12 +65,11 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	generator.LastProcessedTime = timestamppb.New(highWatermark)
 
 	// Execute the generate task.
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.NoError(err)
 
 	// We expect 5 buffered starts.
-	invoker, err := sched.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := sched.Invoker.Get(ctx)
 	s.Equal(5, len(invoker.BufferedStarts))
 
 	// Validate RequestId -> WorkflowId mapping

@@ -30,7 +30,6 @@ import (
 
 const (
 	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
-	firstWorkflowTaskVerificationFailedMsg     = "Failed to verify first workflow task scheduled"
 )
 
 type (

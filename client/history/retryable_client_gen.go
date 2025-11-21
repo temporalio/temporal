@@ -506,6 +506,21 @@ func (c *retryableClient) PauseActivity(
 	return resp, err
 }
 
+func (c *retryableClient) PauseWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.PauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.PauseWorkflowExecutionResponse, error) {
+	var resp *historyservice.PauseWorkflowExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PauseWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,
