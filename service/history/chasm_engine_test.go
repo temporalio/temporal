@@ -622,6 +622,9 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 		},
 	).Times(1)
 
+	updateAtWhichSatisfied := 2
+	update := 0
+
 	updateErr := make(chan error, 1)
 	updateActivity := func() {
 		_, err := s.engine.UpdateComponent(
@@ -630,29 +633,42 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 			func(ctx chasm.MutableContext, component chasm.Component) error {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
-				tc.ActivityInfo.ActivityId = expectedActivityID
+				if update == updateAtWhichSatisfied {
+					tc.ActivityInfo.ActivityId = expectedActivityID
+				}
+				update++
 				return nil
 			},
 		)
 		updateErr <- err
 	}
 
-	newSerializedRef, err := s.engine.PollComponent(
-		context.Background(),
-		ref,
-		func(ctx chasm.Context, component chasm.Component) (bool, error) {
-			tc, ok := component.(*testComponent)
-			s.True(ok)
-			satisfied := tc.ActivityInfo.ActivityId == expectedActivityID
-			// predicate will become satisfied after first invocation
-			if !satisfied {
-				go updateActivity()
-			}
-			return satisfied, nil
-		},
-	)
-	s.NoError(err)
-	s.NoError(<-updateErr)
+	pollErr := make(chan error)
+	pollResult := make(chan []byte)
+
+	pollComponent := func() {
+		newSerializedRef, err := s.engine.PollComponent(
+			context.Background(),
+			ref,
+			func(ctx chasm.Context, component chasm.Component) (bool, error) {
+				tc, ok := component.(*testComponent)
+				s.True(ok)
+				satisfied := tc.ActivityInfo.ActivityId == expectedActivityID
+				return satisfied, nil
+			},
+		)
+		pollErr <- err
+		pollResult <- newSerializedRef
+	}
+
+	go pollComponent()
+	go updateActivity()
+
+	for range updateAtWhichSatisfied {
+		s.NoError(<-updateErr)
+	}
+	s.NoError(<-pollErr)
+	newSerializedRef := <-pollResult
 	s.NotNil(newSerializedRef)
 
 	newRef, err := chasm.DeserializeComponentRef(newSerializedRef)
