@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/chasm"
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -49,14 +51,12 @@ func (g *GeneratorTaskExecutor) Execute(
 ) error {
 	scheduler, err := generator.Scheduler.Get(ctx)
 	if err != nil {
-		g.baseLogger.Error("scheduler tree missing node", tag.Error(err))
 		return ErrUnprocessable
 	}
 	logger := newTaggedLogger(g.baseLogger, scheduler)
 
 	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
-		logger.Error("scheduler tree missing node", tag.Error(err))
 		return ErrUnprocessable
 	}
 
@@ -67,6 +67,12 @@ func (g *GeneratorTaskExecutor) Execute(
 		scheduler.Info.CreateTime = createdAt
 
 		g.logSchedule(logger, "starting schedule", scheduler)
+	}
+
+	// If the high water mark is earlier than when a schedule was updated, we must skip any actions that hadn't
+	// yet been processed.
+	if scheduler.Info.GetUpdateTime().AsTime().After(generator.LastProcessedTime.AsTime()) {
+		generator.LastProcessedTime = scheduler.Info.GetUpdateTime()
 	}
 
 	// Process time range between last high water mark and system time.
@@ -90,8 +96,8 @@ func (g *GeneratorTaskExecutor) Execute(
 	)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
-		logger.Error("failed to process a time range", tag.Error(err))
-		return ErrUnprocessable
+		return queues.NewUnprocessableTaskError(
+			fmt.Sprintf("failed to process a time range: %w", err))
 	}
 
 	// Enqueue newly-generated buffered starts.
@@ -102,8 +108,8 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 	if err := g.updateFutureActionTimes(ctx, generator, scheduler); err != nil {
-		logger.Error("failed to update future action times", tag.Error(err))
-		return err
+		return queues.NewUnprocessableTaskError(
+			fmt.Sprintf("failed to update future action times: %w", err))
 	}
 
 	// Check if the schedule has gone idle.

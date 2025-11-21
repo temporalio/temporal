@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/queues"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -89,7 +90,7 @@ const (
 )
 
 var (
-	errRetryLimitExceeded       = errors.New("retry limit exceeded")
+	errRetryLimitExceeded       = queues.NewUnprocessableTaskError("retry limit exceeded")
 	_                     error = &rateLimitedError{}
 )
 
@@ -201,16 +202,16 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		invokerRef,
-		func(i *Invoker, ctx chasm.MutableContext, _ any) (struct{}, error) {
+		func(i *Invoker, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			s, err := i.Scheduler.Get(ctx)
 			if err != nil {
-				return struct{}{}, err
+				return nil, err
 			}
 
 			i.recordExecuteResult(ctx, &result)
 			s.recordActionResult(&schedulerActionResult{starts: startResults})
 
-			return struct{}{}, nil
+			return nil, nil
 		},
 		nil,
 	)
@@ -397,7 +398,7 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
 	if executionInfo == nil {
-		return serviceerror.NewInvalidArgument("schedules must have an Action set")
+		return queues.NewUnprocessableTaskError("schedules must have an Action set")
 	}
 
 	// Compute actions to take from the current buffer.
@@ -594,6 +595,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		WorkflowRunTimeout:       requestSpec.WorkflowRunTimeout,
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
+		Priority:                 requestSpec.Priority,
 	}
 
 	// Set last completion result payload.

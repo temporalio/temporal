@@ -107,7 +107,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	}
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
+
+	// lastAction is used to set the high water mark for future ProcessTimeRange
+	// invocations. The code below will set a "last action" even when none is taken,
+	// simply to indicate that processing can permanently skip that period of time
+	// (e.g., it was prior to an update or past a catchup).
 	lastAction := end
+
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
@@ -117,6 +123,9 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
+			s.logger.Warn("ProcessBuffer skipped an action due to update time",
+				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
+				tag.NewTimeTag("droppedActionTime", next.Next))
 			continue
 		}
 

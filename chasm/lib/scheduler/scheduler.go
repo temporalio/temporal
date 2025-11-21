@@ -3,7 +3,6 @@ package scheduler
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -13,13 +12,17 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -62,8 +65,9 @@ const (
 )
 
 var (
-	ErrConflictTokenMismatch = errors.New("mismatched conflict token")
-	ErrUnprocessable         = errors.New("unprocessable schedule")
+	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
+	ErrClosed                = serviceerror.NewInvalidArgument("schedule closed")
+	ErrUnprocessable         = serviceerror.NewInternal("unprocessable schedule")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -639,8 +643,7 @@ func (s *Scheduler) validateConflictToken(token []byte) bool {
 // SearchAttributes returns the Temporal-managed key values for visibility.
 func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
-		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.State.Paused),
-		chasm.SearchAttributeTemporalNamespaceDivision.Value(scheduler.NamespaceDivision),
+		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
 }
 
@@ -648,28 +651,31 @@ func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyVa
 func (s *Scheduler) Memo(
 	ctx chasm.Context,
 ) map[string]chasm.VisibilityValue {
-	newInfo, err := s.GetListInfo(ctx)
+	newInfo, err := s.ListInfo(ctx)
 	if err != nil {
 		// Unable to retrieve list info. Return nil to skip memo update.
 		// Error will be logged once loggers are available in CHASM.
 		return nil
 	}
 
-	newInfoPayload, err := newInfo.Marshal()
+	payload, err := newInfo.Marshal()
 	if err != nil {
 		// Unable to marshal list info. Return nil to skip memo update.
 		// Error will be logged once loggers are available in CHASM.
 		return nil
 	}
 
+	// TODO - Memo provider is being updated to support protobufs, byte slices
+	// may cause oscillating writes to visibility given that proto serialization is
+	// non-deterministic.
 	return map[string]chasm.VisibilityValue{
-		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(newInfoPayload),
+		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(payload),
 	}
 }
 
-// GetListInfo returns the ScheduleListInfo, used as the visibility memo, and to
+// ListInfo returns the ScheduleListInfo, used as the visibility memo, and to
 // answer List queries.
-func (s *Scheduler) GetListInfo(
+func (s *Scheduler) ListInfo(
 	ctx chasm.Context,
 ) (*schedulepb.ScheduleListInfo, error) {
 	spec := common.CloneProto(s.Schedule.Spec)

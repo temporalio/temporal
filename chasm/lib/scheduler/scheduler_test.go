@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestGetListInfo(t *testing.T) {
+func TestListInfo(t *testing.T) {
 	scheduler, ctx, _ := setupSchedulerForTest(t)
 
 	// Generator maintains the FutureActionTimes list, set that up first.
@@ -17,7 +17,7 @@ func TestGetListInfo(t *testing.T) {
 	expectedFutureTimes := []*timestamppb.Timestamp{timestamppb.Now(), timestamppb.Now()}
 	generator.FutureActionTimes = expectedFutureTimes
 
-	listInfo, err := scheduler.GetListInfo(ctx)
+	listInfo, err := scheduler.ListInfo(ctx)
 	require.NoError(t, err)
 
 	// Should return a populated info block.

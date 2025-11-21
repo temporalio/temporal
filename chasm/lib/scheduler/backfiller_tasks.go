@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -59,14 +61,12 @@ func (b *BackfillerTaskExecutor) Execute(
 
 	scheduler, err := backfiller.Scheduler.Get(ctx)
 	if err != nil {
-		b.baseLogger.Error("scheduler tree missing node", tag.Error(err))
 		return ErrUnprocessable
 	}
 	logger := newTaggedLogger(b.baseLogger, scheduler)
 
 	invoker, err := scheduler.Invoker.Get(ctx)
 	if err != nil {
-		logger.Error("scheduler tree missing node", tag.Error(err))
 		return ErrUnprocessable
 	}
 
@@ -91,12 +91,10 @@ func (b *BackfillerTaskExecutor) Execute(
 	case RequestTypeTrigger:
 		result, err = b.processTrigger(ctx, scheduler, backfiller)
 	default:
-		logger.Error("unknown backfill type", tag.NewAnyTag("type", backfiller.RequestType()))
-		return ErrUnprocessable
+		return queues.NewUnprocessableTaskError(fmt.Sprintf("unknown backfill type: %v", backfiller.RequestType()))
 	}
 	if err != nil {
-		logger.Error("failed to process backfill", tag.Error(err))
-		return err
+		return queues.NewUnprocessableTaskError(fmt.Sprintf("failed to process backfill: %w", err))
 	}
 
 	// Enqueue new BufferedStarts on the Invoker, if we have any.
