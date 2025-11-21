@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -44,6 +45,7 @@ type (
 		mockRescheduler       *queues.MockRescheduler
 		mockNamespaceRegistry *namespace.MockRegistry
 		mockClusterMetadata   *cluster.MockMetadata
+		chasmRegistry         *chasm.Registry
 		metricsHandler        *metricstest.CaptureHandler
 
 		timeSource *clock.EventTimeSource
@@ -85,6 +87,7 @@ func (s *executableSuite) SetupTest() {
 	}).AnyTimes()
 
 	s.timeSource = clock.NewEventTimeSource()
+	s.chasmRegistry = chasm.NewRegistry(log.NewTestLogger())
 }
 
 func (s *executableSuite) TearDownSuite() {
@@ -1149,6 +1152,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.timeSource,
 		s.mockNamespaceRegistry,
 		s.mockClusterMetadata,
+		s.chasmRegistry,
 		queues.GetTaskTypeTagValue,
 		log.NewTestLogger(),
 		s.metricsHandler,

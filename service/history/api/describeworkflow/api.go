@@ -146,6 +146,15 @@ func Invoke(
 		},
 	}
 
+	// copy pause info to the response if it exists
+	if executionInfo.PauseInfo != nil {
+		result.WorkflowExtendedInfo.PauseInfo = &workflowpb.WorkflowExecutionPauseInfo{
+			PausedTime: executionInfo.PauseInfo.PauseTime,
+			Identity:   executionInfo.PauseInfo.Identity,
+			Reason:     executionInfo.PauseInfo.Reason,
+		}
+	}
+
 	if mutableState.IsResetRun() {
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
 	}

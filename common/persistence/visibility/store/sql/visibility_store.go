@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -183,7 +184,24 @@ func (s *VisibilityStore) listWorkflowExecutions(
 		return nil, err
 	}
 
-	queryParams, err := s.buildQueryParams(request.Namespace, request.Query, sqlQC)
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams, err := buildQueryParams(
+		request.Namespace,
+		request.NamespaceID,
+		request.Query,
+		sqlQC,
+		saTypeMap,
+		saMapper,
+	)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
 		// only mapper errors).
@@ -199,12 +217,7 @@ func (s *VisibilityStore) listWorkflowExecutions(
 		return nil, err
 	}
 
-	queryString, queryArgs := sqlQC.BuildSelectStmt(
-		request.NamespaceID,
-		queryParams,
-		request.PageSize,
-		pageToken,
-	)
+	queryString, queryArgs := sqlQC.BuildSelectStmt(queryParams, request.PageSize, pageToken)
 	selectFilter := &sqlplugin.VisibilitySelectFilter{
 		Query:     queryString,
 		QueryArgs: queryArgs,
@@ -384,7 +397,24 @@ func (s *VisibilityStore) countWorkflowExecutions(
 		return nil, err
 	}
 
-	queryParams, err := s.buildQueryParams(request.Namespace, request.Query, sqlQC)
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams, err := buildQueryParams(
+		request.Namespace,
+		request.NamespaceID,
+		request.Query,
+		sqlQC,
+		saTypeMap,
+		saMapper,
+	)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
 		// only mapper errors).
@@ -395,7 +425,7 @@ func (s *VisibilityStore) countWorkflowExecutions(
 		return nil, err
 	}
 
-	queryString, queryArgs := sqlQC.BuildCountStmt(request.NamespaceID, queryParams)
+	queryString, queryArgs := sqlQC.BuildCountStmt(queryParams)
 	groupBy := make([]string, 0, len(queryParams.GroupBy)+1)
 	for _, field := range queryParams.GroupBy {
 		groupBy = append(groupBy, field.FieldName)
@@ -464,35 +494,6 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 		resp.Count += row.Count
 	}
 	return resp, nil
-}
-
-func (s *VisibilityStore) buildQueryParams(
-	namespaceName namespace.Name,
-	queryString string,
-	sqlQC *SQLQueryConverter,
-) (*query.QueryParams[sqlparser.Expr], error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
-	if err != nil {
-		return nil, err
-	}
-
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
-	if err != nil {
-		return nil, err
-	}
-
-	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper)
-	queryParams, err := c.Convert(queryString)
-	if err != nil {
-		return nil, err
-	}
-
-	// ORDER BY is not support in SQL visibility store
-	if len(queryParams.OrderBy) > 0 {
-		return nil, query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage)
-	}
-
-	return queryParams, nil
 }
 
 func (s *VisibilityStore) GetWorkflowExecution(
@@ -650,7 +651,7 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		// TODO: CHASM search attributes are not in the typeMap and SQL only stores raw values (no metadata).
 		// The Encode() call below will fail to add type metadata, causing decode issues.
-		if searchattribute.IsChasmSearchAttribute(name) {
+		if sadefs.IsChasmSearchAttribute(name) {
 			continue
 		}
 		tp, err := saTypeMap.GetType(name)
@@ -691,4 +692,40 @@ func (s *VisibilityStore) AddSearchAttributes(
 ) error {
 	// SQL Visibility does not support modifying schema to add search attributes at this moment.
 	return serviceerror.NewUnimplemented("AddSearchAttributes operation not supported in SQL visibility")
+}
+
+func buildQueryParams(
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	queryString string,
+	sqlQC *SQLQueryConverter,
+	saTypeMap searchattribute.NameTypeMap,
+	saMapper searchattribute.Mapper,
+) (*query.QueryParams[sqlparser.Expr], error) {
+	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper)
+	queryParams, err := c.Convert(queryString)
+	if err != nil {
+		return nil, err
+	}
+
+	nsFilterExpr, err := sqlQC.ConvertComparisonExpr(
+		sqlparser.EqualStr,
+		query.NamespaceIDSAColumn,
+		namespaceID.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams.QueryExpr, err = sqlQC.BuildAndExpr(nsFilterExpr, queryParams.QueryExpr)
+	if err != nil {
+		return nil, err
+	}
+
+	// ORDER BY is not support in SQL visibility store
+	if len(queryParams.OrderBy) > 0 {
+		return nil, query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage)
+	}
+
+	return queryParams, nil
 }

@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -196,7 +197,7 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 
@@ -210,10 +211,10 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				searchattribute.GetSqlDbColName(searchattribute.RunID),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
+				sadefs.GetSqlDbColName(sadefs.RunID),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
@@ -239,12 +240,12 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 		ORDER BY %s DESC, %s DESC, %s
 		LIMIT ?`,
 		strings.Join(addPrefix("ev.", sqlplugin.DbFields), ", "),
-		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		strings.Join(whereClauses, " AND "),
 		sqlparser.String(c.getCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(sadefs.StartTime),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 	), queryArgs
 }
 
@@ -258,7 +259,7 @@ func (c *mysqlQueryConverter) buildCountStmt(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("(%s = ?)", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 
@@ -279,8 +280,8 @@ func (c *mysqlQueryConverter) buildCountStmt(
 		WHERE %s
 		%s`,
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
-		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		strings.Join(whereClauses, " AND "),
 		groupByClause,
 	), queryArgs

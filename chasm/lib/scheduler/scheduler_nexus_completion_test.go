@@ -30,8 +30,7 @@ type nexusCompletionTestCase struct {
 func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 	sched, ctx, node := setupSchedulerForTest(t)
 
-	invoker, err := sched.Invoker.Get(ctx)
-	require.NoError(t, err)
+	invoker := sched.Invoker.Get(ctx)
 
 	if tc.setupInvoker != nil {
 		tc.setupInvoker(invoker)
@@ -42,10 +41,9 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 
 	initialRunningWorkflows := len(sched.Info.RunningWorkflows)
 	initialRecentActions := len(sched.Info.RecentActions)
-	initialLastCompletion, err := sched.LastCompletionResult.Get(ctx)
-	require.NoError(t, err)
+	initialLastCompletion := sched.LastCompletionResult.Get(ctx)
 
-	err = sched.HandleNexusCompletion(ctx, tc.completion)
+	err := sched.HandleNexusCompletion(ctx, tc.completion)
 	require.NoError(t, err)
 
 	_, err = node.CloseTransaction()
@@ -54,13 +52,12 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 	if tc.expectNoOp {
 		require.Len(t, sched.Info.RunningWorkflows, initialRunningWorkflows)
 		require.Len(t, sched.Info.RecentActions, initialRecentActions)
-		currentLastCompletion, _ := sched.LastCompletionResult.Get(ctx)
+		currentLastCompletion := sched.LastCompletionResult.Get(ctx)
 		require.Equal(t, initialLastCompletion, currentLastCompletion)
 		return
 	}
 
-	lastCompletion, err := sched.LastCompletionResult.Get(ctx)
-	require.NoError(t, err)
+	lastCompletion := sched.LastCompletionResult.Get(ctx)
 	require.NotNil(t, lastCompletion)
 
 	if tc.completion.GetSuccess() != nil {
