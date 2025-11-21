@@ -6,6 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -190,6 +191,11 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+		engine.NotifyChasmExecution(chasm.EntityKey{
+			NamespaceID: currentWorkflowMutation.ExecutionInfo.NamespaceId,
+			BusinessID:  currentWorkflowMutation.ExecutionInfo.WorkflowId,
+			EntityID:    currentWorkflowMutation.ExecutionState.RunId,
+		}, nil)
 	}
 	if err != nil {
 		return 0, 0, err

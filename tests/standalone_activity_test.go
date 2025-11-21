@@ -192,17 +192,108 @@ func (s *standaloneActivityTestSuite) TestActivityFailedByID() {
 	s.validateFailure(ctx, t, activityID, runID, nil, s.tv.WorkerIdentity())
 }
 
-func (s *standaloneActivityTestSuite) TestScheduleToStartShouldTimeout() {
-	// TODO implement when we have PollActivityExecution. Make sure we check the attempt vs. outcome failure population.
-	s.T().Skip("Temporarily disabled")
+// TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is
+// started. It also verifies that PollActivityExecution can be used to poll for a TimedOut state
+// change caused by execution of a timer task.
+func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
+	t := s.T()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := uuid.New().String()
+
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		ActivityType: &commonpb.ActivityType{
+			Name: "test-activity-type",
+		},
+		Input: defaultInput,
+		Options: &activitypb.ActivityOptions{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Second),
+		},
+		RequestId: "test-request-id",
+	})
+	require.NoError(t, err)
+	t.Logf("Started activity %s with 1s start-to-close timeout", activityID)
+
+	// First poll: activity has not started yet
+	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:   s.Namespace().String(),
+		ActivityId:  activityID,
+		RunId:       startResp.RunId,
+		IncludeInfo: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pollResp)
+	require.NotNil(t, pollResp.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, pollResp.GetInfo().GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pollResp.GetInfo().GetRunState())
+
+	// Worker poll to start the activity
+	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+		},
+		Identity: s.tv.WorkerIdentity(),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pollTaskResp)
+	require.NotEmpty(t, pollTaskResp.TaskToken)
+
+	// Second poll: activity has started
+	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:   s.Namespace().String(),
+		ActivityId:  activityID,
+		RunId:       startResp.RunId,
+		IncludeInfo: true,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+				LongPollToken: pollResp.StateChangeLongPollToken,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pollResp)
+	require.NotNil(t, pollResp.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, pollResp.GetInfo().GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, pollResp.GetInfo().GetRunState())
+
+	// Third poll: activity has timed out
+	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          startResp.RunId,
+		IncludeInfo:    true,
+		IncludeOutcome: true,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+				LongPollToken: pollResp.StateChangeLongPollToken,
+			},
+		},
+	})
+
+	// TODO(dan): will complete this test in a different PR
+	require.NoError(t, err)
+	require.NotNil(t, pollResp)
+	require.NotNil(t, pollResp.GetInfo())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
+	// failure := pollResp.GetInfo().GetLastFailure()
+	// require.NotNil(t, failure)
+	// timeoutFailure := failure.GetTimeoutFailureInfo()
+	// require.NotNil(t, timeoutFailure)
+	// require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutFailure.GetTimeoutType())
+	// require.Nil(t, pollResp.GetOutcome())
+	// require.Nil(t, pollResp.GetFailure())
 }
 
-func (s *standaloneActivityTestSuite) TestScheduleToCloseShouldTimeout() {
-	// TODO implement when we have PollActivityExecution. Make sure we check the attempt vs. outcome failure population.
-	s.T().Skip("Temporarily disabled")
-}
-
-func (s *standaloneActivityTestSuite) TestStartToCloseShouldTimeout() {
+func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout() {
 	// TODO implement when we have PollActivityExecution. Make sure we check the attempt vs. outcome failure population.
 	s.T().Skip("Temporarily disabled")
 }
