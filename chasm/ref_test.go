@@ -41,12 +41,12 @@ func (s *componentRefSuite) SetupTest() {
 }
 
 func (s *componentRefSuite) TestArchetypeID() {
-	entityKey := EntityKey{
+	executionKey := ExecutionKey{
 		NamespaceID: primitives.NewUUID().String(),
 		BusinessID:  primitives.NewUUID().String(),
-		EntityID:    primitives.NewUUID().String(),
+		RunID:       primitives.NewUUID().String(),
 	}
-	ref := NewComponentRef[*TestComponent](entityKey)
+	ref := NewComponentRef[*TestComponent](executionKey)
 
 	archetypeID, err := ref.ArchetypeID(s.registry)
 	s.NoError(err)
@@ -58,12 +58,12 @@ func (s *componentRefSuite) TestArchetypeID() {
 }
 
 func (s *componentRefSuite) TestShardingKey() {
-	entityKey := EntityKey{
+	executionKey := ExecutionKey{
 		NamespaceID: primitives.NewUUID().String(),
 		BusinessID:  primitives.NewUUID().String(),
-		EntityID:    primitives.NewUUID().String(),
+		RunID:       primitives.NewUUID().String(),
 	}
-	ref := NewComponentRef[*TestComponent](entityKey)
+	ref := NewComponentRef[*TestComponent](executionKey)
 
 	shardingKey, err := ref.ShardingKey(s.registry)
 	s.NoError(err)
@@ -71,19 +71,19 @@ func (s *componentRefSuite) TestShardingKey() {
 	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
 
-	s.Equal(rc.shardingFn(entityKey), shardingKey)
+	s.Equal(rc.shardingFn(executionKey), shardingKey)
 }
 
 func (s *componentRefSuite) TestSerializeDeserialize() {
-	entityKey := EntityKey{
+	executionKey := ExecutionKey{
 		NamespaceID: primitives.NewUUID().String(),
 		BusinessID:  primitives.NewUUID().String(),
-		EntityID:    primitives.NewUUID().String(),
+		RunID:       primitives.NewUUID().String(),
 	}
 	ref := ComponentRef{
-		EntityKey:    entityKey,
-		entityGoType: reflect.TypeFor[*TestComponent](),
-		entityLastUpdateVT: &persistencespb.VersionedTransition{
+		ExecutionKey:    executionKey,
+		executionGoType: reflect.TypeFor[*TestComponent](),
+		executionLastUpdateVT: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
 		},
@@ -100,13 +100,13 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 	deserializedRef, err := DeserializeComponentRef(serializedRef)
 	s.NoError(err)
 
-	s.ProtoEqual(ref.entityLastUpdateVT, deserializedRef.entityLastUpdateVT)
+	s.ProtoEqual(ref.executionLastUpdateVT, deserializedRef.executionLastUpdateVT)
 	s.ProtoEqual(ref.componentInitialVT, deserializedRef.componentInitialVT)
 
 	rootRc, ok := s.registry.ComponentFor(&TestComponent{})
 	s.True(ok)
 	s.Equal(rootRc.componentID, deserializedRef.archetypeID)
 
-	s.Equal(ref.EntityKey, deserializedRef.EntityKey)
+	s.Equal(ref.ExecutionKey, deserializedRef.ExecutionKey)
 	s.Equal(ref.componentPath, deserializedRef.componentPath)
 }

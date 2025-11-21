@@ -2013,7 +2013,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
@@ -2080,7 +2080,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any())
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
@@ -2189,7 +2189,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any())
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 

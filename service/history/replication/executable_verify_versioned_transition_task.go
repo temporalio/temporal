@@ -221,7 +221,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	wfContext, release, err := e.WorkflowCache.GetOrCreateChasmEntity(
+	wfContext, release, err := e.WorkflowCache.GetOrCreateChasmExecution(
 		ctx,
 		shardContext,
 		namespace.ID(e.NamespaceID),

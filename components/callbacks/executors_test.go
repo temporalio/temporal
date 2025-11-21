@@ -296,7 +296,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 	dummyRef := persistencespb.ChasmComponentRef{
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
-		EntityId:    "entity-id",
+		RunId:       "run-id",
 		ArchetypeId: 1234,
 	}
 
@@ -335,7 +335,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					require.NoError(t, proto.Unmarshal(req.Completion.ComponentRef, &ref))
 					require.Equal(t, "namespace-id", ref.NamespaceId)
 					require.Equal(t, "business-id", ref.BusinessId)
-					require.Equal(t, "entity-id", ref.EntityId)
+					require.Equal(t, "run-id", ref.RunId)
 					require.Equal(t, dummyRef.ArchetypeId, ref.ArchetypeId)
 					require.Equal(t, "request-id", req.Completion.RequestId)
 

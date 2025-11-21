@@ -19,7 +19,7 @@ type (
 
 		ephemeral     bool
 		singleCluster bool
-		shardingFn    func(EntityKey) string
+		shardingFn    func(ExecutionKey) string
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 	}
@@ -58,7 +58,7 @@ func WithSingleCluster() RegistrableComponentOption {
 // WithShardingFn allows specifying a custom sharding key function for the component.
 // TODO: remove WithShardingFn, we don't need this functionality.
 func WithShardingFn(
-	shardingFn func(EntityKey) string,
+	shardingFn func(ExecutionKey) string,
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		if shardingFn != nil {
