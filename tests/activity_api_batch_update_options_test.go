@@ -17,7 +17,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -100,7 +100,7 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-	unpauseCause := fmt.Sprintf("%s = %s", defs.TemporalPauseInfo, escapedSearchValue)
+	unpauseCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, unpauseCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {

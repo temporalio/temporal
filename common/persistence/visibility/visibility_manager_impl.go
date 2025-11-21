@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -194,7 +194,7 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 			IndexedFields: make(map[string]*commonpb.Payload),
 		}
 		for key, value := range request.SearchAttributes.IndexedFields {
-			if !defs.IsSystem(key) {
+			if !sadefs.IsSystem(key) {
 				searchAttrs.IndexedFields[key] = value
 			}
 		}

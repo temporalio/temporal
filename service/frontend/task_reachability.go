@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 )
@@ -169,7 +169,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		}
 
 		// Query workflows that have completed tasks marked with a sentinel "unversioned" search attribute.
-		buildIdsFilter = fmt.Sprintf(`%s = "%s"`, defs.BuildIds, worker_versioning.UnversionedSearchAttribute)
+		buildIdsFilter = fmt.Sprintf(`%s = "%s"`, sadefs.BuildIds, worker_versioning.UnversionedSearchAttribute)
 	} else { // Query for a versioned worker
 		setIdx, buildIdIdx := worker_versioning.FindBuildId(request.versioningData, request.buildId)
 		if setIdx == -1 {
@@ -199,7 +199,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(buildId.Id)))))
 			}
 		}
-		buildIdsFilter = fmt.Sprintf("%s IN (%s)", defs.BuildIds, strings.Join(escapedBuildIds, ","))
+		buildIdsFilter = fmt.Sprintf("%s IN (%s)", sadefs.BuildIds, strings.Join(escapedBuildIds, ","))
 	}
 
 	if reachableByNewWorkflows {
@@ -211,7 +211,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	if isDefaultInQueue {
 		// Take into account started workflows that have not yet been processed by any worker.
 		if request.reachabilityType != enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS {
-			buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", defs.BuildIds, buildIdsFilter)
+			buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", sadefs.BuildIds, buildIdsFilter)
 		}
 	}
 
@@ -233,9 +233,9 @@ func (wh *WorkflowHandler) queryVisibilityForExistingWorkflowsReachability(
 	statusFilter := ""
 	switch reachabilityType {
 	case enumspb.TASK_REACHABILITY_OPEN_WORKFLOWS:
-		statusFilter = fmt.Sprintf(` AND %s = "Running"`, defs.ExecutionStatus)
+		statusFilter = fmt.Sprintf(` AND %s = "Running"`, sadefs.ExecutionStatus)
 	case enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS:
-		statusFilter = fmt.Sprintf(` AND %s != "Running"`, defs.ExecutionStatus)
+		statusFilter = fmt.Sprintf(` AND %s != "Running"`, sadefs.ExecutionStatus)
 	case enumspb.TASK_REACHABILITY_UNSPECIFIED:
 		reachabilityType = enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS
 		statusFilter = ""
@@ -252,7 +252,7 @@ func (wh *WorkflowHandler) queryVisibilityForExistingWorkflowsReachability(
 	req := manager.CountWorkflowExecutionsRequest{
 		NamespaceID: ns.ID(),
 		Namespace:   ns.Name(),
-		Query:       fmt.Sprintf("%s = %s AND %s%s", defs.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter),
+		Query:       fmt.Sprintf("%s = %s AND %s%s", sadefs.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter),
 	}
 
 	// TODO(bergundy): is count more efficient than select with page size of 1?

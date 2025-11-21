@@ -8,7 +8,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 )
 
 const (
@@ -43,7 +43,7 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeM
 		if err != nil {
 			continue
 		}
-		defs.SetMetadataType(saPayload, valueType)
+		sadefs.SetMetadataType(saPayload, valueType)
 	}
 }
 

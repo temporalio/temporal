@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -334,8 +334,8 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 				OrderBy: sqlparser.OrderBy{
 					&sqlparser.Order{
 						Expr: NewSAColumn(
-							defs.WorkflowType,
-							defs.WorkflowType,
+							sadefs.WorkflowType,
+							sadefs.WorkflowType,
 							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 						),
 						Direction: sqlparser.AscScr,
@@ -350,8 +350,8 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 			out: &QueryParams[sqlparser.Expr]{
 				GroupBy: []*SAColumn{
 					NewSAColumn(
-						defs.ExecutionStatus,
-						defs.ExecutionStatus,
+						sadefs.ExecutionStatus,
+						sadefs.ExecutionStatus,
 						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					),
 				},
@@ -447,8 +447,8 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 				OrderBy: sqlparser.OrderBy{
 					&sqlparser.Order{
 						Expr: NewSAColumn(
-							defs.WorkflowType,
-							defs.WorkflowType,
+							sadefs.WorkflowType,
+							sadefs.WorkflowType,
 							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 						),
 						Direction: sqlparser.AscScr,
@@ -463,8 +463,8 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			out: &QueryParams[sqlparser.Expr]{
 				GroupBy: []*SAColumn{
 					NewSAColumn(
-						defs.ExecutionStatus,
-						defs.ExecutionStatus,
+						sadefs.ExecutionStatus,
+						sadefs.ExecutionStatus,
 						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					),
 				},
@@ -564,8 +564,8 @@ func TestQueryConverter_ConvertWhereExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	statusCol := NewSAColumn(
-		defs.ExecutionStatus,
-		defs.ExecutionStatus,
+		sadefs.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1002,8 +1002,8 @@ func TestQueryConverter_ConvertAndExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	wfTypeCol := NewSAColumn(
-		defs.WorkflowType,
-		defs.WorkflowType,
+		sadefs.WorkflowType,
+		sadefs.WorkflowType,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1111,8 +1111,8 @@ func TestQueryConverter_ConvertOrExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	wfTypeCol := NewSAColumn(
-		defs.WorkflowType,
-		defs.WorkflowType,
+		sadefs.WorkflowType,
+		sadefs.WorkflowType,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1669,8 +1669,8 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	statusCol := NewSAColumn(
-		defs.ExecutionStatus,
-		defs.ExecutionStatus,
+		sadefs.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1683,7 +1683,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		{
 			name: "success",
 			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(defs.ExecutionStatus),
+				Name: sqlparser.NewColIdent(sadefs.ExecutionStatus),
 			},
 			out: statusCol,
 		},
@@ -1699,11 +1699,11 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		{
 			name: "success special ScheduleID",
 			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(defs.ScheduleID),
+				Name: sqlparser.NewColIdent(sadefs.ScheduleID),
 			},
 			out: NewSAColumn(
-				defs.ScheduleID,
-				defs.WorkflowID,
+				sadefs.ScheduleID,
+				sadefs.WorkflowID,
 				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			),
 		},
@@ -1766,7 +1766,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 			} else {
 				r.NoError(err)
 				r.Equal(tc.out, out)
-				if tc.out.FieldName == defs.TemporalNamespaceDivision {
+				if tc.out.FieldName == sadefs.TemporalNamespaceDivision {
 					r.True(queryConverter.seenNamespaceDivision)
 				} else {
 					r.False(queryConverter.seenNamespaceDivision)
@@ -1949,8 +1949,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "success SQLVal",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  defs.WorkflowType,
-			field:  defs.WorkflowType,
+			alias:  sadefs.WorkflowType,
+			field:  sadefs.WorkflowType,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "foo",
 		},
@@ -1958,8 +1958,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "success special ScheduleID",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  defs.ScheduleID,
-			field:  defs.WorkflowID,
+			alias:  sadefs.ScheduleID,
+			field:  sadefs.WorkflowID,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    primitives.ScheduleWorkflowIDPrefix + "foo",
 		},
@@ -1988,8 +1988,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "fail SQLVal",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  defs.WorkflowType,
-			field:  defs.WorkflowType,
+			alias:  sadefs.WorkflowType,
+			field:  sadefs.WorkflowType,
 			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			err:    InvalidExpressionErrMessage,
 		},
@@ -2130,7 +2130,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "success ExecutionStatus",
 			expr:   sqlparser.NewStrVal([]byte("Running")),
-			saName: defs.ExecutionStatus,
+			saName: sadefs.ExecutionStatus,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "Running",
 		},
@@ -2138,7 +2138,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "fail ExecutionStatus",
 			expr:   sqlparser.NewStrVal([]byte("Invalid")),
-			saName: defs.ExecutionStatus,
+			saName: sadefs.ExecutionStatus,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			err:    InvalidExpressionErrMessage,
 		},
@@ -2146,7 +2146,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "success ExecutionDuration",
 			expr:   sqlparser.NewStrVal([]byte("1m")),
-			saName: defs.ExecutionDuration,
+			saName: sadefs.ExecutionDuration,
 			saType: enumspb.INDEXED_VALUE_TYPE_INT,
 			out:    int64(1 * time.Minute),
 		},
@@ -2154,7 +2154,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "fail ExecutionDuration",
 			expr:   sqlparser.NewStrVal([]byte("1t")),
-			saName: defs.ExecutionDuration,
+			saName: sadefs.ExecutionDuration,
 			saType: enumspb.INDEXED_VALUE_TYPE_INT,
 			err:    InvalidExpressionErrMessage,
 		},

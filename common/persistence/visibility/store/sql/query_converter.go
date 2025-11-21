@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 )
 
 const (
@@ -264,7 +264,7 @@ func (c *SQLQueryConverter) ConvertIsExpr(
 
 func (c *SQLQueryConverter) buildValueExpr(name string, value any) (sqlparser.Expr, error) {
 	// ExecutionStatus is stored as an integer in SQL database.
-	if name == defs.ExecutionStatus {
+	if name == sadefs.ExecutionStatus {
 		// Query converter already validates the value, so there should not be any errors here.
 		status, _ := enumspb.WorkflowExecutionStatusFromString(value.(string))
 		return sqlparser.NewIntVal([]byte(strconv.FormatInt(int64(status), 10))), nil

@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -99,7 +99,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-	resetCause := fmt.Sprintf("%s = %s", defs.TemporalPauseInfo, escapedSearchValue)
+	resetCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, resetCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -227,7 +227,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-	resetCause := fmt.Sprintf("%s = %s", defs.TemporalPauseInfo, escapedSearchValue)
+	resetCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, resetCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -355,7 +355,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-	resetCause := fmt.Sprintf("%s = %s", defs.TemporalPauseInfo, escapedSearchValue)
+	resetCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, resetCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {

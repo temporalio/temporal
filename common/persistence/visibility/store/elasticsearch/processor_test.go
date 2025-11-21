@@ -17,7 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -240,7 +240,7 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 		Index(testIndex).
 		Id(testID).
 		Version(version).
-		Doc(map[string]interface{}{defs.VisibilityTaskKey: testKey})
+		Doc(map[string]interface{}{sadefs.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
 	mSuccess := map[string]*elastic.BulkResponseItem{
@@ -286,10 +286,10 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 		Id(testID).
 		Version(version).
 		Doc(map[string]interface{}{
-			defs.VisibilityTaskKey: testKey,
-			defs.NamespaceID:       namespaceID,
-			defs.WorkflowID:        wid,
-			defs.RunID:             rid,
+			sadefs.VisibilityTaskKey: testKey,
+			sadefs.NamespaceID:       namespaceID,
+			sadefs.WorkflowID:        wid,
+			sadefs.RunID:             rid,
 		})
 	requests := []elastic.BulkableRequest{request}
 
@@ -330,7 +330,7 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 func (s *processorSuite) TestBulkAfterAction_Error() {
 	version := int64(3)
 	doc := map[string]interface{}{
-		defs.VisibilityTaskKey: "str",
+		sadefs.VisibilityTaskKey: "str",
 	}
 
 	request := elastic.NewBulkIndexRequest().
@@ -367,7 +367,7 @@ func (s *processorSuite) TestBulkBeforeAction() {
 		Index(testIndex).
 		Id(testID).
 		Version(version).
-		Doc(map[string]interface{}{defs.VisibilityTaskKey: testKey})
+		Doc(map[string]interface{}{sadefs.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
 	counterMetric := metrics.NewMockCounterIface(s.controller)
@@ -439,13 +439,13 @@ func (s *processorSuite) TestExtractVisibilityTaskKey() {
 	s.Equal("", visibilityTaskKey)
 
 	m := map[string]interface{}{
-		defs.VisibilityTaskKey: 1,
+		sadefs.VisibilityTaskKey: 1,
 	}
 	request.Doc(m)
 	s.Panics(func() { s.esProcessor.extractVisibilityTaskKey(request) })
 
 	testKey := "test-key"
-	m[defs.VisibilityTaskKey] = testKey
+	m[sadefs.VisibilityTaskKey] = testKey
 	request.Doc(m)
 	s.Equal(testKey, s.esProcessor.extractVisibilityTaskKey(request))
 }
@@ -534,7 +534,7 @@ func (s *processorSuite) Test_End2End() {
 					Index(testIndex).
 					Id(docId).
 					Version(version).
-					Doc(map[string]interface{}{defs.VisibilityTaskKey: testKey})
+					Doc(map[string]interface{}{sadefs.VisibilityTaskKey: testKey})
 
 				mSuccess := map[string]*elastic.BulkResponseItem{
 					"index": {

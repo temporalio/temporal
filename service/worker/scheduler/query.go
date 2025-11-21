@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	expmaps "golang.org/x/exp/maps"
 )
 
@@ -79,7 +79,7 @@ func ValidateVisibilityQuery(
 		return err
 	}
 	for _, field := range fields {
-		if defs.IsReserved(field) && field != defs.TemporalSchedulePaused {
+		if sadefs.IsReserved(field) && field != sadefs.TemporalSchedulePaused {
 			return serviceerror.NewInvalidArgument(
 				fmt.Sprintf("invalid query filter for schedules: cannot filter on %q", field),
 			)
@@ -113,7 +113,7 @@ func getQueryFields(
 		return nil, err
 	}
 	if !queryConverter.SeenNamespaceDivision() {
-		delete(saInterceptor.names, defs.TemporalNamespaceDivision)
+		delete(saInterceptor.names, sadefs.TemporalNamespaceDivision)
 	}
 	return expmaps.Keys(saInterceptor.names), nil
 }

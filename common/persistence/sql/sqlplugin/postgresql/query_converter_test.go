@@ -11,7 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 )
 
 func TestQueryConverter_GetCoalesceCloseTimeExpr(t *testing.T) {
@@ -302,7 +302,7 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 				Right:    query.NewUnsafeSQLString("foo"),
 			},
 			groupBy: []*query.SAColumn{
-				query.NewSAColumn(defs.ExecutionStatus, defs.ExecutionStatus, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				query.NewSAColumn(sadefs.ExecutionStatus, sadefs.ExecutionStatus, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			},
 			stmt: "SELECT status, COUNT(*) FROM executions_visibility WHERE Keyword01 = 'foo' GROUP BY status",
 		},

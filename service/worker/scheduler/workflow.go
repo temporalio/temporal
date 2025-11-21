@@ -23,7 +23,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -1109,7 +1109,7 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 		// and the user already had a custom search attribute with same name. This is
 		// a general issue in the system, and it will be fixed when we introduce
 		// a system prefix to fix those conflicts.
-		if defs.IsReserved(key) {
+		if sadefs.IsReserved(key) {
 			continue
 		}
 		if newValuePayload, exists := searchAttributes.GetIndexedFields()[key]; !exists {
@@ -1156,13 +1156,13 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 	}
 
 	//nolint:staticcheck // SA1019: workflowInfo.SearchAttributes is not typed.
-	currentPausedPayload := workflowInfo.SearchAttributes.GetIndexedFields()[defs.TemporalSchedulePaused]
+	currentPausedPayload := workflowInfo.SearchAttributes.GetIndexedFields()[sadefs.TemporalSchedulePaused]
 	var currentPaused bool
 	if currentPausedPayload == nil ||
 		payload.Decode(currentPausedPayload, &currentPaused) != nil ||
 		currentPaused != s.Schedule.State.Paused {
 		err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
-			defs.TemporalSchedulePaused: s.Schedule.State.Paused,
+			sadefs.TemporalSchedulePaused: s.Schedule.State.Paused,
 		})
 		if err != nil {
 			s.logger.Error("error updating search attributes", "error", err)
@@ -1438,10 +1438,10 @@ func (s *scheduler) addSearchAttributes(
 ) *commonpb.SearchAttributes {
 	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
-		fields[defs.TemporalScheduledStartTime] = p
+		fields[sadefs.TemporalScheduledStartTime] = p
 	}
 	if p, err := payload.Encode(s.State.ScheduleId); err == nil {
-		fields[defs.TemporalScheduledById] = p
+		fields[sadefs.TemporalScheduledById] = p
 	}
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,

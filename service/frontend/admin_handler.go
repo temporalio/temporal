@@ -54,7 +54,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
@@ -290,7 +290,7 @@ func (adh *AdminHandler) AddSearchAttributes(
 	}
 
 	for saName, saType := range request.GetSearchAttributes() {
-		if defs.IsReserved(saName) {
+		if sadefs.IsReserved(saName) {
 			return nil, serviceerror.NewInvalidArgumentf(errSearchAttributeIsReservedMessage, saName)
 		}
 		if currentSearchAttributes.IsDefined(saName) {
@@ -396,7 +396,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		targetFieldName := ""
 		cntUsed := 0
 		for fieldName, fieldType := range cmCustomSearchAttributes {
-			if fieldType != saType || !defs.IsPreallocatedCSAFieldName(fieldName, fieldType) {
+			if fieldType != saType || !sadefs.IsPreallocatedCSAFieldName(fieldName, fieldType) {
 				continue
 			}
 			if _, ok := fieldToAliasMap[fieldName]; ok {

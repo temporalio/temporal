@@ -6,7 +6,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 )
 
 type (
@@ -35,8 +35,8 @@ func buildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.Inde
 }
 
 func (m NameTypeMap) System() map[string]enumspb.IndexedValueType {
-	system := defs.System()
-	predefined := defs.Predefined()
+	system := sadefs.System()
+	predefined := sadefs.Predefined()
 	allSystem := make(map[string]enumspb.IndexedValueType, len(system)+len(predefined))
 	maps.Copy(allSystem, system)
 	maps.Copy(allSystem, predefined)
@@ -48,8 +48,8 @@ func (m NameTypeMap) Custom() map[string]enumspb.IndexedValueType {
 }
 
 func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
-	system := defs.System()
-	predefined := defs.Predefined()
+	system := sadefs.System()
+	predefined := sadefs.Predefined()
 	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(m.customSearchAttributes)+len(predefined))
 	maps.Copy(allSearchAttributes, system)
 	maps.Copy(allSearchAttributes, predefined)
@@ -70,13 +70,13 @@ func (m NameTypeMap) getType(name string, cat category) (enumspb.IndexedValueTyp
 		}
 	}
 	if cat|predefinedCategory == cat {
-		predefined := defs.Predefined()
+		predefined := sadefs.Predefined()
 		if t, isPredefined := predefined[name]; isPredefined {
 			return t, nil
 		}
 	}
 	if cat|systemCategory == cat {
-		system := defs.System()
+		system := sadefs.System()
 		if t, isSystem := system[name]; isSystem {
 			return t, nil
 		}

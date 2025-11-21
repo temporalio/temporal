@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 )
 
 func TestResolveSearchAttributeAlias(t *testing.T) {
@@ -27,7 +27,7 @@ func TestResolveSearchAttributeAlias(t *testing.T) {
 		{name: "TemporalBuildIds", expectedFieldName: "BuildIds", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, expectedErr: false},
 		{name: "TemporalPauseInfo", expectedFieldName: "TemporalPauseInfo", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, expectedErr: false},
 		{name: "NonExistentField", expectedFieldName: "", expectedFieldType: enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, expectedErr: true},
-		{name: defs.ScheduleID, expectedFieldName: defs.WorkflowID, expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD, expectedErr: false},
+		{name: sadefs.ScheduleID, expectedFieldName: sadefs.WorkflowID, expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD, expectedErr: false},
 	}
 
 	ns := namespace.Name("test-namespace")
@@ -61,22 +61,22 @@ func TestResolveSearchAttributeAlias_CustomScheduleID(t *testing.T) {
 
 	// Test case where ScheduleID is defined as a custom search attribute
 	saTypeMapWithCustomScheduleID := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
-		defs.ScheduleID: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		sadefs.ScheduleID: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	})
 
 	mapper := customMapper{
 		fieldToAlias: map[string]string{
-			defs.ScheduleID: defs.ScheduleID,
+			sadefs.ScheduleID: sadefs.ScheduleID,
 		},
 		aliasToField: map[string]string{
-			defs.ScheduleID: defs.ScheduleID,
+			sadefs.ScheduleID: sadefs.ScheduleID,
 		},
 	}
 
 	// When ScheduleID is a custom search attribute, it should use the custom attribute, not transform to WorkflowID
-	fieldName, fieldType, err := ResolveSearchAttributeAlias(defs.ScheduleID, ns, mapper, saTypeMapWithCustomScheduleID)
+	fieldName, fieldType, err := ResolveSearchAttributeAlias(sadefs.ScheduleID, ns, mapper, saTypeMapWithCustomScheduleID)
 	require.NoError(t, err)
-	require.Equal(t, defs.ScheduleID, fieldName)
+	require.Equal(t, sadefs.ScheduleID, fieldName)
 	require.Equal(t, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, fieldType)
 }
 

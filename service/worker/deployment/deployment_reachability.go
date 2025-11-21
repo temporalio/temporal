@@ -11,7 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -86,7 +86,7 @@ func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 		statusFilter = "!= 'Running'"
 	}
 	// todo (carly) part 2: handle null search attribute / unversioned deployment
-	return fmt.Sprintf("%s %s AND %s %s", defs.BuildIds, deploymentFilter, defs.ExecutionStatus, statusFilter)
+	return fmt.Sprintf("%s %s AND %s %s", sadefs.BuildIds, deploymentFilter, sadefs.ExecutionStatus, statusFilter)
 }
 
 /*

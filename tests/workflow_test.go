@@ -27,7 +27,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
@@ -1630,24 +1630,24 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 		}
 	}
 
-	s.Run(defs.TemporalWorkerDeploymentVersion, func() {
-		request := makeRequest(defs.TemporalWorkerDeploymentVersion)
+	s.Run(sadefs.TemporalWorkerDeploymentVersion, func() {
+		request := makeRequest(sadefs.TemporalWorkerDeploymentVersion)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
 		s.ErrorAs(err, &invalidArgument)
 	})
 
-	s.Run(defs.TemporalWorkerDeployment, func() {
-		request := makeRequest(defs.TemporalWorkerDeployment)
+	s.Run(sadefs.TemporalWorkerDeployment, func() {
+		request := makeRequest(sadefs.TemporalWorkerDeployment)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
 		s.ErrorAs(err, &invalidArgument)
 	})
 
-	s.Run(defs.TemporalWorkflowVersioningBehavior, func() {
-		request := makeRequest(defs.TemporalWorkflowVersioningBehavior)
+	s.Run(sadefs.TemporalWorkflowVersioningBehavior, func() {
+		request := makeRequest(sadefs.TemporalWorkflowVersioningBehavior)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
@@ -1656,14 +1656,14 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 
 	// These are currently allowed since they are in the predefinedWhiteList. Once it's confirmed that they are not being used,
 	// we can remove them from the predefinedWhiteList.
-	s.Run(defs.BatcherUser, func() {
-		request := makeRequest(defs.BatcherUser)
+	s.Run(sadefs.BatcherUser, func() {
+		request := makeRequest(sadefs.BatcherUser)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	})
 
-	s.Run(defs.BatcherNamespace, func() {
-		request := makeRequest(defs.BatcherNamespace)
+	s.Run(sadefs.BatcherNamespace, func() {
+		request := makeRequest(sadefs.BatcherNamespace)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	})

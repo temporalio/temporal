@@ -9,7 +9,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/searchattribute/defs"
+	sadefs "go.temporal.io/server/common/searchattribute/defs"
 )
 
 var maxDatetime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
@@ -148,10 +148,10 @@ func (c *queryConverter) BuildSelectStmt(
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-				defs.GetSqlDbColName(defs.StartTime),
-				defs.GetSqlDbColName(defs.RunID),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
+				sadefs.GetSqlDbColName(sadefs.RunID),
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-				defs.GetSqlDbColName(defs.StartTime),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 			),
 		)
@@ -179,12 +179,12 @@ func (c *queryConverter) BuildSelectStmt(
 	stmt := fmt.Sprintf(
 		`SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (%s, %s)%s ORDER BY %s DESC, %s DESC, %s LIMIT ?`,
 		strings.Join(dbFields, ", "),
-		defs.GetSqlDbColName(defs.NamespaceID),
-		defs.GetSqlDbColName(defs.RunID),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		whereString,
 		sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-		defs.GetSqlDbColName(defs.StartTime),
-		defs.GetSqlDbColName(defs.RunID),
+		sadefs.GetSqlDbColName(sadefs.StartTime),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 	)
 	queryArgs = append(queryArgs, pageSize)
 
@@ -204,7 +204,7 @@ func (c *queryConverter) BuildCountStmt(
 
 	groupBy := make([]string, 0, len(queryParams.GroupBy)+1)
 	for _, field := range queryParams.GroupBy {
-		groupBy = append(groupBy, defs.GetSqlDbColName(field.FieldName))
+		groupBy = append(groupBy, sadefs.GetSqlDbColName(field.FieldName))
 	}
 
 	groupByClause := ""
@@ -215,8 +215,8 @@ func (c *queryConverter) BuildCountStmt(
 	return fmt.Sprintf(
 		`SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (%s, %s)%s%s`,
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
-		defs.GetSqlDbColName(defs.NamespaceID),
-		defs.GetSqlDbColName(defs.RunID),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		whereString,
 		groupByClause,
 	), nil
