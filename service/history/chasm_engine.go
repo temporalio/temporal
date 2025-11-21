@@ -340,6 +340,10 @@ func (e *ChasmEngine) PollComponent(
 				}
 				return nil, err
 			}
+			ch, err = e.notifier.Subscribe(requestRef.EntityKey)
+			if err != nil {
+				return nil, err
+			}
 			func() {
 				defer executionLease.GetReleaseFn()(nil)
 				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
