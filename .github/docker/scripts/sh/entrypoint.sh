@@ -29,7 +29,7 @@ if [ -z "${TEMPORAL_ADDRESS:-}" ]; then
     esac
 fi
 
-# Support "bash" argument for debugging (drops into shell instead of starting server)
+# Support "sh" argument for debugging (drops into shell instead of starting server)
 for arg in "$@"; do
     if [ "${arg}" = "sh" ]; then
         sh
