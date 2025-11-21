@@ -653,6 +653,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	)
 	s.NoError(err)
 	s.NoError(<-updateErr)
+	s.NotNil(newSerializedRef)
 
 	newRef, err := chasm.DeserializeComponentRef(newSerializedRef)
 	s.NoError(err)
