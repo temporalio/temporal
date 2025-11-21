@@ -86,7 +86,6 @@ func (h *handler) PollActivityExecution(
 				return nil, false, err
 			}
 			if changed {
-				// TODO(dan): pass ref returned by HasStateAdvanced into this?
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				if err != nil {
 					return nil, true, err

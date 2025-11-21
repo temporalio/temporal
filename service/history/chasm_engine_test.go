@@ -14,7 +14,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -113,12 +112,7 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
-	s.notifier = NewChasmNotifier(
-		clock.NewRealTimeSource(),
-		metrics.NoopMetricsHandler,
-		s.config,
-	)
-	s.notifier.Start()
+	s.notifier = NewChasmNotifier(metrics.NoopMetricsHandler)
 
 	s.engine = newChasmEngine(
 		s.entityCache,
@@ -131,12 +125,6 @@ func (s *chasmEngineSuite) SetupTest() {
 
 func (s *chasmEngineSuite) SetupSubTest() {
 	s.initAssertions()
-}
-
-func (s *chasmEngineSuite) TearDownTest() {
-	if s.notifier != nil {
-		s.notifier.Stop()
-	}
 }
 
 func (s *chasmEngineSuite) initAssertions() {
@@ -610,6 +598,13 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	)
 	expectedActivityID := tv.ActivityID()
 
+	// GetWorkflowExecution is called for initial predicate check
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
+		}, nil).Times(1)
+
+	// UpdateWorkflowExecution for the update
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
@@ -617,10 +612,10 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 		) (*persistence.UpdateWorkflowExecutionResponse, error) {
 			return tests.UpdateWorkflowExecutionResponse, nil
 		},
-	).Times(1).After(s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
-		}, nil).Times(1))
+	).Times(1)
+
+	// Expect the notification when the component is updated
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).Times(1)
 
 	updateErr := make(chan error, 1)
 	updateActivity := func() {

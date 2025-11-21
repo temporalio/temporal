@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -53,7 +54,6 @@ type Activity struct {
 	Store chasm.Field[ActivityStore]
 }
 
-// LifecycleState TODO: we need to add more lifecycle states to better categorize some activity states, particulary for terminated/canceled.
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
@@ -66,6 +66,16 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	default:
 		return chasm.LifecycleStateRunning
 	}
+}
+
+// ToRef creates a serialized component reference for the given activity identifiers.
+func ToRef(namespaceID string, activityID string, runID string) ([]byte, error) {
+	return (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  activityID,
+		EntityId:    runID,
+		Archetype:   "activity.activity",
+	}).Marshal()
 }
 
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.
@@ -98,9 +108,8 @@ func NewStandaloneActivity(
 			Header:       request.Header,
 			UserMetadata: request.UserMetadata,
 		}),
-		LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{}),
-		Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-		Visibility:    chasm.NewComponentField(ctx, visibility),
+		Outcome:    chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
 
 	activity.ScheduledTime = timestamppb.New(ctx.Now(activity))
@@ -243,7 +252,7 @@ func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.Re
 	}
 
 	if shouldRetry {
-		if err := TransitionRescheduled.Apply(a, ctx, rescheduleInfo{
+		if err := TransitionRescheduled.Apply(a, ctx, rescheduleEvent{
 			retryInterval: retryInterval,
 			failure:       failure,
 		}); err != nil {
@@ -268,6 +277,22 @@ func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.Te
 	}
 
 	return &activitypb.TerminateActivityExecutionResponse{}, nil
+}
+
+// getLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
+// to avoid unnecessary writes when heartbeats are not used.
+func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.ActivityHeartbeatState, error) {
+	heartbeat, err := a.LastHeartbeat.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if heartbeat == nil {
+		heartbeat = &activitypb.ActivityHeartbeatState{}
+		a.LastHeartbeat = chasm.NewDataField(ctx, heartbeat)
+	}
+
+	return heartbeat, nil
 }
 
 func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Failure) (bool, time.Duration, error) {
@@ -341,7 +366,7 @@ func (a *Activity) recordFailedAttempt(
 		Failure: failure,
 		Time:    currentTime,
 	}
-	attempt.LastAttemptCompleteTime = currentTime
+	attempt.LastCompleteTime = currentTime
 
 	// If the activity has exhausted retries, mark the outcome failure as well but don't store duplicate failure info.
 	// Also reset the retry interval as there won't be any more retries.
@@ -472,7 +497,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		Attempt:                 attempt.GetCount(),
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
-		LastAttemptCompleteTime: attempt.GetLastAttemptCompleteTime(),
+		LastAttemptCompleteTime: attempt.GetLastCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetLastStartedTime(),
@@ -494,7 +519,6 @@ func (a *Activity) buildPollActivityExecutionResponse(
 ) (*activitypb.PollActivityExecutionResponse, error) {
 	request := req.GetFrontendRequest()
 
-	// TODO(dan): pass ref into this function?
 	token, err := ctx.Ref(a)
 	if err != nil {
 		return nil, err
@@ -529,14 +553,33 @@ func (a *Activity) buildPollActivityExecutionResponse(
 		if err != nil {
 			return nil, err
 		}
-		switch v := activityOutcome.GetVariant().(type) {
-		case *activitypb.ActivityOutcome_Failed_:
-			response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
-				Failure: v.Failed.GetFailure(),
+		if activityOutcome != nil {
+			switch v := activityOutcome.GetVariant().(type) {
+			case *activitypb.ActivityOutcome_Failed_:
+				response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
+					Failure: v.Failed.GetFailure(),
+				}
+			case *activitypb.ActivityOutcome_Successful_:
+				response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
+					Result: v.Successful.GetOutput(),
+				}
 			}
-		case *activitypb.ActivityOutcome_Successful_:
-			response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
-				Result: v.Successful.GetOutput(),
+		} else {
+			shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||
+				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT ||
+				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED ||
+				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
+
+			if shouldHaveFailure {
+				attempt, err := a.Attempt.Get(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if details := attempt.GetLastFailureDetails(); details != nil {
+					response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
+						Failure: details.GetFailure(),
+					}
+				}
 			}
 		}
 	}

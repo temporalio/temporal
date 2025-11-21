@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
@@ -64,17 +62,6 @@ var ChasmEngineModule = fx.Options(
 	fx.Provide(func(impl *ChasmEngine) chasm.Engine { return impl }),
 	fx.Invoke(func(lc fx.Lifecycle, impl *ChasmEngine, shardController shard.Controller) {
 		impl.SetShardController(shardController)
-
-		lc.Append(fx.Hook{
-			OnStart: func(context.Context) error {
-				impl.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				impl.Stop()
-				return nil
-			},
-		})
 	}),
 )
 
@@ -100,14 +87,8 @@ func (e *ChasmEngine) SetShardController(
 	e.shardController = shardController
 }
 
-// Start starts the ChasmEngine
-func (e *ChasmEngine) Start() {
-	e.notifier.Start()
-}
-
-// Stop stops the ChasmEngine
-func (e *ChasmEngine) Stop() {
-	e.notifier.Stop()
+func (e *ChasmEngine) GetNotifier() *ChasmNotifier {
+	return e.notifier
 }
 
 func (e *ChasmEngine) NewEntity(
@@ -235,16 +216,6 @@ func (e *ChasmEngine) UpdateComponent(
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
 	}
 
-	// TODO(dan) For now, UpdateComponent emits execution-level notifications, and PollComponent
-	// subscribes to execution-level notifications. This means that PollComponent may be woken up
-	// unnecessarily, but it will not miss notifications. In the future we may want to change
-	// PollComponent to subscribe to component-level notifications, and change UpdateComponent so
-	// that notifications are emitted only for nodes that were mutated in the transaction.
-	e.notifier.Notify(&ChasmComponentNotification{
-		Key: ref.EntityKey,
-		Ref: newSerializedRef,
-	})
-
 	return newSerializedRef, nil
 }
 
@@ -297,7 +268,7 @@ func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
-) ([]byte, error) {
+) (retRef []byte, retError error) {
 	// 1. Acquire lock
 	// 2. Error if shard execution VT < requestRef VT ('stale state')
 	// 3. If predicate satisfied, release lock and return
@@ -312,45 +283,23 @@ func (e *ChasmEngine) PollComponent(
 	}
 
 	// hold lock until return or subscription established
-	released := false
-	defer func() {
-		if !released {
-			// read-only operation; don't pass error
-			executionLease.GetReleaseFn()(nil)
-		}
-	}()
+	// TODO(dan): this will probably be called when its already been release; ok?
+	defer executionLease.GetReleaseFn()(nil)
 
 	// At this point it's possible that shard VT < requestRef VT (getExecutionLease does not
 	// guarantee that returned shard state is non-stale w.r.t. requestRef).
-	currentRef, err := e.checkPredicate(ctx, requestRef, executionLease, predicateFn)
+	satisfiedRef, err := e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
 	if err != nil {
 		return nil, err
 	}
 	// shard VT >= requestRef VT (enforced by checkPredicate)
 
-	if currentRef != nil {
+	if satisfiedRef != nil {
 		// wait condition was satisfied
-		return currentRef, nil
+		return satisfiedRef, nil
 	}
 
 	// Wait condition not satisfied; long-poll
-
-	// TODO(dan) For now, UpdateComponent emits execution-level notifications, and PollComponent
-	// subscribes to execution-level notifications. This means that PollComponent may be woken up
-	// unnecessarily, but it will not miss notifications. In the future we may want to change
-	// PollComponent to subscribe to component-level notifications, and change UpdateComponent so
-	// that notifications are emitted only for nodes that were mutated in the transaction.
-	channel, subscriberID, err := e.notifier.Subscribe(requestRef.EntityKey)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = e.notifier.Unsubscribe(requestRef.EntityKey, subscriberID)
-	}()
-
-	// Release the lock, now that we are subscribed
-	executionLease.GetReleaseFn()(nil)
-	released = true
 
 	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(requestRef.NamespaceID),
@@ -359,67 +308,66 @@ func (e *ChasmEngine) PollComponent(
 		return nil, err
 	}
 
-	// Long-poll timeout semantics are the same as PollWorkflowExecutionUpdate: if the long-poll
-	// times out due to the server-imposed soft timeout, then return a non-error empty response
-	// indicating to a caller that they should continue long-polling. Unlike
-	// PollWorkflowExecutionUpdate we reserve 1s buffer.
-	softTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-	stCtx, stCancel := contextutil.WithDeadlineBuffer(ctx, softTimeout, time.Second)
-	defer stCancel()
+	// If the long-poll times out due to the internally-imposed long-poll timeout, then we want the
+	// initiator of the long-poll to receive a non-error empty response indicating that they should
+	// continue long-polling. To achieve this, we return nil on all canceled context errors below.
+	// We assume that the parent will check for a canceled context independently (without relying on
+	// any error value we return), so that if the cancelation was due to the parent deadline rather
+	// than the internally-imposed long-poll timeout then the initiator of the long-poll will get a
+	// deadline exceeded error.
+
+	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
+	defer cancel()
+
+	// For now, PollComponent subscribes to execution-level notifications. Suppose that an
+	// execution consists of one component A, and A has subcomponent B. Subscribers interested
+	// only in component B may be woken up unnecessarily due to changes in parts of A that do
+	// not also belong to B, but they will not miss notifications.
+	ch, err := e.notifier.Subscribe(requestRef.EntityKey)
+	if err != nil {
+		return nil, err
+	}
+	executionLease.GetReleaseFn()(nil)
 
 	for {
 		select {
-		case notification := <-channel:
-			if notification == nil {
-				return nil, serviceerror.NewInternal("nil component notification")
-			}
-			// Received a notification. Re-acquire the lock and check the predicate.
-			_, executionLease, err := e.getExecutionLease(stCtx, requestRef)
+		case <-ch:
+			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 			if err != nil {
-				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
-					return nil, ctx.Err()
-				}
-				if errors.Is(err, stCtx.Err()) {
-					// Server-imposed timeout; caller should continue long-polling.
+				if errors.Is(err, ctx.Err()) {
 					return nil, nil
 				}
 				return nil, err
 			}
-
-			newRef, err := e.checkPredicate(stCtx, requestRef, executionLease, predicateFn)
-			executionLease.GetReleaseFn()(nil)
+			func() {
+				defer executionLease.GetReleaseFn()(nil)
+				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
+			}()
 			if err != nil {
-				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
-					return nil, ctx.Err()
-				}
-				if errors.Is(err, stCtx.Err()) {
-					// Server-imposed timeout; caller should continue long-polling.
+				if errors.Is(err, ctx.Err()) {
 					return nil, nil
 				}
 				return nil, err
 			}
-			if newRef != nil {
-				// Wait condition was satisfied.
-				return newRef, nil
+			if satisfiedRef != nil {
+				return satisfiedRef, nil
 			}
-		case <-stCtx.Done():
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			// Server-imposed timeout; caller should continue long-polling.
+		case <-ctx.Done():
 			return nil, nil
 		}
 	}
 }
 
-// checkPredicate is a helper function for PollComponent. It returns (ref, err) where ref is non-nil
+// predicateSatisfied is a helper function for PollComponent. It returns (ref, err) where ref is non-nil
 // iff there's no error and predicateFn evaluates to true.
-func (e *ChasmEngine) checkPredicate(
+func (e *ChasmEngine) predicateSatisfied(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	executionLease api.WorkflowLease,
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) ([]byte, error) {
+	fmt.Println("🔎 checkPredicate")
 
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
 	if !ok {
@@ -453,6 +401,7 @@ func (e *ChasmEngine) checkPredicate(
 		return nil, err
 	}
 	if !satisfied {
+		fmt.Println("    🟠 checkPredicate: predicate not satisfied")
 		return nil, nil
 	}
 
@@ -460,6 +409,7 @@ func (e *ChasmEngine) checkPredicate(
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("    🟢 checkPredicate: predicate satisfied")
 	return newRef, nil
 }
 

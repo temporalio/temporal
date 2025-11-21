@@ -76,7 +76,7 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 )
 
-type rescheduleInfo struct {
+type rescheduleEvent struct {
 	retryInterval time.Duration
 	failure       *failurepb.Failure
 }
@@ -88,7 +88,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, // For retries the activity will be in started status
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-	func(a *Activity, ctx chasm.MutableContext, info rescheduleInfo) error {
+	func(a *Activity, ctx chasm.MutableContext, info rescheduleEvent) error {
 		attempt, err := a.Attempt.Get(ctx)
 		if err != nil {
 			return err
@@ -173,13 +173,8 @@ var TransitionCompleted = chasm.NewTransition(
 				return err
 			}
 
-			attempt.LastAttemptCompleteTime = timestamppb.New(ctx.Now(a))
-
-			// The Identity field is optionally set by the worker, so it could be blank at this point. Set identity
-			// only if has been provided to avoid overwriting previous value with blank.
-			if identity := request.GetCompleteRequest().GetIdentity(); identity != "" {
-				attempt.LastWorkerIdentity = identity
-			}
+			attempt.LastCompleteTime = timestamppb.New(ctx.Now(a))
+			attempt.LastWorkerIdentity = request.GetCompleteRequest().GetIdentity()
 
 			outcome, err := a.Outcome.Get(ctx)
 			if err != nil {
@@ -215,25 +210,21 @@ var TransitionFailed = chasm.NewTransition(
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
-				heartbeatDetails, err := a.LastHeartbeat.Get(ctx)
+				heartbeat, err := a.getLastHeartbeat(ctx)
 				if err != nil {
 					return err
 				}
 
-				heartbeatDetails.Details = details
-				heartbeatDetails.RecordedTime = timestamppb.New(ctx.Now(a))
+				heartbeat.Details = details
+				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
 			}
 
-			// The Identity field is optionally set by the worker, so it could be blank at this point. Set identity
-			// only if has been provided to avoid overwriting previous value with blank.
-			if identity := req.GetFailedRequest().GetIdentity(); identity != "" {
-				attempt, err := a.Attempt.Get(ctx)
-				if err != nil {
-					return err
-				}
-
-				attempt.LastWorkerIdentity = identity
+			attempt, err := a.Attempt.Get(ctx)
+			if err != nil {
+				return err
 			}
+
+			attempt.LastWorkerIdentity = req.GetFailedRequest().GetIdentity()
 
 			return a.recordFailedAttempt(ctx, 0, req.GetFailedRequest().GetFailure(), true)
 		})

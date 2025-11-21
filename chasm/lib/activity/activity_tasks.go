@@ -160,7 +160,7 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 
 	// Retry task if we have remaining attempts and time. A retry involves transitioning the activity back to scheduled state.
 	if shouldRetry {
-		return TransitionRescheduled.Apply(activity, ctx, rescheduleInfo{
+		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
 			retryInterval: retryInterval,
 			failure:       createStartToCloseTimeoutFailure(),
 		})
