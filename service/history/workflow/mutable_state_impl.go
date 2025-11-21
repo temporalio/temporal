@@ -2890,10 +2890,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 	}
 
 	// save pauseInfoSize before clearing so that we can adjust approximate size later before returning success
-        pauseInfoSize := ms.executionInfo.GetPauseInfo().Size()
-        ms.executionInfo.Pause = nil
+	pauseInfoSize := 0
 	if ms.executionInfo.PauseInfo != nil {
-		pauseInfoSize = ms.executionInfo.PauseInfo.Size()
+		pauseInfoSize = ms.GetExecutionInfo().GetPauseInfo().Size()
 		// Clear pause info in mutable state.
 		ms.executionInfo.PauseInfo = nil
 	}
