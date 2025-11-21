@@ -25,3 +25,12 @@ message PollActivityExecutionRequest {
 message PollActivityExecutionResponse {
     temporal.api.workflowservice.v1.PollActivityExecutionResponse frontend_response = 1;
 }
+
+message TerminateActivityExecutionRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.TerminateActivityExecutionRequest frontend_request = 2;
+}
+
+message TerminateActivityExecutionResponse {
+}

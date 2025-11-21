@@ -419,3 +419,39 @@ func TestTransitionFailed(t *testing.T) {
 	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
 	require.Nil(t, outcome.GetFailed())
 }
+
+func TestTransitionTerminated(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	outcome := &activitypb.ActivityOutcome{}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		Attempt: chasm.NewDataField(ctx, attemptState),
+		Outcome: chasm.NewDataField(ctx, outcome),
+	}
+
+	err := TransitionTerminated.Apply(activity, ctx, &activitypb.TerminateActivityExecutionRequest{
+		FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
+			Reason:   "Test Termination",
+			Identity: "worker",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	require.EqualValues(t, 1, attemptState.Count)
+	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
+
+	expectedFailure := &failurepb.Failure{
+		Message:     "Test Termination",
+		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+	}
+	protorequire.ProtoEqual(t, expectedFailure, outcome.GetFailed().GetFailure())
+}
