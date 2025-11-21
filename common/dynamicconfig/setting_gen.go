@@ -787,12 +787,24 @@ func (s GlobalTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s GlobalTypedSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+			Constraints: Constraints{},
+			Value:       s.def,
+		}
+}
 
 func (s GlobalTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s GlobalTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceGlobal }
 func (s GlobalTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s GlobalTypedConstrainedDefaultSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+		Constraints: Constraints{},
+		Value:       s.cdef,
+	}
 }
 
 func (s GlobalTypedSetting[T]) WithDefault(v T) GlobalTypedSetting[T] {
@@ -923,12 +935,24 @@ func (s NamespaceTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s NamespaceTypedSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+			Constraints: Constraints{},
+			Value:       s.def,
+		}
+}
 
 func (s NamespaceTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s NamespaceTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceNamespace }
 func (s NamespaceTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s NamespaceTypedConstrainedDefaultSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+		Constraints: Constraints{},
+		Value:       s.cdef,
+	}
 }
 
 func (s NamespaceTypedSetting[T]) WithDefault(v T) NamespaceTypedSetting[T] {
@@ -1059,12 +1083,24 @@ func (s NamespaceIDTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s NamespaceIDTypedSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+			Constraints: Constraints{},
+			Value:       s.def,
+		}
+}
 
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceNamespaceID }
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+		Constraints: Constraints{},
+		Value:       s.cdef,
+	}
 }
 
 func (s NamespaceIDTypedSetting[T]) WithDefault(v T) NamespaceIDTypedSetting[T] {
@@ -1195,12 +1231,24 @@ func (s TaskQueueTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s TaskQueueTypedSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+			Constraints: Constraints{},
+			Value:       s.def,
+		}
+}
 
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceTaskQueue }
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+		Constraints: Constraints{},
+		Value:       s.cdef,
+	}
 }
 
 func (s TaskQueueTypedSetting[T]) WithDefault(v T) TaskQueueTypedSetting[T] {
@@ -1355,12 +1403,24 @@ func (s ShardIDTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s ShardIDTypedSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+			Constraints: Constraints{},
+			Value:       s.def,
+		}
+}
 
 func (s ShardIDTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s ShardIDTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceShardID }
 func (s ShardIDTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s ShardIDTypedConstrainedDefaultSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+		Constraints: Constraints{},
+		Value:       s.cdef,
+	}
 }
 
 func (s ShardIDTypedSetting[T]) WithDefault(v T) ShardIDTypedSetting[T] {
@@ -1491,12 +1551,24 @@ func (s TaskTypeTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s TaskTypeTypedSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+			Constraints: Constraints{},
+			Value:       s.def,
+		}
+}
 
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceTaskType }
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s TaskTypeTypedConstrainedDefaultSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+		Constraints: Constraints{},
+		Value:       s.cdef,
+	}
 }
 
 func (s TaskTypeTypedSetting[T]) WithDefault(v T) TaskTypeTypedSetting[T] {
@@ -1627,12 +1699,24 @@ func (s DestinationTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s DestinationTypedSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+			Constraints: Constraints{},
+			Value:       s.def,
+		}
+}
 
 func (s DestinationTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s DestinationTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceDestination }
 func (s DestinationTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s DestinationTypedConstrainedDefaultSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+		Constraints: Constraints{},
+		Value:       s.cdef,
+	}
 }
 
 func (s DestinationTypedSetting[T]) WithDefault(v T) DestinationTypedSetting[T] {

@@ -161,6 +161,10 @@ func (c *Collection) GetPingChecks() []pingable.Check {
 	}
 }
 
+func (c *Collection) GetClient() Client {
+	return c.client
+}
+
 func (c *Collection) pollForChanges(ctx context.Context) error {
 	interval := DynamicConfigSubscriptionPollInterval.Get(c)
 	for ctx.Err() == nil {

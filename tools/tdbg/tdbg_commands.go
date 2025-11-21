@@ -68,6 +68,12 @@ func getCommands(
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
 		},
+		{
+			Name:        "config",
+			Usage:       "Command to get dynamic config values",
+			Aliases:     []string{"cfg"},
+			Subcommands: newGetConfigValuesCommands(clientFactory),
+		},
 	}
 }
 
@@ -872,6 +878,26 @@ func newDecodeCommands(
 					return fmt.Errorf("failed to decode task blob: %w", err)
 				}
 				return nil
+			},
+		},
+	}
+}
+
+func newGetConfigValuesCommands(ClientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:    "get",
+			Aliases: []string{"g"},
+			Usage:   "Get frontend dynamic configuration",
+			Flags: []cli.Flag{
+				&cli.StringSliceFlag{
+					Name:  FlagKey,
+					Usage: "Enter keys",
+					Aliases: []string{"k"},
+				}, 
+			},
+			Action: func(c *cli.Context) error {
+			 	return AdminGetClusterConfig(c, ClientFactory)
 			},
 		},
 	}
