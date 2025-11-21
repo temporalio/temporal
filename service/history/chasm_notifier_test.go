@@ -6,23 +6,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/service/history/configs"
 )
 
 func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	tv := testvars.New(t)
 
-	notifier := NewChasmNotifier(
-		clock.NewRealTimeSource(),
-		metrics.NoopMetricsHandler,
-		configs.NewConfig(dynamicconfig.NewNoopCollection(), 1),
-	)
-	notifier.Start()
-	defer notifier.Stop()
+	notifier := NewChasmNotifier(metrics.NoopMetricsHandler)
 
 	entityKey := chasm.EntityKey{
 		NamespaceID: tv.NamespaceID().String(),
@@ -33,49 +24,32 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	// Multiple subscribers
 	subscriberCount := 100
 	subscribers := make([]struct {
-		channel chan *ChasmExecutionNotification
-		id      string
+		channel <-chan struct{}
 	}, subscriberCount)
 
 	for i := range subscriberCount {
-		ch, id, err := notifier.Subscribe(entityKey)
+		ch, err := notifier.Subscribe(entityKey)
 		require.NoError(t, err)
 		subscribers[i].channel = ch
-		subscribers[i].id = id
 	}
 
 	// Single notification
-	notifier.Notify(&ChasmExecutionNotification{
-		Key: entityKey,
-	})
+	notifier.Notify(entityKey)
 
 	// All subscribers should receive it
 	for i, sub := range subscribers {
 		select {
-		case received := <-sub.channel:
-			require.NotNil(t, received, "subscriber %d", i)
-			require.Equal(t, entityKey, received.Key, "subscriber %d", i)
+		case <-sub.channel:
 		case <-time.After(time.Second):
 			t.Fatalf("subscriber %d: timeout waiting for notification", i)
 		}
-	}
-
-	for _, sub := range subscribers {
-		err := notifier.Unsubscribe(entityKey, sub.id)
-		require.NoError(t, err)
 	}
 }
 
 func TestChasmNotifier_KeyIsolation(t *testing.T) {
 	tv := testvars.New(t)
 
-	notifier := NewChasmNotifier(
-		clock.NewRealTimeSource(),
-		metrics.NoopMetricsHandler,
-		configs.NewConfig(dynamicconfig.NewNoopCollection(), 1),
-	)
-	notifier.Start()
-	defer notifier.Stop()
+	notifier := NewChasmNotifier(metrics.NoopMetricsHandler)
 
 	entityKey1 := chasm.EntityKey{
 		NamespaceID: tv.NamespaceID().String(),
@@ -88,60 +62,12 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 		EntityID:    "different-run-id",
 	}
 
-	channel, subscriberID, err := notifier.Subscribe(entityKey1)
+	channel, err := notifier.Subscribe(entityKey1)
 	require.NoError(t, err)
-	notifier.Notify(&ChasmExecutionNotification{
-		Key: entityKey2,
-	})
+	notifier.Notify(entityKey2)
 	select {
 	case <-channel:
 		t.Fatal("should not receive notification for different entity")
-	case <-time.After(50 * time.Millisecond):
-	}
-
-	err = notifier.Unsubscribe(entityKey1, subscriberID)
-	require.NoError(t, err)
-}
-
-func TestChasmNotifier_UnsubscribeStopsDelivery(t *testing.T) {
-	tv := testvars.New(t)
-
-	notifier := NewChasmNotifier(
-		clock.NewRealTimeSource(),
-		metrics.NoopMetricsHandler,
-		configs.NewConfig(dynamicconfig.NewNoopCollection(), 1),
-	)
-	notifier.Start()
-	defer notifier.Stop()
-
-	entityKey := chasm.EntityKey{
-		NamespaceID: tv.NamespaceID().String(),
-		BusinessID:  tv.WorkflowID(),
-		EntityID:    tv.RunID(),
-	}
-
-	// First notification should arrive
-	channel, subscriberID, err := notifier.Subscribe(entityKey)
-	require.NoError(t, err)
-	notifier.Notify(&ChasmExecutionNotification{
-		Key: entityKey,
-	})
-	select {
-	case received := <-channel:
-		require.NotNil(t, received)
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for notification")
-	}
-
-	// Notification after unsubscribe should not arrive
-	err = notifier.Unsubscribe(entityKey, subscriberID)
-	require.NoError(t, err)
-	notifier.Notify(&ChasmExecutionNotification{
-		Key: entityKey,
-	})
-	select {
-	case <-channel:
-		t.Fatal("should not receive notification after unsubscribe")
 	case <-time.After(50 * time.Millisecond):
 	}
 }

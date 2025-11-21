@@ -850,12 +850,9 @@ func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.EntityKey, c
 	if e.chasmEngine == nil {
 		return
 	}
-
 	if chasmEngine, ok := e.chasmEngine.(*ChasmEngine); ok && chasmEngine != nil {
 		if notifier := chasmEngine.GetNotifier(); notifier != nil {
-			notifier.Notify(&ChasmExecutionNotification{
-				Key: executionKey,
-			})
+			notifier.Notify(executionKey)
 		}
 	}
 }
