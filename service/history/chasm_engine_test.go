@@ -610,6 +610,13 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	)
 	expectedActivityID := tv.ActivityID()
 
+	// GetWorkflowExecution is called for initial predicate check
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
+		}, nil).Times(1)
+
+	// UpdateWorkflowExecution for the update
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
@@ -617,10 +624,10 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 		) (*persistence.UpdateWorkflowExecutionResponse, error) {
 			return tests.UpdateWorkflowExecutionResponse, nil
 		},
-	).Times(1).After(s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
-		}, nil).Times(1))
+	).Times(1)
+
+	// Expect the notification when the component is updated
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).Times(1)
 
 	updateErr := make(chan error, 1)
 	updateActivity := func() {
