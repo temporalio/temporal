@@ -21,6 +21,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -51,7 +53,7 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 
 func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 	if retry, ok := result.(invocationResultRetry); ok {
-		return NewDestinationDownError(retry.err.Error(), err)
+		return queueserrors.NewDestinationDownError(retry.err.Error(), err)
 	}
 	return err
 }
@@ -80,7 +82,7 @@ func (n nexusInvocation) Invoke(
 
 	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
-		return invocationResultFail{NewUnprocessableTaskError(
+		return invocationResultFail{queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
 		)}
 	}
@@ -91,7 +93,7 @@ func (n nexusInvocation) Invoke(
 		request.Header.Set(k, v)
 	}
 
-	caller := e.httpCallerProvider(NamespaceIDAndDestination{
+	caller := e.httpCallerProvider(queuescommon.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
 		Destination: taskAttr.Destination,
 	})

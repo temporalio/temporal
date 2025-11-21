@@ -29,7 +29,8 @@ import (
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
-	"go.temporal.io/server/service/history/queues"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -172,7 +173,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 				callbacks.TaskExecutorOptions{
 					NamespaceRegistry: namespaceRegistryMock,
 					MetricsHandler:    metricsHandler,
-					HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+					HTTPCallerProvider: func(nid queuescommon.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
 					Logger: log.NewNoopLogger(),
@@ -203,7 +204,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 
 			if tc.retryable {
-				require.NotErrorAs(t, err, &queues.UnprocessableTaskError{})
+				require.NotErrorAs(t, err, &queueserrors.UnprocessableTaskError{})
 			} else {
 				require.NoError(t, err)
 			}
@@ -238,7 +239,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	require.NoError(t, callbacks.RegisterExecutor(
 		reg,
 		callbacks.TaskExecutorOptions{
-			HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+			HTTPCallerProvider: func(nid queuescommon.NamespaceIDAndDestination) callbacks.HTTPCaller {
 				return nil
 			},
 			Logger: log.NewNoopLogger(),

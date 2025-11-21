@@ -105,7 +105,7 @@ func (w *Workflow) AddCompletionCallbacks(
 			return fmt.Errorf("unsupported callback variant: %T", variant)
 		}
 
-		id := fmt.Sprintf("cb-%s-%d", requestID, idx)
+		id := fmt.Sprintf("%s-%d", requestID, idx)
 
 		// Create and add callback
 		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)

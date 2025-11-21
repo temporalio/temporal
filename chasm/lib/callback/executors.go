@@ -12,18 +12,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
 
-// NamespaceIDAndDestination is a key for grouping callbacks by namespace and destination.
-type NamespaceIDAndDestination struct {
-	NamespaceID string
-	Destination string
-}
-
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
-type HTTPCallerProvider func(NamespaceIDAndDestination) HTTPCaller
+type HTTPCallerProvider func(common.NamespaceIDAndDestination) HTTPCaller
 
 func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTaskExecutor {
 	return &InvocationTaskExecutor{

@@ -28,6 +28,8 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -93,7 +95,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			},
 			expectedMetricOutcome: "unknown-error",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				var destDownErr *DestinationDownError
+				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
 			},
@@ -105,7 +107,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			},
 			expectedMetricOutcome: "status:500",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				var destDownErr *DestinationDownError
+				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
 			},
@@ -240,7 +242,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				namespaceRegistry: nsRegistry,
 				metricsHandler:    metricsHandler,
 				logger:            logger,
-				httpCallerProvider: func(nid NamespaceIDAndDestination) HTTPCaller {
+				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
 					return tc.caller
 				},
 				chasmEngine: mockEngine,

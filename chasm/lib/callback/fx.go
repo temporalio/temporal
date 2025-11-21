@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
 
@@ -32,7 +33,7 @@ func httpCallerProviderProvider(
 	}
 	defaultClient := &http.Client{}
 
-	m := collection.NewOnceMap(func(NamespaceIDAndDestination) HTTPCaller {
+	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
 		return func(r *http.Request) (*http.Response, error) {
 			return routeRequest(r,
 				clusterMetadata,
