@@ -616,11 +616,9 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 		},
 	).AnyTimes()
 
-	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			return tests.UpdateWorkflowExecutionResponse, nil
-		},
-	).Times(numUpdatesTotal)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil).
+		Times(numUpdatesTotal)
 
 	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).DoAndReturn(
 		func(key chasm.EntityKey, ref []byte) {
