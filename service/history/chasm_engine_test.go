@@ -602,19 +602,11 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 
 	var updateCount atomic.Int32
 
-	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(context.Context, *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
-			var info *persistencespb.ActivityInfo
-			if updateCount.Load() < updateCountWhenSatisfied {
-				info = &persistencespb.ActivityInfo{}
-			} else {
-				info = &persistencespb.ActivityInfo{ActivityId: expectedActivityID}
-			}
-			return &persistence.GetWorkflowExecutionResponse{
-				State: s.buildPersistenceMutableState(ref.EntityKey, info),
-			}, nil
-		},
-	).AnyTimes()
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
+		}, nil).
+		AnyTimes()
 
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(tests.UpdateWorkflowExecutionResponse, nil).
