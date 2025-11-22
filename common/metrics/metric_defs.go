@@ -427,6 +427,8 @@ const (
 	EventsCacheGetFromStoreScope = "EventsCacheGetFromStore"
 	// HistoryEventNotificationScope is the scope used by shard history event notification
 	HistoryEventNotificationScope = "HistoryEventNotification"
+	// ChasmComponentNotificationScope is the scope used by shard chasm component notifications
+	ChasmComponentNotificationScope = "ChasmComponentNotification"
 	// ArchiverClientScope is scope used by all metrics emitted by archiver.Client
 	ArchiverClientScope = "ArchiverClient"
 	// DeadlockDetectorScope is a scope for deadlock detector
@@ -712,21 +714,25 @@ var (
 	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
 
 	// History
-	CacheRequests                                = NewCounterDef("cache_requests")
-	CacheFailures                                = NewCounterDef("cache_errors")
-	CacheLatency                                 = NewTimerDef("cache_latency")
-	CacheMissCounter                             = NewCounterDef("cache_miss")
-	CacheSize                                    = NewGaugeDef("cache_size")
-	CacheUsage                                   = NewGaugeDef("cache_usage")
-	CachePinnedUsage                             = NewGaugeDef("cache_pinned_usage")
-	CacheTtl                                     = NewTimerDef("cache_ttl")
-	CacheEntryAgeOnGet                           = NewTimerDef("cache_entry_age_on_get")
-	CacheEntryAgeOnEviction                      = NewTimerDef("cache_entry_age_on_eviction")
-	HistoryEventNotificationQueueingLatency      = NewTimerDef("history_event_notification_queueing_latency")
-	HistoryEventNotificationFanoutLatency        = NewTimerDef("history_event_notification_fanout_latency")
-	HistoryEventNotificationInFlightMessageGauge = NewGaugeDef("history_event_notification_inflight_message_gauge")
-	HistoryEventNotificationFailDeliveryCount    = NewCounterDef("history_event_notification_fail_delivery_count")
-	HistoryHostHealthGauge                       = NewGaugeDef("host_health")
+	CacheRequests                                  = NewCounterDef("cache_requests")
+	CacheFailures                                  = NewCounterDef("cache_errors")
+	CacheLatency                                   = NewTimerDef("cache_latency")
+	CacheMissCounter                               = NewCounterDef("cache_miss")
+	CacheSize                                      = NewGaugeDef("cache_size")
+	CacheUsage                                     = NewGaugeDef("cache_usage")
+	CachePinnedUsage                               = NewGaugeDef("cache_pinned_usage")
+	CacheTtl                                       = NewTimerDef("cache_ttl")
+	CacheEntryAgeOnGet                             = NewTimerDef("cache_entry_age_on_get")
+	CacheEntryAgeOnEviction                        = NewTimerDef("cache_entry_age_on_eviction")
+	HistoryEventNotificationQueueingLatency        = NewTimerDef("history_event_notification_queueing_latency")
+	HistoryEventNotificationFanoutLatency          = NewTimerDef("history_event_notification_fanout_latency")
+	HistoryEventNotificationInFlightMessageGauge   = NewGaugeDef("history_event_notification_inflight_message_gauge")
+	HistoryEventNotificationFailDeliveryCount      = NewCounterDef("history_event_notification_fail_delivery_count")
+	ChasmComponentNotificationQueueingLatency      = NewTimerDef("chasm_component_notification_queueing_latency")
+	ChasmComponentNotificationFanoutLatency        = NewTimerDef("chasm_component_notification_fanout_latency")
+	ChasmComponentNotificationInFlightMessageGauge = NewGaugeDef("chasm_component_notification_inflight_message_gauge")
+	ChasmComponentNotificationFailDeliveryCount    = NewCounterDef("chasm_component_notification_fail_delivery_count")
+	HistoryHostHealthGauge                         = NewGaugeDef("host_health")
 	// ArchivalTaskInvalidURI is emitted by the archival queue task executor when the history or visibility URI for an
 	// archival task is not a valid URI.
 	// We may emit this metric several times for a single task if the task is retried.

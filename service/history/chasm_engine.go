@@ -32,6 +32,7 @@ type (
 		shardController shard.Controller
 		registry        *chasm.Registry
 		config          *configs.Config
+		notifier        *ChasmNotifier
 	}
 
 	newEntityParams struct {
@@ -56,9 +57,10 @@ var defaultTransitionOptions = chasm.TransitionOptions{
 }
 
 var ChasmEngineModule = fx.Options(
+	fx.Provide(NewChasmNotifier),
 	fx.Provide(newChasmEngine),
 	fx.Provide(func(impl *ChasmEngine) chasm.Engine { return impl }),
-	fx.Invoke(func(impl *ChasmEngine, shardController shard.Controller) {
+	fx.Invoke(func(lc fx.Lifecycle, impl *ChasmEngine, shardController shard.Controller) {
 		impl.SetShardController(shardController)
 	}),
 )
@@ -67,11 +69,13 @@ func newChasmEngine(
 	entityCache cache.Cache,
 	registry *chasm.Registry,
 	config *configs.Config,
+	notifier *ChasmNotifier,
 ) *ChasmEngine {
 	return &ChasmEngine{
 		entityCache: entityCache,
 		registry:    registry,
 		config:      config,
+		notifier:    notifier,
 	}
 }
 
@@ -81,6 +85,10 @@ func (e *ChasmEngine) SetShardController(
 	shardController shard.Controller,
 ) {
 	e.shardController = shardController
+}
+
+func (e *ChasmEngine) GetNotifier() *ChasmNotifier {
+	return e.notifier
 }
 
 func (e *ChasmEngine) NewEntity(
@@ -155,6 +163,10 @@ func (e *ChasmEngine) UpdateWithNewEntity(
 	return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("UpdateWithNewEntity is not yet supported")
 }
 
+// UpdateComponent applies updateFn to the component identified by the supplied component reference,
+// returning the new component reference corresponding to the transition. An error is returned if
+// the state transition specified by the supplied component reference is inconsistent with execution
+// transition history.
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -207,6 +219,9 @@ func (e *ChasmEngine) UpdateComponent(
 	return newSerializedRef, nil
 }
 
+// ReadComponent evaluates readFn against the current state of the component identified by the
+// supplied component reference. An error is returned if the state transition specified by the
+// component reference is inconsistent with execution transition history.
 func (e *ChasmEngine) ReadComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -241,14 +256,165 @@ func (e *ChasmEngine) ReadComponent(
 	return readFn(chasmContext, component)
 }
 
+// PollComponent waits until the supplied predicate is satisfied when evaluated against the
+// component identified by the supplied component reference. If it times out due to the
+// server-imposed long-poll timeout then it returns (nil, nil). Otherwise if there is no error, it
+// returns (ref, nil) where ref is a component reference identifying the state at which the
+// predicate was satisfied. It is an error if execution transition history is (after reloading from
+// persistence) behind the requested ref, or if the ref is inconsistent with execution transition
+// history. Thus when the predicate function is evaluated, it is guaranteed that the execution VT >=
+// requestRef VT.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
-	entityRef chasm.ComponentRef,
-	predicateFn func(chasm.Context, chasm.Component) (any, bool, error),
-	operationFn func(chasm.MutableContext, chasm.Component, any) error,
-	opts ...chasm.TransitionOption,
-) (newEntityRef []byte, retError error) {
-	return nil, serviceerror.NewUnimplemented("PollComponent is not yet supported")
+	requestRef chasm.ComponentRef,
+	predicateFn func(chasm.Context, chasm.Component) (bool, error),
+) (retRef []byte, retError error) {
+	// 1. Acquire lock
+	// 2. Error if shard execution VT < requestRef VT ('stale state')
+	// 3. If predicate satisfied, release lock and return
+	// 4. Subscribe to notifications for this execution
+	// 5. Release lock
+	// 6. On notification repeat (1) and (2)
+
+	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
+	if err != nil {
+		// E.g. requestRef VT inconsistent with shard VT ('stale reference')
+		return nil, err
+	}
+
+	// hold lock until return or subscription established
+	// TODO(dan): this will probably be called when its already been release; ok?
+	defer executionLease.GetReleaseFn()(nil)
+
+	// At this point it's possible that shard VT < requestRef VT (getExecutionLease does not
+	// guarantee that returned shard state is non-stale w.r.t. requestRef).
+	satisfiedRef, err := e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
+	if err != nil {
+		return nil, err
+	}
+	// shard VT >= requestRef VT (enforced by checkPredicate)
+
+	if satisfiedRef != nil {
+		// wait condition was satisfied
+		return satisfiedRef, nil
+	}
+
+	// Wait condition not satisfied; long-poll
+
+	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(requestRef.EntityKey.NamespaceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// If the long-poll times out due to the internally-imposed long-poll timeout, then we want the
+	// initiator of the long-poll to receive a non-error empty response indicating that they should
+	// continue long-polling. To achieve this, we return nil on all canceled context errors below.
+	// We assume that the parent will check for a canceled context independently (without relying on
+	// any error value we return), so that if the cancelation was due to the parent deadline rather
+	// than the internally-imposed long-poll timeout then the initiator of the long-poll will get a
+	// deadline exceeded error.
+
+	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
+	defer cancel()
+
+	// For now, PollComponent subscribes to execution-level notifications. Suppose that an
+	// execution consists of one component A, and A has subcomponent B. Subscribers interested
+	// only in component B may be woken up unnecessarily due to changes in parts of A that do
+	// not also belong to B, but they will not miss notifications.
+	ch, err := e.notifier.Subscribe(requestRef.EntityKey)
+	if err != nil {
+		return nil, err
+	}
+	executionLease.GetReleaseFn()(nil)
+
+	for {
+		select {
+		case <-ch:
+			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+			if err != nil {
+				if errors.Is(err, ctx.Err()) {
+					return nil, nil
+				}
+				return nil, err
+			}
+			ch, err = e.notifier.Subscribe(requestRef.EntityKey)
+			if err != nil {
+				return nil, err
+			}
+			func() {
+				defer executionLease.GetReleaseFn()(nil)
+				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
+			}()
+			if err != nil {
+				if errors.Is(err, ctx.Err()) {
+					return nil, nil
+				}
+				return nil, err
+			}
+			if satisfiedRef != nil {
+				return satisfiedRef, nil
+			}
+		case <-ctx.Done():
+			return nil, nil
+		}
+	}
+}
+
+// predicateSatisfied is a helper function for PollComponent. It returns (ref, err) where ref is non-nil
+// iff there's no error and predicateFn evaluates to true.
+func (e *ChasmEngine) predicateSatisfied(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	executionLease api.WorkflowLease,
+	predicateFn func(chasm.Context, chasm.Component) (bool, error),
+) ([]byte, error) {
+	fmt.Println("🔎 checkPredicate")
+
+	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
+	if !ok {
+		return nil, serviceerror.NewInternalf(
+			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
+			executionLease.GetMutableState().ChasmTree(),
+			&chasm.Node{},
+		)
+	}
+
+	// It is not acceptable to declare the predicate to be satisfied against shard state that is
+	// behind the requested reference. However, getExecutionLease does not currently guarantee that
+	// shard VT >= ref VT, therefore we call IsStale() again here and return any error (which at
+	// this point must be ErrStaleState; ErrStaleReference has already been eliminated).
+	err := chasmTree.IsStale(ref)
+	if err != nil {
+		// ErrStaleState
+		// TODO(dan): this should be retryable if it is the failover version that is stale
+		return nil, err
+	}
+	// We know now that shard VT >= ref VT
+
+	chasmContext := chasm.NewContext(ctx, chasmTree)
+
+	component, err := chasmTree.Component(chasmContext, ref)
+	if err != nil {
+		return nil, err
+	}
+	satisfied, err := predicateFn(chasmContext, component)
+	if err != nil {
+		return nil, err
+	}
+	if !satisfied {
+		fmt.Println("    🟠 checkPredicate: predicate not satisfied")
+		return nil, nil
+	}
+
+	newRef, err := chasmContext.Ref(component)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("    🟢 checkPredicate: predicate satisfied")
+	return newRef, nil
 }
 
 func (e *ChasmEngine) constructTransitionOptions(
@@ -372,6 +538,7 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newEntityParams.events,
 	)
 	if err == nil {
+		// TODO(dan): send notification on creation?
 		return currentRunInfo{}, false, nil
 	}
 
@@ -524,6 +691,7 @@ func (e *ChasmEngine) handleReusePolicy(
 	if err != nil {
 		return chasm.EntityKey{}, nil, err
 	}
+	// TODO(dan): send notification on creation?
 
 	serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
 	if err != nil {
@@ -547,6 +715,14 @@ func (e *ChasmEngine) getShardContext(
 	return e.shardController.GetShardByID(shardID)
 }
 
+// getExecutionLease returns shard context and mutable state for the execution identified by the
+// supplied component reference, with the lock held. An error is returned if the state transition
+// specified by the component reference is inconsistent with mutable state transition history. If
+// the state transition specified by the component reference is consistent with mutable state being
+// stale, then mutable state is reloaded from persistence before returning. It does not check that
+// mutable state is non-stale after reload.
+// TODO(dan): if mutable state is stale after reload, return an error (retryable iff the failover
+// version is stale since that is expected under some multi-cluster scenarios).
 func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,
 	ref chasm.ComponentRef,

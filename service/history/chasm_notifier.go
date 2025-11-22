@@ -1,0 +1,58 @@
+// This file implements ChasmNotifier, which allows subscribers to subscribe to notifications
+// relating to components in a specified CHASM execution. It is based on the events.Notifier
+// implementation.
+package history
+
+import (
+	"fmt"
+	"sync"
+
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
+)
+
+type (
+	// ChasmNotifier allows subscribers to subscribe to notifications relating to a CHASM execution.
+	ChasmNotifier struct {
+		metricsHandler metrics.Handler
+		executions     map[chasm.EntityKey]chan struct{}
+		lock           sync.Mutex
+	}
+)
+
+// NewChasmNotifier creates a new instance of ChasmNotifier allowing subscribers to subscribe to
+// notifications relating to components in a specified CHASM execution.
+func NewChasmNotifier(metricsHandler metrics.Handler) *ChasmNotifier {
+	return &ChasmNotifier{
+		metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.ChasmComponentNotificationScope)),
+		executions:     make(map[chasm.EntityKey]chan struct{}),
+	}
+}
+
+// Notify notifies all subscribers subscribed to key by closing the channel.
+func (n *ChasmNotifier) Notify(key chasm.EntityKey) {
+	// If key exists, notify all subscribers by closing the channel, and create a new channel for
+	// subsequent notifications.
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	if ch, ok := n.executions[key]; ok {
+		close(ch)
+		n.executions[key] = make(chan struct{})
+	}
+}
+
+// Subscribe returns a channel that will be closed to indicate that there is a notification relating to the execution.
+func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (<-chan struct{}, error) {
+	fmt.Println("🟠 Subscribe")
+	var ch chan struct{}
+	var ok bool
+
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	if ch, ok = n.executions[key]; !ok {
+		fmt.Println("    ↳ Making new channel")
+		ch = make(chan struct{})
+		n.executions[key] = ch
+	}
+	return ch, nil
+}

@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -115,6 +116,7 @@ func (s *chasmEngineSuite) SetupTest() {
 		s.entityCache,
 		s.registry,
 		s.config,
+		NewChasmNotifier(metrics.NoopMetricsHandler),
 	)
 	s.engine.SetShardController(s.mockShardController)
 }
@@ -541,6 +543,139 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 		},
 	)
 	s.NoError(err)
+}
+
+// TestPollComponent_Success_Wait tests the behavior of PollComponent when the predicate is
+// satisfied at the outset.
+func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    tv.RunID(),
+		},
+	)
+	expectedActivityID := tv.ActivityID()
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{
+				ActivityId: expectedActivityID,
+			}),
+		}, nil).Times(1)
+
+	newSerializedRef, err := s.engine.PollComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.Context, component chasm.Component) (bool, error) {
+			return true, nil
+		},
+	)
+	s.NoError(err)
+
+	newRef, err := chasm.DeserializeComponentRef(newSerializedRef)
+	s.NoError(err)
+	s.Equal(ref.BusinessID, newRef.BusinessID)
+}
+
+// TestPollComponent_Success_Wait tests the waiting behavior of PollComponent when the predicate is
+// not immediately satisfied.
+func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
+	const numUpdatesTotal = 3
+	const updateAtWhichSatisfied = 2   // 0-indexed, so 3rd update
+	const updateCountWhenSatisfied = 3 // 1-indexed count for mock
+
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.EntityKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			EntityID:    tv.RunID(),
+		},
+	)
+	expectedActivityID := tv.ActivityID()
+
+	var updateCount atomic.Int32
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
+		}, nil).
+		Times(1) // subsequent reads during UpdateComponent and PollComponent are from cache
+
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil).
+		Times(numUpdatesTotal)
+
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).DoAndReturn(
+		func(key chasm.EntityKey, ref []byte) {
+			s.engine.notifier.Notify(key)
+		},
+	).Times(numUpdatesTotal)
+
+	pollErr := make(chan error)
+	pollResult := make(chan []byte)
+	go func() {
+		newSerializedRef, err := s.engine.PollComponent(
+			context.Background(),
+			ref,
+			func(ctx chasm.Context, component chasm.Component) (bool, error) {
+				tc, ok := component.(*testComponent)
+				s.True(ok)
+				satisfied := tc.ActivityInfo.ActivityId == expectedActivityID
+				return satisfied, nil
+			},
+		)
+		pollErr <- err
+		pollResult <- newSerializedRef
+	}()
+
+	for currentUpdate := range numUpdatesTotal {
+		_, err := s.engine.UpdateComponent(
+			context.Background(),
+			ref,
+			func(ctx chasm.MutableContext, component chasm.Component) error {
+				tc, ok := component.(*testComponent)
+				s.True(ok)
+				if currentUpdate == updateAtWhichSatisfied {
+					tc.ActivityInfo.ActivityId = expectedActivityID
+				}
+				updateCount.Add(1)
+				return nil
+			},
+		)
+		s.NoError(err)
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	s.NoError(<-pollErr)
+	newSerializedRef := <-pollResult
+	s.NotNil(newSerializedRef)
+
+	newRef, err := chasm.DeserializeComponentRef(newSerializedRef)
+	s.NoError(err)
+
+	newActivityID := make(chan string, 1)
+	err = s.engine.ReadComponent(
+		context.Background(),
+		newRef,
+		func(
+			ctx chasm.Context,
+			component chasm.Component,
+		) error {
+			tc, ok := component.(*testComponent)
+			s.True(ok)
+			newActivityID <- tc.ActivityInfo.ActivityId
+			return nil
+		},
+	)
+	s.NoError(err)
+	s.Equal(expectedActivityID, <-newActivityID)
 }
 
 func (s *chasmEngineSuite) buildPersistenceMutableState(

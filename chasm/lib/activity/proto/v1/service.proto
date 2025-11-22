@@ -11,4 +11,8 @@ service ActivityService {
     rpc StartActivityExecution(StartActivityExecutionRequest) returns (StartActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
     }
+
+    rpc PollActivityExecution(PollActivityExecutionRequest) returns (PollActivityExecutionResponse) {
+      option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
+    }
 }
