@@ -50,7 +50,8 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 	}
 }
 
-func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
+// TestPauseUnpauseWorkflowExecution tests that the pause and unpause workflow execution APIs work as expected.
+func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -97,6 +98,29 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution() {
 			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
 			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
 		}
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Unpause the workflow.
+	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
+		RequestId:  uuid.New(),
+	}
+	unpauseResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
+	s.NoError(err)
+	s.NotNil(unpauseResp)
+
+	// Wait until unpaused (running again).
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		require.Nil(t, desc.GetWorkflowExtendedInfo().GetPauseInfo())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// TODO: currently pause workflow execution does not intercept workflow creation. Fix the reset of this test when that is implemented.
