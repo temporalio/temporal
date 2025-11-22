@@ -190,6 +190,7 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
+		ArchetypeID chasm.ArchetypeID
 
 		Tasks map[tasks.Category][]tasks.Task
 	}
@@ -203,6 +204,8 @@ type (
 
 		PreviousRunID            string
 		PreviousLastWriteVersion int64
+
+		ArchetypeID chasm.ArchetypeID
 
 		NewWorkflowSnapshot WorkflowSnapshot
 		NewWorkflowEvents   []*WorkflowEvents
@@ -219,6 +222,8 @@ type (
 		RangeID int64
 
 		Mode UpdateWorkflowMode
+
+		ArchetypeID chasm.ArchetypeID
 
 		UpdateWorkflowMutation WorkflowMutation
 		UpdateWorkflowEvents   []*WorkflowEvents
@@ -238,6 +243,8 @@ type (
 		RangeID int64
 
 		Mode ConflictResolveWorkflowMode
+
+		ArchetypeID chasm.ArchetypeID
 
 		// workflow to be resetted
 		ResetWorkflowSnapshot WorkflowSnapshot
@@ -263,6 +270,7 @@ type (
 		ShardID     int32
 		NamespaceID string
 		WorkflowID  string
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
@@ -279,6 +287,7 @@ type (
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
@@ -292,6 +301,8 @@ type (
 	SetWorkflowExecutionRequest struct {
 		ShardID int32
 		RangeID int64
+
+		ArchetypeID chasm.ArchetypeID
 
 		SetWorkflowSnapshot WorkflowSnapshot
 	}
@@ -386,6 +397,7 @@ type (
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// DeleteCurrentWorkflowExecutionRequest is used to delete the current workflow execution
@@ -394,6 +406,7 @@ type (
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// GetHistoryTasksRequest is used to get a range of history tasks
