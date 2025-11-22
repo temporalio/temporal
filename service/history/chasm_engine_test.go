@@ -491,6 +491,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 			return tests.UpdateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).Return().Times(1)
 
 	// TODO: validate returned component once Ref() method of chasm tree is implememented.
 	_, err := s.engine.UpdateComponent(
