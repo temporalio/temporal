@@ -2613,7 +2613,7 @@ func (h *Handler) ResetActivity(
 	return response, nil
 }
 
-// PauseWorkflowExecution is used to pause a running workflow execution.  This results in
+// PauseWorkflowExecution is used to pause a running workflow execution. This results in
 // WorkflowExecutionPaused event recorded in the history.
 func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (_ *historyservice.PauseWorkflowExecutionResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
@@ -2643,4 +2643,34 @@ func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyse
 	}
 
 	return resp, nil
+}
+
+func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *historyservice.UnpauseWorkflowExecutionRequest) (_ *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.GetUnpauseRequest().GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	unpauseResp, unpauseErr := engine.UnpauseWorkflowExecution(ctx, request)
+	if unpauseErr != nil {
+		return nil, h.convertError(unpauseErr)
+	}
+
+	return unpauseResp, nil
 }
