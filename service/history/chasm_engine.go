@@ -260,22 +260,16 @@ func (e *ChasmEngine) ReadComponent(
 // component identified by the supplied component reference. If it times out due to the
 // server-imposed long-poll timeout then it returns (nil, nil). Otherwise if there is no error, it
 // returns (ref, nil) where ref is a component reference identifying the state at which the
-// predicate was satisfied. It is an error if execution transition history is (after reloading from
-// persistence) behind the requested ref, or if the ref is inconsistent with execution transition
-// history. Thus when the predicate function is evaluated, it is guaranteed that the execution VT >=
-// requestRef VT.
+// predicate was satisfied. The predicate must be monotonic: if it returns true at execution state
+// transition s it must return true at all transitions t > s. It is an error if execution transition
+// history is (after reloading from persistence) behind the requested ref, or if the ref is
+// inconsistent with execution transition history. Thus when the predicate function is evaluated, it
+// is guaranteed that the execution VT >= requestRef VT.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
-	// 1. Acquire lock
-	// 2. Error if shard execution VT < requestRef VT ('stale state')
-	// 3. If predicate satisfied, release lock and return
-	// 4. Subscribe to notifications for this execution
-	// 5. Release lock
-	// 6. On notification repeat (1) and (2)
-
 	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
 	if err != nil {
 		// E.g. requestRef VT inconsistent with shard VT ('stale reference')
@@ -332,6 +326,9 @@ func (e *ChasmEngine) PollComponent(
 
 	for {
 		select {
+		// It is possible that multiple state transitions (multiple notifications) occur between
+		// predicate checks. Therefore the predicate must be monotonic: if it returns true at
+		// execution state transition s it must return true at all transitions t > s.
 		case <-ch:
 			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 			if err != nil {
