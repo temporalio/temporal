@@ -953,7 +953,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenCurrentOrRamping() {
 		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
 				// The validator should reject this update
-				s.Require().ErrorContains(err, ErrVersionIsCurrentOrRamping)
+				s.Require().ErrorContains(err, fmt.Sprintf(ErrVersionIsCurrentOrRamping, tv.DeploymentVersionStringV32()))
 			},
 			OnAccept: func() {
 				s.Fail("delete version should have been rejected by validator")
