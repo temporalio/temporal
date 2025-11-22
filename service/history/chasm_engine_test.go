@@ -618,7 +618,6 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			updateCount.Add(1)
 			return tests.UpdateWorkflowExecutionResponse, nil
 		},
 	).Times(numUpdatesTotal)
@@ -641,6 +640,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 					if currentUpdate == updateAtWhichSatisfied {
 						tc.ActivityInfo.ActivityId = expectedActivityID
 					}
+					updateCount.Add(1)
 					return nil
 				},
 			)
