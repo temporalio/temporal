@@ -63,6 +63,7 @@ const (
 	AdminService_GenerateLastHistoryReplicationTasks_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/GenerateLastHistoryReplicationTasks"
 	AdminService_DescribeTaskQueuePartition_FullMethodName          = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
 	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
+	AdminService_GetDynamicConfigurations_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/GetDynamicConfigurations"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -121,9 +122,7 @@ type AdminServiceClient interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
-	//
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(ctx context.Context, in *PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -140,8 +139,7 @@ type AdminServiceClient interface {
 	GetNamespace(ctx context.Context, in *GetNamespaceRequest, opts ...grpc.CallOption) (*GetNamespaceResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
+	//     aip.dev/not-precedent:  --)
 	PurgeDLQTasks(ctx context.Context, in *PurgeDLQTasksRequest, opts ...grpc.CallOption) (*PurgeDLQTasksResponse, error)
 	MergeDLQTasks(ctx context.Context, in *MergeDLQTasksRequest, opts ...grpc.CallOption) (*MergeDLQTasksResponse, error)
 	DescribeDLQJob(ctx context.Context, in *DescribeDLQJobRequest, opts ...grpc.CallOption) (*DescribeDLQJobResponse, error)
@@ -153,6 +151,7 @@ type AdminServiceClient interface {
 	GenerateLastHistoryReplicationTasks(ctx context.Context, in *GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*GenerateLastHistoryReplicationTasksResponse, error)
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
+	GetDynamicConfigurations(ctx context.Context, in *GetDynamicConfigurationsRequest, opts ...grpc.CallOption) (*GetDynamicConfigurationsResponse, error)
 }
 
 type adminServiceClient struct {
@@ -572,6 +571,15 @@ func (c *adminServiceClient) ForceUnloadTaskQueuePartition(ctx context.Context, 
 	return out, nil
 }
 
+func (c *adminServiceClient) GetDynamicConfigurations(ctx context.Context, in *GetDynamicConfigurationsRequest, opts ...grpc.CallOption) (*GetDynamicConfigurationsResponse, error) {
+	out := new(GetDynamicConfigurationsResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetDynamicConfigurations_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -628,9 +636,7 @@ type AdminServiceServer interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
-	//
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(context.Context, *PurgeDLQMessagesRequest) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -647,8 +653,7 @@ type AdminServiceServer interface {
 	GetNamespace(context.Context, *GetNamespaceRequest) (*GetNamespaceResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
+	//     aip.dev/not-precedent:  --)
 	PurgeDLQTasks(context.Context, *PurgeDLQTasksRequest) (*PurgeDLQTasksResponse, error)
 	MergeDLQTasks(context.Context, *MergeDLQTasksRequest) (*MergeDLQTasksResponse, error)
 	DescribeDLQJob(context.Context, *DescribeDLQJobRequest) (*DescribeDLQJobResponse, error)
@@ -660,6 +665,7 @@ type AdminServiceServer interface {
 	GenerateLastHistoryReplicationTasks(context.Context, *GenerateLastHistoryReplicationTasksRequest) (*GenerateLastHistoryReplicationTasksResponse, error)
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
+	GetDynamicConfigurations(context.Context, *GetDynamicConfigurationsRequest) (*GetDynamicConfigurationsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -795,6 +801,9 @@ func (UnimplementedAdminServiceServer) DescribeTaskQueuePartition(context.Contex
 }
 func (UnimplementedAdminServiceServer) ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForceUnloadTaskQueuePartition not implemented")
+}
+func (UnimplementedAdminServiceServer) GetDynamicConfigurations(context.Context, *GetDynamicConfigurationsRequest) (*GetDynamicConfigurationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDynamicConfigurations not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1591,6 +1600,24 @@ func _AdminService_ForceUnloadTaskQueuePartition_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_GetDynamicConfigurations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDynamicConfigurationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetDynamicConfigurations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetDynamicConfigurations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetDynamicConfigurations(ctx, req.(*GetDynamicConfigurationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1765,6 +1792,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForceUnloadTaskQueuePartition",
 			Handler:    _AdminService_ForceUnloadTaskQueuePartition_Handler,
+		},
+		{
+			MethodName: "GetDynamicConfigurations",
+			Handler:    _AdminService_GetDynamicConfigurations_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

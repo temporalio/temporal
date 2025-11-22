@@ -75,12 +75,24 @@ func (s {{$P.Name}}TypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s {{$P.Name}}TypedSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+			Constraints: Constraints{},
+			Value:       s.def,
+		}
+}
 
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Precedence() Precedence { return Precedence{{$P.Name}} }
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) DefaultValue() ConstrainedValue {
+	return ConstrainedValue {
+		Constraints: Constraints{},
+		Value:       s.cdef,
+	}
 }
 
 func (s {{$P.Name}}TypedSetting[T]) WithDefault(v T) {{$P.Name}}TypedSetting[T] {

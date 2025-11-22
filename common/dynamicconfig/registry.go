@@ -17,6 +17,14 @@ var (
 	globalRegistry registry
 )
 
+func GetDefaultValueForKey(k Key) ConstrainedValue {
+	s := queryRegistry(k)
+	if s == nil {
+		return ConstrainedValue{}
+	}
+	return s.DefaultValue()
+}
+
 func register(s GenericSetting) {
 	if globalRegistry.queried.Load() {
 		panic("dynamicconfig.New*Setting must only be called from static initializers")

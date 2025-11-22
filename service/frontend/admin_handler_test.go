@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -83,6 +84,7 @@ type (
 		mockProducer               *persistence.MockNamespaceReplicationQueue
 		mockMatchingClient         *matchingservicemock.MockMatchingServiceClient
 		mockSaMapper               *searchattribute.MockMapper
+		dynamicconfig              *dynamicconfig.Collection
 
 		namespace      namespace.Name
 		namespaceID    namespace.ID
@@ -136,6 +138,12 @@ func (s *adminHandlerSuite) SetupTest() {
 		NumHistoryShards: 1,
 	}
 
+	dynamicConfigClient := dynamicconfig.NewMemoryClient()
+	dynamicConfigClient.OverrideValue("frontend.rps", 10)
+	dynamicConfigClient.OverrideValue("limit.maxIDLength", 255)
+	dynamicConfigClient.OverrideValue("history.enableTransitionHistory", true)
+	s.dynamicconfig = dynamicconfig.NewCollection(dynamicConfigClient, &log.MockLogger{})
+
 	cfg := &Config{
 		NumHistoryShards: 4,
 
@@ -172,6 +180,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		health.NewServer(),
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
+		s.dynamicconfig,
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -2077,6 +2086,20 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			}
 		})
 	}
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigurations() {
+	key1 := dynamicconfig.Key("frontend.rps")
+	key2 := dynamicconfig.Key("limit.maxIDLength")
+	key3 := dynamicconfig.Key("history.enableTransitionHistory")
+
+	value1 := s.dynamicconfig.GetClient().GetValue(key1)
+	value2 := s.dynamicconfig.GetClient().GetValue(key2)
+	value3 := s.dynamicconfig.GetClient().GetValue(key3)
+
+	s.Equal(10, value1[0].Value)
+	s.Equal(255, value2[0].Value)
+	s.Equal(true, value3[0].Value)
 }
 
 func (s *adminHandlerSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo,

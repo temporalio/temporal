@@ -70,4 +70,5 @@ var (
 	FlagAllActive                  = "select-all-active"
 	FlagFair                       = "fair"
 	FlagMinPass                    = "min-pass"
+	FlagKey                        = "key"
 )

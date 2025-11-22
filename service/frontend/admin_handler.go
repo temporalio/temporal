@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
+	dc "go.temporal.io/server/api/dynamicconfig/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -39,6 +40,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -62,6 +64,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -105,6 +108,7 @@ type (
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
+		dc                         *dynamicconfig.Collection
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -139,6 +143,7 @@ type (
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
+		dc                                  *dynamicconfig.Collection
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -223,6 +228,7 @@ func NewAdminHandler(
 		clusterMetadata:      args.ClusterMetadata,
 		healthServer:         args.HealthServer,
 		historyHealthChecker: historyHealthChecker,
+		dc:                   args.dc,
 		taskCategoryRegistry: args.CategoryRegistry,
 		matchingClient:       args.matchingClient,
 	}
@@ -2175,6 +2181,77 @@ func (adh *AdminHandler) getDLQWorkflowID(
 			key.TargetCluster,
 		),
 	)
+}
+
+func (adh *AdminHandler) GetDynamicConfigurations(
+	ctx context.Context,
+	req *adminservice.GetDynamicConfigurationsRequest,
+) (_ *adminservice.GetDynamicConfigurationsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+	requestedKeys := req.GetDynamicConfigKeys()
+	dynamicConfig := make(map[string]*dc.ConstrainedValues, len(requestedKeys))
+
+	for _, key := range requestedKeys {
+		var dcEntry []dynamicconfig.ConstrainedValue
+		k := dynamicconfig.Key(key)
+		dcEntry = adh.dc.GetClient().GetValue(k)
+
+		// get global default value
+		defaultValue := dynamicconfig.GetDefaultValueForKey(k)
+		if dcEntry == nil {
+			dcEntry = append(dcEntry, defaultValue)
+		} else {
+			var hasDefault bool
+			for i := range dcEntry {
+				if dcEntry[i].Constraints == (dynamicconfig.Constraints{}) {
+					hasDefault = true
+					break
+				}
+			}
+			if !hasDefault {
+				dcEntry = append(dcEntry, defaultValue)
+			}
+		}
+
+		protoValues := make([]*dc.ConstrainedValue, 0)
+		for _, ConstrainedValue := range dcEntry {
+			value, _ := toStruct(ConstrainedValue.Value)
+			protoValues = append(protoValues, &dc.ConstrainedValue{
+				Value: value,
+				Constraints: &dc.Constraints{
+					Namespace:     ConstrainedValue.Constraints.Namespace,
+					NamespaceId:   ConstrainedValue.Constraints.NamespaceID,
+					TaskQueueName: ConstrainedValue.Constraints.TaskQueueName,
+					TaskQueueType: int32(ConstrainedValue.Constraints.TaskQueueType),
+					ShardId:       ConstrainedValue.Constraints.ShardID,
+					TaskType:      int32(ConstrainedValue.Constraints.TaskType),
+					Destination:   ConstrainedValue.Constraints.Destination,
+				},
+			})
+		}
+		dynamicConfig[key] = &dc.ConstrainedValues{Items: protoValues}
+	}
+
+	hostConfig := &adminservice.HostConfig{
+		Hostname:      adh.hostInfoProvider.HostInfo().Identity(),
+		DynamicConfig: dynamicConfig,
+	}
+
+	return &adminservice.GetDynamicConfigurationsResponse{
+		HostConfig: []*adminservice.HostConfig{hostConfig},
+	}, nil
+}
+
+func toStruct(v any) (*structpb.Struct, error) {
+	val, err := structpb.NewValue(v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert value: %w", err)
+	}
+	return &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"value": val,
+		},
+	}, nil
 }
 
 func validateHistoryDLQKey(
