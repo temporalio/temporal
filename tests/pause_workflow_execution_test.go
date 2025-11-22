@@ -216,6 +216,66 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	s.Contains(unimplementedErr.Error(), namespaceName)
 }
 
+// TestUnpauseWorkflowExecutionRequestValidation tests unpause workflow execution request validation. We don't need a valid workflow.
+// - fails when the identity is too long.
+// - fails when the reason is too long.
+// - fails when the request id is too long.
+func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidation() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	namespaceName := s.Namespace().String()
+
+	// fails when the identity is too long.
+	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  namespaceName,
+		WorkflowId: "test-workflow-id",
+		RunId:      uuid.New(),
+		Identity:   strings.Repeat("x", 2000),
+		Reason:     s.pauseReason,
+		RequestId:  uuid.New(),
+	}
+	resp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
+	s.Error(err)
+	s.Nil(resp)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.NotNil(invalidArgumentErr)
+	s.Contains(invalidArgumentErr.Error(), "identity is too long.")
+
+	// fails when the reason is too long.
+	unpauseRequest = &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  namespaceName,
+		WorkflowId: "test-workflow-id",
+		RunId:      uuid.New(),
+		Identity:   s.pauseIdentity,
+		Reason:     strings.Repeat("x", 2000),
+		RequestId:  uuid.New(),
+	}
+	resp, err = s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
+	s.Error(err)
+	s.Nil(resp)
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.NotNil(invalidArgumentErr)
+	s.Contains(invalidArgumentErr.Error(), "reason is too long.")
+
+	// fails when the request id is too long.
+	unpauseRequest = &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  namespaceName,
+		WorkflowId: "test-workflow-id",
+		RunId:      uuid.New(),
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
+		RequestId:  strings.Repeat("x", 2000),
+	}
+	resp, err = s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
+	s.Error(err)
+	s.Nil(resp)
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.NotNil(invalidArgumentErr)
+	s.Contains(invalidArgumentErr.Error(), "request id is too long.")
+}
+
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
