@@ -619,31 +619,9 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 		},
 	).Times(numUpdatesTotal)
 
-	updateErr := make(chan error, numUpdatesTotal)
-	updateActivity := func() {
-		for currentUpdate := range numUpdatesTotal {
-			_, err := s.engine.UpdateComponent(
-				context.Background(),
-				ref,
-				func(ctx chasm.MutableContext, component chasm.Component) error {
-					tc, ok := component.(*testComponent)
-					s.True(ok)
-					if currentUpdate == updateAtWhichSatisfied {
-						tc.ActivityInfo.ActivityId = expectedActivityID
-					}
-					updateCount.Add(1)
-					return nil
-				},
-			)
-			updateErr <- err
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
 	pollErr := make(chan error)
 	pollResult := make(chan []byte)
-
-	pollComponent := func() {
+	go func() {
 		newSerializedRef, err := s.engine.PollComponent(
 			context.Background(),
 			ref,
@@ -656,14 +634,26 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 		)
 		pollErr <- err
 		pollResult <- newSerializedRef
+	}()
+
+	for currentUpdate := range numUpdatesTotal {
+		_, err := s.engine.UpdateComponent(
+			context.Background(),
+			ref,
+			func(ctx chasm.MutableContext, component chasm.Component) error {
+				tc, ok := component.(*testComponent)
+				s.True(ok)
+				if currentUpdate == updateAtWhichSatisfied {
+					tc.ActivityInfo.ActivityId = expectedActivityID
+				}
+				updateCount.Add(1)
+				return nil
+			},
+		)
+		s.NoError(err)
+		time.Sleep(100 * time.Millisecond)
 	}
 
-	go pollComponent()
-	go updateActivity()
-
-	for range numUpdatesTotal {
-		s.NoError(<-updateErr)
-	}
 	s.NoError(<-pollErr)
 	newSerializedRef := <-pollResult
 	s.NotNil(newSerializedRef)
