@@ -606,7 +606,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 		Return(&persistence.GetWorkflowExecutionResponse{
 			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
 		}, nil).
-		AnyTimes()
+		Times(1) // subsequent reads during UpdateComponent and PollComponent are from cache
 
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(tests.UpdateWorkflowExecutionResponse, nil).
