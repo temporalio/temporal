@@ -813,7 +813,7 @@ var (
 	)
 	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
 	TaskSkipped                     = NewCounterDef("task_skipped")
-	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
+	TaskVersionMismatch             = NewCounterDef("task_errors_version_mismatch")
 	TasksDependencyTaskNotCompleted = NewCounterDef("task_dependency_task_not_completed")
 	TaskStandbyRetryCounter         = NewCounterDef("task_errors_standby_retry_counter")
 	TaskWorkflowBusyCounter         = NewCounterDef(

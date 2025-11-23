@@ -437,7 +437,7 @@ func (e *executableImpl) isInvalidTaskError(err error) bool {
 	}
 
 	if err == consts.ErrTaskVersionMismatch {
-		metrics.TaskVersionMisMatch.With(e.metricsHandler).Record(1)
+		metrics.TaskVersionMismatch.With(e.metricsHandler).Record(1)
 		return true
 	}
 

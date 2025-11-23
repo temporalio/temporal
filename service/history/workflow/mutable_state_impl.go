@@ -1058,7 +1058,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 		return common.EmptyVersion, serviceerror.NewInternalf("workflow still running, current state: %v", ms.executionState.State.String())
 	}
 
-	// if workflow is closing in the current transation,
+	// if workflow is closing in the current transaction,
 	// then the last event is closed event and the event version is the close version
 	if lastEventVersion, ok := ms.hBuilder.LastEventVersion(); ok {
 		return lastEventVersion, nil
@@ -3259,7 +3259,7 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 // effective version of the workflow (aka, the override version if override is set).
 //
 // If deprecated Deployment-based APIs are in use and the workflow is pinned, `pinned:<deployment_series_name>:<deployment_build_id>`
-// will be appended to the BuilIds list if it is not already present. The deployment will be
+// will be appended to the BuildIds list if it is not already present. The deployment will be
 // the effective deployment of the workflow (aka the override deployment_series and build_id if set).
 //
 // For all other workflows (ms.GetEffectiveVersioningBehavior() != PINNED), this will append a tag  to BuildIds

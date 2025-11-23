@@ -548,7 +548,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		// The standby logic should continue to wait for the workflow timeout event to be replicated from the active side.
 		//
 		// Return non-nil post action info to indicate that verification is not done yet.
-		// The returned post action info can be used to resend history fron active side.
+		// The returned post action info can be used to resend history from active side.
 
 		return newExecutionTimerPostActionInfo(mutableState)
 	}

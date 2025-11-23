@@ -186,7 +186,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	// wait for visibility to stabilize on completed before calling describe,
 	// otherwise their recent actions may flake and differ
 
-	visibilityResponse := s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
+	visibilityResponse := s.getScheduleEntryFromVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
 		recentActions := ent.GetInfo().GetRecentActions()
 		return len(recentActions) >= 2 && recentActions[1].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	})
@@ -807,7 +807,7 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	s.NoError(err)
 	s.cleanup(sid)
 
-	entry := s.getScheduleEntryFomVisibility(sid, nil)
+	entry := s.getScheduleEntryFromVisibility(sid, nil)
 	s.NotNil(entry.Info)
 	s.ProtoEqual(schedule.Spec, entry.Info.Spec)
 	s.Equal(wt, entry.Info.WorkflowType.Name)
@@ -920,7 +920,7 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	s.cleanup(sid)
 
 	// validate RecentActions made it to visibility
-	listResp := s.getScheduleEntryFomVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
+	listResp := s.getScheduleEntryFromVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
 		return len(listResp.Info.RecentActions) >= 1
 	})
 	s.Equal(1, len(listResp.Info.RecentActions))
@@ -941,7 +941,7 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	s.NoError(err)
 
 	// now wait for second recent action to land in visibility
-	listResp = s.getScheduleEntryFomVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
+	listResp = s.getScheduleEntryFromVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
 		return len(listResp.Info.RecentActions) >= 2
 	})
 
@@ -1026,7 +1026,7 @@ func (s *ScheduleFunctionalSuite) TestLimitMemoSpecSize() {
 	s.cleanup(sid)
 
 	// Verify the memo field length limit was enforced.
-	entry := s.getScheduleEntryFomVisibility(sid, nil)
+	entry := s.getScheduleEntryFromVisibility(sid, nil)
 	s.Require().NotNil(entry)
 	spec := entry.GetInfo().GetSpec()
 	s.Require().Equal(expectedLimit, len(spec.GetInterval()))
@@ -1112,9 +1112,9 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	s.Equal(expectedRefills, nextTimeSideEffects)
 }
 
-// getScheduleEntryFomVisibility polls visibility using ListSchedules until it finds a schedule
+// getScheduleEntryFromVisibility polls visibility using ListSchedules until it finds a schedule
 // with the given id and for which the optional predicate function returns true.
-func (s *ScheduleFunctionalSuite) getScheduleEntryFomVisibility(sid string, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
+func (s *ScheduleFunctionalSuite) getScheduleEntryFromVisibility(sid string, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
 	var slEntry *schedulepb.ScheduleListEntry
 	s.Require().Eventually(func() bool { // wait for visibility
 		listResp, err := s.FrontendClient().ListSchedules(testcore.NewContext(), &workflowservice.ListSchedulesRequest{

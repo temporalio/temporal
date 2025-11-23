@@ -363,14 +363,14 @@ func CreateUnaryMetricsHandlerLogTags(
 	methodName string,
 	nsName namespace.Name,
 ) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
+	overriddenMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
 
 	if nsName == "" {
-		return baseMetricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
-			[]tag.Tag{tag.Operation(overridedMethodName)}
+		return baseMetricsHandler.WithTags(metrics.OperationTag(overriddenMethodName), metrics.NamespaceUnknownTag()),
+			[]tag.Tag{tag.Operation(overriddenMethodName)}
 	}
-	return baseMetricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceTag(nsName.String())),
-		[]tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
+	return baseMetricsHandler.WithTags(metrics.OperationTag(overriddenMethodName), metrics.NamespaceTag(nsName.String())),
+		[]tag.Tag{tag.Operation(overriddenMethodName), tag.WorkflowNamespace(nsName.String())}
 }
 
 func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(req any,
@@ -384,11 +384,11 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	fullMethod string,
 	methodName string,
 ) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
+	overriddenMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
 	return ti.metricsHandler.WithTags(
-		metrics.OperationTag(overridedMethodName),
+		metrics.OperationTag(overriddenMethodName),
 		metrics.NamespaceUnknownTag(),
-	), []tag.Tag{tag.Operation(overridedMethodName)}
+	), []tag.Tag{tag.Operation(overriddenMethodName)}
 }
 
 func GetMetricsHandlerFromContext(

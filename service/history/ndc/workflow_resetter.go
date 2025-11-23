@@ -1144,7 +1144,7 @@ func IsTerminatedByResetter(event *historypb.HistoryEvent) bool {
 	return false
 }
 
-// shouldExcludeAllReapplyEvents returns true if the excludeTypes map contains all the elegible re-apply event types.
+// shouldExcludeAllReapplyEvents returns true if the excludeTypes map contains all the eligible re-apply event types.
 func (r *workflowResetterImpl) shouldExcludeAllReapplyEvents(excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) bool {
 	for key := range enumspb.ResetReapplyExcludeType_name {
 		eventType := enumspb.ResetReapplyExcludeType(key)

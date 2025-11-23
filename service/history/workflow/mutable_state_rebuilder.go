@@ -620,7 +620,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				newRunID = continuedAsNewRunID
 			} else if newRunID != continuedAsNewRunID {
 				return nil, serviceerror.NewInternalf(
-					"ApplyEvents encounted newRunID mismatch for continuedAsNew event, task newRunID: %v, event newRunID: %v",
+					"ApplyEvents encountered newRunID mismatch for continuedAsNew event, task newRunID: %v, event newRunID: %v",
 					newRunID,
 					continuedAsNewRunID,
 				)

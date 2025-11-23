@@ -43,7 +43,7 @@ type (
 
 // NewClient return a Temporal gcloudstorage.Client based on default google service account credentials (ScopeFullControl required).
 // Bucket must be created by Iaas scripts, in other words, this library doesn't create the required Bucket.
-// Optionally you can set your credential path throught "GOOGLE_APPLICATION_CREDENTIALS" environment variable or through temporal config file.
+// Optionally you can set your credential path through "GOOGLE_APPLICATION_CREDENTIALS" environment variable or through temporal config file.
 // You can find more info about "Google Setting Up Authentication for Server to Server Production Applications" under the following link
 // https://cloud.google.com/docs/authentication/production
 func NewClient(ctx context.Context, config *config.GstorageArchiver) (Client, error) {

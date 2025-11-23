@@ -238,7 +238,7 @@ Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortActivityTimers() {
 		if !queues.IsTimeExpired(task, referenceTime, timerSequenceID.Timestamp) {
 			// timer sequence IDs are sorted, once there is one timer
-			// sequence ID not expired, all after that wil not expired
+			// sequence ID not expired, all after that will not expired
 			break Loop
 		}
 

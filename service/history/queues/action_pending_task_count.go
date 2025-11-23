@@ -91,7 +91,7 @@ func (a *actionQueuePendingTask) gatherStatistics(
 ) {
 	// gather statistic for
 	// 1. total # of pending tasks per key
-	// 2. for each slice, # of pending taks per key
+	// 2. for each slice, # of pending tasks per key
 	// 3. for each key, a list of slices that contains pending tasks from that key,
 	//    reversely ordered by slice range. Upon unloading, first unload newer slices.
 	for _, reader := range readers {

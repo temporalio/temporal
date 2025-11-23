@@ -664,7 +664,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 	s.Worker().RegisterWorkflow(childWorkflowFn)
 	s.Worker().RegisterActivity(activityFn)
 
-	id := "functional-test-finish-workflow-with-deffered-commands"
+	id := "functional-test-finish-workflow-with-deferred-commands"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
 		TaskQueue:          s.TaskQueue(),

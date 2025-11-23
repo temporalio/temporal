@@ -145,7 +145,7 @@ events and create a new Workflow Task as normal.
 > new events would be added to the history - but heartbeats would not be visible anymore.
 
 ## Conversion to Normal Workflow Task
-If during the exection of a speculative Workflow Task, a mutable state write is required
+If during the execution of a speculative Workflow Task, a mutable state write is required
 (i.e., a new events comes in), then it is converted to a normal one, and written to the database.
 This means the `Type` field value is changed to `WORKFLOW_TASK_TYPE_NORMAL`, an in-memory timer is
 replaced with a persisted timer, and the corresponding speculative Workflow Task `WorkflowTaskScheduled`

@@ -1987,7 +1987,7 @@ func (s *ContextImpl) acquireShard() {
 
 		// NOTE: engine is created & started before setting shard state to acquired.
 		// -> namespace handover callback is registered & called before shard is able to serve traffic
-		// -> information for handover namespace is recorded before shard can servce traffic
+		// -> information for handover namespace is recorded before shard can service traffic
 		// -> upon shard reload, no history api or task can go through for ns in handover state
 		err = s.transition(contextRequestAcquired{engine: engine})
 

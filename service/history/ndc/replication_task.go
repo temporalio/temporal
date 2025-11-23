@@ -74,9 +74,9 @@ var (
 	ErrInvalidExecution = serviceerror.NewInvalidArgument("invalid execution")
 	// ErrInvalidRunID is returned if run ID is invalid
 	ErrInvalidRunID = serviceerror.NewInvalidArgument("invalid run ID")
-	// ErrEventIDMismatch is returned if event ID mis-matched
+	// ErrEventIDMismatch is returned if event ID mismatched
 	ErrEventIDMismatch = serviceerror.NewInvalidArgument("event ID mismatch")
-	// ErrEventVersionMismatch is returned if event version mis-matched
+	// ErrEventVersionMismatch is returned if event version mismatched
 	ErrEventVersionMismatch = serviceerror.NewInvalidArgument("event version mismatch")
 	// ErrNoNewRunHistory is returned if there is no new run history
 	ErrNoNewRunHistory = serviceerror.NewInvalidArgument("no new run history events")

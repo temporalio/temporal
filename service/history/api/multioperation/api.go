@@ -263,7 +263,7 @@ func (uws *updateWithStart) workflowLeaseCallback(
 		res.GetContext().(*workflow.ContextImpl).MutableState = ms
 
 		// Add the Update.
-		// NOTE: UpdateWorkflowAction return value is ignored since ther Starter will always create a WFT.
+		// NOTE: UpdateWorkflowAction return value is ignored since the Starter will always create a WFT.
 		updateReg := res.GetContext().UpdateRegistry(ctx)
 		if _, err := uws.updater.ApplyRequest(ctx, updateReg, ms); err != nil {
 			// Wrapping the error so Update and Start errors can be distinguished later.
