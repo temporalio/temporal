@@ -1,5 +1,35 @@
 # Configuration for typos spell checker
 # See: https://github.com/crate-ci/typos
+#
+# Inline typos ignore comments:
+# To ignore a specific line, add a comment on the same line:
+#   var myVar = "mispeling"  // typos:disable-line
+#
+# To ignore the next line, add a comment on the line before:
+#   // typos:ignore-next-line
+#   var myVar = "mispeling"
+#
+# To ignore a block of code:
+#   // typos:off
+#   var myVar = "mispeling"
+#   var other = "anothermispeling"
+#   // typos:on
+#
+# To check only changed files (useful for local development):
+#   git diff --name-only --diff-filter=ACMR main...HEAD | typos --file-list -
+# Or check only staged files:
+#   git diff --cached --name-only | typos --file-list -
+
+[default]
+# Custom ignore patterns for inline typos comments
+extend-ignore-re = [
+  # Line ignore with trailing comment: // typos:disable-line or # typos:disable-line
+  "(?Rm)^.*(#|//)\\s*typos:disable-line$",
+  # Block ignore with typos:off/on: // typos:off ... // typos:on
+  "(?s)(#|//)\\s*typos:off.*?\\n\\s*(#|//)\\s*typos:on",
+  # Next-line ignore: // typos:ignore-next-line (ignores the following line)
+  "(#|//)\\s*typos:ignore-next-line\\n.*",
+]
 
 [default.extend-words]
 # Add custom dictionary entries here for intentional "misspellings" used in the codebase
@@ -31,19 +61,3 @@ extend-exclude = [
 
 [type.go]
 extend-glob = ["*.go"]
-
-# Inline typos ignore comments:
-# To ignore a specific line, add a comment on the same line or the line before:
-#   // typos:disable-next-line
-#   var myVar = "mispeling"  // intentional
-#
-# To ignore a specific word on a line:
-#   var myVar = "mispeling"  // typos:ignore
-#
-# To disable checking for an entire file, add at the top:
-#   // typos:disable-file
-#
-# To check only changed files (useful for local development):
-#   git diff --name-only --diff-filter=ACMR main...HEAD | typos --file-list -
-# Or check only staged files:
-#   git diff --cached --name-only | typos --file-list -
