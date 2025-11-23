@@ -239,7 +239,7 @@ type (
 
 		Mode ConflictResolveWorkflowMode
 
-		// workflow to be resetted
+		// workflow to be reset
 		ResetWorkflowSnapshot WorkflowSnapshot
 		ResetWorkflowEvents   []*WorkflowEvents
 

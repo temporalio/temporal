@@ -1147,7 +1147,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			return nil, err
 		}
 
-		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
+		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some entries in the cache can be more stale if
 		// user is calling this API back-to-back but with different version selection.
 		cacheKeyFunc := func(buildId string, taskQueueType enumspb.TaskQueueType) string {
 			return fmt.Sprintf("dtq_enhanced:%s.%s", buildId, taskQueueType.String())

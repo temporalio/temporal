@@ -69,7 +69,7 @@ func applyWorkflowMutationTx(
 		workflowMutation.DBRecordVersion,
 		shardID,
 	); err != nil {
-		return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err)
+		return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to update executions row. Error: %v", err)
 	}
 
 	if err := applyTasks(ctx,
@@ -238,7 +238,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.DBRecordVersion,
 		shardID,
 	); err != nil {
-		return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err)
+		return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Error: %v", err)
 	}
 
 	if err := applyTasks(ctx,
@@ -695,26 +695,26 @@ func createImmediateTasks(
 	tx sqlplugin.Tx,
 	shardID int32,
 	categoryID int,
-	immedidateTasks []p.InternalHistoryTask,
+	immediateTasks []p.InternalHistoryTask,
 ) error {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exist before the general history_immediate_tasks table is created,
 	// so they have their own tables.
 	switch categoryID {
 	case tasks.CategoryIDTransfer:
-		return createTransferTasks(ctx, tx, shardID, immedidateTasks)
+		return createTransferTasks(ctx, tx, shardID, immediateTasks)
 	case tasks.CategoryIDVisibility:
-		return createVisibilityTasks(ctx, tx, shardID, immedidateTasks)
+		return createVisibilityTasks(ctx, tx, shardID, immediateTasks)
 	case tasks.CategoryIDReplication:
-		return createReplicationTasks(ctx, tx, shardID, immedidateTasks)
+		return createReplicationTasks(ctx, tx, shardID, immediateTasks)
 	}
 
-	if len(immedidateTasks) == 0 {
+	if len(immediateTasks) == 0 {
 		return nil
 	}
 
-	immediateTasksRows := make([]sqlplugin.HistoryImmediateTasksRow, 0, len(immedidateTasks))
-	for _, task := range immedidateTasks {
+	immediateTasksRows := make([]sqlplugin.HistoryImmediateTasksRow, 0, len(immediateTasks))
+	for _, task := range immediateTasks {
 		immediateTasksRows = append(immediateTasksRows, sqlplugin.HistoryImmediateTasksRow{
 			ShardID:      shardID,
 			CategoryID:   int32(categoryID),
@@ -747,7 +747,7 @@ func createScheduledTasks(
 	categoryID int,
 	scheduledTasks []p.InternalHistoryTask,
 ) error {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exists before the general history_scheduled_tasks table is created,
 	// so they have their own tables.
 	if categoryID == tasks.CategoryIDTimer {
@@ -1134,11 +1134,11 @@ func (m *sqlExecutionStore) createExecution(
 				DBRecordVersion: 0,
 			}
 		}
-		return serviceerror.NewUnavailablef("createExecution failed. Erorr: %v", err)
+		return serviceerror.NewUnavailablef("createExecution failed. Error: %v", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return serviceerror.NewUnavailablef("createExecution failed. Failed to verify number of rows affected. Erorr: %v", err)
+		return serviceerror.NewUnavailablef("createExecution failed. Failed to verify number of rows affected. Error: %v", err)
 	}
 	if rowsAffected != 1 {
 		return serviceerror.NewNotFoundf("createExecution failed. Affected %v rows updated instead of 1.", rowsAffected)
@@ -1174,11 +1174,11 @@ func updateExecution(
 	}
 	result, err := tx.UpdateExecutions(ctx, row)
 	if err != nil {
-		return serviceerror.NewUnavailablef("updateExecution failed. Erorr: %v", err)
+		return serviceerror.NewUnavailablef("updateExecution failed. Error: %v", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return serviceerror.NewUnavailablef("updateExecution failed. Failed to verify number of rows affected. Erorr: %v", err)
+		return serviceerror.NewUnavailablef("updateExecution failed. Failed to verify number of rows affected. Error: %v", err)
 	}
 	if rowsAffected != 1 {
 		return serviceerror.NewNotFoundf("updateExecution failed. Affected %v rows updated instead of 1.", rowsAffected)

@@ -82,7 +82,7 @@ func (m *sqlExecutionStore) getHistoryImmediateTasks(
 	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exist before the general history_immediate_tasks table is created,
 	// so they have their own tables.
 	categoryID := request.TaskCategory.ID()
@@ -141,7 +141,7 @@ func (m *sqlExecutionStore) completeHistoryImmediateTask(
 	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exist before the general history_immediate_tasks table is created,
 	// so they have their own tables.
 	categoryID := request.TaskCategory.ID()
@@ -170,7 +170,7 @@ func (m *sqlExecutionStore) rangeCompleteHistoryImmediateTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exist before the general history_immediate_tasks table is created,
 	// so they have their own tables.
 	categoryID := request.TaskCategory.ID()
@@ -200,7 +200,7 @@ func (m *sqlExecutionStore) getHistoryScheduledTasks(
 	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exist before the general history_scheduled_tasks table is created,
 	// so they have their own tables.
 	categoryID := request.TaskCategory.ID()
@@ -259,7 +259,7 @@ func (m *sqlExecutionStore) completeHistoryScheduledTask(
 	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exist before the general history_scheduled_tasks table is created,
 	// so they have their own tables.
 	categoryID := request.TaskCategory.ID()
@@ -282,7 +282,7 @@ func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	// This is for backward compatiblity.
+	// This is for backward compatibility.
 	// These task categories exist before the general history_scheduled_tasks table is created,
 	// so they have their own tables.
 	categoryID := request.TaskCategory.ID()

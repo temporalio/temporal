@@ -16,7 +16,7 @@ type Generator struct {
 	Scheduler chasm.Field[*Scheduler]
 }
 
-// NewGenerator returns an intialized Generator component, which should
+// NewGenerator returns an initialized Generator component, which should
 // be parented under a Scheduler root node.
 func NewGenerator(ctx chasm.MutableContext, scheduler *Scheduler, invoker *Invoker) *Generator {
 	generator := &Generator{

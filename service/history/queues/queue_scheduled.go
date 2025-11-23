@@ -270,9 +270,9 @@ func (p *scheduledQueue) lookAheadTask() {
 		return
 	}
 
-	// no look ahead task, next loading will be triggerred at the end of the current
+	// no look ahead task, next loading will be triggered at the end of the current
 	// look ahead window or when new task notification comes
-	// NOTE: with this we don't need a separate max poll timer, loading will be triggerred
+	// NOTE: with this we don't need a separate max poll timer, loading will be triggered
 	// every maxPollInterval + jitter.
 	p.timerGate.Update(lookAheadMaxTime)
 }

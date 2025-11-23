@@ -33,7 +33,7 @@ func (mt MessageType) String() string {
 	return string(mt)
 }
 
-// String tranforms a Type into a string
+// String transforms a Type into a string
 func (pt Type) String() string {
 	return string(pt)
 }

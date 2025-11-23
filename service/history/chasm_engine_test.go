@@ -572,7 +572,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 		},
 	).Times(1)
 
-	// TODO: validate returned component once Ref() method of chasm tree is implememented.
+	// TODO: validate returned component once Ref() method of chasm tree is implemented.
 	_, err := s.engine.UpdateComponent(
 		context.Background(),
 		ref,

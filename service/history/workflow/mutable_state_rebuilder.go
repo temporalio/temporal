@@ -216,7 +216,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 			// since we do not use stickiness on the standby side
 			// there shall be no workflowTask schedule to start timeout
-			// NOTE: at the beginning of the loop, stickyness is cleared
+			// NOTE: at the beginning of the loop, stickiness is cleared
 			if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 				workflowTask.ScheduledEventID,
 			); err != nil {
@@ -270,7 +270,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if workflowTask != nil {
 				// since we do not use stickiness on the standby side
 				// there shall be no workflowTask schedule to start timeout
-				// NOTE: at the beginning of the loop, stickyness is cleared
+				// NOTE: at the beginning of the loop, stickiness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					workflowTask.ScheduledEventID,
 				); err != nil {
@@ -292,7 +292,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if workflowTask != nil {
 				// since we do not use stickiness on the standby side
 				// there shall be no workflowTask schedule to start timeout
-				// NOTE: at the beginning of the loop, stickyness is cleared
+				// NOTE: at the beginning of the loop, stickiness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					workflowTask.ScheduledEventID,
 				); err != nil {

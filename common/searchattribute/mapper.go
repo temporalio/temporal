@@ -25,7 +25,7 @@ type (
 	// This mapper is to be backwards compatible with versions before v1.20.
 	// Users using standard visibility might have registered custom search attributes.
 	// Those search attributes won't be searchable, as they weren't before version v1.20.
-	// Thus, this mapper will allow those search attributes to be used without being alised.
+	// Thus, this mapper will allow those search attributes to be used without being aliased.
 	backCompMapper_v1_20 struct {
 		mapper                 Mapper
 		emptyStringNameTypeMap NameTypeMap

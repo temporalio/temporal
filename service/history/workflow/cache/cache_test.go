@@ -853,7 +853,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
-	}).Return(nil, serviceerror.NewNotFound("current worflow not found")).Times(1)
+	}).Return(nil, serviceerror.NewNotFound("current workflow not found")).Times(1)
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),

@@ -711,13 +711,13 @@ func (a *activities) checkSkipWorkflowExecution(
 func (a *activities) verifySingleReplicationTask(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
-	remotAdminClient adminservice.AdminServiceClient,
+	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 	we *commonpb.WorkflowExecution,
 ) (verifyResult, error) {
 	s := time.Now()
 	// Check if execution exists on remote cluster
-	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	mu, err := remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace:       request.Namespace,
 		Execution:       we,
 		SkipForceReload: true,
@@ -726,7 +726,7 @@ func (a *activities) verifySingleReplicationTask(
 
 	switch err.(type) {
 	case nil:
-		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, we, mu)
+		result, err := a.workflowVerifier(ctx, request, remoteAdminClient, a.adminClient, ns, we, mu)
 		if err == nil && result.status == verified {
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		}
@@ -757,7 +757,7 @@ func (a *activities) verifyReplicationTasks(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
 	details *replicationTasksHeartbeatDetails,
-	remotAdminClient adminservice.AdminServiceClient,
+	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 	heartbeat func(details replicationTasksHeartbeatDetails),
 ) (bool, error) {
@@ -777,7 +777,7 @@ func (a *activities) verifyReplicationTasks(
 
 	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
 		we := request.Executions[details.NextIndex]
-		r, err := a.verifySingleReplicationTask(ctx, request, remotAdminClient, ns, we)
+		r, err := a.verifySingleReplicationTask(ctx, request, remoteAdminClient, ns, we)
 		if err != nil {
 			return false, err
 		}
@@ -811,7 +811,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		activity.RecordHeartbeat(ctx, details)
 	}
 
-	remotAdminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
+	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
 	if err != nil {
 		return response, err
 	}
@@ -837,7 +837,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		// Since replication has a lag, sleep first.
 		time.Sleep(request.VerifyInterval)
 
-		verified, err := a.verifyReplicationTasks(ctx, request, &details, remotAdminClient, nsEntry,
+		verified, err := a.verifyReplicationTasks(ctx, request, &details, remoteAdminClient, nsEntry,
 			func(d replicationTasksHeartbeatDetails) {
 				activity.RecordHeartbeat(ctx, d)
 			})

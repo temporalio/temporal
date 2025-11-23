@@ -49,7 +49,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 		TaskQueueName: historyScannerTaskQueueName,
 	}
 	buildIdScavenger := expectedScanner{
-		WFTypeName:    build_ids.BuildIdScavangerWorkflowName,
+		WFTypeName:    build_ids.BuildIdScavengerWorkflowName,
 		TaskQueueName: build_ids.BuildIdScavengerTaskQueueName,
 	}
 

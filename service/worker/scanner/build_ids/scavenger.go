@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	BuildIdScavangerWorkflowName = "build-id-scavenger"
-	BuildIdScavangerActivityName = "scavenge-build-ids"
+	BuildIdScavengerWorkflowName = "build-id-scavenger"
+	BuildIdScavengerActivityName = "scavenge-build-ids"
 
 	BuildIdScavengerWFID          = "temporal-sys-build-id-scavenger"
 	BuildIdScavengerTaskQueueName = "temporal-sys-build-id-scavenger-taskqueue-0"
@@ -41,7 +41,7 @@ var (
 )
 
 type (
-	BuildIdScavangerInput struct {
+	BuildIdScavengerInput struct {
 		NamespaceListPageSize int
 		TaskQueueListPageSize int
 		IgnoreRetentionTime   bool // If true, consider build ids added since retention time also
@@ -96,18 +96,18 @@ func NewActivities(
 	}
 }
 
-// BuildIdScavangerWorkflow scans all task queue user data entries in all namespaces and cleans up unused build ids.
+// BuildIdScavengerWorkflow scans all task queue user data entries in all namespaces and cleans up unused build ids.
 // This workflow is a wrapper around the long running ScavengeBuildIds activity.
-func BuildIdScavangerWorkflow(ctx workflow.Context, input BuildIdScavangerInput) error {
+func BuildIdScavengerWorkflow(ctx workflow.Context, input BuildIdScavengerInput) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		// Give the activity enough time to scan the entire namespace
 		StartToCloseTimeout: 6 * time.Hour,
 		HeartbeatTimeout:    30 * time.Second,
 	})
-	return workflow.ExecuteActivity(activityCtx, BuildIdScavangerActivityName, input).Get(ctx, nil)
+	return workflow.ExecuteActivity(activityCtx, BuildIdScavengerActivityName, input).Get(ctx, nil)
 }
 
-func (a *Activities) setDefaults(input *BuildIdScavangerInput) {
+func (a *Activities) setDefaults(input *BuildIdScavengerInput) {
 	if input.NamespaceListPageSize == 0 {
 		input.NamespaceListPageSize = 100
 	}
@@ -121,7 +121,7 @@ func (a *Activities) recordHeartbeat(ctx context.Context, heartbeat heartbeatDet
 }
 
 // ScavengeBuildIds scans all task queue user data entries in all namespaces and cleans up unused build ids.
-func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavangerInput) error {
+func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavengerInput) error {
 	a.setDefaults(&input)
 
 	var heartbeat heartbeatDetails
@@ -161,7 +161,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 func (a *Activities) processNamespaceEntry(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
-	input BuildIdScavangerInput,
+	input BuildIdScavengerInput,
 	heartbeat *heartbeatDetails,
 	nsId string,
 ) error {
@@ -215,7 +215,7 @@ func (a *Activities) processNamespaceEntry(
 func (a *Activities) processUserDataEntry(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
-	input BuildIdScavangerInput,
+	input BuildIdScavengerInput,
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,
@@ -244,7 +244,7 @@ func (a *Activities) processUserDataEntry(
 func (a *Activities) findBuildIdsToRemove(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
-	input BuildIdScavangerInput,
+	input BuildIdScavengerInput,
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,

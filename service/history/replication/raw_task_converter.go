@@ -95,7 +95,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	if namespaceEntry != nil {
 		nsName = namespaceEntry.Name().String()
 	}
-	callerInfo := getReplicaitonCallerInfo(priority)
+	callerInfo := getReplicationCallerInfo(priority)
 	ctx, cancel = newTaskContext(nsName, c.config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task, targetClusterID)

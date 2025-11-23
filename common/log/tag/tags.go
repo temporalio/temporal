@@ -236,7 +236,7 @@ func WorkflowNextEventID(nextEventID int64) ZapTag {
 
 // WorkflowBeginningFirstEventID returns tag for WorkflowBeginningFirstEventID
 func WorkflowBeginningFirstEventID(beginningFirstEventID int64) ZapTag {
-	return NewInt64("wf-begining-first-event-id", beginningFirstEventID)
+	return NewInt64("wf-beginning-first-event-id", beginningFirstEventID)
 }
 
 // WorkflowEndingNextEventID returns tag for WorkflowEndingNextEventID
@@ -859,8 +859,8 @@ func ArchivalRequestWorkflowID(requestWorkflowID string) ZapTag {
 	return NewStringTag("archival-request-workflow-id", requestWorkflowID)
 }
 
-// ArchvialRequestWorkflowType returns tag for RequestWorkflowType
-func ArchvialRequestWorkflowType(requestWorkflowType string) ZapTag {
+// ArchivalRequestWorkflowType returns tag for RequestWorkflowType
+func ArchivalRequestWorkflowType(requestWorkflowType string) ZapTag {
 	return NewStringTag("archival-request-workflow-type", requestWorkflowType)
 }
 

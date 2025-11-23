@@ -80,7 +80,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 		return nil
 	}
 
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
@@ -123,7 +123,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		e.MarkTaskDuplicated()
 		return nil
 	}
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	switch retryErr := err.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(

@@ -53,10 +53,10 @@ const (
 	// Memos
 	WorkerDeploymentMemoField = "WorkerDeploymentMemo" // for Worker Deployment wf
 
-	// Prefixes, Delimeters and Keys
+	// Prefixes, Delimiters and Keys
 	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
-	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix)
+	WorkerDeploymentVersionWorkflowIDDelimiter   = ":"
+	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimiter) + len(WorkerDeploymentVersionWorkflowIDPrefix)
 	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 
@@ -121,7 +121,7 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 		return serviceerror.NewInvalidArgumentf("%v cannot be empty", fieldName)
 	}
 
-	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
+	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimiter length)) / 2
 	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
 		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
 	}

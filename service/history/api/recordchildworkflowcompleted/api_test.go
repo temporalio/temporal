@@ -51,12 +51,12 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
-	mockRegistery := namespace.NewMockRegistry(ctrl)
-	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
+	mockRegistry := namespace.NewMockRegistry(ctrl)
+	mockRegistry.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
 	shardContext := historyi.NewMockShardContext(ctrl)
-	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
+	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry)
 	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
 
 	oldParentMutableState := historyi.NewMockMutableState(ctrl)
@@ -122,12 +122,12 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
-	mockRegistery := namespace.NewMockRegistry(ctrl)
-	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
+	mockRegistry := namespace.NewMockRegistry(ctrl)
+	mockRegistry.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
 	shardContext := historyi.NewMockShardContext(ctrl)
-	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
+	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry)
 	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
 
 	oldParentMutableState := historyi.NewMockMutableState(ctrl)

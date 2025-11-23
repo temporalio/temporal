@@ -75,7 +75,7 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 		return nil
 	}
 
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
@@ -142,7 +142,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		tag.TaskID(e.ExecutableTask.TaskID()),
 		tag.Error(err),
 	)
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	switch taskErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil

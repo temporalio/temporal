@@ -435,7 +435,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 
 	newEntries := entries[2:]
 
-	// entry1 only has descrption update, so won't trigger the state change callback
+	// entry1 only has description update, so won't trigger the state change callback
 	s.Len(newEntries, 1)
 	s.Equal([]*namespace.Namespace{entry2New}, newEntries)
 }

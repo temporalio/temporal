@@ -44,7 +44,7 @@ var (
 		return serviceerror.NewFailedPreconditionf("update exceeds number of assignment rules permitted in namespace (%v/%v)", cnt, max)
 	}
 	// errRequireFullyRampedAssignmentRule is thrown if the task queue previously had a fully-ramped assignment rule and
-	// the requested operation would result in a list of assignment rules without a fully-ramped assigment rule, which
+	// the requested operation would result in a list of assignment rules without a fully-ramped assignment rule, which
 	// effectively means that the task queue does not have a default version. This error is only thrown when moving from
 	// a task queue with a fully-ramped assignment rule (aka versioned with a default Build ID / default version) to a
 	// task queue without any fully-ramped assignment rules, because that operation would make the unversioned queue the

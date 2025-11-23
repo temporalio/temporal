@@ -294,7 +294,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	wg.Add(1)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
-			// Offer forwarding has occured
+			// Offer forwarding has occurred
 			wg.Done()
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)

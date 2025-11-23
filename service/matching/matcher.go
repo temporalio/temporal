@@ -257,7 +257,7 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 	return syncOfferTask(ctx, tm, task, tm.queryTaskC, tm.fwdr.ForwardQueryTask, true)
 }
 
-// OfferNexusTask either matchs a task to a local poller or forwards it if no local pollers available.
+// OfferNexusTask either matches a task to a local poller or forwards it if no local pollers available.
 // Local match is always attempted before forwarding. If local match occurs response and error are both nil, if
 // forwarding occurs then response or error is returned.
 func (tm *TaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {

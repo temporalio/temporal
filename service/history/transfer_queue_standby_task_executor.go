@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
+	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recorded"
 )
 
 type (
@@ -437,7 +437,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		if workflowClosed && !(childStarted && childAbandon) {
 			// NOTE: ideally for workflowClosed, child not started, parent close policy is abandon case,
 			// we should continue to start the child workflow in active cluster, so standby logic also need to
-			// perform the verification. However, we can't do that due to some technial reasons.
+			// perform the verification. However, we can't do that due to some technical reasons.
 			// Please check the comments in processStartChildExecution in transferQueueActiveTaskExecutor.go
 			// for details.
 			return nil, nil

@@ -37,12 +37,12 @@ const (
 	DeploymentMemoField       = "DeploymentMemo"       // for deployment wf
 	DeploymentSeriesMemoField = "DeploymentSeriesMemo" // for deployment series wf
 
-	// Prefixes, Delimeters and Keys
+	// Prefixes, Delimiters and Keys
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
 	DeploymentSeriesWorkflowIDPrefix = "temporal-sys-deployment-series"
-	DeploymentWorkflowIDDelimeter    = ":"
+	DeploymentWorkflowIDDelimiter    = ":"
 	DeploymentWorkflowIDEscape       = "|"
-	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
+	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimiter)) + len(DeploymentWorkflowIDPrefix)
 	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
 
@@ -71,7 +71,7 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 		return serviceerror.NewInvalidArgumentf("%v cannot be empty", fieldName)
 	}
 
-	// Length of each field should be: (MaxIDLengthLimit - prefix and delimeter length) / 2
+	// Length of each field should be: (MaxIDLengthLimit - prefix and delimiter length) / 2
 	if len(field) > (maxIDLengthLimit-DeploymentWorkflowIDInitialSize)/2 {
 		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
 	}
@@ -79,18 +79,18 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 	return nil
 }
 
-// EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character
+// EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimiter character
 // in the input string
 func escapeChar(s string) string {
 	s = strings.Replace(s, DeploymentWorkflowIDEscape, DeploymentWorkflowIDEscape+DeploymentWorkflowIDEscape, -1)
-	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, DeploymentWorkflowIDEscape+DeploymentWorkflowIDDelimeter, -1)
+	s = strings.Replace(s, DeploymentWorkflowIDDelimiter, DeploymentWorkflowIDEscape+DeploymentWorkflowIDDelimeter, -1)
 	return s
 }
 
 func GenerateDeploymentSeriesWorkflowID(deploymentSeriesName string) string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
 	escapedSeriesName := escapeChar(deploymentSeriesName)
-	return DeploymentSeriesWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName
+	return DeploymentSeriesWorkflowIDPrefix + DeploymentWorkflowIDDelimiter + escapedSeriesName
 }
 
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
@@ -99,13 +99,13 @@ func GenerateDeploymentWorkflowID(seriesName string, buildID string) string {
 	escapedSeriesName := escapeChar(seriesName)
 	escapedBuildId := escapeChar(buildID)
 
-	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter + escapedBuildId
+	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimiter + escapedSeriesName + DeploymentWorkflowIDDelimiter + escapedBuildId
 }
 
 func GenerateDeploymentWorkflowIDForPatternMatching(seriesName string) string {
 	escapedSeriesName := escapeChar(seriesName)
 
-	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter
+	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimiter + escapedSeriesName + DeploymentWorkflowIDDelimiter
 }
 
 // BuildQueryWithSeriesFilter is a helper which builds a query for pattern matching based on the

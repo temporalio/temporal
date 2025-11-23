@@ -514,7 +514,7 @@ func NewMutableStateFromDB(
 
 	if len(dbRecord.Checksum.GetValue()) > 0 {
 		switch {
-		case mutableState.shouldInvalidateCheckum():
+		case mutableState.shouldInvalidateChecksum():
 			mutableState.checksum = nil
 			metrics.MutableStateChecksumInvalidated.With(mutableState.metricsHandler).Record(1)
 		case mutableState.shouldVerifyChecksum():
@@ -3169,7 +3169,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 
 	if assignedBuildId == "" && !ms.HasCompletedAnyWorkflowTask() {
 		// If build ID is being set for the first time, and no progress is made by unversioned workers we don't
-		// increment redirect counter. This is to keep the redirect counter zero for verisoned WFs that
+		// increment redirect counter. This is to keep the redirect counter zero for versioned WFs that
 		// do not experience any redirects, but only initial build ID assignment.
 		return redirectCounter, nil
 	}
@@ -7510,7 +7510,7 @@ func (ms *MutableStateImpl) validateNoEventsAfterWorkflowFinish(
 			tag.WorkflowID(ms.executionInfo.WorkflowId),
 			tag.WorkflowRunID(ms.executionState.RunId),
 		)
-		return consts.ErrEventsAterWorkflowFinish
+		return consts.ErrEventsAfterWorkflowFinish
 	}
 }
 
@@ -7839,7 +7839,7 @@ func (ms *MutableStateImpl) shouldVerifyChecksum() bool {
 	return rand.Intn(100) < ms.config.MutableStateChecksumVerifyProbability(ms.namespaceEntry.Name().String())
 }
 
-func (ms *MutableStateImpl) shouldInvalidateCheckum() bool {
+func (ms *MutableStateImpl) shouldInvalidateChecksum() bool {
 	invalidateBeforeEpochSecs := int64(ms.config.MutableStateChecksumInvalidateBefore())
 	if invalidateBeforeEpochSecs > 0 {
 		invalidateBefore := time.Unix(invalidateBeforeEpochSecs, 0).UTC()

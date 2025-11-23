@@ -166,7 +166,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		c.MutableState = mutableState
 	}
 
-	// TODO: Use archetype ID instead of name to do the comparsion
+	// TODO: Use archetype ID instead of name to do the comparison
 	// after adding archetypeID to chasm tasks as well and chasm.ArchetypeAny is removed.
 	actualArchetype, err := c.MutableState.ChasmTree().Archetype()
 	if err != nil {
@@ -179,7 +179,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 			tag.NewStringTag("actual-archetype", actualArchetype),
 		)
 		return nil, serviceerror.NewNotFoundf(
-			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
+			"CHASM Archetype mismatch for %v, expected: %s, actual: %s",
 			c.workflowKey,
 			c.archetype,
 			actualArchetype,

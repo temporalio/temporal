@@ -916,7 +916,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		}
 
 		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
-		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superseded
 		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
 		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
 			return nil, err
@@ -1145,7 +1145,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		}
 
 		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
-		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superseded
 		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
 		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
 			return nil, err
@@ -4932,7 +4932,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		}
 
 		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
-		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superseded
 		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
 		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
 			return nil, err
@@ -4968,7 +4968,7 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 			operationToken = r.OperationId //nolint:staticcheck // SA1019 this field might be set by old clients.
 		}
 		if operationToken == "" {
-			return nil, serviceerror.NewInvalidArgument("missing opration token in response")
+			return nil, serviceerror.NewInvalidArgument("missing operation token in response")
 		}
 
 		tokenLimit := wh.config.MaxNexusOperationTokenLength(request.Namespace)
@@ -5278,7 +5278,7 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
 	req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) error {
-	errDeets := []string{"request to update worker build ID compatability requires: "}
+	errDeets := []string{"request to update worker build ID compatibility requires: "}
 
 	checkIdLen := func(id string) {
 		if len(id) > wh.config.WorkerBuildIdSizeLimit() {

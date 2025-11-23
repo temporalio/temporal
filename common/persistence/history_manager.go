@@ -353,7 +353,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 		}
 		if e.EventId != lastID+1 {
 			return nil, &InvalidPersistenceRequestError{
-				Msg: "event ID must be continous",
+				Msg: "event ID must be continuous",
 			}
 		}
 		lastID++

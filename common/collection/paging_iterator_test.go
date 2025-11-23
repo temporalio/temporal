@@ -80,7 +80,7 @@ func (s *pagingIteratorSuite) TestIteration_NoErr() {
 	s.Equal([]int{1, 2, 3, 4, 5, 6}, result)
 }
 
-func (s *pagingIteratorSuite) TestIteration_Err_Beginging() {
+func (s *pagingIteratorSuite) TestIteration_Err_Beginning() {
 	phase := 0
 	ite := NewPagingIterator(func(token []byte) ([]interface{}, []byte, error) {
 		switch phase {
@@ -99,7 +99,7 @@ func (s *pagingIteratorSuite) TestIteration_Err_Beginging() {
 	s.False(ite.HasNext())
 }
 
-func (s *pagingIteratorSuite) TestIteration_Err_NotBegining() {
+func (s *pagingIteratorSuite) TestIteration_Err_NotBeginning() {
 
 	phase := 0
 	outputs := [][]interface{}{

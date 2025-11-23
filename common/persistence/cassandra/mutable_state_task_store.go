@@ -739,7 +739,7 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	switch request.TaskCategory.Type() {
 	case tasks.CategoryTypeImmediate:
-		return d.getHistoryImmedidateTasks(ctx, request)
+		return d.getHistoryImmediateTasks(ctx, request)
 	case tasks.CategoryTypeScheduled:
 		return d.getHistoryScheduledTasks(ctx, request)
 	default:
@@ -747,7 +747,7 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 	}
 }
 
-func (d *MutableStateTaskStore) getHistoryImmedidateTasks(
+func (d *MutableStateTaskStore) getHistoryImmediateTasks(
 	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {

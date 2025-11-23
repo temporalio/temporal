@@ -956,7 +956,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
 	}
 }
 
-// TestReapplyEvents_WithNoPendingChildren asserts that none of the child events are picked when there is no pending child correspondng to the init event ID.
+// TestReapplyEvents_WithNoPendingChildren asserts that none of the child events are picked when there is no pending child corresponding to the init event ID.
 func (s *workflowResetterSuite) TestReapplyEvents_WithNoPendingChildren() {
 	testInitiatedEventID := int64(123)
 	startedEvent := &historypb.HistoryEvent{

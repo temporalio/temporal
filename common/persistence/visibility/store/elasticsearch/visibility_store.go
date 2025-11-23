@@ -1290,12 +1290,12 @@ func parsePageTokenValue(
 		jsonNumber, ok := jsonValue.(json.Number)
 		if !ok {
 			return nil, serviceerror.NewInvalidArgumentf(
-				"invalid page token: expected interger type, got %q", jsonValue)
+				"invalid page token: expected integer type, got %q", jsonValue)
 		}
 		num, err := jsonNumber.Int64()
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgumentf(
-				"invalid page token: expected interger type, got %v", jsonValue)
+				"invalid page token: expected integer type, got %v", jsonValue)
 		}
 		if num == math.MaxInt64 || num == math.MinInt64 {
 			return nil, nil

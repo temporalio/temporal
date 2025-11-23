@@ -53,7 +53,7 @@ var (
 // - NeedSyncStructure: Value is deserialized, neither data nor tree structure is synced.
 //
 // For simplicity, for a dirty component node, the logic always sync structure (potentially multiple times within a transaction) first,
-// and the serialize the data at the very end of a transaction. So there will never base a case where value is synced with seralizedNode,
+// and the serialize the data at the very end of a transaction. So there will never base a case where value is synced with serializedNode,
 // but not with children.
 //
 // To update this field, ALWAYS use setValueState() method.
@@ -308,7 +308,7 @@ func newTreeInitSearchAttributesAndMemo(
 		return err
 	}
 
-	// Theoritically we should check if the root node has a Visibility component or not.
+	// Theoretically we should check if the root node has a Visibility component or not.
 	// But that doesn't really matter. Even if it doesn't have one, currentSearchAttributes
 	// and currentMemo will just never be used.
 
@@ -1526,7 +1526,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	visibility.generateTask(mutableContext)
 	visibilityNode.setValueState(valueStateNeedSerialize)
 
-	// We don't need to sync tree structure here for the visiblity node because we only generated a task without
+	// We don't need to sync tree structure here for the visibility node because we only generated a task without
 	// changing any component fields.
 	return nil
 }
@@ -2661,7 +2661,7 @@ func deserializeTask(
 		return taskValue, nil
 	}
 
-	// TODO: consider pre-calculating the proto field num when registring the task type.
+	// TODO: consider pre-calculating the proto field num when registering the task type.
 
 	protoMessageFound := false
 	for i := 0; i < taskGoType.NumField(); i++ {
@@ -2712,7 +2712,7 @@ func serializeTask(
 		}, nil
 	}
 
-	// TODO: consider pre-calculating the proto field num when registring the task type.
+	// TODO: consider pre-calculating the proto field num when registering the task type.
 
 	var blob *commonpb.DataBlob
 	protoMessageFound := false

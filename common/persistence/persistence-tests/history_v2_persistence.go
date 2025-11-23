@@ -429,7 +429,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			_, ok = err.(*serviceerror.DataLoss)
 			s.Equal(true, ok)
 
-			// override more with larger txn_id, this would fix the corrupted hole so that we cna get 20 events again
+			// override more with larger txn_id, this would fix the corrupted hole so that we can get 20 events again
 			events = s.genRandomEvents([]int64{7, 8}, 1)
 			err = s.appendNewNode(branch, events, 3002)
 			s.Nil(err)

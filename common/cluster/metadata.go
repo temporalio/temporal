@@ -336,7 +336,7 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 
 	if !isGlobalNamespace {
 		panic(fmt.Sprintf(
-			"ClusterMetadata encountered local namesapce with failover version %v",
+			"ClusterMetadata encountered local namespace with failover version %v",
 			failoverVersion,
 		))
 	}

@@ -70,7 +70,7 @@ var (
 		sqlparser.NotStartsWithStr,
 	}
 
-	supportedKeyworkListOperators = []string{
+	supportedKeywordListOperators = []string{
 		sqlparser.EqualStr,
 		sqlparser.NotEqualStr,
 		sqlparser.InStr,
@@ -648,7 +648,7 @@ func isSupportedComparisonOperator(operator string) bool {
 }
 
 func isSupportedKeywordListOperator(operator string) bool {
-	return isSupportedOperator(supportedKeyworkListOperators, operator)
+	return isSupportedOperator(supportedKeywordListOperators, operator)
 }
 
 func isSupportedTextOperator(operator string) bool {

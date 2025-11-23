@@ -1,5 +1,5 @@
 // Package goro provides utilities for spawning and subsequently managing the
-// liftime(s) of one or more goroutines. This package relies heavily on the
+// lifetime(s) of one or more goroutines. This package relies heavily on the
 // context package to provide consistent cancellation semantics for long-lived
 // goroutines. The goal of this package is to provide a unified way to cancel
 // and wait on running goroutines as is often seen in "service" or "daemon"

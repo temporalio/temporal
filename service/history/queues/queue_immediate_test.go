@@ -63,7 +63,7 @@ func (s *immediateQueueSuite) SetupTest() {
 		GrouperNamespaceID{},
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
-		nil, // execuable factory
+		nil, // executable factory
 	)
 }
 

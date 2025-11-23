@@ -403,9 +403,9 @@ const (
 	ShardInfoScope = "ShardInfo"
 	// WorkflowContextScope is the scope used by WorkflowContext component
 	WorkflowContextScope = "WorkflowContext"
-	// ExecutionStatsScope is the scope used for emiting workflow execution related stats
+	// ExecutionStatsScope is the scope used for emitting workflow execution related stats
 	ExecutionStatsScope = "ExecutionStats"
-	// SessionStatsScope is the scope used for emiting session update related stats
+	// SessionStatsScope is the scope used for emitting session update related stats
 	SessionStatsScope = "SessionStats"
 	// WorkflowCompletionStatsScope tracks workflow completion updates
 	WorkflowCompletionStatsScope = "CompletionStats"
@@ -1224,7 +1224,7 @@ var (
 	ElasticsearchBulkProcessorWaitAddLatency          = NewTimerDef("elasticsearch_bulk_processor_wait_add_latency")
 	ElasticsearchBulkProcessorWaitStartLatency        = NewTimerDef("elasticsearch_bulk_processor_wait_start_latency")
 	ElasticsearchBulkProcessorBulkSize                = NewDimensionlessHistogramDef("elasticsearch_bulk_processor_bulk_size")
-	ElasticsearchBulkProcessorBulkResquestTookLatency = NewTimerDef("elasticsearch_bulk_processor_bulk_request_took_latency")
+	ElasticsearchBulkProcessorBulkRequestTookLatency = NewTimerDef("elasticsearch_bulk_processor_bulk_request_took_latency")
 	ElasticsearchDocumentParseFailuresCount           = NewCounterDef("elasticsearch_document_parse_failures_counter")
 	ElasticsearchDocumentGenerateFailuresCount        = NewCounterDef("elasticsearch_document_generate_failures_counter")
 	ElasticsearchCustomOrderByClauseCount             = NewCounterDef("elasticsearch_custom_order_by_clause_counter")

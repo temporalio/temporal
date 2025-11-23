@@ -397,7 +397,7 @@ func (r *workflowResetterImpl) persistToDB(
 		return err
 	}
 	resetRunVersion := resetWorkflow.GetMutableState().GetCurrentVersion()
-	currentRunVerson := currentWorkflow.GetMutableState().GetCurrentVersion()
+	currentRunVersion := currentWorkflow.GetMutableState().GetCurrentVersion()
 	if _, _, _, err := r.transaction.ConflictResolveWorkflowExecution(
 		ctx,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
@@ -407,7 +407,7 @@ func (r *workflowResetterImpl) persistToDB(
 		&resetRunVersion,
 		resetWorkflowSnapshot,
 		resetWorkflowEventsSeq,
-		&currentRunVerson,
+		&currentRunVersion,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
 		currentWorkflow.GetMutableState().IsWorkflow(),

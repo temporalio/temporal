@@ -390,7 +390,7 @@ CREATE TABLE nexus_endpoints (
 
 -- Stores the version of Nexus endpoints table as a whole
 CREATE TABLE nexus_endpoints_partition_status (
-    id      INT NOT NULL DEFAULT 0 CHECK (id = 0),  -- Restrict the primary key to a single value since it will only be used for enpoints
+    id      INT NOT NULL DEFAULT 0 CHECK (id = 0),  -- Restrict the primary key to a single value since it will only be used for endpoints
     version BIGINT NOT NULL,                        -- Version of the nexus_endpoints table
     PRIMARY KEY (id)
 );

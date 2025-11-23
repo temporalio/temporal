@@ -942,7 +942,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 	}
 
-	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
+	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was successfully started.
 	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
 	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
 	// This path is usually taken when the parent is being reset and the reset point (i.e baseWorkflowInfo.LowestCommonAncestorEventId) is after the child was initiated.
@@ -1107,15 +1107,15 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 		return "", "", nil
 	}
 
-	childsParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
+	childrenParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
 	// Check if the child's parent was the base run for the current run.
-	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
+	if childrenParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
 		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
 	}
 
 	// load the child's parent mutable state.
 	wfKey := mutableState.GetWorkflowKey()
-	wfKey.RunID = childsParentRunID
+	wfKey.RunID = childrenParentRunID
 	wfContext, release, err := getWorkflowExecutionContext(
 		ctx,
 		t.shardContext,
@@ -1129,13 +1129,13 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	}
 	defer func() { release(retError) }()
 
-	childsParentMutableState, err := wfContext.LoadMutableState(ctx, t.shardContext)
+	childrenParentMutableState, err := wfContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
 		return "", "", err
 	}
 
 	// now check if the child's parent's original run id and the current run's original run ID are the same.
-	if childsParentMutableState.GetExecutionInfo().OriginalExecutionRunId == mutableState.GetExecutionInfo().OriginalExecutionRunId {
+	if childrenParentMutableState.GetExecutionInfo().OriginalExecutionRunId == mutableState.GetExecutionInfo().OriginalExecutionRunId {
 		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
 	}
 

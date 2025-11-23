@@ -69,7 +69,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 		return nil
 	}
 
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
@@ -119,7 +119,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		tag.TaskID(e.ExecutableTask.TaskID()),
 		tag.Error(err),
 	)
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(

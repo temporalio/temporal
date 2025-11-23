@@ -1160,7 +1160,7 @@ func getCurrentBranchLastWriteVersion(
 	// We are still checking version history first here since it's the old logic and we want to minimize the risk for now
 	// and to account for the fact that transition history is not fully enabled.
 	//
-	// Theoritically, using version history here is wrong because there can be transitions (even on Workflows) that have no
+	// Theoretically, using version history here is wrong because there can be transitions (even on Workflows) that have no
 	// events (e.g. Activity Heartbeat).
 	//
 	// Although using version history has the benefit of ensuring the returned version don't change after the run is closed, using

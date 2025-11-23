@@ -86,7 +86,7 @@ func newRateLimitManager(userDataManager userDataManager,
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partitons.
+	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partitions.
 	var cancel func()
 	r.adminNsRate, cancel = config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
 	r.cancels = append(r.cancels, cancel)

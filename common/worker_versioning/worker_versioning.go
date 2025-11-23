@@ -46,7 +46,7 @@ const (
 	WorkerDeploymentVersionIdDelimiter         = ":"
 	WorkerDeploymentVersionWorkflowIDPrefix    = "temporal-sys-worker-deployment-version"
 	WorkerDeploymentWorkflowIDPrefix           = "temporal-sys-worker-deployment"
-	WorkerDeploymentVersionWorkflowIDDelimeter = ":"
+	WorkerDeploymentVersionWorkflowIDDelimiter = ":"
 	WorkerDeploymentVersionWorkflowIDEscape    = "|"
 )
 
@@ -228,7 +228,7 @@ func DeploymentIfValid(d *deploymentpb.Deployment) *deploymentpb.Deployment {
 
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
 // - inheritedBuildId: build ID inherited from a past/previous wf execution (for Child WF or CaN)
-// - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
+// - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssignedBuildId)
 // - stamp: the latest versioning stamp of the execution (only needed for old versioning)
 // - hasCompletedWorkflowTask: if the wf has completed any WFT
 // - behavior: workflow's effective behavior
@@ -772,7 +772,7 @@ func ValidateTaskVersionDirective(
 	// Effective behavior and deployment of the workflow when History scheduled the WFT.
 	directiveBehavior := directive.GetBehavior()
 	if directiveBehavior != wfBehavior &&
-		// Verisoning 3 pre-release (v1.26, Dec 2024) is not populating request.VersionDirective so
+		// Versioning 3 pre-release (v1.26, Dec 2024) is not populating request.VersionDirective so
 		// we skip this check until v1.28 if directiveBehavior is unspecified.
 		// TODO (shahab): remove this line after v1.27 is released.
 		directiveBehavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
@@ -973,11 +973,11 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment workflows
 func GenerateDeploymentWorkflowID(deploymentName string) string {
-	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + deploymentName
+	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimiter + deploymentName
 }
 
 func GetDeploymentNameFromWorkflowID(workflowID string) string {
-	_, deploymentName, _ := strings.Cut(workflowID, WorkerDeploymentVersionWorkflowIDDelimeter)
+	_, deploymentName, _ := strings.Cut(workflowID, WorkerDeploymentVersionWorkflowIDDelimiter)
 	return deploymentName
 }
 
@@ -988,5 +988,5 @@ func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	})
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + versionString
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimiter + versionString
 }

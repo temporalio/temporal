@@ -1638,14 +1638,14 @@ func (s *nodeSuite) TestRef() {
 		component        Component
 		expectErr        bool
 		expectedPath     []string
-		expectedInitalVT *persistencespb.VersionedTransition
+		expectedInitialVT *persistencespb.VersionedTransition
 	}{
 		{
 			name:         "root",
 			component:    testComponent,
 			expectErr:    false,
 			expectedPath: nil, // same as []string{}
-			expectedInitalVT: &persistencespb.VersionedTransition{
+			expectedInitialVT: &persistencespb.VersionedTransition{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          1,
 			},
@@ -1655,7 +1655,7 @@ func (s *nodeSuite) TestRef() {
 			component:    subComponent1,
 			expectErr:    false,
 			expectedPath: []string{"SubComponent1"},
-			expectedInitalVT: &persistencespb.VersionedTransition{
+			expectedInitialVT: &persistencespb.VersionedTransition{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          1,
 			},
@@ -1665,7 +1665,7 @@ func (s *nodeSuite) TestRef() {
 			component:    subComponent11,
 			expectErr:    false,
 			expectedPath: []string{"SubComponent1", "SubComponent11"},
-			expectedInitalVT: &persistencespb.VersionedTransition{
+			expectedInitialVT: &persistencespb.VersionedTransition{
 				NamespaceFailoverVersion: 1,
 				TransitionCount:          1,
 			},
@@ -1694,13 +1694,13 @@ func (s *nodeSuite) TestRef() {
 
 				// Proto fields are validated separately with ProtoEqual.
 				// executionLastUpdateVT: currentVT,
-				// componentInitialVT: tc.expectedInitalVT,
+				// componentInitialVT: tc.expectedInitialVT,
 			}
 
 			actualRef, err := DeserializeComponentRef(encodedRef)
 			s.NoError(err)
 			s.ProtoEqual(currentVT, actualRef.executionLastUpdateVT)
-			s.ProtoEqual(tc.expectedInitalVT, actualRef.componentInitialVT)
+			s.ProtoEqual(tc.expectedInitialVT, actualRef.componentInitialVT)
 
 			actualRef.executionLastUpdateVT = nil
 			actualRef.componentInitialVT = nil
@@ -1866,7 +1866,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 		return true, nil
 	}
 
-	// Init visiblity component
+	// Init visibility component
 	testComponent.(*TestComponent).Visibility = NewComponentField(chasmCtx, NewVisibility(chasmCtx))
 	mutation, err := node.CloseTransaction()
 	s.NoError(err)
@@ -1919,7 +1919,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 		return nextTransitionCount
 	}
 
-	// Init visiblity component
+	// Init visibility component
 	testComponent.(*TestComponent).Visibility = NewComponentField(chasmCtx, NewVisibility(chasmCtx))
 	s.nodeBackend.HandleUpdateWorkflowStateStatus = func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error) {
 		return true, nil
@@ -2544,7 +2544,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	s.Len(mutations.UpdatedNodes, 2, "root and subcomponent1 should be updated")
 	s.Empty(mutations.DeletedNodes)
 
-	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
+	// immediate pure tasks will be executed inline and no physical chasm pure task will be generated.
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
@@ -2829,14 +2829,14 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	ctx := NewEngineContext(context.Background(), mockEngine)
 
 	chasmContext := NewMutableContext(ctx, root)
-	var backendValidtionFnCalled bool
+	var backendValidationFnCalled bool
 	// This won't be called until access time.
 	dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
-		backendValidtionFnCalled = true
+		backendValidationFnCalled = true
 		return nil
 	}
 	expectValidate := func(valid bool, validationErr error) {
-		backendValidtionFnCalled = false
+		backendValidationFnCalled = false
 		s.testLibrary.mockSideEffectTaskValidator.EXPECT().Validate(
 			gomock.Any(),
 			gomock.Any(),
@@ -2872,7 +2872,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectExecute(nil)
 	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
 	s.NoError(err)
-	s.True(backendValidtionFnCalled)
+	s.True(backendValidationFnCalled)
 	s.True(chasmTask.DeserializedTask.IsValid())
 
 	// Invalid task.
@@ -2897,7 +2897,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectExecute(executionErr)
 	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(executionErr, err)
-	s.True(backendValidtionFnCalled)
+	s.True(backendValidationFnCalled)
 	s.False(chasmTask.DeserializedTask.IsValid())
 }
 

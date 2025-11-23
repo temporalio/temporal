@@ -1427,7 +1427,7 @@ BackfillLoop:
 		}
 
 		if isStateBased {
-			// If backfill suceeds but later event reapply fails, during task's next retry,
+			// If backfill succeeds but later event reapply fails, during task's next retry,
 			// we still need to reapply events that have been stored in local DB.
 			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
 			if err != nil {

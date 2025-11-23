@@ -74,7 +74,7 @@ To enable Nexus in your deployment:
     component.nexusoperations.callback.endpoint.template:
       # The URL must be publicly accessible if the callback is meant to be called by external services.
       # When using Nexus for cross namespace calls, the URL's host is irrelevant as the address is resolved using
-      # membership. The URL is a Go template that interpolates the `NamepaceName` and `NamespaceID` variables.
+      # membership. The URL is a Go template that interpolates the `NamespaceName` and `NamespaceID` variables.
       - value: https://$PUBLIC_URL:7243/namespaces/{{.NamespaceName}}/nexus/callback
     component.callbacks.allowedAddresses:
       # This list is a security mechanism for limiting which callback URLs are accepted by the server.
@@ -312,7 +312,7 @@ stateDiagram-v2
     Failed --> [*]
 ```
 
-Cancelations are continously retried using a [configurable retry policy][nexus-retry-policy] until they succeed,
+Cancellations are continuously retried using a [configurable retry policy][nexus-retry-policy] until they succeed,
 permanently fail, or the operation times out.
 
 ### Task Executors
@@ -333,7 +333,7 @@ workflow and operation state machine. The
 [component.nexusoperations.callback.endpoint.template](https://github.com/temporalio/temporal/blob/7c8025aff96af7d72a91af615f1d625817842894/components/nexusoperations/config.go#L69)
 global dynamic config must be set to construct callback URLs or the executor will fail to process invocation tasks. When
 routing callbacks to external clusters and non-Temporal destinations, the URL is used and should be a value that is
-publically accessible to those external destinations. Callbacks that are routed internally within the cluster resolve
+publicly accessible to those external destinations. Callbacks that are routed internally within the cluster resolve
 the frontend URL via membership or, as a last resort, via static configuration overrides.
 
 The timeout for making a single Nexus HTTP call is configurable via: `component.nexusoperations.request.timeout`
@@ -350,7 +350,7 @@ retried or continues-as-new.
 Similarly to Nexus Operations, callbacks are implemented via a hierarchical state machine and a set of executors, which
 are located in [the components directory](../../components/callbacks).
 
-Callbacks are continously retried using a [configurable retry policy][callback-retry-policy] until they succeed,
+Callbacks are continuously retried using a [configurable retry policy][callback-retry-policy] until they succeed,
 permanently fail, or the workflow's retention period expires.
 
 The timeout for making a single callback HTTP call is configurable via: `component.callbacks.request.timeout`

@@ -127,7 +127,7 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		return nil
 	}
 
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
@@ -183,7 +183,7 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
-		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+		callerInfo := getReplicationCallerInfo(e.GetPriority())
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,

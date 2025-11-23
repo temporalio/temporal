@@ -314,7 +314,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()))
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-		// TODO uncommment once RETRY_STATE_PAUSED is supported
+		// TODO uncomment once RETRY_STATE_PAUSED is supported
 		// || retryState == enumspb.RETRY_STATE_PAUSED {
 		result.shouldUpdateMutableState = true
 		return result, nil

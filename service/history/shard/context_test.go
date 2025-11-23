@@ -318,7 +318,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory, stage)
 }
 
-func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotifiction() {
+func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotification() {
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  tests.WorkflowID,

@@ -233,7 +233,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 			log.Fatal(err)
 		}
 
-		// If the run completely successfull, no need to retry.
+		// If the run completely successful, no need to retry.
 		if currentAttempt.exitErr == nil {
 			break
 		}

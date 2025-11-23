@@ -1101,7 +1101,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", nil) // set version as ramping
 
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, currentVersionVars, worker_versioning.UnversionedVersionId, true, "") // set version as curent
+	s.setCurrentVersion(ctx, currentVersionVars, worker_versioning.UnversionedVersionId, true, "") // set version as current
 
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -1548,7 +1548,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 	setCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, true, "")
 
-	// verify the current version has propogated to all the registered task-queues userData
+	// verify the current version has propagated to all the registered task-queues userData
 	for i := 0; i < taskQueues; i++ {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
 	}

@@ -27,7 +27,7 @@ type ComponentRef struct {
 	// is not specified in the ExecutionKey.
 	archetypeID ArchetypeID
 	// executionGoType is used for determining the ComponetRef's archetype.
-	// When CHASM deverloper needs to create a ComponentRef, they will only provide the component type,
+	// When CHASM developer needs to create a ComponentRef, they will only provide the component type,
 	// and leave the work of determining archetypeID to the CHASM framework.
 	executionGoType reflect.Type
 

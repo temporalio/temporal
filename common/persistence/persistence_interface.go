@@ -369,7 +369,7 @@ type (
 
 		Mode ConflictResolveWorkflowMode
 
-		// workflow to be resetted
+		// workflow to be reset
 		ResetWorkflowSnapshot        InternalWorkflowSnapshot
 		ResetWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 		// maybe new workflow

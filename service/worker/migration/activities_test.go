@@ -169,7 +169,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 
 	// Slowly replicated
-	replicationSlowReponses := []struct {
+	replicationSlowResponses := []struct {
 		resp *adminservice.DescribeMutableStateResponse
 		err  error
 	}{
@@ -178,7 +178,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 		{&adminservice.DescribeMutableStateResponse{}, nil},
 	}
 
-	for _, r := range replicationSlowReponses {
+	for _, r := range replicationSlowResponses {
 		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 			Namespace:       mockedNamespace,
 			Execution:       execution2,
@@ -411,7 +411,7 @@ type mockHeartBeatRecorder struct {
 	lastHeartBeat replicationTasksHeartbeatDetails
 }
 
-func (m *mockHeartBeatRecorder) hearbeat(details replicationTasksHeartbeatDetails) {
+func (m *mockHeartBeatRecorder) heartbeat(details replicationTasksHeartbeatDetails) {
 	m.lastHeartBeat = details
 }
 
@@ -481,7 +481,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			CheckPoint: checkPointTime,
 		}
 
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.heartbeat)
 		if tc.expectedErr == nil {
 			s.NoError(err)
 		}
@@ -523,7 +523,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 	}
 
 	ctx := context.TODO()
-	verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+	verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.heartbeat)
 	s.NoError(err)
 	s.False(verified)
 	// Verify has made progress.
@@ -540,7 +540,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 	})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
 	// All results should be either NotFound or cached and no progress should be made.
-	verified, err = s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+	verified, err = s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, &testNamespace, recorder.heartbeat)
 	s.NoError(err)
 	s.False(verified)
 	s.Equal(prevDetails, details)
@@ -605,7 +605,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 
 		details := replicationTasksHeartbeatDetails{}
 		ctx := context.TODO()
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, ns, recorder.hearbeat)
+		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, s.mockRemoteAdminClient, ns, recorder.heartbeat)
 		s.NoError(err)
 		s.Equal(tc.verified, verified)
 		s.Equal(recorder.lastHeartBeat, details)
@@ -665,7 +665,7 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	s.Greater(len(iceptor.generateReplicationRecordedHeartbeats), 0)
 	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
-	// Only the generation of 1st execution suceeded.
+	// Only the generation of 1st execution succeeded.
 	s.Equal(0, lastHeartBeat)
 }
 

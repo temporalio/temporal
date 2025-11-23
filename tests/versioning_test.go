@@ -101,7 +101,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 
 		// Use new matcher for versioning tests. Ideally we would run everything with old and new,
 		// but for now we pick a subset of tests. Versioning tests exercise the most features of
-		// matching so they're a good condidate.
+		// matching so they're a good candidate.
 		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))

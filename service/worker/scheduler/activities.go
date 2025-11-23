@@ -58,7 +58,7 @@ var (
 	errNoEvents             = errors.New("GetEvents didn't return any events")
 	errNoAttrs              = errors.New("last event did not have correct attrs")
 	errBlocked              = errors.New("rate limiter doesn't allow any progress")
-	errUnkownWorkflowStatus = errors.New("unknown workflow status")
+	errUnknownWorkflowStatus = errors.New("unknown workflow status")
 )
 
 func (e errFollow) Error() string { return string(e) }
@@ -353,7 +353,7 @@ func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedulespb.Watc
 			return r.makeResponse(nil, nil, event.EventTime), nil
 		}
 	}
-	return nil, errUnkownWorkflowStatus
+	return nil, errUnknownWorkflowStatus
 }
 
 func (r responseBuilder) isTooBig(m proto.Message) bool {

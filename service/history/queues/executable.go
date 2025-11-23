@@ -82,7 +82,7 @@ var (
 	// across multiple submissions to scheduler
 	reschedulePolicy                           = common.CreateTaskReschedulePolicy()
 	taskNotReadyReschedulePolicy               = common.CreateTaskNotReadyReschedulePolicy()
-	taskResourceExhuastedReschedulePolicy      = common.CreateTaskResourceExhaustedReschedulePolicy()
+	taskResourceExhaustedReschedulePolicy      = common.CreateTaskResourceExhaustedReschedulePolicy()
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 )
 
@@ -713,7 +713,7 @@ func (e *executableImpl) Nack(err error) {
 	submitted := false
 	if e.shouldResubmitOnNack(e.Attempt(), err) {
 		// we do not need to know if there any error during submission
-		// as long as it's not submitted, the execuable should be add
+		// as long as it's not submitted, the executable should be add
 		// to the rescheduler
 		e.SetScheduledTime(e.timeSource.Now())
 		submitted = e.scheduler.TrySubmit(e)
@@ -842,7 +842,7 @@ func (e *executableImpl) backoffDuration(
 		// upon system resource exhausted error and pick the longer backoff duration
 		backoffDuration = max(
 			backoffDuration,
-			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount, err),
+			taskResourceExhaustedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount, err),
 		)
 	}
 

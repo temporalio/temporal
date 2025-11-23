@@ -346,7 +346,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, 
 	if res.ctxErr != nil {
 		return false, res.ctxErr
 	}
-	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
+	if !softassert.That(tm.logger, res.poller != nil, "expected poller from match") {
 		return false, nil
 	}
 
@@ -412,7 +412,7 @@ func (tm *priTaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*
 	return nil, err
 }
 
-// OfferNexusTask either matchs a task to a local poller or forwards it if no local pollers available.
+// OfferNexusTask either matches a task to a local poller or forwards it if no local pollers available.
 // Local match is always attempted before forwarding. If local match occurs response and error are both nil, if
 // forwarding occurs then response or error is returned.
 func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	// NoInterval represents Maximim interval
+	// NoInterval represents Maximum interval
 	NoInterval                      = 0
 	done              time.Duration = -1
 	noMaximumAttempts               = 0
