@@ -1,8 +1,6 @@
 # Configuration for typos spell checker
 # See: https://github.com/crate-ci/typos
 
-[default]
-
 [default.extend-words]
 # Add custom dictionary entries here for intentional "misspellings" used in the codebase
 # Preemptable is used consistently instead of "Preemptible" for caller types
@@ -26,8 +24,6 @@ heartbeart = "heartbeart"
 # Exclude generated protobuf files
 extend-exclude = [
   "*.pb.go",
-  "*.pb.gw.go",
-  # Exclude other generated or third-party files
   "*.gen.go",
   "**/testdata/**",
   "*.svg",
