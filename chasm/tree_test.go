@@ -1634,10 +1634,10 @@ func (s *nodeSuite) TestRef() {
 	subComponent11 := subComponent1.SubComponent11.Get(chasmContext)
 
 	testCases := []struct {
-		name             string
-		component        Component
-		expectErr        bool
-		expectedPath     []string
+		name              string
+		component         Component
+		expectErr         bool
+		expectedPath      []string
 		expectedInitialVT *persistencespb.VersionedTransition
 	}{
 		{

@@ -61,7 +61,7 @@ func (s *mitigatorSuite) TestMitigate_ActionMatchAlert() {
 			alert: Alert{
 				AlertType: AlertTypeQueuePendingTaskCount,
 				AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
-					CurrentPendingTaskCount:   1000,
+					CurrentPendingTaskCount:  1000,
 					CriticalPendingTaskCount: 500,
 				},
 			},
@@ -115,7 +115,7 @@ func (s *mitigatorSuite) TestMitigate_ResolveAlert() {
 	alert := Alert{
 		AlertType: AlertTypeQueuePendingTaskCount,
 		AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
-			CurrentPendingTaskCount:   1000,
+			CurrentPendingTaskCount:  1000,
 			CriticalPendingTaskCount: 500,
 		},
 	}
