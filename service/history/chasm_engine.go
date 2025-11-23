@@ -367,8 +367,6 @@ func (e *ChasmEngine) predicateSatisfied(
 	executionLease api.WorkflowLease,
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) ([]byte, error) {
-	fmt.Println("🔎 checkPredicate")
-
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
 	if !ok {
 		return nil, serviceerror.NewInternalf(
@@ -401,7 +399,6 @@ func (e *ChasmEngine) predicateSatisfied(
 		return nil, err
 	}
 	if !satisfied {
-		fmt.Println("    🟠 checkPredicate: predicate not satisfied")
 		return nil, nil
 	}
 
@@ -409,7 +406,6 @@ func (e *ChasmEngine) predicateSatisfied(
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("    🟢 checkPredicate: predicate satisfied")
 	return newRef, nil
 }
 

@@ -4,7 +4,6 @@
 package history
 
 import (
-	"fmt"
 	"sync"
 
 	"go.temporal.io/server/chasm"
@@ -43,14 +42,12 @@ func (n *ChasmNotifier) Notify(key chasm.EntityKey) {
 
 // Subscribe returns a channel that will be closed to indicate that there is a notification relating to the execution.
 func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (<-chan struct{}, error) {
-	fmt.Println("🟠 Subscribe")
 	var ch chan struct{}
 	var ok bool
 
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	if ch, ok = n.executions[key]; !ok {
-		fmt.Println("    ↳ Making new channel")
 		ch = make(chan struct{})
 		n.executions[key] = ch
 	}
