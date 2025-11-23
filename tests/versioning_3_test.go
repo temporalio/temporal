@@ -2869,7 +2869,6 @@ func (s *Versioning3Suite) syncTaskQueueDeploymentDataWithRoutingConfig(
 func (s *Versioning3Suite) rollbackTaskQueueToVersion(
 	tv0 *testvars.TestVars,
 	timeAdjustment time.Duration,
-	verify bool,
 	tqTypes ...enumspb.TaskQueueType,
 ) {
 	// Get current task queue user data
@@ -2916,19 +2915,17 @@ func (s *Versioning3Suite) rollbackTaskQueueToVersion(
 	})
 	s.NoError(err)
 
-	// Optionally verify that the rollback propagated
-	if verify {
-		s.Eventually(func() bool {
-			ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
-				NamespaceId:   s.NamespaceID().String(),
-				TaskQueue:     tv0.TaskQueue().GetName(),
-				TaskQueueType: tqTypeWf,
-			})
-			s.NoError(err)
-			current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
-			return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
-		}, 10*time.Second, 100*time.Millisecond)
-	}
+	// Verify that the rollback propagated to all partitions
+	s.Eventually(func() bool {
+		ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv0.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+		})
+		s.NoError(err)
+		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
+		return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *Versioning3Suite) syncTaskQueueDeploymentData(
@@ -4191,8 +4188,6 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
 		}
 		execInfo := desc.GetWorkflowExecutionInfo()
 
-		fmt.Println("This is the execution info: ", execInfo)
-
 		// Verify that the child workflow started and completed on the v1 worker
 		if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv2.BuildID() {
 			return false
@@ -4272,59 +4267,7 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 
 	// Roll back the child TQ routing-config revision to simulate Routing Config lag in matching partitions (set v0 as current with older revision)
 	tv0Child := tvChild.WithBuildIDNumber(0)
-
-	// Rollback the userData to v0. Using the lower API here.
-	currentData, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:   s.NamespaceID().String(),
-		TaskQueue:     tv0Child.TaskQueue().GetName(),
-		TaskQueueType: tqTypeWf,
-	})
-	s.NoError(err)
-
-	// Now update with the correct current version
-	_, err = s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
-		NamespaceId: s.NamespaceID().String(),
-		TaskQueue:   tv0Child.TaskQueue().GetName(),
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data: &persistencespb.TaskQueueUserData{
-				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
-					int32(tqTypeWf): {
-						DeploymentData: &persistencespb.DeploymentData{
-							DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-								tv0Child.DeploymentVersion().GetDeploymentName(): {
-									RoutingConfig: &deploymentpb.RoutingConfig{
-										CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0Child.DeploymentVersionString()),
-										CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(time.Second)),
-										RevisionNumber:            0,
-									},
-									Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-										tv0Child.DeploymentVersion().GetBuildId(): {
-											Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			Version: currentData.GetUserData().GetVersion(),
-		},
-	})
-	s.NoError(err)
-
-	// Verify that the task queue user data is updated to v0.
-	s.Eventually(func() bool {
-		ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     tv0Child.TaskQueue().GetName(),
-			TaskQueueType: tqTypeWf,
-		})
-		s.NoError(err)
-		// Find the current version for this task-queue specifically. It should be set to v0.
-		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
-		return current.GetBuildId() == tv0Child.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
-	}, 10*time.Second, 100*time.Millisecond)
+	s.rollbackTaskQueueToVersion(tv0Child, -5*time.Second, tqTypeWf)
 
 	//nolint:testifylint
 	var wg sync.WaitGroup
@@ -4539,58 +4482,8 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 	// Roll back the TQ routing-config revision to simulate Routing Config lag (set v0 as current with older revision)
 	tv0 := tv1.WithBuildIDNumber(0)
 
-	// Rollback the userData to v0. Using the lower API here.
-	currentData, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:   s.NamespaceID().String(),
-		TaskQueue:     tv1.TaskQueue().GetName(),
-		TaskQueueType: tqTypeWf,
-	})
-	s.NoError(err)
-
-	// Now update with v0 as current version
-	_, err = s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
-		NamespaceId: s.NamespaceID().String(),
-		TaskQueue:   tv1.TaskQueue().GetName(),
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data: &persistencespb.TaskQueueUserData{
-				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
-					int32(tqTypeWf): {
-						DeploymentData: &persistencespb.DeploymentData{
-							DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-								tv0.DeploymentVersion().GetDeploymentName(): {
-									RoutingConfig: &deploymentpb.RoutingConfig{
-										CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
-										CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(-5 * time.Second)), // simulate going back in time
-										RevisionNumber:            0,
-									},
-									Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-										tv0.DeploymentVersion().GetBuildId(): {
-											Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			Version: currentData.GetUserData().GetVersion(),
-		},
-	})
-	s.NoError(err)
-
-	// Verify that the task queue user data is updated to v0
-	s.Eventually(func() bool {
-		ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     tv1.TaskQueue().GetName(),
-			TaskQueueType: tqTypeWf,
-		})
-		s.NoError(err)
-		// Find the current version for this task-queue specifically. It should be set to v0.
-		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
-		return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
-	}, 10*time.Second, 100*time.Millisecond)
+	// Rollback the TaskQueueUserData to simulate task queue partition lag
+	s.rollbackTaskQueueToVersion(tv0, -5*time.Second, tqTypeWf)
 
 	//nolint:testifylint
 	var wg sync.WaitGroup
@@ -4836,59 +4729,8 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 		}
 	}
 
-	// Roll back the workflow task-queue user data for one partition to simulate rollback/lag.
-	currentData, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:   s.NamespaceID().String(),
-		TaskQueue:     tv0.TaskQueue().GetName(),
-		TaskQueueType: tqTypeWf,
-	})
-	s.NoError(err)
-
-	_, err = s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
-		NamespaceId: s.NamespaceID().String(),
-		TaskQueue:   tv0.TaskQueue().GetName(),
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data: &persistencespb.TaskQueueUserData{
-				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
-					int32(tqTypeWf): {
-						DeploymentData: &persistencespb.DeploymentData{
-							DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
-								tv0.DeploymentVersion().GetDeploymentName(): {
-									RoutingConfig: &deploymentpb.RoutingConfig{
-										CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
-										CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(-time.Second)),
-										RevisionNumber:            0,
-									},
-									Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
-										tv0.DeploymentVersion().GetBuildId(): {
-											Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			Version: currentData.GetUserData().GetVersion(),
-		},
-	})
-	s.NoError(err)
-
-	// Confirm rollback visible on TQ (partition).
-	s.Eventually(func() bool {
-		ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     tv0.TaskQueue().GetName(),
-			TaskQueueType: tqTypeWf,
-		})
-		s.NoError(err)
-		if err != nil {
-			return false
-		}
-		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
-		return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
-	}, 10*time.Second, 100*time.Millisecond)
+	// Roll back the child TQ routing-config revision to simulate Routing Config lag in matching partitions (set v0 as current with older revision)
+	s.rollbackTaskQueueToVersion(tv0, -5*time.Second, tqTypeWf)
 
 	// Trigger failure of the run to cause retry.
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, runIDBeforeRetry, "proceed", nil))
