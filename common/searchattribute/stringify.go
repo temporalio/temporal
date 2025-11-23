@@ -11,6 +11,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 // Stringify converts search attributes to map of strings using (in order):
@@ -125,7 +126,7 @@ func parseValueOrArray(valStr string, t enumspb.IndexedValueType) (*commonpb.Pay
 		return nil, err
 	}
 
-	setMetadataType(valPayload, t)
+	sadefs.SetMetadataType(valPayload, t)
 	return valPayload, nil
 }
 

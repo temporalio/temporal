@@ -103,6 +103,26 @@ func (mr *MockHistoryServiceClientMockRecorder) CompleteNexusOperation(ctx, in a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperation", reflect.TypeOf((*MockHistoryServiceClient)(nil).CompleteNexusOperation), varargs...)
 }
 
+// CompleteNexusOperationChasm mocks base method.
+func (m *MockHistoryServiceClient) CompleteNexusOperationChasm(ctx context.Context, in *historyservice.CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CompleteNexusOperationChasm", varargs...)
+	ret0, _ := ret[0].(*historyservice.CompleteNexusOperationChasmResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteNexusOperationChasm indicates an expected call of CompleteNexusOperationChasm.
+func (mr *MockHistoryServiceClientMockRecorder) CompleteNexusOperationChasm(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperationChasm", reflect.TypeOf((*MockHistoryServiceClient)(nil).CompleteNexusOperationChasm), varargs...)
+}
+
 // DeepHealthCheck mocks base method.
 func (m *MockHistoryServiceClient) DeepHealthCheck(ctx context.Context, in *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
 	m.ctrl.T.Helper()
@@ -681,6 +701,26 @@ func (mr *MockHistoryServiceClientMockRecorder) PauseActivity(ctx, in any, opts 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).PauseActivity), varargs...)
+}
+
+// PauseWorkflowExecution mocks base method.
+func (m *MockHistoryServiceClient) PauseWorkflowExecution(ctx context.Context, in *historyservice.PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.PauseWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PauseWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.PauseWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseWorkflowExecution indicates an expected call of PauseWorkflowExecution.
+func (mr *MockHistoryServiceClientMockRecorder) PauseWorkflowExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).PauseWorkflowExecution), varargs...)
 }
 
 // PollMutableState mocks base method.
@@ -1670,6 +1710,21 @@ func (mr *MockHistoryServiceServerMockRecorder) CompleteNexusOperation(arg0, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperation", reflect.TypeOf((*MockHistoryServiceServer)(nil).CompleteNexusOperation), arg0, arg1)
 }
 
+// CompleteNexusOperationChasm mocks base method.
+func (m *MockHistoryServiceServer) CompleteNexusOperationChasm(arg0 context.Context, arg1 *historyservice.CompleteNexusOperationChasmRequest) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteNexusOperationChasm", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.CompleteNexusOperationChasmResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteNexusOperationChasm indicates an expected call of CompleteNexusOperationChasm.
+func (mr *MockHistoryServiceServerMockRecorder) CompleteNexusOperationChasm(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperationChasm", reflect.TypeOf((*MockHistoryServiceServer)(nil).CompleteNexusOperationChasm), arg0, arg1)
+}
+
 // DeepHealthCheck mocks base method.
 func (m *MockHistoryServiceServer) DeepHealthCheck(arg0 context.Context, arg1 *historyservice.DeepHealthCheckRequest) (*historyservice.DeepHealthCheckResponse, error) {
 	m.ctrl.T.Helper()
@@ -2103,6 +2158,21 @@ func (m *MockHistoryServiceServer) PauseActivity(arg0 context.Context, arg1 *his
 func (mr *MockHistoryServiceServerMockRecorder) PauseActivity(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).PauseActivity), arg0, arg1)
+}
+
+// PauseWorkflowExecution mocks base method.
+func (m *MockHistoryServiceServer) PauseWorkflowExecution(arg0 context.Context, arg1 *historyservice.PauseWorkflowExecutionRequest) (*historyservice.PauseWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.PauseWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseWorkflowExecution indicates an expected call of PauseWorkflowExecution.
+func (mr *MockHistoryServiceServerMockRecorder) PauseWorkflowExecution(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).PauseWorkflowExecution), arg0, arg1)
 }
 
 // PollMutableState mocks base method.

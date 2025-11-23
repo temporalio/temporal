@@ -62,7 +62,6 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (res *api.UpdateWorkflowAction, retErr error) {
 			mutableState := workflowLease.GetMutableState()
-			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx)
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -73,6 +72,10 @@ func Invoke(
 				//  - WFT is already completed as a result of another call (safe to drop this WFT),
 				//  - Speculative WFT is lost (ScheduleToStart timeout for speculative WFT will recreate it).
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
+			}
+			if req.GetStamp() != mutableState.GetExecutionInfo().GetWorkflowTaskStamp() {
+				// This happens when the workflow task was rescheduled.
+				return nil, serviceerrors.NewObsoleteMatchingTask("Workflow task stamp mismatch")
 			}
 
 			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
@@ -90,6 +93,7 @@ func Invoke(
 
 			workflowKey = mutableState.GetWorkflowKey()
 			updateAction := &api.UpdateWorkflowAction{}
+			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx)
 
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
@@ -186,7 +190,7 @@ func Invoke(
 					// Dispatching to a different deployment. Try starting a transition. Starting the
 					// transition AFTER applying the start event because we don't want this pending
 					// wft to be rescheduled by StartDeploymentTransition.
-					if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+					if err := mutableState.StartDeploymentTransition(pollerDeployment, req.TaskDispatchRevisionNumber); err != nil {
 						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 							// This must be a task from a time that the workflow was unpinned, but it's
 							// now pinned so can't transition. Matching can drop the task safely.

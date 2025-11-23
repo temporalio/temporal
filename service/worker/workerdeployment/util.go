@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -36,12 +36,15 @@ const (
 	DeleteVersion                     = "delete-version"                   // for WorkerDeployment wfs
 	DeleteDeployment                  = "delete-deployment"                // for WorkerDeployment wfs
 	SetManagerIdentity                = "set-manager-identity"             // for WorkerDeployment wfs
+	serverDeleteVersionIdentity       = "try-delete-for-add-version"       // identity of the worker-deployment workflow when it tries to delete a version on the event that the addition
+	// of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions)
 
 	// Signals
-	ForceCANSignalName       = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
-	SyncDrainageSignalName   = "sync-drainage-status"
-	TerminateDrainageSignal  = "terminate-drainage"
-	SyncVersionSummarySignal = "sync-version-summary"
+	ForceCANSignalName        = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
+	SyncDrainageSignalName    = "sync-drainage-status"
+	TerminateDrainageSignal   = "terminate-drainage"
+	SyncVersionSummarySignal  = "sync-version-summary"
+	PropagationCompleteSignal = "propagation-complete"
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
@@ -64,6 +67,8 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionNotFound            = "Version not found in deployment"
+	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 
 	errConflictTokenMismatchType = "errConflictTokenMismatch"
 	errFailedPrecondition        = "FailedPrecondition"
@@ -76,16 +81,17 @@ const (
 	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
 	ErrManagerIdentityMismatch                = "ManagerIdentity '%s' is set and does not match user identity '%s'; to proceed, set your own identity as the ManagerIdentity, remove the ManagerIdentity, or wait for the other client to do so"
 	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name %s; does your Worker Deployment have pollers?"
+	ErrWorkerDeploymentVersionNotFound        = "build ID %s not fount in Worker Deployment %s"
 )
 
 var (
 	WorkerDeploymentVisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		searchattribute.WorkflowType,
+		sadefs.WorkflowType,
 		WorkerDeploymentWorkflowType,
-		searchattribute.TemporalNamespaceDivision,
+		sadefs.TemporalNamespaceDivision,
 		WorkerDeploymentNamespaceDivision,
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 )
@@ -96,6 +102,13 @@ var (
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 100 * time.Millisecond,
 			MaximumAttempts: 5,
+		},
+	}
+	propagationActivityOptions = workflow.ActivityOptions{
+		StartToCloseTimeout: 1 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 100 * time.Millisecond,
+			// unlimited attempts
 		},
 	}
 )

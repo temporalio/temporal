@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -416,7 +416,7 @@ func (s *workflowSuite) setupWorkflowContext(mutableState *historyi.MockMutableS
 
 func (s *workflowSuite) setupCache() *wcache.MockCache {
 	workflowCache := wcache.NewMockCache(s.controller)
-	workflowCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasmworkflow.Archetype, locks.PriorityHigh).
+	workflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.WorkflowArchetype, locks.PriorityHigh).
 		Return(s.workflowContext, wcache.NoopReleaseFn, nil).AnyTimes()
 	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).Return(wcache.NoopReleaseFn, nil).AnyTimes()
 	return workflowCache

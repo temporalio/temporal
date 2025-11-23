@@ -109,7 +109,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_ExecuteDeleteHistoryEventTask_NoE
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 
-	s.mockCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), s.testShardContext, tests.NamespaceID, we, chasm.ArchetypeAny, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, chasm.ArchetypeAny, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetWorkflowKey().Return(task.WorkflowKey).AnyTimes()
@@ -154,7 +154,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 
-	s.mockCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), s.testShardContext, tests.NamespaceID, we, chasm.ArchetypeAny, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, chasm.ArchetypeAny, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetWorkflowKey().Return(task.WorkflowKey).AnyTimes()

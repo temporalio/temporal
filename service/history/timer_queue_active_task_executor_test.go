@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -228,7 +227,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -303,7 +302,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -373,7 +372,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_WfClosed
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -440,7 +439,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_NoTimerA
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -493,7 +492,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -576,7 +575,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -661,7 +660,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -749,7 +748,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -855,7 +854,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -936,7 +935,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1024,7 +1023,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1114,7 +1113,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startedEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1165,7 +1164,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Noop() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startedEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1189,6 +1188,59 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Noop() {
 
 	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(resp.ExecutionErr)
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_StampMismatch() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	startedEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+
+	// Create timer task with original stamp
+	timerTask := &tasks.WorkflowTaskTimeoutTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		ScheduleAttempt:     1,
+		Version:             s.version,
+		TaskID:              s.mustGenerateTaskID(),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		VisibilityTimestamp: s.now,
+		EventID:             wt.ScheduledEventID,
+		Stamp:               wt.Stamp,
+	}
+
+	// Modify the workflow task stamp in mutable state to create mismatch
+	mutableState.GetExecutionInfo().WorkflowTaskStamp = wt.Stamp + 1
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, startedEvent.GetEventId(), startedEvent.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
@@ -1218,7 +1270,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	timerTask := &tasks.WorkflowBackoffTimerTask{
 		WorkflowKey:         workflowKey,
@@ -1264,7 +1316,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1315,7 +1367,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1404,7 +1456,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 			},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1488,7 +1540,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Fire() {
 			WorkflowExecutionExpirationTime: timestamppb.New(s.now.Add(expirationTime)),
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1554,7 +1606,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Retry() {
 			WorkflowExecutionExpirationTime: timestamppb.New(s.now.Add(executionRunTimeout)),
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 	// need to override the workflow retry policy
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.HasRetryPolicy = true
@@ -1621,7 +1673,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Cron() {
 			WorkflowExecutionExpirationTime: timestamppb.New(s.now.Add(expirationTime)),
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 	mutableState.GetExecutionState().StartTime = timestamppb.New(s.now)
 	mutableState.GetExecutionInfo().CronSchedule = "* * * * *"
 
@@ -1679,7 +1731,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_WorkflowExpir
 			WorkflowExecutionExpirationTime: timestamppb.New(s.now.Add(-1 * time.Second)),
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 	mutableState.GetExecutionState().StartTime = timestamppb.New(s.now)
 	mutableState.GetExecutionInfo().CronSchedule = "* * * * *"
 
@@ -1740,7 +1792,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Fire() 
 		uuid.New(),
 		firstRunID,
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	timerTask := &tasks.WorkflowExecutionTimeoutTask{
 		NamespaceID:         s.namespaceID.String(),
@@ -1809,7 +1861,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Noop() 
 			WorkflowExecutionExpirationTime: timestamppb.New(s.now.Add(10 * time.Second)),
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 
 	timerTask := &tasks.WorkflowExecutionTimeoutTask{
 		NamespaceID:         s.namespaceID.String(),
@@ -1852,7 +1904,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Zombie
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 	mutableState.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 
 	// Add a valid timer task.
@@ -1888,7 +1940,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Zom
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{},
 		},
 	)
-	s.Nil(err)
+	s.NoError(err)
 	mutableState.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 
 	timerTask := &tasks.StateMachineTimerTask{
@@ -1950,7 +2002,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 			ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{},
 			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{},
 			Path:                                   []string{},
-			Type:                                   "Testlib.TestSideEffectTask",
+			TypeId:                                 1234,
 			Data: &commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			},
@@ -1961,7 +2013,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
@@ -1990,8 +2042,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	}
 
 	// Mock the CHASM tree and execute interface.
-	mockEach := chasm.NewMockNodePureTask(s.controller)
-	mockEach.EXPECT().ExecutePureTask(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+	mockEach := &chasm.MockNodePureTask{}
 	chasmTree := historyi.NewMockChasmTree(s.controller)
 	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
 		Times(1).Do(
@@ -2029,7 +2080,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any())
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
+	mockCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
@@ -2138,8 +2189,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any())
 
 	mockCache := wcache.NewMockCache(s.controller)
-	mockCache.EXPECT().GetOrCreateChasmEntity(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasmworkflow.Archetype, locks.PriorityLow,
+	mockCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
@@ -2216,6 +2267,8 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		s.mockNamespaceCache,
 		s.mockClusterMetadata,
+		s.mockShard.ChasmRegistry(),
+		queues.GetTaskTypeTagValue,
 		nil,
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,

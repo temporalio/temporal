@@ -56,11 +56,138 @@ func (s *ChasmTestSuite) TestNewPayloadStore() {
 	_, err := tests.NewPayloadStoreHandler(
 		chasm.NewEngineContext(ctx, s.chasmEngine),
 		tests.NewPayloadStoreRequest{
-			NamespaceID: s.NamespaceID(),
-			StoreID:     tv.Any().String(),
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          tv.Any().String(),
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
 		},
 	)
 	s.NoError(err)
+}
+
+func (s *ChasmTestSuite) TestNewPayloadStore_ConflictPolicy_UseExisting() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+
+	resp, err := tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	currentRunID := resp.RunID
+
+	resp, err = tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
+
+	resp, err = tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyUseExisting,
+		},
+	)
+	s.NoError(err)
+	s.Equal(currentRunID, resp.RunID)
+}
+
+func (s *ChasmTestSuite) TestPayloadStore_UpdateComponent() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	_, err = tests.AddPayloadHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "key1",
+			Payload:     payload.EncodeString("value1"),
+		},
+	)
+	s.NoError(err)
+
+	descResp, err := tests.DescribePayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(1), descResp.State.TotalCount)
+	s.Positive(descResp.State.TotalSize)
+}
+
+func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	_, err = tests.AddPayloadHandler(
+		chasm.NewEngineContext(ctx, s.chasmEngine),
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "key1",
+			Payload:     payload.EncodeString("value1"),
+			TTL:         1 * time.Second,
+		},
+	)
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		descResp, err := tests.DescribePayloadStoreHandler(
+			chasm.NewEngineContext(ctx, s.chasmEngine),
+			tests.DescribePayloadStoreRequest{
+				NamespaceID: s.NamespaceID(),
+				StoreID:     storeID,
+			},
+		)
+		s.NoError(err)
+		return descResp.State.TotalCount == 0
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
@@ -80,7 +207,10 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	)
 	s.NoError(err)
 
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = 'tests.payloadStore' AND WorkflowId = '%s'", storeID)
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
 
 	var visRecord *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
@@ -119,9 +249,15 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.True(ok)
 	s.NoError(payload.Decode(p, &intVal))
 	s.Equal(0, intVal)
-	var strVal string
-	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields[tests.TestKeywordSAFieldName], &strVal))
-	s.Equal(tests.TestKeywordSAFieldValue, strVal)
+	var totalCount int
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalInt01"], &totalCount))
+	s.Equal(0, totalCount)
+	var totalSize int
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalInt02"], &totalSize))
+	var scheduledByID string
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalScheduledById"], &scheduledByID))
+	s.Equal(tests.TestScheduleID, scheduledByID)
+	s.Equal(0, totalSize)
 
 	addPayloadResp, err := tests.AddPayloadHandler(
 		engineContext,

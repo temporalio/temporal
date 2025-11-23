@@ -30,7 +30,8 @@ func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
 	return &Invoker{
 		InvokerState: &schedulerpb.InvokerState{
-			BufferedStarts: []*schedulespb.BufferedStart{},
+			BufferedStarts:        []*schedulespb.BufferedStart{},
+			RequestIdToWorkflowId: make(map[string]string),
 		},
 		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
@@ -41,8 +42,14 @@ func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
 func (i *Invoker) EnqueueBufferedStarts(ctx chasm.MutableContext, starts []*schedulespb.BufferedStart) {
 	i.BufferedStarts = append(i.BufferedStarts, starts...)
 
-	// Immediately begin processing the new starts.
-	ctx.AddTask(i, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
+	if i.RequestIdToWorkflowId == nil {
+		i.RequestIdToWorkflowId = make(map[string]string)
+	}
+	for _, start := range starts {
+		i.RequestIdToWorkflowId[start.RequestId] = start.WorkflowId
+	}
+
+	i.addTasks(ctx)
 }
 
 type processBufferResult struct {
@@ -169,6 +176,58 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	i.addTasks(ctx)
 }
 
+// WorkflowID returns the workflow ID associated with the given request, or an
+// empty string if not found.
+func (i *Invoker) WorkflowID(requestID string) string {
+	wfID := i.RequestIdToWorkflowId[requestID]
+	return wfID
+}
+
+// recordCompletedAction updates Invoker metadata and kicks off tasks after
+// an action completes.
+//
+// If an action being marked as complete is still in BufferedStarts (== we
+// completed it before we recorded our startWorkflow result), it will be removed
+// from BufferedStarts, and the time at which it had been scheduled at is
+// returned. Otherwise, the return value is an initialized time.Time.
+func (i *Invoker) recordCompletedAction(
+	ctx chasm.MutableContext,
+	closeTime time.Time,
+	requestID string,
+) (scheduleTime time.Time) {
+	// Clean up the RequestID map, since we're done with the request.
+	delete(i.RequestIdToWorkflowId, requestID)
+
+	// Check if the action is still in BufferedStarts, clear it out.
+	idx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
+		if start.GetRequestId() == requestID {
+			scheduleTime = start.DesiredTime.AsTime()
+			return true
+		}
+		return false
+	})
+	if idx >= 0 {
+		i.BufferedStarts = slices.Delete(i.BufferedStarts, idx, idx+1)
+	}
+
+	// Update DesiredTime on the first pending start for metrics. DesiredTime is used
+	// to drive action latency between buffered starts (the time it takes between
+	// completing one start and kicking off the next). We set that on the first start
+	// pending execution.
+	idx = slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
+		return start.Attempt == 0
+	})
+	if idx >= 0 {
+		i.BufferedStarts[idx].DesiredTime = timestamppb.New(closeTime)
+	}
+
+	// addTasks will add an immediate ProcessBufferTask if we have any starts pending
+	// kick-off.
+	i.addTasks(ctx)
+
+	return
+}
+
 // addTasks adds both ProcessBuffer and Execute tasks as needed. It should be
 // called when completing processing/executing tasks, to drive backoff/retry.
 func (i *Invoker) addTasks(ctx chasm.MutableContext) {
@@ -179,7 +238,7 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	// backing off, or are still pending initial processing.
 	if (totalStarts - eligibleStarts) > 0 {
 		ctx.AddTask(i, chasm.TaskAttributes{
-			ScheduledTime: i.processingDeadline(),
+			ScheduledTime: i.processingDeadline(ctx),
 		}, &schedulerpb.InvokerProcessBufferTask{})
 	}
 
@@ -194,11 +253,13 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 // queue should be processed, taking into account starts that have not yet been
 // attempted, as well as those that are pending backoff to retry. If the buffer
 // is empty, the return value will be Time's zero value.
-func (i *Invoker) processingDeadline() time.Time {
+func (i *Invoker) processingDeadline(ctx chasm.Context) time.Time {
 	var deadline time.Time
 	for _, start := range i.GetBufferedStarts() {
 		if start.GetAttempt() == 0 {
-			return chasm.TaskScheduledTimeImmediate
+			// We use a current timestamp instead of TaskScheduledTimeImmediate so that we
+			// can validate the task with only the high watermark and task schedule time.
+			return ctx.Now(i)
 		}
 		backoff := start.GetBackoffTime().AsTime()
 		if deadline.IsZero() || backoff.Before(deadline) {

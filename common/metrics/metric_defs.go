@@ -28,6 +28,7 @@ const (
 	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
 	PersistenceDBKindTagName    = "db_kind"
+	WorkerPluginNameTagName     = "worker_plugin_name"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -355,6 +356,8 @@ const (
 	HistorySignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
 	// HistoryCompleteNexusOperationScope tracks CompleteNexusOperation API calls received by service
 	HistoryCompleteNexusOperationScope = "CompleteNexusOperation"
+	// HistoryCompleteNexusOperationChasmScope tracks CompleteNexusOperationChasm API calls received by service
+	HistoryCompleteNexusOperationChasmScope = "CompleteNexusOperationChasm"
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope = "SyncShardStatus"
 	// HistoryShardControllerScope is the scope used by shard controller
@@ -565,6 +568,7 @@ const (
 	TaskTypeTimerActiveTaskWorkflowBackoffTimer           = "TimerActiveTaskWorkflowBackoffTimer"
 	TaskTypeTimerActiveTaskDeleteHistoryEvent             = "TimerActiveTaskDeleteHistoryEvent"
 	TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout = "TimerActiveTaskSpeculativeWorkflowTaskTimeout"
+	TaskTypeTimerActiveTaskChasmPureTask                  = "TimerActiveTaskChasmPureTask"
 	TaskTypeTimerStandbyTaskActivityTimeout               = "TimerStandbyTaskActivityTimeout"
 	TaskTypeTimerStandbyTaskWorkflowTaskTimeout           = "TimerStandbyTaskWorkflowTaskTimeout"
 	TaskTypeTimerStandbyTaskUserTimer                     = "TimerStandbyTaskUserTimer"
@@ -573,6 +577,7 @@ const (
 	TaskTypeTimerStandbyTaskActivityRetryTimer            = "TimerStandbyTaskActivityRetryTimer"
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer          = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent            = "TimerStandbyTaskDeleteHistoryEvent"
+	TaskTypeTimerStandbyTaskChasmPureTask                 = "TimerStandbyTaskChasmPureTask"
 )
 
 // Schedule action types
@@ -960,7 +965,7 @@ var (
 	WorkflowTimeoutCount                  = NewCounterDef("workflow_timeout")
 	WorkflowTerminateCount                = NewCounterDef("workflow_terminate")
 	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
-	WorkflowDuration                      = NewTimerDef("workflow_duration")
+	WorkflowScheduleToCloseLatency        = NewTimerDef("workflow_schedule_to_close_latency")
 	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
 	ReplicationStreamError                = NewCounterDef("replication_stream_error")
 	ReplicationServiceError               = NewCounterDef("replication_service_error")
@@ -1123,6 +1128,13 @@ var (
 	WorkerRegistryCapacityUtilizationMetric = NewGaugeDef(
 		"worker_registry_capacity_utilization",
 		WithDescription("Tracks the ratio of total entries to maxItems."),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to understand plugin adoption.
+	WorkerPluginNameMetric = NewGaugeDef(
+		"worker_plugin_name",
+		WithDescription(
+			"Set if the worker was configured with a plugin. Dimensions: namespace, plugin_name"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 

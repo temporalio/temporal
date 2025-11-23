@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
@@ -526,6 +527,7 @@ func genericFrontendServiceProvider(
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
 		fx.Supply(params.CustomFrontendInterceptors),
+		fx.Supply([]grpc.StreamServerInterceptor{}),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
@@ -638,7 +640,7 @@ func ApplyClusterMetadataConfigProvider(
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
 		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
-			indexSearchAttributes[ds.GetIndexName()] = searchattribute.GetDBIndexSearchAttributes(visCSAOverride)
+			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 		}
 	}
 
@@ -1207,6 +1209,13 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("function", e.ConstructorName))
 		}
+	case *fxevent.BeforeRun:
+		l.logger.Debug("before run",
+			tag.ComponentFX,
+			tag.NewStringTag("name", e.Name),
+			tag.NewStringTag("kind", e.Kind),
+			tag.NewStringTag("module", e.ModuleName),
+		)
 	default:
 		l.logger.Warn("unknown fx log type, update fxLogAdapter",
 			tag.ComponentFX,

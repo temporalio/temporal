@@ -10,7 +10,7 @@ retract (
 require (
 	cloud.google.com/go/storage v1.51.0
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/aws/aws-sdk-go v1.55.6
+	github.com/aws/aws-sdk-go v1.55.8
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
@@ -46,7 +46,6 @@ require (
 	github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
-	github.com/temporalio/tctl-kit v0.0.0-20250107205014-58462b03dfb2
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.5
@@ -60,9 +59,9 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.53.1-0.20250930223154-d26cf6ca688f
+	go.temporal.io/api v1.58.1-0.20251120183209-4485ca21da0e
 	go.temporal.io/sdk v1.35.0
-	go.uber.org/fx v1.23.0
+	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
@@ -160,10 +159,10 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.34.0
 	go.opentelemetry.io/proto/otlp v1.5.0
 	go.uber.org/atomic v1.11.0 // indirect
-	go.uber.org/dig v1.18.0 // indirect
+	go.uber.org/dig v1.19.0 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
 	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250303144028-a0af3efb3deb // indirect

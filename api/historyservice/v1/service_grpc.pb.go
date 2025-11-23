@@ -84,6 +84,7 @@ const (
 	HistoryService_AddTasks_FullMethodName                               = "/temporal.server.api.historyservice.v1.HistoryService/AddTasks"
 	HistoryService_ListTasks_FullMethodName                              = "/temporal.server.api.historyservice.v1.HistoryService/ListTasks"
 	HistoryService_CompleteNexusOperation_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation"
+	HistoryService_CompleteNexusOperationChasm_FullMethodName            = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperationChasm"
 	HistoryService_InvokeStateMachineMethod_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod"
 	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
 	HistoryService_SyncWorkflowState_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState"
@@ -91,6 +92,7 @@ const (
 	HistoryService_PauseActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivity"
 	HistoryService_UnpauseActivity_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseActivity"
 	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
+	HistoryService_PauseWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/PauseWorkflowExecution"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -305,7 +307,12 @@ type HistoryServiceClient interface {
 	ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error)
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
+	//
+	// Deprecated. Will be renamed to CompleteNexusOperationHsm in a future release.
 	CompleteNexusOperation(ctx context.Context, in *CompleteNexusOperationRequest, opts ...grpc.CallOption) (*CompleteNexusOperationResponse, error)
+	// Complete an async Nexus Operation using a CHASM reference. The completion
+	// state could be successful, failed, or canceled.
+	CompleteNexusOperationChasm(ctx context.Context, in *CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*CompleteNexusOperationChasmResponse, error)
 	InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error)
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
@@ -369,6 +376,8 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
+	// PauseWorkflowExecution pauses the workflow execution specified in the request.
+	PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error)
 }
 
 type historyServiceClient struct {
@@ -977,6 +986,15 @@ func (c *historyServiceClient) CompleteNexusOperation(ctx context.Context, in *C
 	return out, nil
 }
 
+func (c *historyServiceClient) CompleteNexusOperationChasm(ctx context.Context, in *CompleteNexusOperationChasmRequest, opts ...grpc.CallOption) (*CompleteNexusOperationChasmResponse, error) {
+	out := new(CompleteNexusOperationChasmResponse)
+	err := c.cc.Invoke(ctx, HistoryService_CompleteNexusOperationChasm_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error) {
 	out := new(InvokeStateMachineMethodResponse)
 	err := c.cc.Invoke(ctx, HistoryService_InvokeStateMachineMethod_FullMethodName, in, out, opts...)
@@ -1034,6 +1052,15 @@ func (c *historyServiceClient) UnpauseActivity(ctx context.Context, in *UnpauseA
 func (c *historyServiceClient) ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error) {
 	out := new(ResetActivityResponse)
 	err := c.cc.Invoke(ctx, HistoryService_ResetActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error) {
+	out := new(PauseWorkflowExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_PauseWorkflowExecution_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1252,7 +1279,12 @@ type HistoryServiceServer interface {
 	ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error)
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
+	//
+	// Deprecated. Will be renamed to CompleteNexusOperationHsm in a future release.
 	CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error)
+	// Complete an async Nexus Operation using a CHASM reference. The completion
+	// state could be successful, failed, or canceled.
+	CompleteNexusOperationChasm(context.Context, *CompleteNexusOperationChasmRequest) (*CompleteNexusOperationChasmResponse, error)
 	InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error)
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
@@ -1316,6 +1348,8 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
+	// PauseWorkflowExecution pauses the workflow execution specified in the request.
+	PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1515,6 +1549,9 @@ func (UnimplementedHistoryServiceServer) ListTasks(context.Context, *ListTasksRe
 func (UnimplementedHistoryServiceServer) CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteNexusOperation not implemented")
 }
+func (UnimplementedHistoryServiceServer) CompleteNexusOperationChasm(context.Context, *CompleteNexusOperationChasmRequest) (*CompleteNexusOperationChasmResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompleteNexusOperationChasm not implemented")
+}
 func (UnimplementedHistoryServiceServer) InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeStateMachineMethod not implemented")
 }
@@ -1535,6 +1572,9 @@ func (UnimplementedHistoryServiceServer) UnpauseActivity(context.Context, *Unpau
 }
 func (UnimplementedHistoryServiceServer) ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseWorkflowExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2709,6 +2749,24 @@ func _HistoryService_CompleteNexusOperation_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_CompleteNexusOperationChasm_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteNexusOperationChasmRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).CompleteNexusOperationChasm(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_CompleteNexusOperationChasm_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).CompleteNexusOperationChasm(ctx, req.(*CompleteNexusOperationChasmRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_InvokeStateMachineMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(InvokeStateMachineMethodRequest)
 	if err := dec(in); err != nil {
@@ -2831,6 +2889,24 @@ func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).ResetActivity(ctx, req.(*ResetActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_PauseWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseWorkflowExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).PauseWorkflowExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_PauseWorkflowExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).PauseWorkflowExecution(ctx, req.(*PauseWorkflowExecutionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3095,6 +3171,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HistoryService_CompleteNexusOperation_Handler,
 		},
 		{
+			MethodName: "CompleteNexusOperationChasm",
+			Handler:    _HistoryService_CompleteNexusOperationChasm_Handler,
+		},
+		{
 			MethodName: "InvokeStateMachineMethod",
 			Handler:    _HistoryService_InvokeStateMachineMethod_Handler,
 		},
@@ -3121,6 +3201,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetActivity",
 			Handler:    _HistoryService_ResetActivity_Handler,
+		},
+		{
+			MethodName: "PauseWorkflowExecution",
+			Handler:    _HistoryService_PauseWorkflowExecution_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

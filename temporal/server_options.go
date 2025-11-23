@@ -1,6 +1,7 @@
 package temporal
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -34,6 +35,7 @@ type (
 		configDir      string
 		env            string
 		zone           string
+		configFilePath string
 		hostsByService map[primitives.ServiceName]static.Hosts
 
 		startupSynchronizationMode synchronizationModeParams
@@ -91,12 +93,28 @@ func (so *serverOptions) loadAndValidate() error {
 }
 
 func (so *serverOptions) loadConfig() error {
-	so.config = &config.Config{}
-	err := config.Load(so.env, so.configDir, so.zone, so.config)
-	if err != nil {
-		return fmt.Errorf("config file corrupted: %w", err)
+	if so.configFilePath != "" {
+		if so.env != "" || so.configDir != "" || so.zone != "" {
+			return errors.New("env, config, zone can not be set if configFilePath is set")
+		}
+		cfg, err := config.Load(
+			config.WithConfigFile(so.configFilePath),
+		)
+		if err != nil {
+			return fmt.Errorf("could not load config file: %w", err)
+		}
+		so.config = cfg
+		return nil
 	}
-
+	cfg, err := config.Load(
+		config.WithEnv(so.env),
+		config.WithConfigDir(so.configDir),
+		config.WithZone(so.zone),
+	)
+	if err != nil {
+		return fmt.Errorf("could not load config file: %w", err)
+	}
+	so.config = cfg
 	return nil
 }
 

@@ -24,6 +24,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.CompleteNexusOperationResponse:
 		return nil
+	case *historyservice.CompleteNexusOperationChasmRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetCompletion().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetCompletion().GetRunId()),
+		}
+	case *historyservice.CompleteNexusOperationChasmResponse:
+		return nil
 	case *historyservice.DeepHealthCheckRequest:
 		return nil
 	case *historyservice.DeepHealthCheckResponse:
@@ -195,6 +202,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowRunID(r.GetFrontendRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.PauseActivityResponse:
+		return nil
+	case *historyservice.PauseWorkflowExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetPauseRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetPauseRequest().GetRunId()),
+		}
+	case *historyservice.PauseWorkflowExecutionResponse:
 		return nil
 	case *historyservice.PollMutableStateRequest:
 		return []tag.Tag{

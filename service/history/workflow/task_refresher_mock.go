@@ -43,29 +43,29 @@ func (m *MockTaskRefresher) EXPECT() *MockTaskRefresherMockRecorder {
 }
 
 // PartialRefresh mocks base method.
-func (m *MockTaskRefresher) PartialRefresh(ctx context.Context, mutableState interfaces.MutableState, minVersionedTransition *persistence.VersionedTransition, previousPendingChildIds map[int64]struct{}) error {
+func (m *MockTaskRefresher) PartialRefresh(ctx context.Context, mutableState interfaces.MutableState, minVersionedTransition *persistence.VersionedTransition, previousPendingChildIds map[int64]struct{}, shouldSkipGeneratingCloseTransferTask bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PartialRefresh", ctx, mutableState, minVersionedTransition, previousPendingChildIds)
+	ret := m.ctrl.Call(m, "PartialRefresh", ctx, mutableState, minVersionedTransition, previousPendingChildIds, shouldSkipGeneratingCloseTransferTask)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PartialRefresh indicates an expected call of PartialRefresh.
-func (mr *MockTaskRefresherMockRecorder) PartialRefresh(ctx, mutableState, minVersionedTransition, previousPendingChildIds any) *gomock.Call {
+func (mr *MockTaskRefresherMockRecorder) PartialRefresh(ctx, mutableState, minVersionedTransition, previousPendingChildIds, shouldSkipGeneratingCloseTransferTask any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartialRefresh", reflect.TypeOf((*MockTaskRefresher)(nil).PartialRefresh), ctx, mutableState, minVersionedTransition, previousPendingChildIds)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartialRefresh", reflect.TypeOf((*MockTaskRefresher)(nil).PartialRefresh), ctx, mutableState, minVersionedTransition, previousPendingChildIds, shouldSkipGeneratingCloseTransferTask)
 }
 
 // Refresh mocks base method.
-func (m *MockTaskRefresher) Refresh(ctx context.Context, mutableState interfaces.MutableState) error {
+func (m *MockTaskRefresher) Refresh(ctx context.Context, mutableState interfaces.MutableState, shouldSkipGeneratingCloseTransferTask bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Refresh", ctx, mutableState)
+	ret := m.ctrl.Call(m, "Refresh", ctx, mutableState, shouldSkipGeneratingCloseTransferTask)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Refresh indicates an expected call of Refresh.
-func (mr *MockTaskRefresherMockRecorder) Refresh(ctx, mutableState any) *gomock.Call {
+func (mr *MockTaskRefresherMockRecorder) Refresh(ctx, mutableState, shouldSkipGeneratingCloseTransferTask any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockTaskRefresher)(nil).Refresh), ctx, mutableState)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockTaskRefresher)(nil).Refresh), ctx, mutableState, shouldSkipGeneratingCloseTransferTask)
 }

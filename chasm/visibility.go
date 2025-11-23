@@ -2,25 +2,31 @@ package chasm
 
 import (
 	"context"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
 )
 
 const (
-	visibilityComponentFqType = "core.vis"
-	visibilityTaskFqType      = "core.visTask"
+	visibilityComponentType = "core.vis"
+	visibilityTaskType      = "core.visTask"
+)
+
+var (
+	visibilityComponentTypeID = generateTypeID(visibilityComponentType)
+	visibilityTaskTypeID      = generateTypeID(visibilityTaskType)
 )
 
 // VisibilitySearchAttributesProvider if implemented by the root Component,
 // allows the CHASM framework to automatically determine, at the end of
 // a transaction, if a visibility task needs to be generated to update the
 // visibility record with the returned search attributes.
-//
-// TODO: Improve this interface after support registering CHASM search attributes.
 type VisibilitySearchAttributesProvider interface {
-	SearchAttributes(Context) map[string]VisibilityValue
+	SearchAttributes(Context) []SearchAttributeKeyValue
 }
 
 // VisibilityMemoProvider if implemented by the root Component,
@@ -29,6 +35,45 @@ type VisibilitySearchAttributesProvider interface {
 // visibility record with the returned memo.
 type VisibilityMemoProvider interface {
 	Memo(Context) map[string]VisibilityValue
+}
+
+// VisibilitySearchAttributesMapper is a mapper for CHASM search attributes.
+type VisibilitySearchAttributesMapper struct {
+	aliasToField map[string]string
+	fieldToAlias map[string]string
+	saTypeMap    map[string]enumspb.IndexedValueType
+}
+
+// Alias returns the alias for a given field.
+func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
+	if v == nil {
+		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
+	}
+	alias, ok := v.fieldToAlias[field]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %q", field))
+	}
+	return alias, nil
+}
+
+// Field returns the field for a given alias.
+func (v *VisibilitySearchAttributesMapper) Field(alias string) (string, error) {
+	if v == nil {
+		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
+	}
+	field, ok := v.aliasToField[alias]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %q", alias))
+	}
+	return field, nil
+}
+
+// SATypeMap returns the type map for the CHASM search attributes.
+func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.IndexedValueType {
+	if v == nil {
+		return nil
+	}
+	return v.saTypeMap
 }
 
 type Visibility struct {
@@ -82,24 +127,19 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 
 func (v *Visibility) GetSearchAttributes(
 	chasmContext Context,
-) (map[string]*commonpb.Payload, error) {
-	sa, err := v.SA.Get(chasmContext)
-	if err != nil {
-		return nil, err
-	}
-	return sa.GetIndexedFields(), nil
+) map[string]*commonpb.Payload {
+	sa, _ := v.SA.TryGet(chasmContext)
+	// nil check handled by the proto getter.
+	return sa.GetIndexedFields()
 }
 
 func (v *Visibility) SetSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
-) error {
-	currentSA, err := v.SA.Get(mutableContext)
-	if err != nil {
-		return err
-	}
+) {
+	currentSA, ok := v.SA.TryGet(mutableContext)
 
-	if currentSA == nil {
+	if !ok {
 		currentSA = &commonpb.SearchAttributes{}
 		v.SA = NewDataField(mutableContext, currentSA)
 	}
@@ -109,30 +149,23 @@ func (v *Visibility) SetSearchAttributes(
 		customSearchAttributes,
 	)
 	v.generateTask(mutableContext)
-
-	return nil
 }
 
 func (v *Visibility) GetMemo(
 	chasmContext Context,
-) (map[string]*commonpb.Payload, error) {
-	memo, err := v.Memo.Get(chasmContext)
-	if err != nil {
-		return nil, err
-	}
-	return memo.GetFields(), nil
+) map[string]*commonpb.Payload {
+	memo, _ := v.Memo.TryGet(chasmContext)
+	// nil check handled by the proto getter.
+	return memo.GetFields()
 }
 
 func (v *Visibility) SetMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
-) error {
-	currentMemo, err := v.Memo.Get(mutableContext)
-	if err != nil {
-		return err
-	}
+) {
+	currentMemo, ok := v.Memo.TryGet(mutableContext)
 
-	if currentMemo == nil {
+	if !ok {
 		currentMemo = &commonpb.Memo{}
 		v.Memo = NewDataField(mutableContext, currentMemo)
 	}
@@ -142,8 +175,6 @@ func (v *Visibility) SetMemo(
 		customMemo,
 	)
 	v.generateTask(mutableContext)
-
-	return nil
 }
 
 func (v *Visibility) generateTask(

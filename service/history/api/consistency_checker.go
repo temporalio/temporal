@@ -9,7 +9,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -106,7 +105,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	workflowKey definition.WorkflowKey,
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
-	return c.getWorkflowLeaseImpl(ctx, reqClock, nil, workflowKey, chasmworkflow.Archetype, lockPriority)
+	return c.getWorkflowLeaseImpl(ctx, reqClock, nil, workflowKey, chasm.WorkflowArchetype, lockPriority)
 }
 
 // The code below should be used when custom workflow state validation is required.
@@ -119,7 +118,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLeaseWithConsistencyCheck(
 	workflowKey definition.WorkflowKey,
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
-	return c.getWorkflowLeaseImpl(ctx, reqClock, consistencyPredicate, workflowKey, chasmworkflow.Archetype, lockPriority)
+	return c.getWorkflowLeaseImpl(ctx, reqClock, consistencyPredicate, workflowKey, chasm.WorkflowArchetype, lockPriority)
 }
 
 func (c *WorkflowConsistencyCheckerImpl) GetChasmLease(
@@ -250,7 +249,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 
-	wfContext, release, err := c.workflowCache.GetOrCreateChasmEntity(
+	wfContext, release, err := c.workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),

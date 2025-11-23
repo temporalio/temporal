@@ -327,7 +327,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		},
 		1234,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.Rebuild(
 		context.Background(),
@@ -443,7 +443,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 		1234,
 	), nil).AnyTimes()
 
-	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	currentMutableState := &persistencespb.WorkflowMutableState{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			TransitionHistory: []*persistencespb.VersionedTransition{

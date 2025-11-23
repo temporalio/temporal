@@ -74,7 +74,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskTypeTagValue := queues.GetStandbyTimerTaskTypeTagValue(task)
+	taskTypeTagValue := queues.GetStandbyTimerTaskTypeTagValue(task, t.shardContext.ChasmRegistry())
 
 	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
@@ -418,6 +418,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 		workflowTask := mutableState.GetWorkflowTaskByID(timerTask.EventID)
 		if workflowTask == nil {
 			return nil, nil
+		}
+		if timerTask.Stamp != workflowTask.Stamp {
+			return nil, consts.ErrStaleReference
 		}
 
 		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)

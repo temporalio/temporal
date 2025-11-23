@@ -129,7 +129,7 @@ func Invoke(
 			AssignedBuildId:              executionInfo.AssignedBuildId,
 			InheritedBuildId:             executionInfo.InheritedBuildId,
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
-			VersioningInfo:               executionInfo.VersioningInfo,
+			VersioningInfo:               common.CloneProto(executionInfo.VersioningInfo),
 			WorkerDeploymentName:         executionInfo.WorkerDeploymentName,
 			Priority:                     executionInfo.Priority,
 		},
@@ -141,6 +141,15 @@ func Invoke(
 			ResetRunId:              executionInfo.ResetRunId,
 			RequestIdInfos:          make(map[string]*workflowpb.RequestIdInfo),
 		},
+	}
+
+	// copy pause info to the response if it exists
+	if executionInfo.PauseInfo != nil {
+		result.WorkflowExtendedInfo.PauseInfo = &workflowpb.WorkflowExecutionPauseInfo{
+			PausedTime: executionInfo.PauseInfo.PauseTime,
+			Identity:   executionInfo.PauseInfo.Identity,
+			Reason:     executionInfo.PauseInfo.Reason,
+		}
 	}
 
 	if mutableState.IsResetRun() {

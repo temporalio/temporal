@@ -40,7 +40,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(workers.NewRegistry),
+	fx.Provide(WorkersRegistryProvider),
 	fx.Provide(NewHandler),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
@@ -179,6 +179,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
+		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 	)
@@ -186,4 +187,12 @@ func VisibilityManagerProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func WorkersRegistryProvider(
+	lc fx.Lifecycle,
+	metricsHandler metrics.Handler,
+	serviceConfig *Config,
+) workers.Registry {
+	return workers.NewRegistry(lc, metricsHandler, serviceConfig.EnableWorkerPluginMetrics)
 }

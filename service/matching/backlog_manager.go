@@ -93,7 +93,8 @@ func newBacklogManager(
 		config:           config,
 		initializedError: future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler)
+	isDraining := false // newBacklogManager can't be used for draining
+	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
@@ -193,7 +194,7 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 }
 
 func (c *backlogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
-	defaultPriority := int32(defaultPriorityLevel(c.config.PriorityLevels()))
+	defaultPriority := int32(c.config.DefaultPriorityKey)
 	return map[int32]*taskqueuepb.TaskQueueStats{
 		defaultPriority: &taskqueuepb.TaskQueueStats{
 			ApproximateBacklogCount: c.db.getTotalApproximateBacklogCount(),

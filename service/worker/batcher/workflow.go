@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	batchspb "go.temporal.io/server/api/batch/v1"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -54,9 +54,9 @@ const (
 
 var (
 	OpenBatchOperationQuery = fmt.Sprintf("%s = '%s' AND %s = %d",
-		searchattribute.TemporalNamespaceDivision,
+		sadefs.TemporalNamespaceDivision,
 		NamespaceDivision,
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 	)
 )
@@ -105,8 +105,8 @@ var (
 	}
 )
 
-// BatchWorkflow is the workflow that runs a batch job of resetting workflows.
-func BatchWorkflow(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+// BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
+func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	if batchParams == nil {
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
@@ -121,7 +121,7 @@ func BatchWorkflow(ctx workflow.Context, batchParams *batchspb.BatchOperationInp
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
-	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
+	err = workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, batchParams).Get(ctx, &result)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}

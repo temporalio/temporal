@@ -27,7 +27,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
@@ -991,6 +991,58 @@ StartNewExecutionLoop:
 	s.True(newExecutionStarted)
 }
 
+func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
+	tv := testvars.New(s.T())
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	}
+
+	testContext := testcore.NewContext()
+
+	// start workflow execution
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testContext, request)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.NoError(err0)
+
+	// start workflow task, but do not respond to it
+	res, err := s.FrontendClient().PollWorkflowTaskQueue(testContext, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+	})
+	s.Logger.Info("PollWorkflowTaskQueue", tag.Error(err))
+	s.NoError(err)
+
+	// respond workflow task as failed with grpc message too large error
+	_, err = s.FrontendClient().RespondWorkflowTaskFailed(testContext, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: res.TaskToken,
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_GRPC_MESSAGE_TOO_LARGE,
+	})
+	s.NoError(err)
+
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      we.RunId,
+	})
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionTerminated`, // verify that workflow is terminated
+		historyEvents)
+}
+
 func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1578,24 +1630,24 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 		}
 	}
 
-	s.Run(searchattribute.TemporalWorkerDeploymentVersion, func() {
-		request := makeRequest(searchattribute.TemporalWorkerDeploymentVersion)
+	s.Run(sadefs.TemporalWorkerDeploymentVersion, func() {
+		request := makeRequest(sadefs.TemporalWorkerDeploymentVersion)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
 		s.ErrorAs(err, &invalidArgument)
 	})
 
-	s.Run(searchattribute.TemporalWorkerDeployment, func() {
-		request := makeRequest(searchattribute.TemporalWorkerDeployment)
+	s.Run(sadefs.TemporalWorkerDeployment, func() {
+		request := makeRequest(sadefs.TemporalWorkerDeployment)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
 		s.ErrorAs(err, &invalidArgument)
 	})
 
-	s.Run(searchattribute.TemporalWorkflowVersioningBehavior, func() {
-		request := makeRequest(searchattribute.TemporalWorkflowVersioningBehavior)
+	s.Run(sadefs.TemporalWorkflowVersioningBehavior, func() {
+		request := makeRequest(sadefs.TemporalWorkflowVersioningBehavior)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
@@ -1604,14 +1656,14 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 
 	// These are currently allowed since they are in the predefinedWhiteList. Once it's confirmed that they are not being used,
 	// we can remove them from the predefinedWhiteList.
-	s.Run(searchattribute.BatcherUser, func() {
-		request := makeRequest(searchattribute.BatcherUser)
+	s.Run(sadefs.BatcherUser, func() {
+		request := makeRequest(sadefs.BatcherUser)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	})
 
-	s.Run(searchattribute.BatcherNamespace, func() {
-		request := makeRequest(searchattribute.BatcherNamespace)
+	s.Run(sadefs.BatcherNamespace, func() {
+		request := makeRequest(sadefs.BatcherNamespace)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	})

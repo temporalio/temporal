@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -408,6 +409,25 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	return wh.convertToStartWorkflowExecutionResponse(resp, namespaceName)
+}
+
+func (wh *WorkflowHandler) convertToStartWorkflowExecutionResponse(
+	resp *historyservice.StartWorkflowExecutionResponse,
+	namespaceName namespace.Name,
+) (*workflowservice.StartWorkflowExecutionResponse, error) {
+	if resp.GetEagerWorkflowTask() != nil {
+		if err := api.ProcessOutgoingSearchAttributes(
+			wh.saProvider,
+			wh.saMapperProvider,
+			resp.GetEagerWorkflowTask().GetHistory().GetEvents(),
+			namespaceName,
+			wh.visibilityMgr,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	return &workflowservice.StartWorkflowExecutionResponse{
 		RunId:             resp.GetRunId(),
 		Started:           resp.Started,
@@ -571,7 +591,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, err
 	}
 
-	response, err := convertToMultiOperationResponse(historyResp)
+	response, err := wh.convertToMultiOperationResponse(historyResp, namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -680,33 +700,29 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 	return opReq, workflowId, nil
 }
 
-func convertToMultiOperationResponse(
+func (wh *WorkflowHandler) convertToMultiOperationResponse(
 	historyResp *historyservice.ExecuteMultiOperationResponse,
+	namespaceName namespace.Name,
 ) (*workflowservice.ExecuteMultiOperationResponse, error) {
 	resp := &workflowservice.ExecuteMultiOperationResponse{
 		Responses: make([]*workflowservice.ExecuteMultiOperationResponse_Response, len(historyResp.Responses)),
 	}
 	for i, op := range historyResp.Responses {
 		var opResp *workflowservice.ExecuteMultiOperationResponse_Response
-		if startResp := op.GetStartWorkflow(); startResp != nil {
+		if historyStartResp := op.GetStartWorkflow(); historyStartResp != nil {
+			startResp, err := wh.convertToStartWorkflowExecutionResponse(historyStartResp, namespaceName)
+			if err != nil {
+				return nil, err
+			}
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
 				Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-					StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
-						RunId:   startResp.RunId,
-						Started: startResp.Started,
-						Link:    startResp.Link,
-						Status:  startResp.Status,
-					},
+					StartWorkflow: startResp,
 				},
 			}
-		} else if updateResp := op.GetUpdateWorkflow(); updateResp != nil {
+		} else if histUpdateResp := op.GetUpdateWorkflow(); histUpdateResp != nil {
 			opResp = &workflowservice.ExecuteMultiOperationResponse_Response{
 				Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
-					UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{
-						UpdateRef: updateResp.Response.UpdateRef,
-						Outcome:   updateResp.Response.Outcome,
-						Stage:     updateResp.Response.Stage,
-					},
+					UpdateWorkflow: histUpdateResp.GetResponse(),
 				},
 			}
 		} else {
@@ -885,29 +901,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	pollerID := uuid.New()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
-
-	if request.WorkerHeartbeat != nil {
-		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
-		request.WorkerHeartbeat = nil // clear the heartbeat from the request to avoid sending it to matching service
-
-		// route heartbeat to the matching service only if the request is valid (all validation checks passed)
-		go func() {
-			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-				NamespaceId: namespaceID.String(),
-				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-					Namespace:       request.Namespace,
-					Identity:        request.Identity,
-					WorkerHeartbeat: heartbeats,
-				},
-			})
-
-			if err != nil {
-				wh.logger.Error("Failed to record worker heartbeat.",
-					tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
-					tag.Error(err))
-			}
-		}()
-	}
 
 	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(childCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
@@ -2241,7 +2234,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 
 	query = append(query, fmt.Sprintf(
 		"%s = '%s'",
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	))
 
@@ -2252,20 +2245,20 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s BETWEEN '%s' AND '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s >= '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s <= '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	}
@@ -2276,7 +2269,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowID,
+			sadefs.WorkflowID,
 			request.GetExecutionFilter().GetWorkflowId()))
 
 		wh.logger.Debug("List open workflow with filter",
@@ -2287,7 +2280,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowType,
+			sadefs.WorkflowType,
 			request.GetTypeFilter().GetName()))
 
 		wh.logger.Debug("List open workflow with filter",
@@ -2342,7 +2335,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	query = append(query, fmt.Sprintf(
 		"%s != '%s'",
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	))
 
@@ -2353,20 +2346,20 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s BETWEEN '%s' AND '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s >= '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s <= '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	}
@@ -2377,7 +2370,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowID,
+			sadefs.WorkflowID,
 			request.GetExecutionFilter().GetWorkflowId()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -2388,7 +2381,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowType,
+			sadefs.WorkflowType,
 			request.GetTypeFilter().GetName()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -2402,7 +2395,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.ExecutionStatus,
+			sadefs.ExecutionStatus,
 			request.GetStatusFilter().GetStatus()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -3053,7 +3046,10 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 }
 
 // Creates a new schedule.
-func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflowservice.CreateScheduleRequest) (_ *workflowservice.CreateScheduleResponse, retError error) {
+func (wh *WorkflowHandler) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+) (_ *workflowservice.CreateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3086,6 +3082,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// Check if CHASM scheduler experiment is enabled
+	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String()) {
+		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
+	}
+
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
@@ -3095,7 +3097,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	}
 
 	// Add namespace division before unaliasing search attributes.
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 
 	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
@@ -4086,6 +4088,7 @@ func (wh *WorkflowHandler) ListSchedules(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
+			wh.config.VisibilityEnableUnifiedQueryConverter,
 			request.Query,
 		); err != nil {
 			return nil, err
@@ -4546,9 +4549,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		case *batchpb.BatchOperationUnpauseActivities_Type:
 			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
 			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
+			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
+			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", sadefs.TemporalPauseInfo)
 			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
@@ -4579,13 +4582,13 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	// Add pre-define search attributes
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
 		WorkflowId:               request.GetJobId(),
-		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayload,
 		Identity:                 identity,
@@ -4722,7 +4725,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, err
 	}
 	var identity string
-	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[searchattribute.BatcherUser]
+	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser]
 	err = payload.Decode(encodedBatcherIdentity, &identity)
 	if err != nil {
 		return nil, err
@@ -4831,7 +4834,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		PageSize:      request.PageSize,
 		NextPageToken: request.GetNextPageToken(),
 		Query: fmt.Sprintf("%s = '%s'",
-			searchattribute.TemporalNamespaceDivision,
+			sadefs.TemporalNamespaceDivision,
 			batcher.NamespaceDivision,
 		),
 	})
@@ -5217,8 +5220,10 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 			}
 
 			headerSize := 0
+			lowerCaseHeaders := make(map[string]string, len(cb.Nexus.GetHeader()))
 			for k, v := range cb.Nexus.GetHeader() {
 				headerSize += len(k) + len(v)
+				lowerCaseHeaders[strings.ToLower(k)] = v
 			}
 			if headerSize > wh.config.CallbackHeaderMaxSize(ns.String()) {
 				return status.Error(
@@ -5229,6 +5234,7 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 					),
 				)
 			}
+			cb.Nexus.Header = lowerCaseHeaders
 		case *commonpb.Callback_Internal_:
 			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
 			continue
@@ -5607,14 +5613,14 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commo
 		return nil
 	}
 
-	delete(fields, searchattribute.TemporalSchedulePaused)
+	delete(fields, sadefs.TemporalSchedulePaused)
 	delete(fields, "TemporalScheduleInfoJSON") // used by older version, clean this up if present
 	// these aren't schedule-related but they aren't relevant to the user for
 	// scheduler workflows since it's the server worker
-	delete(fields, searchattribute.BinaryChecksums)
-	delete(fields, searchattribute.BuildIds)
+	delete(fields, sadefs.BinaryChecksums)
+	delete(fields, sadefs.BuildIds)
 	// all schedule workflows should be in this namespace division so there's no need to include it
-	delete(fields, searchattribute.TemporalNamespaceDivision)
+	delete(fields, sadefs.TemporalNamespaceDivision)
 
 	if len(fields) == 0 {
 		return nil
@@ -6022,23 +6028,36 @@ func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	if err != nil {
 		return nil, err
 	}
-	// Validation: prohibit setting rate limit on workflow task queues
-	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+
+	// Validate rate limits
+	queueRateLimit := request.GetUpdateQueueRateLimit()
+	if queueRateLimit.GetRateLimit() != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, serviceerror.NewInvalidArgument("Setting rate limit on workflow task queues is not allowed.")
 	}
-	queueRateLimit := request.GetUpdateQueueRateLimit()
-	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
-	// Validate rate limits
 	if err := validateRateLimit(queueRateLimit, "UpdateQueueRateLimit"); err != nil {
 		return nil, err
+	}
+	fairnessKeyRateLimitDefault := request.GetUpdateFairnessKeyRateLimitDefault()
+	if fairnessKeyRateLimitDefault.GetRateLimit() != nil && request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return nil, serviceerror.NewInvalidArgument("Setting fairness key rate limit on workflow task queues is not allowed.")
 	}
 	if err := validateRateLimit(fairnessKeyRateLimitDefault, "UpdateFairnessKeyRateLimitDefault"); err != nil {
 		return nil, err
 	}
+
 	// Validate identity field
 	if err := validateStringField("Identity", request.GetIdentity(), wh.config.MaxIDLengthLimit(), false); err != nil {
 		return nil, err
 	}
+
+	// Validate Fairness Weight Updates
+	setFairnessWeightOverrides := request.GetSetFairnessWeightOverrides()
+	unsetFairnessWeightOverrides := request.GetUnsetFairnessWeightOverrides()
+	limit := wh.config.MaxFairnessWeightOverrideConfigLimit(request.GetNamespace(), request.TaskQueue, request.TaskQueueType)
+	if err := validateFairnessWeightUpdate(setFairnessWeightOverrides, unsetFairnessWeightOverrides, limit); err != nil {
+		return nil, err
+	}
+
 	resp, err := wh.matchingClient.UpdateTaskQueueConfig(ctx, &matchingservice.UpdateTaskQueueConfigRequest{
 		NamespaceId:           namespaceID.String(),
 		UpdateTaskqueueConfig: request,
@@ -6103,4 +6122,32 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 	return &workflowservice.DescribeWorkerResponse{
 		WorkerInfo: resp.GetWorkerInfo(),
 	}, nil
+}
+
+// PauseWorkflowExecution pauses a workflow execution.
+func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *workflowservice.PauseWorkflowExecutionRequest) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.WorkflowPauseEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", request.GetNamespace())
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, historyErr := wh.historyClient.PauseWorkflowExecution(ctx, &historyservice.PauseWorkflowExecutionRequest{
+		NamespaceId:  namespaceID.String(),
+		PauseRequest: request,
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+
+	return &workflowservice.PauseWorkflowExecutionResponse{}, nil
 }

@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -31,6 +33,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
@@ -107,6 +110,17 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		config,
 	)
 
+	// Set up expectations on the SearchAttributesMapper mocks created by NewTestContext
+	mockMapper := searchattribute.NewMockMapper(s.controller)
+	mockMapper.EXPECT().GetFieldName(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(alias string, _ string) (string, error) {
+			return alias, nil
+		},
+	).AnyTimes()
+
+	mockMapperProvider := s.mockShard.Resource.SearchAttributesMapperProvider
+	mockMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(mockMapper, nil).AnyTimes()
+
 	reg := hsm.NewRegistry()
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
@@ -116,6 +130,8 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	err = chasmRegistry.Register(&chasm.CoreLibrary{})
 	s.NoError(err)
 	err = chasmRegistry.Register(&testChasmLibrary{})
+	s.NoError(err)
+	err = chasmRegistry.Register(chasmworkflow.NewLibrary())
 	s.NoError(err)
 
 	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
@@ -251,7 +267,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 			parentExecution,
 			rootExecution,
 			map[string]any{
-				searchattribute.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
+				sadefs.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
 			},
 		),
 	).Return(nil)
@@ -338,7 +354,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 			parentExecution,
 			rootExecution,
 			map[string]any{
-				searchattribute.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
+				sadefs.BuildIds: []string{worker_versioning.UnversionedSearchAttribute},
 			},
 		),
 	).Return(nil)
@@ -609,15 +625,18 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 
 			s.Len(request.SearchAttributes.IndexedFields, 2)
 
-			v, ok := request.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision]
+			v, ok := request.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision]
 			s.True(ok)
-			var actualArchetype string
-			err := payload.Decode(v, &actualArchetype)
+			var actualArchetypeIDStr string
+			err := payload.Decode(v, &actualArchetypeIDStr)
 			s.NoError(err)
-			s.Equal("TestLibrary.test_component", actualArchetype)
+			expectedArchetypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
+			s.True(ok)
+			s.Equal(strconv.FormatUint(uint64(expectedArchetypeID), 10), actualArchetypeIDStr)
 
 			var paused bool
-			err = payload.Decode(request.SearchAttributes.IndexedFields[testComponentPausedSAName], &paused)
+			// SearchAttribute now uses field name (TemporalBool01) instead of alias (PausedSA)
+			err = payload.Decode(request.SearchAttributes.IndexedFields["TemporalBool01"], &paused)
 			s.NoError(err)
 			s.True(paused)
 
@@ -695,6 +714,11 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 	data, err := visibilityComponentData.Marshal()
 	s.NoError(err)
 
+	testComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
+	s.True(ok)
+	visComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&chasm.Visibility{})
+	s.True(ok)
+
 	chasmNodes := map[string]*persistencespb.ChasmNode{
 		"": {
 			Metadata: &persistencespb.ChasmNodeMetadata{
@@ -702,7 +726,7 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "TestLibrary.test_component",
+						TypeId: testComponentTypeID,
 					},
 				},
 			},
@@ -714,7 +738,7 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-						Type: "core.vis",
+						TypeId: visComponentTypeID,
 					},
 				},
 			},
@@ -742,6 +766,9 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmVisTask(
 	data, err := visTaskData.Marshal()
 	s.NoError(err)
 
+	visTaskTypeID, ok := s.mockShard.ChasmRegistry().TaskIDFor(&persistencespb.ChasmVisibilityTaskData{})
+	s.True(ok)
+
 	return &tasks.ChasmTask{
 		WorkflowKey:         key,
 		VisibilityTimestamp: time.Now().UTC(),
@@ -751,7 +778,7 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmVisTask(
 			ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 			Path:                                   []string{"Visibility"},
-			Type:                                   "core.visTask",
+			TypeId:                                 visTaskTypeID,
 			Data: &commonpb.DataBlob{
 				Data:         data,
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
@@ -905,6 +932,8 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetClusterMetadata(),
+		s.mockShard.ChasmRegistry(),
+		queues.GetTaskTypeTagValue,
 		nil,
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,

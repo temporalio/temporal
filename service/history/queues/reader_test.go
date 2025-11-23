@@ -9,15 +9,19 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
 
@@ -26,9 +30,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller      *gomock.Controller
-		mockScheduler   *MockScheduler
-		mockRescheduler *MockRescheduler
+		controller            *gomock.Controller
+		mockScheduler         *MockScheduler
+		mockRescheduler       *MockRescheduler
+		mockClusterMetadata   *cluster.MockMetadata
+		mockNamespaceRegistry *namespace.MockRegistry
 
 		logger            log.Logger
 		metricsHandler    metrics.Handler
@@ -48,6 +54,10 @@ func (s *readerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockScheduler = NewMockScheduler(s.controller)
 	s.mockRescheduler = NewMockRescheduler(s.controller)
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
@@ -61,8 +71,10 @@ func (s *readerSuite) SetupTest() {
 			nil,
 			NewNoopPriorityAssigner(),
 			clock.NewRealTimeSource(),
-			nil,
-			nil,
+			s.mockNamespaceRegistry,
+			s.mockClusterMetadata,
+			chasm.NewRegistry(log.NewTestLogger()),
+			testTaskTagValueProvider,
 			nil,
 			metrics.NoopMetricsHandler,
 			telemetry.NoopTracer,
@@ -89,6 +101,7 @@ func (s *readerSuite) TestStartLoadStop() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -279,6 +292,7 @@ func (s *readerSuite) TestPause() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -348,6 +362,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 				mockTask := tasks.NewMockTask(s.controller)
 				mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
 				mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 				result = append(result, mockTask)
 			}
 
@@ -383,6 +398,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -415,6 +431,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -465,7 +482,7 @@ func (s *readerSuite) TestSubmitTask() {
 
 	futureFireTime := reader.timeSource.Now().Add(time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(futureFireTime, rand.Int63())).Times(1)
-	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime.Add(persistence.ScheduledTaskMinPrecision)).Times(1)
+	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime.Add(common.ScheduledTaskMinPrecision)).Times(1)
 	reader.submit(mockExecutable)
 }
 
@@ -511,4 +528,8 @@ func (s *readerSuite) newTestReader(
 		s.logger,
 		s.metricsHandler,
 	)
+}
+
+func testTaskTagValueProvider(_ tasks.Task, _ bool, _ *chasm.Registry) string {
+	return "testTaskType"
 }

@@ -30,7 +30,6 @@ import (
 
 const (
 	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
-	firstWorkflowTaskVerificationFailedMsg     = "Failed to verify first workflow task scheduled"
 )
 
 type (
@@ -80,7 +79,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
+	taskType := queues.GetStandbyTransferTaskTypeTagValue(task, t.shardContext.ChasmRegistry())
 	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
@@ -162,8 +161,12 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
-		if activityInfo.Stamp != transferTask.Stamp || activityInfo.Paused {
-			return nil, nil // drop the task
+		if activityInfo.Paused {
+			return nil, nil
+		}
+
+		if activityInfo.Stamp != transferTask.Stamp {
+			return nil, consts.ErrStaleReference
 		}
 
 		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
@@ -200,6 +203,9 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		wtInfo := mutableState.GetWorkflowTaskByID(transferTask.ScheduledEventID)
 		if wtInfo == nil {
 			return nil, nil
+		}
+		if transferTask.Stamp != wtInfo.Stamp {
+			return nil, consts.ErrStaleReference
 		}
 
 		_, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
@@ -521,9 +527,12 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	}
 	defer func() {
 		var verificationErr *verificationErr
-		if retError == consts.ErrTaskRetry || errors.As(retError, &verificationErr) {
+		switch {
+		case retError == consts.ErrTaskRetry,
+			errors.Is(retError, consts.ErrStaleReference),
+			errors.As(retError, &verificationErr):
 			release(nil)
-		} else {
+		default:
 			release(retError)
 		}
 	}()
@@ -558,10 +567,14 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
+	activityTask, ok := task.(*tasks.ActivityTask)
+	if !ok {
+		return serviceerror.NewInternal("task is not an ActivityTask")
+	}
 	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
-		task.(*tasks.ActivityTask),
+		activityTask,
 		pushActivityInfo.activityTaskScheduleToStartTimeout,
 		pushActivityInfo.versionDirective,
 		pushActivityInfo.priority,
