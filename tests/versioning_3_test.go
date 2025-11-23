@@ -73,30 +73,38 @@ type Versioning3Suite struct {
 	useV32                    bool
 	deploymentWorkflowVersion workerdeployment.DeploymentWorkflowVersion
 	useRevisionNumbers        bool
-	// TODO: this is always false. clean it up.
-	useNewDeploymentData bool
+	useNewDeploymentData      bool
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	t.Run("basic", func(t *testing.T) {
-		suite.Run(t, &Versioning3Suite{useV32: true})
-	})
-
-	t.Run("async_deployment", func(t *testing.T) {
+	t.Run("sync_old_deployment_data", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.InitialVersion,
 			useV32:                    true,
-			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			useNewDeploymentData:      false,
+			useRevisionNumbers:        false,
 		})
 	})
 
-	t.Run("async_deployment_with_revisions", func(t *testing.T) {
+	t.Run("async_new_deployment_data", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
-			useV32:                    true,
 			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			useV32:                    true,
+			useNewDeploymentData:      true,
+			useRevisionNumbers:        false,
+		})
+	})
+
+	t.Run("async_new_deployment_data_and_revisions", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			useV32:                    true,
 			useRevisionNumbers:        true,
+			useNewDeploymentData:      true,
 		})
 	})
+
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -2855,6 +2863,74 @@ func (s *Versioning3Suite) syncTaskQueueDeploymentDataWithRoutingConfig(
 	s.NoError(err)
 }
 
+// rollbackTaskQueueToVersion simulates routing config lag by rolling back the task queue user data
+// to an older version with revision number 0. This is used to test that workflows correctly use
+// inherited revision numbers instead of falling back to the (stale) current task queue version.
+func (s *Versioning3Suite) rollbackTaskQueueToVersion(
+	tv0 *testvars.TestVars,
+	timeAdjustment time.Duration,
+	verify bool,
+	tqTypes ...enumspb.TaskQueueType,
+) {
+	// Get current task queue user data
+	currentData, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:   s.NamespaceID().String(),
+		TaskQueue:     tv0.TaskQueue().GetName(),
+		TaskQueueType: tqTypeWf,
+	})
+	s.NoError(err)
+
+	// Build per-type data for each requested task queue type
+	perTypeData := make(map[int32]*persistencespb.TaskQueueTypeUserData)
+	for _, tqType := range tqTypes {
+		perTypeData[int32(tqType)] = &persistencespb.TaskQueueTypeUserData{
+			DeploymentData: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					tv0.DeploymentVersion().GetDeploymentName(): {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
+							CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(timeAdjustment)),
+							RevisionNumber:            0,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							tv0.DeploymentVersion().GetBuildId(): {
+								Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	// Update task queue user data with rolled-back version
+	_, err = s.GetTestCluster().MatchingClient().UpdateTaskQueueUserData(context.Background(), &matchingservice.UpdateTaskQueueUserDataRequest{
+		NamespaceId: s.NamespaceID().String(),
+		TaskQueue:   tv0.TaskQueue().GetName(),
+		UserData: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: perTypeData,
+			},
+			Version: currentData.GetUserData().GetVersion(),
+		},
+	})
+	s.NoError(err)
+
+	// Optionally verify that the rollback propagated
+	if verify {
+		s.Eventually(func() bool {
+			ms, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   s.NamespaceID().String(),
+				TaskQueue:     tv0.TaskQueue().GetName(),
+				TaskQueueType: tqTypeWf,
+			})
+			s.NoError(err)
+			current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
+			return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+}
+
 func (s *Versioning3Suite) syncTaskQueueDeploymentData(
 	tv *testvars.TestVars,
 	isCurrent bool,
@@ -3549,6 +3625,8 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 					versions := workerDeploymentData.GetVersions()
 					for buildID, versionData := range versions {
 						if buildID == tv.DeploymentVersion().GetBuildId() && status == versionStatus(versionData.GetStatus()) {
+							routingConfig := workerDeploymentData.GetRoutingConfig()
+							fmt.Println("Seeing this for the status and revision number", status, versionData.GetStatus(), "revisionNumber:", routingConfig.GetRevisionNumber())
 							delete(remaining, pt)
 						}
 					}
@@ -4017,91 +4095,131 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *Versioning3Suite) TestChildStartsWithParentRevision_TaskQueueDoesNotLag() {
-	if !s.useNewDeploymentData {
-		s.T().Skip("This test is only supported on new deployment data")
-	}
-	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
-
-	tv := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
-	tvChild := tv.WithWorkflowIDNumber(2)
-
-	// 1) Set parent/child TQ current deployment and known revision number
-	rev := int64(1)
-	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
-		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-		RevisionNumber:            rev,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
-		tv.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
-	}, []string{}, tqTypeWf, tqTypeAct)
-
-	// 2) Parent workflow: execute a child with known ID
-	parent := func(ctx workflow.Context) error {
-		_ = workflow.ExecuteChildWorkflow(
-			workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				TaskQueue:  tv.TaskQueue().GetName(),
-				WorkflowID: tvChild.WorkflowID(),
-			}),
-			"child",
-		).Get(ctx, nil)
-		return nil
-	}
-	child := func(ctx workflow.Context) error { return nil }
-
-	w := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{
-		DeploymentOptions: worker.DeploymentOptions{Version: tv.SDKDeploymentVersion(), UseVersioning: true, DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade},
-	})
-	w.RegisterWorkflowWithOptions(parent, workflow.RegisterOptions{Name: "parent", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
-	w.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
-	s.NoError(w.Start())
-	defer w.Stop()
-
-	// 3) Start parent
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID: tv.WorkflowID(), TaskQueue: tv.TaskQueue().GetName(),
-	}, "parent")
-	s.NoError(err)
-
-	// 4) Wait for child to exist, then read its MS and assert revision
-	s.Eventually(func() bool {
-		ms, err := s.GetTestCluster().HistoryClient().GetMutableState(context.Background(),
-			&historyservice.GetMutableStateRequest{
-				NamespaceId: s.NamespaceID().String(),
-				Execution:   tvChild.WorkflowExecution()})
-		if err != nil || ms.GetVersioningInfo().GetRevisionNumber() == 0 {
-			return false
-		}
-		got := ms.GetVersioningInfo().GetRevisionNumber()
-		s.Equal(rev, got)
-		return true
-	}, 10*time.Second, 100*time.Millisecond)
-}
-
-func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
-	if !s.useNewDeploymentData {
-		s.T().Skip("This test is only supported on new deployment data")
+// TODO (Shivam): This is technically tested already by TestChildWorkflowInheritance_UnpinnedParent. However,
+// the test is present to show that revision number mechanics work as expected even when the task-queue
+// partitions have a more updated view of the current version than the mutable state of a workflow.
+func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
+	if !s.useRevisionNumbers {
+		s.T().Skip("This test is only supported on revision number mechanics")
 	}
 
-	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tvParent := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tvChild := tvParent.WithWorkflowIDNumber(2)
 
-	parentRev := int64(1) // parent TQ revision
+	// Parent workflow waits for a signal before starting the child.
+	parent := func(ctx workflow.Context) (string, error) {
+		workflow.GetSignalChannel(ctx, "startChild").Receive(ctx, nil)
+		f := workflow.ExecuteChildWorkflow(
+			workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+				TaskQueue:  tvChild.TaskQueue().GetName(),
+				WorkflowID: tvChild.WorkflowID(),
+			}),
+			"child",
+		)
 
-	// Make v1 current on parent TQ with parentRev
-	s.updateTaskQueueDeploymentDataWithRoutingConfig(tvParent, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tvParent.DeploymentVersionString()),
-		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-		RevisionNumber:            parentRev,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
-		tvParent.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
-	}, []string{}, tqTypeWf, tqTypeAct)
+		var childResult string
+		err := f.Get(ctx, &childResult)
+		return childResult, err
+	}
+	child := func(ctx workflow.Context) (string, error) {
+		return "v2", nil
+	}
+
+	// Workers on parent and child TQs. Note: Both the parent and child workflows run on the same TQ.
+	w := worker.New(s.SdkClient(), tvParent.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{Version: tvParent.SDKDeploymentVersion(), UseVersioning: true, DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade},
+	})
+	w.RegisterWorkflowWithOptions(parent, workflow.RegisterOptions{Name: "parent", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	w.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	// Also start a v2 worker, which polls on the same TQ.
+	tv2 := tvParent.WithBuildIDNumber(2)
+	w2 := worker.New(s.SdkClient(), tv2.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{Version: tv2.SDKDeploymentVersion(), UseVersioning: true, DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade},
+	})
+	w2.RegisterWorkflowWithOptions(parent, workflow.RegisterOptions{Name: "parent", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	w2.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// Set v1 as the current version for the deployment
+	s.setCurrentDeployment(tvParent)
+	// Wait for propagation to complete
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tvParent.DeploymentSeries(),
+		})
+		s.NoError(err)
+		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Start parent
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        tvParent.WorkflowID(),
+		TaskQueue: tvParent.TaskQueue().GetName(),
+	}, "parent")
+	s.NoError(err)
+
+	// Set v2 as the current version of the deployment
+	s.setCurrentDeployment(tv2)
+	// Wait for propagation to complete
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv2.DeploymentSeries(),
+		})
+		s.NoError(err)
+		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Unblock parent to start the child
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
+
+	// Verify that the child started and completed on the v2 worker.
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tvChild.WorkflowID(), "")
+		if err != nil {
+			return false
+		}
+		execInfo := desc.GetWorkflowExecutionInfo()
+
+		fmt.Println("This is the execution info: ", execInfo)
+
+		// Verify that the child workflow started and completed on the v1 worker
+		if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv2.BuildID() {
+			return false
+		}
+		if execInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+			return false
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Verify that the parent workflow completed successfully. This shall only be possible if the child workflow
+	// started and completed on the v2 worker.
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("v2", result)
+}
+
+func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
+	if !s.useRevisionNumbers {
+		s.T().Skip("This test is only supported on revision number mechanics")
+	}
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	tvParent := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvChild := tvParent.WithWorkflowIDNumber(2)
 
 	// Parent workflow waits for a signal before starting the child.
 	parent := func(ctx workflow.Context) (string, error) {
@@ -4122,7 +4240,7 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 		return "v1", nil
 	}
 
-	// Workers on parent and child TQs
+	// Workers on parent and child TQs. Note: Both the parent and child workflows run on the same TQ.
 	w := worker.New(s.SdkClient(), tvParent.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{Version: tvParent.SDKDeploymentVersion(), UseVersioning: true, DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade},
 	})
@@ -4130,6 +4248,18 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 	w.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
 	s.NoError(w.Start())
 	defer w.Stop()
+
+	// Set v1 as the current version for the deployment
+	s.setCurrentDeployment(tvParent)
+	// Wait for propagation to complete
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tvParent.DeploymentSeries(),
+		})
+		s.NoError(err)
+		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Start parent
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
@@ -4197,67 +4327,57 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 	}, 10*time.Second, 100*time.Millisecond)
 
 	//nolint:testifylint
-	go s.idlePollWorkflow(tv0Child, true, 1*time.Minute, "workflow should not go to the old deployment")
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// The child workflow should not go to this worker
+		s.idlePollWorkflow(tv0Child, true, 10*time.Second, "workflow should not go to the old deployment")
+	}()
 
 	// Unblock parent to start the child
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
 
-	// Verify that the child starts with at least the parent's revision, despite TQ lag/rollback.
+	// Verify that the child started and completed on the v1 worker.
 	s.Eventually(func() bool {
-		ms, err := s.GetTestCluster().HistoryClient().GetMutableState(context.Background(),
-			&historyservice.GetMutableStateRequest{
-				NamespaceId: s.NamespaceID().String(),
-				Execution:   tvChild.WorkflowExecution(),
-			})
-		if err != nil || ms.GetVersioningInfo() == nil {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tvChild.WorkflowID(), "")
+		if err != nil {
 			return false
 		}
-		got := ms.GetVersioningInfo().GetRevisionNumber()
-		s.Equal(parentRev, got)
+		execInfo := desc.GetWorkflowExecutionInfo()
+
+		// Verify that the child workflow started and completed on the v1 worker
+		if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tvChild.BuildID() {
+			return false
+		}
+		if execInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+			return false
+		}
 		return true
 	}, 10*time.Second, 100*time.Millisecond)
 
-	// Verify that the parent workflow completed successfully.
+	// Verify that the parent workflow completed successfully. This shall only be possible if the child workflow
+	// started and completed on the v1 worker.
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("v1", result)
+
+	wg.Wait()
 }
 
 // TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ demonstrates that a child workflow of an AutoUpgrade parent, not sharing
 // the same task queue, starts with no inherited auto upgrade info.
 func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ() {
-	if !s.useNewDeploymentData {
-		s.T().Skip("This test is only supported on new deployment data")
+	if !s.useRevisionNumbers {
+		s.T().Skip("This test is only supported on revision number mechanics")
 	}
 
-	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	// Use different task queues that are in different deployments for both parent and child
-	tvParent := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1).WithTaskQueue("parent-tq")
-	tvChild := tvParent.WithBuildIDNumber(2).WithWorkflowIDNumber(2).WithTaskQueue("child-tq")
-
-	parentRev := int64(1) // parent TQ revision
-	childRev := int64(2)  // child TQ revision. Setting it to 2 to demonstrate that the child workflow starts on this version with a revision number different from the parent.
-
-	// Make v1 current on parent TQ with parentRev
-	s.updateTaskQueueDeploymentDataWithRoutingConfig(tvParent, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tvParent.DeploymentVersionString()),
-		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-		RevisionNumber:            parentRev,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
-		tvParent.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
-	}, []string{}, tqTypeWf, tqTypeAct)
-
-	// Make v1 current on child TQ with childRev
-	s.updateTaskQueueDeploymentDataWithRoutingConfig(tvChild, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tvChild.DeploymentVersionString()),
-		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-		RevisionNumber:            childRev,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
-		tvChild.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
-	}, []string{}, tqTypeWf, tqTypeAct)
+	tvParent := testvars.New(s).WithDeploymentSeriesNumber(1).WithBuildIDNumber(1).WithWorkflowIDNumber(1).WithTaskQueue("parent-tq")
+	tvChild := tvParent.WithDeploymentSeriesNumber(2).WithBuildIDNumber(2).WithWorkflowIDNumber(2).WithTaskQueue("child-tq")
 
 	// Parent workflow waits for a signal before starting the child.
 	parent := func(ctx workflow.Context) (string, error) {
@@ -4292,6 +4412,30 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ
 	s.NoError(wChild.Start())
 	defer wChild.Stop()
 
+	// Set tvParent as the current version for the deployment
+	s.setCurrentDeployment(tvParent)
+	// Wait for propagation to complete
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tvParent.DeploymentSeries(),
+		})
+		s.NoError(err)
+		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Set tvChild as the current version for the deployment
+	s.setCurrentDeployment(tvChild)
+	// Wait for propagation to complete
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tvChild.DeploymentSeries(),
+		})
+		s.NoError(err)
+		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
+
 	// Start parent
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
@@ -4304,6 +4448,24 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ
 	// Unblock parent to start the child
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
 
+	// Verify that the child workflow started and completed on it's worker, which shall verify that no AutoUpgradeInheritedInfo was inherited.
+	s.Eventually(func() bool {
+		s.Eventually(func() bool {
+			desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, tvChild.WorkflowID(), "")
+			if err != nil {
+				return false
+			}
+			execInfo := desc.GetWorkflowExecutionInfo()
+
+			// Verify that the new run starts on the v1 worker
+			if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tvChild.BuildID() {
+				return false
+			}
+			return true
+		}, 10*time.Second, 100*time.Millisecond)
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+
 	// Verify that the parent workflow completed successfully.
 	// This shall only be possible if the child workflow started on it's worker and completed.
 	var result string
@@ -4313,26 +4475,14 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ
 
 // Tests testing continue-as-new of an AutoUpgrade workflow using revision number mechanics.
 func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumberMechanics() {
-	if !s.useNewDeploymentData {
-		s.T().Skip("This test is only supported on new deployment data")
+	if !s.useRevisionNumbers {
+		s.T().Skip("This test is only supported on revision number mechanics")
 	}
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
-
-	parentRev := int64(1) // parent TQ revision
-
-	// Make v1 current on TQ with parentRev
-	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
-		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-		RevisionNumber:            parentRev,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
-		tv1.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
-	}, []string{}, tqTypeWf, tqTypeAct)
 
 	// Workflow that waits for a signal before continuing-as-new
 	canWorkflow := func(ctx workflow.Context, attempt int) (string, error) {
@@ -4350,6 +4500,18 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 	w.RegisterWorkflowWithOptions(canWorkflow, workflow.RegisterOptions{Name: "canWorkflow", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
 	s.NoError(w.Start())
 	defer w.Stop()
+
+	// Set v1 to be the current version for the deployment
+	s.setCurrentDeployment(tv1)
+	// Run a describe to see if the RoutingConfig shows completed state.
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+		})
+		s.NoError(err)
+		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Start workflow
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
@@ -4398,7 +4560,7 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 								tv0.DeploymentVersion().GetDeploymentName(): {
 									RoutingConfig: &deploymentpb.RoutingConfig{
 										CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv0.DeploymentVersionString()),
-										CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(time.Second)),
+										CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(-5 * time.Second)), // simulate going back in time
 										RevisionNumber:            0,
 									},
 									Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
@@ -4431,7 +4593,12 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 	}, 10*time.Second, 100*time.Millisecond)
 
 	//nolint:testifylint
-	go s.idlePollWorkflow(tv0, true, 1*time.Minute, "workflow should not go to the old deployment")
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.idlePollWorkflow(tv0, true, 10*time.Second, "workflow should not go to the old deployment")
+	}()
 
 	// Signal the workflow to trigger CAN
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "triggerCAN", nil))
@@ -4444,17 +4611,29 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 			return false
 		}
 		execInfo := desc.GetWorkflowExecutionInfo()
-		if execInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+
+		// Verify that the workflow truly CAN'ed and started a new run
+		if execInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 			newRunID = execInfo.GetExecution().GetRunId()
-			return newRunID != run.GetRunID()
+			if newRunID == run.GetRunID() {
+				return false
+			}
 		}
-		return false
+
+		// Verify that the new run starts on the v1 worker
+		if execInfo.GetVersioningInfo().GetDeploymentVersion().GetBuildId() != tv1.BuildID() {
+			return false
+		}
+
+		return true
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Verify that the workflow completed successfully on v1
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("v1", result)
+
+	wg.Wait()
 }
 
 // Verifies that a retry run starts on the same version the first run executed on,
@@ -4462,33 +4641,15 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 // If testContinueAsNew is true, tests a ContinueAsNew followed by retry; otherwise tests a direct retry of a workflow.
 // If testChildWorkflow is true, tests that a child workflow's retry doesn't bounce back (child spawned by parent with retry policy).
 func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChildWorkflow bool) {
-	if !s.useNewDeploymentData {
-		s.T().Skip("This test is only supported on new deployment data")
+	if !s.useRevisionNumbers {
+		s.T().Skip("This test is only supported on revision number mechanics")
 	}
 
-	s.OverrideDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 	tv0 := tv1.WithBuildIDNumber(0)
-
-	// Make v1 current and propagate using the routing config
-	s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
-		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-		RevisionNumber:            1,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
-		tv1.DeploymentVersion().GetBuildId(): {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT},
-	}, []string{}, tqTypeWf, tqTypeAct)
-
-	// Ensure v0 poller never received a task throughout the test
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		s.idlePollWorkflow(tv0, true, 10*time.Second, "v0 poller should not receive a task")
-	}()
 
 	childWorkflowID := tv1.WorkflowID() + "-child"
 
@@ -4591,6 +4752,18 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 	w1.RegisterActivityWithOptions(act, activity.RegisterOptions{Name: "act"})
 	s.NoError(w1.Start())
 	defer w1.Stop()
+
+	// Set v1 to be the current version for the deployment
+	s.setCurrentDeployment(tv1)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// Ensure v0 poller never received a task throughout the test
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.idlePollWorkflow(tv0, true, 10*time.Second, "v0 poller should not receive a task")
+	}()
 
 	var wfID string
 	var runIDBeforeRetry string

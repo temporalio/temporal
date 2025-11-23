@@ -404,7 +404,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 			nil,
 			time.Now().UTC(),
 			nil,
-			0,
 		),
 	)
 	if err != nil {
@@ -672,7 +671,6 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 					nil,
 					time.Now().UTC(),
 					nil,
-					0,
 				),
 			},
 		}
@@ -3156,7 +3154,6 @@ func (wh *WorkflowHandler) CreateSchedule(
 			nil,
 			time.Now().UTC(),
 			nil,
-			0,
 		),
 	)
 
@@ -4613,8 +4610,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			nil,
 			nil,
 			time.Now().UTC(),
-			nil, // source deployment version
-			0,   // source deployment revision number
+			nil,
 		),
 	)
 	if err != nil {

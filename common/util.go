@@ -536,8 +536,7 @@ func CreateHistoryStartWorkflowRequest(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	now time.Time,
-	sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
-	sourceDeploymentRevisionNumber int64,
+	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
 ) *historyservice.StartWorkflowExecutionRequest {
 	// We include the original startRequest in the forwarded request to History, but
 	// we don't want to send workflow payloads twice. We deep copy to a new struct,
@@ -560,6 +559,7 @@ func CreateHistoryStartWorkflowRequest(
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
+	histRequest.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
@@ -573,15 +573,6 @@ func CreateHistoryStartWorkflowRequest(
 
 	if timestamp.DurationValue(startRequest.GetWorkflowStartDelay()) > 0 {
 		histRequest.FirstWorkflowTaskBackoff = startRequest.GetWorkflowStartDelay()
-	}
-
-	// Populate the inherited auto upgrade info only if the source deployment version and revision number are not nil
-	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
-		inheritedAutoUpgradeInfo := &deploymentpb.InheritedAutoUpgradeInfo{
-			SourceDeploymentVersion:        sourceDeploymentVersion,
-			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
-		}
-		histRequest.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
 	}
 
 	return histRequest

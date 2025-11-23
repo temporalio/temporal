@@ -1231,21 +1231,29 @@ func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 
 	dcValue := pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String())
 
-	// Debug logging to track DC value
-	fmt.Printf("[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeployment=%s, targetRevision=%d, taskRevision=%d\n",
-		dcValue, targetDeployment.GetBuildId(), targetDeploymentRevisionNumber, taskDirectiveRevisionNumber)
-
 	if pm.engine != nil && dcValue {
 		if targetDeployment.GetSeriesName() != taskDeployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+
+			// Debug logging to track DC value
+			fmt.Printf("(TARGET-Deployment):[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeploymentRevisionNumber=%d, taskDirectiveRevisionNumber=%d, Going to deployment=%s\n",
+				dcValue, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber, targetDeployment.GetBuildId())
 			return q, targetDeploymentRevisionNumber, err
 		}
+
+		// Debug logging to track DC value
+		fmt.Printf("(TASK-Deployment):[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeploymentRevisionNumber=%d, taskDirectiveRevisionNumber=%d, Going to deployment=%s\n",
+			dcValue, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber, taskDeployment.GetBuildId())
 		q, err := pm.getVersionedQueue(ctx, "", "", taskDeployment, true)
 		return q, taskDirectiveRevisionNumber, err
 	}
 
 	// When not using revision number mechanics, always choose the targetDeployment.
 	q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
+
+	// Debug logging to track DC value
+	fmt.Printf("(TARGET-Deployment):[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeploymentRevisionNumber=%d, taskDirectiveRevisionNumber=%d, Going to deployment=%s\n",
+		dcValue, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber, targetDeployment.GetBuildId())
 	return q, targetDeploymentRevisionNumber, err
 }
 
