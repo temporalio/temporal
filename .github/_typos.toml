@@ -50,6 +50,10 @@ AVAILABILTY = "AVAILABILTY"
 Heartbeart = "Heartbeart"
 heartbeart = "heartbeart"
 
+Invoke = "Invoke"
+invoke = "invoke"
+Invokable = "Invokable"
+
 [files]
 # Exclude generated protobuf files
 extend-exclude = [
