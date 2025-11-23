@@ -64,7 +64,6 @@ type loadOptions struct {
 	zone            string
 	configFilePath  string
 	useEmbeddedOnly bool
-	envMap          map[string]string
 }
 
 type loadOption func(*loadOptions)
@@ -117,31 +116,19 @@ func WithEmbedded() loadOption {
 	}
 }
 
-// WithEnvMap provides a custom environment variable map for template rendering.
-// If not provided, the loader will use os.Environ() to populate environment variables.
-func WithEnvMap(envMap map[string]string) loadOption {
-	return func(o *loadOptions) {
-		if envMap != nil {
-			o.envMap = envMap
-		}
-	}
-}
-
 // Load loads and validates the Temporal server configuration.
 // It supports multiple loading strategies based on the provided options:
 //   - Embedded template with environment variables (WithEmbedded)
 //   - Single config file (WithConfigFile)
 //   - Legacy hierarchical config directory (WithConfigDir, WithEnv, WithZone)
 //
-// Configuration files can be templated using Go template syntax with dockerize-compatible
+// Configuration files can be templated using Go template syntax with sprig-compatible
 // functions. To enable templating, add "# enable-template" comment in the first 1KB of the file.
 //
 // Returns the loaded configuration or an error if loading or validation fails.
 func Load(opts ...loadOption) (*Config, error) {
 	cfg := &Config{}
-	options := &loadOptions{
-		envMap: loadEnvMap(),
-	}
+	options := &loadOptions{}
 
 	for _, opt := range opts {
 		opt(options)
@@ -154,13 +141,10 @@ func Load(opts ...loadOption) (*Config, error) {
 }
 
 func (opts *loadOptions) load(config any) error {
-	if opts.envMap == nil {
-		opts.envMap = loadEnvMap()
-	}
 
 	if opts.useEmbeddedOnly {
 		stdlog.Println("Loading configuration from environment variables only")
-		return loadAndUnmarshalContent(embeddedConfigTemplate, "config_template_embedded.yaml", opts.envMap, config)
+		return loadAndUnmarshalContent(embeddedConfigTemplate, "config_template_embedded.yaml", config)
 	}
 
 	if opts.configFilePath != "" {
@@ -168,7 +152,7 @@ func (opts *loadOptions) load(config any) error {
 		if err != nil {
 			return err
 		}
-		return loadAndUnmarshalContent(content, filepath.Base(opts.configFilePath), opts.envMap, config)
+		return loadAndUnmarshalContent(content, filepath.Base(opts.configFilePath), config)
 	}
 	return opts.loadLegacy(config)
 
@@ -215,7 +199,7 @@ func (opts *loadOptions) loadLegacy(config any) error {
 			return err
 		}
 
-		processedData, err := processConfigFile(data, filepath.Base(f), opts.envMap)
+		processedData, err := processConfigFile(data, filepath.Base(f))
 		if err != nil {
 			return err
 		}
@@ -240,7 +224,7 @@ func readConfigFile(path string) ([]byte, error) {
 }
 
 // processConfigFile processes a config file, rendering it as a template if enabled
-func processConfigFile(data []byte, filename string, envMap map[string]string) ([]byte, error) {
+func processConfigFile(data []byte, filename string) ([]byte, error) {
 	// If the config file contains "enable-template" in a comment within the first 1KB, then
 	// we will treat the file as a template and render it.
 	templating, err := checkTemplatingEnabled(data)
@@ -253,74 +237,13 @@ func processConfigFile(data []byte, filename string, envMap map[string]string) (
 	}
 
 	stdlog.Printf("Processing config file as template; filename=%v\n", filename)
-	return renderTemplate(data, filename, envMap)
-}
-
-// templateContext mimics dockerize's Context struct to support .Env.VAR_NAME syntax.
-// In dockerize, .Env is a method that returns the environment map, allowing dot-based access.
-type templateContext struct {
-	envMap map[string]string
-}
-
-// Env returns the environment variable map, matching dockerize's Context.Env() method.
-// This allows templates to use .Env.VAR_NAME syntax for environment variable access.
-func (c *templateContext) Env() map[string]string {
-	return c.envMap
-}
-
-// defaultValue implements dockerize-compatible default handling.
-// This properly handles nil values from missing map keys when using .Env.VAR syntax.
-// Args order: value first, default second (e.g., {{ default .Env.VAR "fallback" }})
-func defaultValue(args ...any) (string, error) {
-	if len(args) == 0 {
-		return "", errors.New("default called with no values")
-	}
-
-	if len(args) > 0 {
-		if args[0] != nil {
-			val, ok := args[0].(string)
-			if !ok {
-				return "", errors.New("first argument is not a string")
-			}
-			return val, nil
-		}
-	}
-
-	if len(args) > 1 {
-		if args[1] == nil {
-			return "", errors.New("default called with nil default value")
-		}
-
-		val, ok := args[1].(string)
-		if !ok {
-			return "", errors.New("default is not a string value, hint: surround it w/ double quotes")
-		}
-
-		return val, nil
-	}
-
-	return "", errors.New("default called with no default value")
-}
-
-// renderTemplate renders a config file as a Go template with environment variables.
-// It uses dockerize-compatible template functions and supports .Env.VAR syntax.
-func renderTemplate(data []byte, filename string, envMap map[string]string) ([]byte, error) {
-	templateFuncs := sprig.FuncMap()
-	// Override sprig's default with dockerize's implementation that properly handles
-	// nil values from missing environment variables
-	templateFuncs["default"] = defaultValue
-
-	// Create a context with Env() method that returns the environment map
-	// Templates access environment variables using .Env.VAR_NAME syntax
-	ctx := &templateContext{envMap: envMap}
-
-	tpl, err := template.New(filename).Funcs(templateFuncs).Parse(string(data))
+	tpl, err := template.New(filename).Funcs(sprig.FuncMap()).Parse(string(data))
 	if err != nil {
 		return nil, err
 	}
 
 	var rendered bytes.Buffer
-	err = tpl.Execute(&rendered, ctx)
+	err = tpl.Execute(&rendered, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -328,8 +251,8 @@ func renderTemplate(data []byte, filename string, envMap map[string]string) ([]b
 	return rendered.Bytes(), nil
 }
 
-func loadAndUnmarshalContent(content []byte, filename string, envMap map[string]string, config any) error {
-	processed, err := processConfigFile(content, filename, envMap)
+func loadAndUnmarshalContent(content []byte, filename string, config any) error {
+	processed, err := processConfigFile(content, filename)
 	if err != nil {
 		return fmt.Errorf("failed to process config file %s: %w", filename, err)
 	}
