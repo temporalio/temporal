@@ -334,15 +334,19 @@ func (e *ChasmEngine) PollComponent(
 		select {
 		case <-ch:
 			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
-			if err == nil {
-				func() {
-					defer executionLease.GetReleaseFn()(nil)
-					satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
-					if err == nil && satisfiedRef == nil {
-						ch, err = e.notifier.Subscribe(requestRef.EntityKey)
-					}
-				}()
+			if err != nil {
+				if errors.Is(err, ctx.Err()) {
+					return nil, nil
+				}
+				return nil, err
 			}
+			func() {
+				defer executionLease.GetReleaseFn()(nil)
+				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
+				if err == nil && satisfiedRef == nil {
+					ch, err = e.notifier.Subscribe(requestRef.EntityKey)
+				}
+			}()
 			if err != nil {
 				if errors.Is(err, ctx.Err()) {
 					return nil, nil
