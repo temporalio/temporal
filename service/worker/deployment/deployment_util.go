@@ -83,7 +83,7 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 // in the input string
 func escapeChar(s string) string {
 	s = strings.Replace(s, DeploymentWorkflowIDEscape, DeploymentWorkflowIDEscape+DeploymentWorkflowIDEscape, -1)
-	s = strings.Replace(s, DeploymentWorkflowIDDelimiter, DeploymentWorkflowIDEscape+DeploymentWorkflowIDDelimeter, -1)
+	s = strings.ReplaceAll(s, DeploymentWorkflowIDDelimiter, DeploymentWorkflowIDEscape+DeploymentWorkflowIDDelimiter)
 	return s
 }
 
