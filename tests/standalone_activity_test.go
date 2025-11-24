@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -69,7 +68,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 		Name: "test-activity-type",
 	}
 	input := createDefaultInput()
-	taskQueue := uuid.New().String()
+	taskQueue := testcore.RandomizeStr(t.Name())
 
 	resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:    s.Namespace().String(),
@@ -114,7 +113,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	defer cancel()
 
 	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := uuid.New().String()
+	taskQueue := testcore.RandomizeStr(t.Name())
 
 	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
@@ -229,7 +228,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := uuid.New().String()
+	taskQueue := testcore.RandomizeStr(t.Name())
 
 	startResp, err := s.startActivity(ctx, activityID, taskQueue)
 	require.NoError(t, err)
@@ -262,7 +261,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := uuid.New().String()
+	taskQueue := testcore.RandomizeStr(t.Name())
 
 	startResp, err := s.startActivity(ctx, activityID, taskQueue)
 	require.NoError(t, err)
