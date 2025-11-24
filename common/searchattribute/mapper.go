@@ -133,7 +133,6 @@ func AliasFields(
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
 	mapped := false
-
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		if !sadefs.IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
@@ -151,7 +150,6 @@ func AliasFields(
 			}
 			return nil, err
 		}
-
 		if aliasName != saName {
 			mapped = true
 		}

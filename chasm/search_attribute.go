@@ -450,7 +450,7 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 // If the value is not found, the zero value for the type T is returned and the second return value is false.
 // Before casting the VisibilityValue to the target type, the value is checked to ensure it is of the correct type.
 // If the value is found but the type does not match, the zero value for the type T is returned and the second return value is false.
-func Get[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
+func GetSearchAttributeValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
 	var zero T
 	if m.values == nil {
 		return zero, false

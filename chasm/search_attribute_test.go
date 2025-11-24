@@ -30,51 +30,51 @@ func TestSearchAttributesMap_Get(t *testing.T) {
 	m := NewSearchAttributesMap(values)
 
 	t.Run("GetBool", func(t *testing.T) {
-		val, ok := Get(m, boolAttr)
+		val, ok := GetSearchAttributeValue(m, boolAttr)
 		assert.True(t, ok)
 		assert.True(t, val)
 	})
 
 	t.Run("GetInt64", func(t *testing.T) {
-		val, ok := Get(m, intAttr)
+		val, ok := GetSearchAttributeValue(m, intAttr)
 		assert.True(t, ok)
 		assert.Equal(t, int64(42), val)
 	})
 
 	t.Run("GetFloat64", func(t *testing.T) {
-		val, ok := Get(m, doubleAttr)
+		val, ok := GetSearchAttributeValue(m, doubleAttr)
 		assert.True(t, ok)
 		assert.InDelta(t, 3.14, val, 0.0001)
 	})
 
 	t.Run("GetString", func(t *testing.T) {
-		val, ok := Get(m, keywordAttr)
+		val, ok := GetSearchAttributeValue(m, keywordAttr)
 		assert.True(t, ok)
 		assert.Equal(t, "active", val)
 	})
 
 	t.Run("GetTime", func(t *testing.T) {
-		val, ok := Get(m, datetimeAttr)
+		val, ok := GetSearchAttributeValue(m, datetimeAttr)
 		assert.True(t, ok)
 		assert.True(t, now.Equal(val))
 	})
 
 	t.Run("GetStringSlice", func(t *testing.T) {
-		val, ok := Get(m, keywordListAttr)
+		val, ok := GetSearchAttributeValue(m, keywordListAttr)
 		assert.True(t, ok)
 		assert.Equal(t, []string{"tag1", "tag2"}, val)
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
 		missingAttr := NewSearchAttributeBool("missing", SearchAttributeFieldBool02)
-		val, ok := Get(m, missingAttr)
+		val, ok := GetSearchAttributeValue(m, missingAttr)
 		assert.False(t, ok)
 		assert.False(t, val)
 	})
 
 	t.Run("NilMap", func(t *testing.T) {
 		emptyMap := NewSearchAttributesMap(nil)
-		val, ok := Get(emptyMap, boolAttr)
+		val, ok := GetSearchAttributeValue(emptyMap, boolAttr)
 		assert.False(t, ok)
 		assert.False(t, val)
 	})
