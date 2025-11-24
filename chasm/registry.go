@@ -157,6 +157,8 @@ func (r *Registry) componentOf(componentGoType reflect.Type) (*RegistrableCompon
 }
 
 // ArchetypeIDOf returns the ArchetypeID for the given component Go type.
+// This method should only be used by CHASM framework internal,
+// NOT CHASM library developers.
 func (r *Registry) ArchetypeIDOf(componentGoType reflect.Type) (ArchetypeID, bool) {
 	rc, ok := r.componentByGoType[componentGoType]
 	if !ok {

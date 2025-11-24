@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	UserMemoPrefix  = "__user__"
-	ChasmMemoPrefix = "__chasm__"
+	UserMemoKey  = "__user__"
+	ChasmMemoKey = "__chasm__"
 
 	visibilityComponentType = "core.vis"
 	visibilityTaskType      = "core.visTask"
@@ -80,9 +80,9 @@ func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.Indexe
 	return v.saTypeMap
 }
 
-// GetType returns the type of a CHASM search attribute field.
+// ValueType returns the type of a CHASM search attribute field.
 // Returns an error if the field is not found in the type map.
-func (v *VisibilitySearchAttributesMapper) GetType(fieldName string) (enumspb.IndexedValueType, error) {
+func (v *VisibilitySearchAttributesMapper) ValueType(fieldName string) (enumspb.IndexedValueType, error) {
 	if v == nil {
 		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
 	}

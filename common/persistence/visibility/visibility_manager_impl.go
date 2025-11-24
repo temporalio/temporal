@@ -147,12 +147,12 @@ func (p *visibilityManagerImpl) ListWorkflowExecutions(
 func (p *visibilityManagerImpl) ListChasmExecutions(
 	ctx context.Context,
 	request *manager.ListChasmExecutionsRequest,
-) (*manager.ListChasmExecutionsResponse, error) {
+) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
 	response, err := p.store.ListChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-	executions := make([]*manager.ChasmExecutionInfo, 0, len(response.Executions))
+	executions := make([]*chasm.ExecutionInfo[*commonpb.Payload], 0, len(response.Executions))
 	for _, exec := range response.Executions {
 		combinedMemo, err := deserializeMemo(exec.Memo)
 		if err != nil {
@@ -162,31 +162,32 @@ func (p *visibilityManagerImpl) ListChasmExecutions(
 		var userMemo *commonpb.Memo
 		var chasmMemoPayload *commonpb.Payload
 
-		// Check if archetype matches to decide how to split memo
-		requestedArchetypeIDStr := strconv.Itoa(int(request.ArchetypeID))
-		archetypeMatches := false
+		// Check if archetype exists to decide how to split memo, assume any number indicates an archetype id.
+		archetypeExists := false
 		if archetypePayload, ok := exec.SearchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
 			var archetypeIDStr string
 			if err := payload.Decode(archetypePayload, &archetypeIDStr); err == nil {
-				archetypeMatches = (archetypeIDStr == requestedArchetypeIDStr)
+				if _, err := strconv.Atoi(archetypeIDStr); err == nil {
+					archetypeExists = true
+				}
 			}
 		}
 
-		if archetypeMatches && combinedMemo != nil {
+		if archetypeExists && combinedMemo != nil {
 			// Archetype matches - split memo into user and chasm parts
-			userPayload := combinedMemo.Fields[chasm.UserMemoPrefix]
+			userPayload := combinedMemo.Fields[chasm.UserMemoKey]
 			if err := payload.Decode(userPayload, &userMemo); err != nil {
 				p.logger.Error("failed to decode user memo", tag.Error(err))
 				userMemo = nil
 			}
-			chasmMemoPayload = combinedMemo.Fields[chasm.ChasmMemoPrefix]
+			chasmMemoPayload = combinedMemo.Fields[chasm.ChasmMemoKey]
 		} else {
 			// Archetype doesn't match or no combined memo - return entire memo as user memo
 			userMemo = combinedMemo
 			chasmMemoPayload = nil
 		}
 
-		executions = append(executions, &manager.ChasmExecutionInfo{
+		executions = append(executions, &chasm.ExecutionInfo[*commonpb.Payload]{
 			BusinessID:             exec.WorkflowID,
 			RunID:                  exec.RunID,
 			StartTime:              exec.StartTime,
@@ -194,14 +195,14 @@ func (p *visibilityManagerImpl) ListChasmExecutions(
 			HistoryLength:          exec.HistoryLength,
 			HistorySizeBytes:       exec.HistorySizeBytes,
 			StateTransitionCount:   exec.StateTransitionCount,
-			ChasmSearchAttributes:  exec.ChasmSearchAttributes,
+			ChasmSearchAttributes:  chasm.NewSearchAttributesMap(exec.ChasmSearchAttributes),
 			CustomSearchAttributes: exec.SearchAttributes.GetIndexedFields(),
 			Memo:                   userMemo,
 			ChasmMemo:              chasmMemoPayload,
 		})
 	}
 
-	return &manager.ListChasmExecutionsResponse{
+	return &chasm.ListExecutionsResponse[*commonpb.Payload]{
 		Executions:    executions,
 		NextPageToken: response.NextPageToken,
 	}, nil

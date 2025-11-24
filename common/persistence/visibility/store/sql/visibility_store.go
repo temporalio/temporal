@@ -39,7 +39,7 @@ type (
 		enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn
 	}
 
-	listWorkflowExecutionsRequestInternal struct {
+	listExecutionsRequestInternal struct {
 		NamespaceID   namespace.ID
 		Namespace     namespace.Name
 		Query         string
@@ -207,7 +207,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 	}
 	mapper := rc.SearchAttributesMapper()
 
-	requestInternal := &listWorkflowExecutionsRequestInternal{
+	requestInternal := &listExecutionsRequestInternal{
 		NamespaceID:   request.NamespaceID,
 		Namespace:     request.Namespace,
 		Query:         request.Query,
@@ -321,7 +321,7 @@ func (s *VisibilityStore) listWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.listExecutionsInternal(ctx, &listWorkflowExecutionsRequestInternal{
+	return s.listExecutionsInternal(ctx, &listExecutionsRequestInternal{
 		NamespaceID:   request.NamespaceID,
 		Namespace:     request.Namespace,
 		Query:         request.Query,
@@ -332,7 +332,7 @@ func (s *VisibilityStore) listWorkflowExecutions(
 
 func (s *VisibilityStore) listExecutionsInternal(
 	ctx context.Context,
-	request *listWorkflowExecutionsRequestInternal,
+	request *listExecutionsRequestInternal,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	sqlQC, err := NewSQLQueryConverter(s.GetName())
 	if err != nil {
@@ -407,7 +407,7 @@ func (s *VisibilityStore) listWorkflowExecutionsLegacy(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.listExecutionsInternalLegacy(ctx, &listWorkflowExecutionsRequestInternal{
+	return s.listExecutionsInternalLegacy(ctx, &listExecutionsRequestInternal{
 		NamespaceID:   request.NamespaceID,
 		Namespace:     request.Namespace,
 		Query:         request.Query,
@@ -420,7 +420,7 @@ func (s *VisibilityStore) listWorkflowExecutionsLegacy(
 
 func (s *VisibilityStore) listExecutionsInternalLegacy(
 	ctx context.Context,
-	request *listWorkflowExecutionsRequestInternal,
+	request *listExecutionsRequestInternal,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {

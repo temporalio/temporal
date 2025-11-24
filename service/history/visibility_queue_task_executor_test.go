@@ -643,8 +643,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 			s.Len(request.Memo.Fields, 1)
 
 			// Memo should contain "__chasm__" key with encoded proto message
-			chasmMemoPayload, ok := request.Memo.Fields[chasm.ChasmMemoPrefix]
-			s.True(ok, "Expected %s key in memo", chasm.ChasmMemoPrefix)
+			chasmMemoPayload, ok := request.Memo.Fields[chasm.ChasmMemoKey]
+			s.True(ok, "Expected %s key in memo", chasm.ChasmMemoKey)
 
 			// Decode the chasm memo proto message
 			var chasmMemoProto persistencespb.WorkflowExecutionState
@@ -737,7 +737,10 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 					},
 				},
 			},
-			Data: newTestComponentStateBlob(&persistencespb.ActivityInfo{Paused: true}),
+			Data: newTestComponentStateBlob(&persistencespb.ActivityInfo{
+				Paused:     true,
+				ActivityId: key.RunID,
+			}),
 		},
 		"Visibility": {
 			Metadata: &persistencespb.ChasmNodeMetadata{

@@ -99,7 +99,6 @@ func (s *ChasmVisibilitySuite) SetupTest() {
 	s.visibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.shardContext.EXPECT().ChasmRegistry().Return(s.registry).AnyTimes()
-	s.shardContext.EXPECT().GetVisibilityManager().Return(s.visibilityManager).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
 	s.config.HistoryMaxPageSize = dynamicconfig.GetIntPropertyFnFilteredByNamespace(1000)
@@ -146,14 +145,14 @@ func (s *ChasmVisibilitySuite) TestListRuns_Success() {
 	s.NoError(err)
 
 	// Get archetype ID for the test component
-	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[visibilityTestComponent]())
+	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[*visibilityTestComponent]())
 	s.True(ok)
 
 	// Create chasm search attributes map
-	chasmSearchAttributes := map[string]chasm.VisibilityValue{
+	chasmSearchAttributes := chasm.NewSearchAttributesMap(map[string]chasm.VisibilityValue{
 		testChasmSA1Name: chasm.VisibilityValueInt64(123),
 		testChasmSA2Name: chasm.VisibilityValueString("test-value"),
-	}
+	})
 
 	// Create custom search attributes map
 	customSearchAttributes := map[string]*commonpb.Payload{
@@ -170,12 +169,11 @@ func (s *ChasmVisibilitySuite) TestListRuns_Success() {
 		Query:         query,
 	}
 
-	expectedResponse := &manager.ListChasmExecutionsResponse{
-		Executions: []*manager.ChasmExecutionInfo{
+	expectedResponse := &chasm.ListExecutionsResponse[*commonpb.Payload]{
+		Executions: []*chasm.ExecutionInfo[*commonpb.Payload]{
 			{
 				BusinessID:             testBusinessID,
 				RunID:                  testRunID,
-				ArchetypeID:            archetypeID,
 				StartTime:              testComponentStartTime,
 				CloseTime:              testComponentCloseTime,
 				HistoryLength:          100,
@@ -192,7 +190,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_Success() {
 
 	s.visibilityManager.EXPECT().
 		ListChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*manager.ListChasmExecutionsResponse, error) {
+		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
 			s.Equal(expectedRequest.ArchetypeID, req.ArchetypeID)
 			s.Equal(expectedRequest.NamespaceID, req.NamespaceID)
 			s.Equal(expectedRequest.Namespace, req.Namespace)
@@ -213,7 +211,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_Success() {
 
 	response, err := s.engine.ListExecutions(
 		ctx,
-		reflect.TypeFor[visibilityTestComponent](),
+		reflect.TypeFor[*visibilityTestComponent](),
 		request,
 	)
 
@@ -253,7 +251,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_Success() {
 	query := "StartTime > '2024-01-01T00:00:00Z'"
 
 	// Get archetype ID for the test component
-	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[visibilityTestComponent]())
+	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[*visibilityTestComponent]())
 	s.True(ok)
 
 	expectedCount := int64(42)
@@ -289,7 +287,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_Success() {
 
 	response, err := s.engine.CountExecutions(
 		ctx,
-		reflect.TypeFor[visibilityTestComponent](),
+		reflect.TypeFor[*visibilityTestComponent](),
 		request,
 	)
 
@@ -305,7 +303,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_DefaultPageSize() {
 	query := "StartTime > '2024-01-01T00:00:00Z'"
 
 	// Get archetype ID for the test component
-	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[visibilityTestComponent]())
+	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[*visibilityTestComponent]())
 	s.True(ok)
 
 	// Setup visibility manager mock - should use default page size from config
@@ -318,14 +316,14 @@ func (s *ChasmVisibilitySuite) TestListRuns_DefaultPageSize() {
 		Query:         query,
 	}
 
-	expectedResponse := &manager.ListChasmExecutionsResponse{
-		Executions:    []*manager.ChasmExecutionInfo{},
+	expectedResponse := &chasm.ListExecutionsResponse[*commonpb.Payload]{
+		Executions:    []*chasm.ExecutionInfo[*commonpb.Payload]{},
 		NextPageToken: nil,
 	}
 
 	s.visibilityManager.EXPECT().
 		ListChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*manager.ListChasmExecutionsResponse, error) {
+		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
 			s.Equal(expectedRequest.ArchetypeID, req.ArchetypeID)
 			s.Equal(expectedRequest.NamespaceID, req.NamespaceID)
 			s.Equal(expectedRequest.Namespace, req.Namespace)
@@ -344,7 +342,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_DefaultPageSize() {
 
 	response, err := s.engine.ListExecutions(
 		ctx,
-		reflect.TypeFor[visibilityTestComponent](),
+		reflect.TypeFor[*visibilityTestComponent](),
 		request,
 	)
 
@@ -405,13 +403,13 @@ func (s *ChasmVisibilitySuite) TestListRuns_VisibilityManagerError() {
 	query := "StartTime > '2024-01-01T00:00:00Z'"
 
 	// Get archetype ID for the test component
-	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[visibilityTestComponent]())
+	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[*visibilityTestComponent]())
 	s.True(ok)
 
 	// Setup visibility manager mock to return an error
 	s.visibilityManager.EXPECT().
 		ListChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*manager.ListChasmExecutionsResponse, error) {
+		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
 			s.Equal(archetypeID, req.ArchetypeID)
 			return nil, errTestVisibilityError
 		})
@@ -424,7 +422,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_VisibilityManagerError() {
 
 	response, err := s.engine.ListExecutions(
 		ctx,
-		reflect.TypeFor[visibilityTestComponent](),
+		reflect.TypeFor[*visibilityTestComponent](),
 		request,
 	)
 
@@ -439,7 +437,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_VisibilityManagerError() {
 	query := "StartTime > '2024-01-01T00:00:00Z'"
 
 	// Get archetype ID for the test component
-	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[visibilityTestComponent]())
+	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[*visibilityTestComponent]())
 	s.True(ok)
 
 	// Setup visibility manager mock to return an error
@@ -458,7 +456,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_VisibilityManagerError() {
 
 	response, err := s.engine.CountExecutions(
 		ctx,
-		reflect.TypeFor[visibilityTestComponent](),
+		reflect.TypeFor[*visibilityTestComponent](),
 		request,
 	)
 

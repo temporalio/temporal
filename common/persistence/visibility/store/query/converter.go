@@ -515,7 +515,7 @@ func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
 		if err != nil {
 			return false
 		}
-		ft, err := c.chasmMapper.GetType(fn)
+		ft, err := c.chasmMapper.ValueType(fn)
 		if err != nil {
 			return false
 		}

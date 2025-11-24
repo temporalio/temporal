@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -132,7 +134,7 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 func (m *visibilityManagerMetrics) ListChasmExecutions(
 	ctx context.Context,
 	request *manager.ListChasmExecutionsRequest,
-) (*manager.ListChasmExecutionsResponse, error) {
+) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListChasmExecutionsScope)
 	response, err := m.delegate.ListChasmExecutions(ctx, request)
 	elapsed := time.Since(startTime)

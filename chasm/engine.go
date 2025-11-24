@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -87,11 +88,6 @@ type ListExecutionsRequest struct {
 	NamespaceID   string
 	NamespaceName string
 	Query         string
-	PageSize      int
-	NextPageToken []byte
-}
-
-type ListExecutionsOptions struct {
 	PageSize      int
 	NextPageToken []byte
 }
@@ -376,7 +372,11 @@ func ListExecutions[C Component, M proto.Message](
 	// Convert response, unmarshaling ChasmMemo to type M
 	executions := make([]*ExecutionInfo[M], len(response.Executions))
 	for i, execution := range response.Executions {
-		chasmMemo := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(M)
+		chasmMemoInterface := reflect.New(reflect.TypeFor[M]().Elem()).Interface()
+		chasmMemo, ok := chasmMemoInterface.(M)
+		if !ok {
+			return nil, serviceerror.NewInternalf("failed to cast chasm memo to type %s", reflect.TypeFor[M]().String())
+		}
 		if err := proto.Unmarshal(execution.ChasmMemo.Data, chasmMemo); err == nil {
 			executions[i] = &ExecutionInfo[M]{
 				BusinessID:             execution.BusinessID,

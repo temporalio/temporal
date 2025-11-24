@@ -24,6 +24,11 @@ const (
 	customCategory
 )
 
+var (
+	system     = sadefs.System()
+	predefined = sadefs.Predefined()
+)
+
 func buildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.IndexSearchAttributes) map[string]NameTypeMap {
 	indexNameTypeMap := make(map[string]NameTypeMap, len(indexSearchAttributes))
 	for indexName, customSearchAttributes := range indexSearchAttributes {
@@ -42,8 +47,6 @@ func NewNameTypeMap(customSearchAttributes map[string]enumspb.IndexedValueType) 
 }
 
 func (m NameTypeMap) System() map[string]enumspb.IndexedValueType {
-	system := sadefs.System()
-	predefined := sadefs.Predefined()
 	allSystem := make(map[string]enumspb.IndexedValueType, len(system)+len(predefined))
 	maps.Copy(allSystem, system)
 	maps.Copy(allSystem, predefined)
@@ -55,8 +58,6 @@ func (m NameTypeMap) Custom() map[string]enumspb.IndexedValueType {
 }
 
 func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
-	system := sadefs.System()
-	predefined := sadefs.Predefined()
 	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(m.customSearchAttributes)+len(predefined))
 	maps.Copy(allSearchAttributes, system)
 	maps.Copy(allSearchAttributes, predefined)
@@ -83,7 +84,6 @@ func (m NameTypeMap) getType(name string, cat category) (enumspb.IndexedValueTyp
 		}
 	}
 	if cat|systemCategory == cat {
-		system := sadefs.System()
 		if t, isSystem := system[name]; isSystem {
 			return t, nil
 		}

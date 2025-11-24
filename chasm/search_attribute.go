@@ -385,29 +385,29 @@ func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValu
 	}
 }
 
-// SearchAttributeMap wraps search attribute values with type-safe access.
+// SearchAttributesMap wraps search attribute values with type-safe access.
 type SearchAttributesMap struct {
 	values map[string]VisibilityValue
 }
 
-// NewSearchAttributeMap creates a new SearchAttributeMap from raw values.
+// NewSearchAttributesMap creates a new SearchAttributeMap from raw values.
 func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesMap {
 	return SearchAttributesMap{values: values}
 }
 
-// GetBool returns the boolean value for a given SearchAttributeBool. If not found or map is nil, second parameter is false.
-func (m SearchAttributesMap) GetBool(sa SearchAttributeBool) (bool, bool) {
+// GetBool returns the boolean value for a given SearchAttributeBool. If not found or map is nil, found is false.
+func (m SearchAttributesMap) GetBool(sa SearchAttributeBool) (value bool, found bool) {
 	if m.values == nil {
 		return false, false
 	}
 
 	alias := sa.definition().alias
-	boolValue, ok := m.values[alias].(VisibilityValueBool)
+	boolVal, ok := m.values[alias].(VisibilityValueBool)
 	if !ok {
 		return false, false
 	}
 
-	return bool(boolValue), true
+	return bool(boolVal), true
 }
 
 // GetInt returns the int value for a given SearchAttributeInt. If not found or map is nil, second parameter is false.

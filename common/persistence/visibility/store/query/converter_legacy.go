@@ -4,6 +4,7 @@ package query
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/olivere/elastic/v7"
@@ -11,7 +12,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
 )
 
@@ -51,7 +51,7 @@ type (
 		fnInterceptor    FieldNameInterceptor
 		fvInterceptor    FieldValuesInterceptor
 		allowedOperators map[string]struct{}
-		saNameType       searchattribute.NameTypeMap
+		finalTypeMap     searchattribute.NameTypeMap
 		chasmMapper      *chasm.VisibilitySearchAttributesMapper
 	}
 
@@ -147,7 +147,7 @@ func NewComparisonExprConverter(
 	fnInterceptor FieldNameInterceptor,
 	fvInterceptor FieldValuesInterceptor,
 	allowedOperators map[string]struct{},
-	saNameType searchattribute.NameTypeMap,
+	customSaNameType searchattribute.NameTypeMap,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) ExprConverter {
 	if fnInterceptor == nil {
@@ -156,11 +156,16 @@ func NewComparisonExprConverter(
 	if fvInterceptor == nil {
 		fvInterceptor = &NopFieldValuesInterceptor{}
 	}
+
+	combinedTypeMap := maps.Clone(customSaNameType.Custom())
+	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
+	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+
 	return &comparisonExprConverter{
 		fnInterceptor:    fnInterceptor,
 		fvInterceptor:    fvInterceptor,
 		allowedOperators: allowedOperators,
-		saNameType:       saNameType,
+		finalTypeMap:     finalTypeMap,
 		chasmMapper:      chasmMapper,
 	}
 }
@@ -456,20 +461,9 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		return nil, NewConverterError("operator '%v' not allowed in comparison expression", comparisonExpr.Operator)
 	}
 
-	// Get field type, checking CHASM mapper first if applicable
-	var tp enumspb.IndexedValueType
-	if sadefs.IsChasmSearchAttribute(colName) {
-		var err error
-		tp, err = c.chasmMapper.GetType(colName)
-		if err != nil {
-			return nil, NewConverterError("invalid search attribute: %s", colName)
-		}
-	} else {
-		var err error
-		tp, err = c.saNameType.GetType(colName)
-		if err != nil {
-			return nil, err
-		}
+	tp, err := c.finalTypeMap.GetType(colName)
+	if err != nil {
+		return nil, err
 	}
 
 	var query elastic.Query

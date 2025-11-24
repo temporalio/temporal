@@ -410,6 +410,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
 			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
+			continue
 		}
 		searchattributes[fieldName] = value
 	}
@@ -424,7 +425,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		}
 	}
 
-	combinedMemo := make(map[string]*commonpb.Payload)
+	combinedMemo := make(map[string]*commonpb.Payload, 2)
 	userMemoMap := visComponent.GetMemo(visTaskContext)
 	if len(userMemoMap) > 0 {
 		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
@@ -432,7 +433,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		if err != nil {
 			return err
 		}
-		combinedMemo[chasm.UserMemoPrefix] = userMemoPayload
+		combinedMemo[chasm.UserMemoKey] = userMemoPayload
 	}
 	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
 		chasmMemo := memoProvider.Memo(visTaskContext)
@@ -441,7 +442,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 			if err != nil {
 				return err
 			}
-			combinedMemo[chasm.ChasmMemoPrefix] = chasmMemoPayload
+			combinedMemo[chasm.ChasmMemoKey] = chasmMemoPayload
 		}
 	}
 

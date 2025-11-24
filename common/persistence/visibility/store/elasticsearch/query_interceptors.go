@@ -99,7 +99,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 	var err error
 
 	if sadefs.IsChasmSearchAttribute(fieldName) {
-		fieldType, err = vi.chasmMapper.GetType(fieldName)
+		fieldType, err = vi.chasmMapper.ValueType(fieldName)
 		if err != nil {
 			return nil, query.NewConverterError("invalid search attribute: %s", name)
 		}

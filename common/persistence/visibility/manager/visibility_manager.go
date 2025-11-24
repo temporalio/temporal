@@ -34,7 +34,7 @@ type (
 
 		// Read APIs.
 		ListWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
-		ListChasmExecutions(ctx context.Context, request *ListChasmExecutionsRequest) (*ListChasmExecutionsResponse, error)
+		ListChasmExecutions(ctx context.Context, request *ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error)
 		CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
 		CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*CountChasmExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
@@ -124,13 +124,6 @@ type (
 		NextPageToken []byte
 	}
 
-	ListChasmExecutionsResponse struct {
-		Executions []*ChasmExecutionInfo
-		// Token to read next page if there are more workflow executions beyond page size.
-		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
-		NextPageToken []byte
-	}
-
 	CountChasmExecutionsRequest struct {
 		ArchetypeID chasm.ArchetypeID
 		NamespaceID namespace.ID
@@ -140,22 +133,6 @@ type (
 
 	CountChasmExecutionsResponse struct {
 		Count int64
-	}
-
-	ChasmExecutionInfo struct {
-		BusinessID           string
-		RunID                string
-		ArchetypeID          uint32
-		StartTime            time.Time
-		CloseTime            time.Time
-		HistoryLength        int64
-		HistorySizeBytes     int64
-		StateTransitionCount int64
-
-		ChasmSearchAttributes  map[string]chasm.VisibilityValue
-		CustomSearchAttributes map[string]*commonpb.Payload
-		Memo                   *commonpb.Memo
-		ChasmMemo              *commonpb.Payload
 	}
 
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions

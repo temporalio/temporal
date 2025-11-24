@@ -646,41 +646,21 @@ func (e *ChasmEngine) ListExecutions(
 		return nil, serviceerror.NewInternal("unknown chasm component type: " + archetypeType.String())
 	}
 
+	pageSize := request.PageSize
+	if pageSize <= 0 {
+		pageSize = e.config.HistoryMaxPageSize(namespace.Name(request.NamespaceName).String())
+	}
+
 	visReq := &manager.ListChasmExecutionsRequest{
 		ArchetypeID:   archetypeID,
 		NamespaceID:   namespace.ID(request.NamespaceID),
 		Namespace:     namespace.Name(request.NamespaceName),
-		PageSize:      request.PageSize,
+		PageSize:      pageSize,
 		NextPageToken: request.NextPageToken,
 		Query:         request.Query,
 	}
 
-	resp, err := e.visibilityMgr.ListChasmExecutions(ctx, visReq)
-	if err != nil {
-		return nil, err
-	}
-
-	executions := make([]*chasm.ExecutionInfo[*commonpb.Payload], len(resp.Executions))
-	for i, exec := range resp.Executions {
-		executions[i] = &chasm.ExecutionInfo[*commonpb.Payload]{
-			BusinessID:             exec.BusinessID,
-			RunID:                  exec.RunID,
-			StartTime:              exec.StartTime,
-			CloseTime:              exec.CloseTime,
-			HistoryLength:          exec.HistoryLength,
-			HistorySizeBytes:       exec.HistorySizeBytes,
-			StateTransitionCount:   exec.StateTransitionCount,
-			ChasmSearchAttributes:  chasm.NewSearchAttributesMap(exec.ChasmSearchAttributes),
-			CustomSearchAttributes: exec.CustomSearchAttributes,
-			Memo:                   exec.Memo,
-			ChasmMemo:              exec.ChasmMemo,
-		}
-	}
-
-	return &chasm.ListExecutionsResponse[*commonpb.Payload]{
-		Executions:    executions,
-		NextPageToken: resp.NextPageToken,
-	}, nil
+	return e.visibilityMgr.ListChasmExecutions(ctx, visReq)
 }
 
 // CountExecutions implements the Engine interface for visibility queries.

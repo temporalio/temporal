@@ -92,7 +92,7 @@ func tryChasmMapper(name string, chasmMapper *chasm.VisibilitySearchAttributesMa
 		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 	}
 
-	fieldType, err := chasmMapper.GetType(fieldName)
+	fieldType, err := chasmMapper.ValueType(fieldName)
 	if err != nil {
 		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 	}
