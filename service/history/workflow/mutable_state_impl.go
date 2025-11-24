@@ -2848,10 +2848,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
 	if event.GetInheritedAutoUpgradeInfo() != nil {
-		fmt.Println("INHERITED AUTO UPGRADE INFO in MS")
-		fmt.Println(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion())
-		fmt.Println(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
-
 		ms.SetVersioningRevisionNumber(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
 		if ms.executionInfo.VersioningInfo == nil {
 			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}

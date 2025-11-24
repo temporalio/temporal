@@ -853,7 +853,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
 	)
 }
 
-func (s *Versioning3Suite) TestWorkflowRetry_Pinned_lerit_RetryOfChild() {
+func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectInherit_RetryOfChild() {
 	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, true, true, false)
 }
 

@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -1074,18 +1073,6 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
 	targetDeployment := worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 
-	// if strings.Contains(targetDeployment.GetBuildId(), "build_id_0") {
-	// 	fmt.Println("current", current)
-	// 	fmt.Println("currentRevisionNumber", currentRevisionNumber)
-	// 	fmt.Println("taskDirectiveRevisionNumber", taskDirectiveRevisionNumber)
-	// 	fmt.Println("ramping", ramping)
-	// 	fmt.Println("rampingPercentage", rampingPercentage)
-	// 	fmt.Println("rampingRevisionNumber", rampingRevisionNumber)
-	// 	fmt.Println("targetDeploymentVersion", targetDeploymentVersion)
-	// 	fmt.Println("targetDeploymentRevisionNumber", targetDeploymentRevisionNumber)
-	// 	fmt.Println("targetDeployment", targetDeployment)
-	// }
-
 	var targetDeploymentQueue physicalTaskQueueManager
 	if directive.GetAssignedBuildId() == "" && targetDeployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -1229,31 +1216,17 @@ func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 	taskDirectiveRevisionNumber int64,
 ) (physicalTaskQueueManager, int64, error) {
 
-	dcValue := pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String())
-
-	if pm.engine != nil && dcValue {
+	if pm.engine != nil && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
 		if targetDeployment.GetSeriesName() != taskDeployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
-
-			// Debug logging to track DC value
-			fmt.Printf("(TARGET-Deployment):[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeploymentRevisionNumber=%d, taskDirectiveRevisionNumber=%d, Going to deployment=%s\n",
-				dcValue, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber, targetDeployment.GetBuildId())
 			return q, targetDeploymentRevisionNumber, err
 		}
-
-		// Debug logging to track DC value
-		fmt.Printf("(TASK-Deployment):[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeploymentRevisionNumber=%d, taskDirectiveRevisionNumber=%d, Going to deployment=%s\n",
-			dcValue, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber, taskDeployment.GetBuildId())
 		q, err := pm.getVersionedQueue(ctx, "", "", taskDeployment, true)
 		return q, taskDirectiveRevisionNumber, err
 	}
 
 	// When not using revision number mechanics, always choose the targetDeployment.
 	q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)
-
-	// Debug logging to track DC value
-	fmt.Printf("(TARGET-Deployment):[chooseTargetQueueByFlag] DC UseRevisionNumberForWorkerVersioning=%v, targetDeploymentRevisionNumber=%d, taskDirectiveRevisionNumber=%d, Going to deployment=%s\n",
-		dcValue, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber, targetDeployment.GetBuildId())
 	return q, targetDeploymentRevisionNumber, err
 }
 

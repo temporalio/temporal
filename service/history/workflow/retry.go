@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"slices"
 	"time"
@@ -259,10 +258,6 @@ func SetupNewWorkflowForRetryOrCron(
 	// If the previous run had an AutoUpgrade behavior, we pass down the source deployment version and revision number to the new run.
 	// Note: We only pass down one of inheritedPinnedVersion or inheritedAutoUpgradeInfo, but not both!
 	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
-
-	fmt.Println("RETRYYYY")
-	fmt.Println(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment()))
-	fmt.Println(previousMutableState.GetVersioningRevisionNumber())
 
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
