@@ -1837,6 +1837,12 @@ func (s *Versioning3Suite) TestChildWorkflowInheritance_ParentPinnedByOverride()
 	s.testChildWorkflowInheritance_ExpectInherit(false, true, vbUnpinned)
 }
 
+func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_Inherit() {
+	// the ExpectInherit helper polls on the child's task queue with the parent's version,
+	// so we expect the version to be inherited
+	s.testChildWorkflowInheritance_ExpectInherit(true, false, vbPinned)
+}
+
 func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bool, withOverride bool, parentRegistrationBehavior enumspb.VersioningBehavior) {
 	// Child wf of a pinned parent starts on the parents pinned version.
 
@@ -1917,28 +1923,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 	defer w1.Stop()
 
 	// v1 is current for both parent and child
-	// TODO (Shivam): Once #8570 goes in, we can replace this with a simple setCurrentDeployment call.
-	if s.useNewDeploymentData {
-		s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
-			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
-			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-			RevisionNumber:            1,
-		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
-			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf)
-
-		if crossTq {
-			s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1Child, &deploymentpb.RoutingConfig{
-				CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1Child.DeploymentVersionString()),
-				CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-				RevisionNumber:            1,
-			}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1Child.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
-				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-			}}, []string{}, tqTypeWf)
-		}
-	} else {
-		s.setCurrentDeployment(tv1)
-	}
+	s.setCurrentDeployment(tv1)
 
 	startOpts := sdkclient.StartWorkflowOptions{
 		ID:                  tv1.WorkflowID(),
@@ -1991,12 +1976,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bo
 
 func (s *Versioning3Suite) TestChildWorkflowInheritance_UnpinnedParent() {
 	s.testChildWorkflowInheritance_ExpectNoInherit(false, vbUnpinned)
-}
-
-func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_Inherit() {
-	// the ExpectInherit helper polls on the child's task queue with the parent's version,
-	// so we expect the version to be inherited
-	s.testChildWorkflowInheritance_ExpectInherit(true, false, vbPinned)
 }
 
 func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_NoInherit() {
@@ -2088,16 +2067,18 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	defer w1.Stop()
 
 	// v1 is current for both parent and child
-	if s.useNewDeploymentData {
-		s.updateTaskQueueDeploymentDataWithRoutingConfig(tv1, &deploymentpb.RoutingConfig{
-			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
-			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-			RevisionNumber:            1,
-		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
-			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf)
-	} else {
-		s.setCurrentDeployment(tv1)
+	s.setCurrentDeployment(tv1)
+
+	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
+	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		s.Eventually(func() bool {
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv1.DeploymentSeries(),
+			})
+			s.NoError(err)
+			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+		}, 10*time.Second, 100*time.Millisecond)
 	}
 
 	if crossTq {
@@ -2140,27 +2121,19 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	close(wfStarted)
 
 	// make v2 current for both parent and child and unblock the wf to start the child
-	if s.useNewDeploymentData {
-		s.updateTaskQueueDeploymentDataWithRoutingConfig(tv2, &deploymentpb.RoutingConfig{
-			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv2.DeploymentVersionString()),
-			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-			RevisionNumber:            2,
-		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv2.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
-			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-		}}, []string{}, tqTypeWf)
-
-		if crossTq {
-			s.updateTaskQueueDeploymentDataWithRoutingConfig(tv2Child, &deploymentpb.RoutingConfig{
-				CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv2Child.DeploymentVersionString()),
-				CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-				RevisionNumber:            2,
-			}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv2Child.DeploymentVersion().GetBuildId(): &deploymentspb.WorkerDeploymentVersionData{
-				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
-			}}, []string{}, tqTypeWf)
-		}
-	} else {
-		s.setCurrentDeployment(tv2)
+	s.setCurrentDeployment(tv2)
+	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
+	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		s.Eventually(func() bool {
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv2.DeploymentSeries(),
+			})
+			s.NoError(err)
+			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+		}, 10*time.Second, 100*time.Millisecond)
 	}
+
 	currentChanged <- struct{}{}
 
 	var out string
@@ -2228,7 +2201,12 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
-		s.verifyWorkflowVersioning(tv2, vbUnspecified, nil, nil, tv2.DeploymentVersionTransition())
+		if behavior == vbUnpinned {
+			// Unpinned CaN should inherit parent deployment version and behaviour
+			s.verifyWorkflowVersioning(tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
+		} else {
+			s.verifyWorkflowVersioning(tv2, vbUnspecified, nil, nil, tv2.DeploymentVersionTransition())
+		}
 		return "v2", nil
 	}
 
@@ -2710,6 +2688,18 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
+
+	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
+	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		s.Eventually(func() bool {
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+			})
+			s.NoError(err)
+			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+		}, 10*time.Second, 100*time.Millisecond)
+	}
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
@@ -2728,6 +2718,18 @@ func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
 		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
+
+	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
+	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		s.Eventually(func() bool {
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+			})
+			s.NoError(err)
+			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+		}, 10*time.Second, 100*time.Millisecond)
+	}
 }
 
 func (s *Versioning3Suite) setRampingDeployment(
@@ -2763,6 +2765,18 @@ func (s *Versioning3Suite) setRampingDeployment(
 		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
+
+	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
+	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		s.Eventually(func() bool {
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+			})
+			s.NoError(err)
+			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
+		}, 10*time.Second, 100*time.Millisecond)
+	}
 }
 
 func (s *Versioning3Suite) updateTaskQueueDeploymentData(
@@ -3622,8 +3636,6 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 					versions := workerDeploymentData.GetVersions()
 					for buildID, versionData := range versions {
 						if buildID == tv.DeploymentVersion().GetBuildId() && status == versionStatus(versionData.GetStatus()) {
-							routingConfig := workerDeploymentData.GetRoutingConfig()
-							fmt.Println("Seeing this for the status and revision number", status, versionData.GetStatus(), "revisionNumber:", routingConfig.GetRevisionNumber())
 							delete(remaining, pt)
 						}
 					}
