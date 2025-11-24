@@ -190,7 +190,7 @@ func (v *VisibilityManagerDual) CountWorkflowExecutions(
 func (v *VisibilityManagerDual) CountChasmExecutions(
 	ctx context.Context,
 	request *manager.CountChasmExecutionsRequest,
-) (*manager.CountChasmExecutionsResponse, error) {
+) (*chasm.CountExecutionsResponse, error) {
 	return dualReadWrapper(
 		ctx,
 		v,

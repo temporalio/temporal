@@ -3,6 +3,7 @@ package chasm
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -67,19 +68,31 @@ var (
 )
 
 var (
-	_ SearchAttribute = (*searchAttributeDefinition)(nil)
 	_ SearchAttribute = (*SearchAttributeBool)(nil)
 	_ SearchAttribute = (*SearchAttributeDateTime)(nil)
 	_ SearchAttribute = (*SearchAttributeInt)(nil)
 	_ SearchAttribute = (*SearchAttributeDouble)(nil)
 	_ SearchAttribute = (*SearchAttributeKeyword)(nil)
 	_ SearchAttribute = (*SearchAttributeKeywordList)(nil)
+
+	_ typedSearchAttribute[bool]      = (*SearchAttributeBool)(nil)
+	_ typedSearchAttribute[time.Time] = (*SearchAttributeDateTime)(nil)
+	_ typedSearchAttribute[int64]     = (*SearchAttributeInt)(nil)
+	_ typedSearchAttribute[float64]   = (*SearchAttributeDouble)(nil)
+	_ typedSearchAttribute[string]    = (*SearchAttributeKeyword)(nil)
+	_ typedSearchAttribute[[]string]  = (*SearchAttributeKeywordList)(nil)
 )
 
 type (
 	// SearchAttribute is a shared interface for all search attribute types. Each type must embed searchAttributeDefinition.
 	SearchAttribute interface {
 		definition() searchAttributeDefinition
+	}
+
+	typedSearchAttribute[T any] interface {
+		SearchAttribute
+		typeMarker(T)
+		markedVisibilityType() reflect.Type
 	}
 
 	searchAttributeDefinition struct {
@@ -210,6 +223,12 @@ func (s SearchAttributeBool) Value(value bool) SearchAttributeKeyValue {
 	}
 }
 
+func (s SearchAttributeBool) typeMarker(_ bool) {}
+
+func (s SearchAttributeBool) markedVisibilityType() reflect.Type {
+	return reflect.TypeFor[VisibilityValueBool]()
+}
+
 // SearchAttributeDateTime is a search attribute for a datetime value.
 type SearchAttributeDateTime struct {
 	searchAttributeDefinition
@@ -243,6 +262,12 @@ func (s SearchAttributeDateTime) Value(value time.Time) SearchAttributeKeyValue 
 		Field: s.field,
 		Value: VisibilityValueTime(value),
 	}
+}
+
+func (s SearchAttributeDateTime) typeMarker(_ time.Time) {}
+
+func (s SearchAttributeDateTime) markedVisibilityType() reflect.Type {
+	return reflect.TypeFor[VisibilityValueTime]()
 }
 
 // SearchAttributeInt is a search attribute for an integer value.
@@ -280,6 +305,12 @@ func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 	}
 }
 
+func (s SearchAttributeInt) typeMarker(_ int64) {}
+
+func (s SearchAttributeInt) markedVisibilityType() reflect.Type {
+	return reflect.TypeFor[VisibilityValueInt64]()
+}
+
 // SearchAttributeDouble is a search attribute for a double value.
 type SearchAttributeDouble struct {
 	searchAttributeDefinition
@@ -313,6 +344,12 @@ func (s SearchAttributeDouble) Value(value float64) SearchAttributeKeyValue {
 		Field: s.field,
 		Value: VisibilityValueFloat64(value),
 	}
+}
+
+func (s SearchAttributeDouble) typeMarker(_ float64) {}
+
+func (s SearchAttributeDouble) markedVisibilityType() reflect.Type {
+	return reflect.TypeFor[VisibilityValueFloat64]()
 }
 
 // SearchAttributeKeyword is a search attribute for a keyword value.
@@ -350,6 +387,12 @@ func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 	}
 }
 
+func (s SearchAttributeKeyword) typeMarker(_ string) {}
+
+func (s SearchAttributeKeyword) markedVisibilityType() reflect.Type {
+	return reflect.TypeFor[VisibilityValueString]()
+}
+
 // SearchAttributeKeywordList is a search attribute for a keyword list value.
 type SearchAttributeKeywordList struct {
 	searchAttributeDefinition
@@ -385,6 +428,12 @@ func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValu
 	}
 }
 
+func (s SearchAttributeKeywordList) typeMarker(_ []string) {}
+
+func (s SearchAttributeKeywordList) markedVisibilityType() reflect.Type {
+	return reflect.TypeFor[VisibilityValueStringSlice]()
+}
+
 // SearchAttributesMap wraps search attribute values with type-safe access.
 type SearchAttributesMap struct {
 	values map[string]VisibilityValue
@@ -395,94 +444,39 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 	return SearchAttributesMap{values: values}
 }
 
-// GetBool returns the boolean value for a given SearchAttributeBool. If not found or map is nil, found is false.
-func (m SearchAttributesMap) GetBool(sa SearchAttributeBool) (value bool, found bool) {
+// Get returns the value for a given SearchAttribute with compile-time type safety.
+// The return type T is inferred from the SearchAttribute's type parameter.
+// For example, SearchAttriteBool will return a bool value.
+// If the value is not found, the zero value for the type T is returned and the second return value is false.
+func Get[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
+	var zero T
 	if m.values == nil {
-		return false, false
+		return zero, false
 	}
 
 	alias := sa.definition().alias
-	boolVal, ok := m.values[alias].(VisibilityValueBool)
+	visibilityValue, exists := m.values[alias]
+	if !exists {
+		return zero, false
+	}
+
+	if reflect.TypeOf(visibilityValue) != sa.markedVisibilityType() {
+		return zero, false
+	}
+
+	reflectVal := reflect.ValueOf(val)
+	targetType := reflect.TypeFor[T]()
+
+	if !reflectVal.Type().ConvertibleTo(targetType) {
+		return zero, false
+	}
+
+	result, ok := reflectVal.Convert(targetType).Interface().(T)
 	if !ok {
-		return false, false
+		return zero, false
 	}
 
-	return bool(boolVal), true
-}
-
-// GetInt returns the int value for a given SearchAttributeInt. If not found or map is nil, second parameter is false.
-func (m SearchAttributesMap) GetInt(sa SearchAttributeInt) (int, bool) {
-	if m.values == nil {
-		return 0, false
-	}
-
-	alias := sa.definition().alias
-	intValue, ok := m.values[alias].(VisibilityValueInt)
-	if !ok {
-		return 0, false
-	}
-
-	return int(intValue), true
-}
-
-// GetDouble returns the double value for a given SearchAttributeDouble. If not found or map is nil, second parameter is false.
-func (m SearchAttributesMap) GetDouble(sa SearchAttributeDouble) (float64, bool) {
-	if m.values == nil {
-		return 0, false
-	}
-
-	alias := sa.definition().alias
-	doubleValue, ok := m.values[alias].(VisibilityValueFloat64)
-	if !ok {
-		return 0, false
-	}
-
-	return float64(doubleValue), true
-}
-
-// GetKeyword returns the string value for a given SearchAttributeKeyword. If not found or map is nil, second parameter is false.
-func (m SearchAttributesMap) GetKeyword(sa SearchAttributeKeyword) (string, bool) {
-	if m.values == nil {
-		return "", false
-	}
-
-	alias := sa.definition().alias
-	stringValue, ok := m.values[alias].(VisibilityValueString)
-	if !ok {
-		return "", false
-	}
-
-	return string(stringValue), true
-}
-
-// GetDateTime returns the time value for a given SearchAttributeDateTime. If not found or map is nil, second parameter is false.
-func (m SearchAttributesMap) GetDateTime(sa SearchAttributeDateTime) (time.Time, bool) {
-	if m.values == nil {
-		return time.Time{}, false
-	}
-
-	alias := sa.definition().alias
-	timeValue, ok := m.values[alias].(VisibilityValueTime)
-	if !ok {
-		return time.Time{}, false
-	}
-
-	return time.Time(timeValue), true
-}
-
-// GetKeywordList returns the string list value for a given SearchAttributeKeywordList. If not found or map is nil, second parameter is false.
-func (m SearchAttributesMap) GetKeywordList(sa SearchAttributeKeywordList) ([]string, bool) {
-	if m.values == nil {
-		return nil, false
-	}
-
-	alias := sa.definition().alias
-	keywordListValue, ok := m.values[alias].(VisibilityValueStringSlice)
-	if !ok {
-		return nil, false
-	}
-
-	return []string(keywordListValue), true
+	return result, true
 }
 
 // convertToVisibilityValue converts a value to VisibilityValue based on its runtime type.

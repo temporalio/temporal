@@ -36,7 +36,7 @@ type (
 		ListWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ListChasmExecutions(ctx context.Context, request *ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error)
 		CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
-		CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*CountChasmExecutionsResponse, error)
+		CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 
 		// Admin APIs

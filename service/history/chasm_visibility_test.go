@@ -264,13 +264,13 @@ func (s *ChasmVisibilitySuite) TestCountRuns_Success() {
 		Query:       query,
 	}
 
-	expectedResponse := &manager.CountChasmExecutionsResponse{
+	expectedResponse := &chasm.CountExecutionsResponse{
 		Count: expectedCount,
 	}
 
 	s.visibilityManager.EXPECT().
 		CountChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.CountChasmExecutionsRequest) (*manager.CountChasmExecutionsResponse, error) {
+		DoAndReturn(func(_ context.Context, req *manager.CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error) {
 			s.Equal(expectedRequest.ArchetypeID, req.ArchetypeID)
 			s.Equal(expectedRequest.NamespaceID, req.NamespaceID)
 			s.Equal(expectedRequest.Namespace, req.Namespace)
@@ -443,7 +443,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_VisibilityManagerError() {
 	// Setup visibility manager mock to return an error
 	s.visibilityManager.EXPECT().
 		CountChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.CountChasmExecutionsRequest) (*manager.CountChasmExecutionsResponse, error) {
+		DoAndReturn(func(_ context.Context, req *manager.CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error) {
 			s.Equal(archetypeID, req.ArchetypeID)
 			return nil, errTestVisibilityError
 		})

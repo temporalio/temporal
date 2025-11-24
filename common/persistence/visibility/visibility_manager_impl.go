@@ -211,13 +211,13 @@ func (p *visibilityManagerImpl) ListChasmExecutions(
 func (p *visibilityManagerImpl) CountChasmExecutions(
 	ctx context.Context,
 	request *manager.CountChasmExecutionsRequest,
-) (*manager.CountChasmExecutionsResponse, error) {
+) (*chasm.CountExecutionsResponse, error) {
 	response, err := p.store.CountChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	return response, nil
+	return &chasm.CountExecutionsResponse{Count: response.Count}, nil
 }
 
 func (p *visibilityManagerImpl) CountWorkflowExecutions(

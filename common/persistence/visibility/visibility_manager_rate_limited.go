@@ -141,7 +141,7 @@ func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 func (m *visibilityManagerRateLimited) CountChasmExecutions(
 	ctx context.Context,
 	request *manager.CountChasmExecutionsRequest,
-) (*manager.CountChasmExecutionsResponse, error) {
+) (*chasm.CountExecutionsResponse, error) {
 	if ok := allow(ctx, "CountChasmExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}

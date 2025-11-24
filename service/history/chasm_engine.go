@@ -674,15 +674,10 @@ func (e *ChasmEngine) CountExecutions(
 		return nil, serviceerror.NewInternal("unknown chasm component type: " + archetypeType.String())
 	}
 
-	resp, err := e.visibilityMgr.CountChasmExecutions(ctx, &manager.CountChasmExecutionsRequest{
+	return e.visibilityMgr.CountChasmExecutions(ctx, &manager.CountChasmExecutionsRequest{
 		ArchetypeID: archetypeID,
 		NamespaceID: namespace.ID(request.NamespaceID),
 		Namespace:   namespace.Name(request.NamespaceName),
 		Query:       request.Query,
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &chasm.CountExecutionsResponse{Count: resp.Count}, nil
 }

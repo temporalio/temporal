@@ -162,7 +162,7 @@ func (m *visibilityManagerMetrics) CountWorkflowExecutions(
 func (m *visibilityManagerMetrics) CountChasmExecutions(
 	ctx context.Context,
 	request *manager.CountChasmExecutionsRequest,
-) (*manager.CountChasmExecutionsResponse, error) {
+) (*chasm.CountExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceCountChasmExecutionsScope)
 	response, err := m.delegate.CountChasmExecutions(ctx, request)
 	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))

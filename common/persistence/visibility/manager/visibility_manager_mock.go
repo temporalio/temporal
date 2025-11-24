@@ -70,10 +70,10 @@ func (mr *MockVisibilityManagerMockRecorder) Close() *gomock.Call {
 }
 
 // CountChasmExecutions mocks base method.
-func (m *MockVisibilityManager) CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*CountChasmExecutionsResponse, error) {
+func (m *MockVisibilityManager) CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountChasmExecutions", ctx, request)
-	ret0, _ := ret[0].(*CountChasmExecutionsResponse)
+	ret0, _ := ret[0].(*chasm.CountExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
