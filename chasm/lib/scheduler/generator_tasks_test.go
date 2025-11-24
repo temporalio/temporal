@@ -46,9 +46,9 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 	// Execute the generate task.
 	generator := sched.Generator.Get(ctx)
 	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.ErrorIs(err, queueerrors.UnprocessableTaskError{
-		Message: "failed to process a time range: processTimeRange bug",
-	})
+	var target *queueerrors.UnprocessableTaskError
+	s.ErrorAs(err, &target)
+	s.Equal("failed to process a time range: processTimeRange bug", target.Message)
 }
 
 func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
