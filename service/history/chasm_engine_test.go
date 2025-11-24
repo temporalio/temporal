@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -582,16 +581,19 @@ func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 	s.Equal(ref.BusinessID, newRef.BusinessID)
 }
 
-// TestPollComponent_Success_Wait tests the waiting behavior of PollComponent when the predicate is
-// not immediately satisfied.
+// TestPollComponent_Success_Wait tests the waiting behavior of PollComponent.
 func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
+	// The predicate is not satisfied at the outset, so the call blocks waiting for notifications.
+	// UpdateComponent is used twice to update the execution in a way which does not satisfy the
+	// predicate, and a final third time in a way that does satisfy the predicate, causing the
+	// long-poll to return.
 	const numUpdatesTotal = 3
-	const updateAtWhichSatisfied = 2   // 0-indexed, so 3rd update
-	const updateCountWhenSatisfied = 3 // 1-indexed count for mock
+	const updateAtWhichSatisfied = 2 // 0-indexed, so 3rd update
 
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
+	activityID := tv.ActivityID()
 	ref := chasm.NewComponentRef[*testComponent](
 		chasm.EntityKey{
 			NamespaceID: string(tests.NamespaceID),
@@ -599,20 +601,14 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 			EntityID:    tv.RunID(),
 		},
 	)
-	expectedActivityID := tv.ActivityID()
-
-	var updateCount atomic.Int32
-
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
 			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
 		}, nil).
 		Times(1) // subsequent reads during UpdateComponent and PollComponent are from cache
-
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(tests.UpdateWorkflowExecutionResponse, nil).
 		Times(numUpdatesTotal)
-
 	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).DoAndReturn(
 		func(key chasm.EntityKey, ref []byte) {
 			s.engine.notifier.Notify(key)
@@ -621,45 +617,63 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 
 	pollErr := make(chan error)
 	pollResult := make(chan []byte)
-	go func() {
+	pollComponent := func() {
 		newSerializedRef, err := s.engine.PollComponent(
 			context.Background(),
 			ref,
 			func(ctx chasm.Context, component chasm.Component) (bool, error) {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
-				satisfied := tc.ActivityInfo.ActivityId == expectedActivityID
+				satisfied := tc.ActivityInfo.ActivityId == activityID
 				return satisfied, nil
 			},
 		)
 		pollErr <- err
 		pollResult <- newSerializedRef
-	}()
-
-	for currentUpdate := range numUpdatesTotal {
+	}
+	updateComponent := func(satisfyPredicate bool) {
 		_, err := s.engine.UpdateComponent(
 			context.Background(),
 			ref,
 			func(ctx chasm.MutableContext, component chasm.Component) error {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
-				if currentUpdate == updateAtWhichSatisfied {
-					tc.ActivityInfo.ActivityId = expectedActivityID
+				if satisfyPredicate {
+					tc.ActivityInfo.ActivityId = activityID
 				}
-				updateCount.Add(1)
 				return nil
 			},
 		)
 		s.NoError(err)
-		time.Sleep(100 * time.Millisecond)
+	}
+	assertEmptyChan := func(ch chan []byte) {
+		select {
+		case <-ch:
+			s.FailNow("expected channel to be empty")
+		default:
+		}
 	}
 
+	// Start a PollComponent call. It will not return until the third execution update.
+	go pollComponent()
+
+	// Perform two execution updates that do not satisfy the predicate followed by one that does.
+	for range 2 {
+		updateComponent(false)
+		time.Sleep(100 * time.Millisecond)
+		assertEmptyChan(pollResult)
+	}
+	updateComponent(true)
+	// The poll call has returned.
 	s.NoError(<-pollErr)
 	newSerializedRef := <-pollResult
 	s.NotNil(newSerializedRef)
 
 	newRef, err := chasm.DeserializeComponentRef(newSerializedRef)
 	s.NoError(err)
+	s.Equal(tests.NamespaceID.String(), newRef.NamespaceID)
+	s.Equal(tv.WorkflowID(), newRef.BusinessID)
+	s.Equal(tv.RunID(), newRef.EntityID)
 
 	newActivityID := make(chan string, 1)
 	err = s.engine.ReadComponent(
@@ -676,7 +690,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 		},
 	)
 	s.NoError(err)
-	s.Equal(expectedActivityID, <-newActivityID)
+	s.Equal(activityID, <-newActivityID)
 }
 
 func (s *chasmEngineSuite) buildPersistenceMutableState(
