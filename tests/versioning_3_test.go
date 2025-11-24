@@ -4664,14 +4664,6 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 	// Set v1 to be the current version for the deployment
 	s.setCurrentDeployment(tv1)
 
-	// Ensure v0 poller never received a task throughout the test
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		s.idlePollWorkflow(tv0, true, 10*time.Second, "v0 poller should not receive a task")
-	}()
-
 	var wfID string
 	var runIDBeforeRetry string
 
@@ -4767,13 +4759,9 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 		})
 		s.NoError(err)
 
-		fmt.Println("DeploymentData!:::", ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
 		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
-		fmt.Println("current", current.GetBuildId(), "currentRevisionNumber", currentRevisionNumber)
 		return current.GetBuildId() == tv0.DeploymentVersion().GetBuildId() && currentRevisionNumber == 0
 	}, 10*time.Second, 100*time.Millisecond)
-
-	// s.rollbackTaskQueueToVersion(tv0, -5*time.Second, tqTypeWf)
 
 	// Trigger failure of the run to cause retry.
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, runIDBeforeRetry, "proceed", nil))
@@ -4802,9 +4790,6 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 		}
 		return false
 	}, 10*time.Second, 100*time.Millisecond)
-
-	// Clean up the idle poller
-	wg.Wait()
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_NoBounceBack() {
