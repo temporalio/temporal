@@ -258,14 +258,13 @@ func (e *ChasmEngine) ReadComponent(
 }
 
 // PollComponent waits until the supplied predicate is satisfied when evaluated against the
-// component identified by the supplied component reference. If it times out due to the
-// server-imposed long-poll timeout then it returns (nil, nil). Otherwise if there is no error, it
-// returns (ref, nil) where ref is a component reference identifying the state at which the
-// predicate was satisfied. The predicate must be monotonic: if it returns true at execution state
-// transition s it must return true at all transitions t > s. It is an error if execution transition
-// history is (after reloading from persistence) behind the requested ref, or if the ref is
-// inconsistent with execution transition history. Thus when the predicate function is evaluated, it
-// is guaranteed that the execution VT >= requestRef VT.
+// component identified by the supplied component reference. If there is no error, it returns (ref,
+// nil) where ref is a component reference identifying the state at which the predicate was
+// satisfied. The predicate must be monotonic: if it returns true at execution state transition s it
+// must return true at all transitions t > s. It is an error if execution transition history is
+// (after reloading from persistence) behind the requested ref, or if the ref is inconsistent with
+// execution transition history. Thus when the predicate function is evaluated, it is guaranteed
+// that the execution VT >= requestRef VT.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
@@ -303,14 +302,6 @@ func (e *ChasmEngine) PollComponent(
 		return nil, err
 	}
 
-	// If the long-poll times out due to the internally-imposed long-poll timeout, then we want the
-	// initiator of the long-poll to receive a non-error empty response indicating that they should
-	// continue long-polling. To achieve this, we return nil on all canceled context errors below.
-	// We assume that the parent will check for a canceled context independently (without relying on
-	// any error value we return), so that if the cancelation was due to the parent deadline rather
-	// than the internally-imposed long-poll timeout then the initiator of the long-poll will get a
-	// deadline exceeded error.
-
 	if parentDeadline, ok := ctx.Deadline(); ok {
 		fmt.Println("⏰ parent timeout:", time.Until(parentDeadline))
 	} else {
@@ -346,9 +337,6 @@ func (e *ChasmEngine) PollComponent(
 		case <-ch:
 			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 			if err != nil {
-				if errors.Is(err, ctx.Err()) {
-					return nil, nil
-				}
 				return nil, err
 			}
 			func() {
@@ -359,16 +347,13 @@ func (e *ChasmEngine) PollComponent(
 				}
 			}()
 			if err != nil {
-				if errors.Is(err, ctx.Err()) {
-					return nil, nil
-				}
 				return nil, err
 			}
 			if satisfiedRef != nil {
 				return satisfiedRef, nil
 			}
 		case <-ctx.Done():
-			return nil, nil
+			return nil, ctx.Err()
 		}
 	}
 }

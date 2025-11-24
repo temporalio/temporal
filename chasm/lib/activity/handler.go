@@ -2,7 +2,8 @@ package activity
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -72,12 +73,20 @@ func (h *handler) PollActivityExecution(
 		return chasm.ReadComponent(ctx, ref, (*Activity).buildPollActivityExecutionResponse, req, nil)
 	}
 
+	// Do not allow long-poll to use all remaining time
+	childCtx := ctx
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		childCtx, cancel = context.WithDeadline(ctx, deadline.Add(-time.Second))
+		defer cancel()
+	}
+
 	switch waitPolicy.(type) {
 	case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
 		token := req.GetFrontendRequest().
 			GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
 			WaitAnyStateChange.GetLongPollToken()
-		response, _, err = chasm.PollComponent(ctx, ref, func(
+		response, _, err = chasm.PollComponent(childCtx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
@@ -95,7 +104,7 @@ func (h *handler) PollActivityExecution(
 		}, req)
 	case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
 		// TODO(dan): add functional test when RecordActivityTaskCompleted is implemented
-		response, _, err = chasm.PollComponent(ctx, ref, func(
+		response, _, err = chasm.PollComponent(childCtx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
@@ -115,15 +124,14 @@ func (h *handler) PollActivityExecution(
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("unexpected wait policy type: %T", waitPolicy)
 	}
-	if err != nil {
-		fmt.Println("❌ error received from PollComponent:", err)
-		return nil, err
-	} else {
-		fmt.Println("✅ no error received from PollComponent")
+
+	if childCtx.Err() != nil {
+		// Caller deadline exceeded
+		return nil, childCtx.Err()
 	}
-	if response == nil {
-		// nil response indicates server-imposed long-poll timeout. Communicate this to callers by
-		// returning a non-error empty response.
+	if errors.Is(err, context.DeadlineExceeded) {
+		// Server-imposed long-poll deadline exceeded. Communicate this to callers by returning a
+		// non-error empty response.
 
 		// TODO(dan): the definition of "empty" is unclear, since callers can currently choose to
 		// exclude info, outcome, and input from the result. Currently, a caller can infer that the
@@ -133,9 +141,9 @@ func (h *handler) PollActivityExecution(
 		// both with long-poll options. An empty response will then be more obvious to the caller.
 		// However, we may want to consider a more explicit way of saying to the caller "timed out
 		// due to internal long-poll timeout; please resubmit your long-poll request".
-		response = &activitypb.PollActivityExecutionResponse{
+		return &activitypb.PollActivityExecutionResponse{
 			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
-		}
+		}, nil
 	}
-	return response, nil
+	return response, err
 }
