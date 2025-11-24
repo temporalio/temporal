@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -44,6 +45,7 @@ func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
 		primitives.NewUUID().String(),
 		primitives.NewUUID().String(),
 		primitives.NewUUID().String(),
+		chasm.WorkflowArchetypeID,
 		treeID0,
 		&branchID0,
 		ancestors,
