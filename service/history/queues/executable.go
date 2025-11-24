@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -936,38 +937,11 @@ func (e *CircuitBreakerExecutable) Execute() error {
 	}()
 
 	err = e.Executable.Execute()
-	var destinationDownErr *DestinationDownError
+	var destinationDownErr *queueserrors.DestinationDownError
 	if errors.As(err, &destinationDownErr) {
 		err = destinationDownErr.Unwrap()
 	}
 
 	doneCb(destinationDownErr == nil)
 	return err
-}
-
-// DestinationDownError indicates the destination is down and wraps another error.
-// It is a useful specific error that can be used, for example, in a circuit breaker
-// to distinguish when a destination service is down and an internal error.
-type DestinationDownError struct {
-	Message string
-	err     error
-}
-
-func NewDestinationDownError(msg string, err error) *DestinationDownError {
-	return &DestinationDownError{
-		Message: "destination down: " + msg,
-		err:     err,
-	}
-}
-
-func (e *DestinationDownError) Error() string {
-	msg := e.Message
-	if e.err != nil {
-		msg += "\n" + e.err.Error()
-	}
-	return msg
-}
-
-func (e *DestinationDownError) Unwrap() error {
-	return e.err
 }

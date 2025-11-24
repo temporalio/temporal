@@ -153,7 +153,7 @@ func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
 		// Assuming the dynamic config OutboundStandbyTaskMissingEventsDiscardDelay is long enough,
 		// it should give enough time for the active side to execute the task successfully, and the
 		// standby side to process it as well without discarding the task.
-		err = queues.NewDestinationDownError(
+		err = queueserrors.NewDestinationDownError(
 			"standby task executor returned retryable error",
 			err,
 		)

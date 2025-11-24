@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
@@ -57,7 +56,7 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 
 func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 	if failure, ok := result.(invocationResultRetry); ok {
-		return queues.NewDestinationDownError(failure.err.Error(), err)
+		return queueserrors.NewDestinationDownError(failure.err.Error(), err)
 	}
 	return err
 }
