@@ -28,7 +28,9 @@ type PauseWorkflowExecutionSuite struct {
 	pauseIdentity string
 	pauseReason   string
 
-	workflowFn func(ctx workflow.Context) (string, error)
+	workflowFn      func(ctx workflow.Context) (string, error)
+	childWorkflowFn func(ctx workflow.Context) (string, error)
+	activityFn      func(ctx context.Context) (string, error)
 }
 
 func TestPauseWorkflowExecutionSuite(t *testing.T) {
@@ -45,10 +47,34 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 	s.pauseReason = "pausing workflow for acceptance test"
 
 	s.workflowFn = func(ctx workflow.Context) (string, error) {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout:    5 * time.Second,
+			ScheduleToCloseTimeout: 10 * time.Second,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+
+		var activityResult string
+		if err := workflow.ExecuteActivity(ctx, s.activityFn).Get(ctx, &activityResult); err != nil {
+			return "", err
+		}
+
+		var childResult string
+		if err := workflow.ExecuteChildWorkflow(ctx, s.childWorkflowFn).Get(ctx, &childResult); err != nil {
+			return "", err
+		}
+
 		signalCh := workflow.GetSignalChannel(ctx, s.testEndSignal)
 		var signalPayload string
 		signalCh.Receive(ctx, &signalPayload)
-		return signalPayload, nil
+		return signalPayload + activityResult + childResult, nil
+	}
+
+	s.childWorkflowFn = func(ctx workflow.Context) (string, error) {
+		return "child-workflow", nil
+	}
+
+	s.activityFn = func(ctx context.Context) (string, error) {
+		return "activity", nil
 	}
 }
 
@@ -58,6 +84,8 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	defer cancel()
 
 	s.Worker().RegisterWorkflow(s.workflowFn)
+	s.Worker().RegisterWorkflow(s.childWorkflowFn)
+	s.Worker().RegisterActivity(s.activityFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
@@ -363,6 +391,8 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	defer cancel()
 
 	s.Worker().RegisterWorkflow(s.workflowFn)
+	s.Worker().RegisterWorkflow(s.childWorkflowFn)
+	s.Worker().RegisterActivity(s.activityFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
@@ -416,6 +446,27 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	s.ErrorAs(err, &failedPreconditionErr)
 	s.NotNil(failedPreconditionErr)
 	s.Contains(failedPreconditionErr.Error(), "workflow is already paused.")
+
+	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   s.pauseIdentity,
+		Reason:     "cleanup after paused workflow test",
+		RequestId:  uuid.New(),
+	}
+	unpauseResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
+	s.NoError(err)
+	s.NotNil(unpauseResp)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		require.Nil(t, desc.GetWorkflowExtendedInfo().GetPauseInfo())
+	}, 5*time.Second, 200*time.Millisecond)
 
 	// For now sending this signal will complete the workflow and finish the test.
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
