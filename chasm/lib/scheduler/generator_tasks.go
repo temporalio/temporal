@@ -101,7 +101,7 @@ func (g *GeneratorTaskExecutor) Execute(
 
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
-	if err := g.updateFutureActionTimes(ctx, generator, scheduler); err != nil {
+	if err := g.updateFutureActionTimes(generator, scheduler); err != nil {
 		return queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to update future action times: %s", err.Error()))
 	}
@@ -143,12 +143,11 @@ func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, sched
 }
 
 func (g *GeneratorTaskExecutor) updateFutureActionTimes(
-	ctx chasm.MutableContext,
 	generator *Generator,
 	scheduler *Scheduler,
 ) error {
 	nextTime := func(t time.Time) (time.Time, error) {
-		res, err := g.SpecProcessor.GetNextTime(scheduler, t)
+		res, err := g.SpecProcessor.NextTime(scheduler, t)
 		return res.Next, err
 	}
 

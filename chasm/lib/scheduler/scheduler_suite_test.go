@@ -92,11 +92,11 @@ func (s *schedulerSuite) SetupTest() {
 
 	// Set up future action times.
 	futureTime := now.Add(time.Hour)
-	s.specProcessor.EXPECT().GetNextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{
+	s.specProcessor.EXPECT().NextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{
 		Next:    futureTime,
 		Nominal: futureTime,
 	}, nil).MaxTimes(1)
-	s.specProcessor.EXPECT().GetNextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{}, nil).AnyTimes()
+	s.specProcessor.EXPECT().NextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{}, nil).AnyTimes()
 }
 
 // hasTask returns true if the given task type was added at the end of the
