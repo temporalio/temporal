@@ -2201,7 +2201,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
-		if behavior == vbUnpinned {
+		if behavior == vbUnpinned && s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
 			// Unpinned CaN should inherit parent deployment version and behaviour
 			s.verifyWorkflowVersioning(tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
 		} else {
