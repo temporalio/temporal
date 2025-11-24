@@ -384,11 +384,17 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 	workflow.Await(ctx, func() bool { return d.asyncPropagationsInProgress == 1 }) // delete itself is counted as one
 	d.cancelPropagations = false                                                   // need to unset this in case the version is revived
 
+	// Not counting the possible wait for previous propagations in this propagation latency.
+	startTime := workflow.Now(ctx)
+	defer func() {
+		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
+	}()
 	d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
 	d.asyncPropagationsInProgress--
 }
 
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueues(ctx workflow.Context, activityCtx workflow.Context) error {
+
 	state := d.GetVersionState()
 
 	// sync version removal to task queues
@@ -1003,6 +1009,11 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 // syncTaskQueuesAsync must be called within the lock. It first increments the version revision number and then
 // starts async propagation of version data (and routing info if given) to all task queues.
 func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routingConfig *deploymentpb.RoutingConfig, versionDataChanged bool) {
+	startTime := workflow.Now(ctx)
+	defer func() {
+		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
+	}()
+
 	withRevisionNumber := d.hasMinVersion(VersionDataRevisionNumber)
 	if withRevisionNumber && versionDataChanged {
 		d.GetVersionState().RevisionNumber++
