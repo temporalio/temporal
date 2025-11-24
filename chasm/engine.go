@@ -359,6 +359,17 @@ func engineFromContext(
 	return e
 }
 
+// ListExecutions lists the executions of a CHASM archetype given an initial query.
+// The query string can specify any combination of CHASM, custom, and predefined/system search attributes.
+// The generic parameter C is the CHASM component type used for executions and search attribute filtering.
+// The generic parameter M is the type of the memo payload to be unmarshaled from the execution.
+// PageSize is required, must be greater than 0.
+// NextPageToken is optional, set on subsequent requests to continue listing the next page of executions.
+// Note: For CHASM executions, TemporalNamespaceDivision is the predefined search attribute
+// that is used to identify the archetype of the execution.
+// If the query string does not specify TemporalNamespaceDivision, the archetype C of the request will be used to filter the executions.
+// If the initial query already specifies TemporalNamespaceDivision, the archetype C of the request will
+// only be used to get the registered SearchAttributes.
 func ListExecutions[C Component, M proto.Message](
 	ctx context.Context,
 	request *ListExecutionsRequest,
@@ -400,6 +411,14 @@ func ListExecutions[C Component, M proto.Message](
 	}, nil
 }
 
+// CountExecutions counts the executions of a CHASM archetype given an initial query.
+// The generic parameter C is the CHASM component type used for executions and search attribute filtering.
+// The query string can specify any combination of CHASM, custom, and predefined/system search attributes.
+// Note: For CHASM executions, TemporalNamespaceDivision is the predefined search attribute
+// that is used to identify the archetype of the execution.
+// If the query string does not specify TemporalNamespaceDivision, the archetype C of the request will be used to count the executions.
+// If the initial query already specifies TemporalNamespaceDivision, the archetype C of the request will
+// only be used to get the registered SearchAttributes.
 func CountExecutions[C Component](
 	ctx context.Context,
 	request *CountExecutionsRequest,
