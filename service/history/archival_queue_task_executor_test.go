@@ -439,6 +439,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 							ShardID:     shardID,
 							NamespaceID: tests.NamespaceID.String(),
 							WorkflowID:  task.WorkflowID,
+							ArchetypeID: chasm.WorkflowArchetypeID,
 							Tasks:       popTasks,
 						})
 					})

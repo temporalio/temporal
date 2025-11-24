@@ -20,6 +20,7 @@ import (
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	workflow "go.temporal.io/server/api/workflow/v1"
+	chasm "go.temporal.io/server/chasm"
 	collection "go.temporal.io/server/common/collection"
 	definition "go.temporal.io/server/common/definition"
 	metrics "go.temporal.io/server/common/metrics"
@@ -616,17 +617,17 @@ func (mr *MockEngineMockRecorder) RecordWorkflowTaskStarted(ctx, request any) *g
 }
 
 // RefreshWorkflowTasks mocks base method.
-func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution) error {
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution, archetypeID chasm.ArchetypeID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution)
+	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution, archetypeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RefreshWorkflowTasks indicates an expected call of RefreshWorkflowTasks.
-func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execution any) *gomock.Call {
+func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execution, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockEngine)(nil).RefreshWorkflowTasks), ctx, namespaceUUID, execution)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockEngine)(nil).RefreshWorkflowTasks), ctx, namespaceUUID, execution, archetypeID)
 }
 
 // RemoveSignalMutableState mocks base method.
@@ -673,17 +674,17 @@ func (mr *MockEngineMockRecorder) ReplicateHistoryEvents(ctx, workflowKey, baseE
 }
 
 // ReplicateVersionedTransition mocks base method.
-func (m *MockEngine) ReplicateVersionedTransition(ctx context.Context, artifact *repication.VersionedTransitionArtifact, sourceClusterName string) error {
+func (m *MockEngine) ReplicateVersionedTransition(ctx context.Context, archetypeID chasm.ArchetypeID, artifact *repication.VersionedTransitionArtifact, sourceClusterName string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, artifact, sourceClusterName)
+	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, archetypeID, artifact, sourceClusterName)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReplicateVersionedTransition indicates an expected call of ReplicateVersionedTransition.
-func (mr *MockEngineMockRecorder) ReplicateVersionedTransition(ctx, artifact, sourceClusterName any) *gomock.Call {
+func (mr *MockEngineMockRecorder) ReplicateVersionedTransition(ctx, archetypeID, artifact, sourceClusterName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockEngine)(nil).ReplicateVersionedTransition), ctx, artifact, sourceClusterName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockEngine)(nil).ReplicateVersionedTransition), ctx, archetypeID, artifact, sourceClusterName)
 }
 
 // ReplicateWorkflowState mocks base method.

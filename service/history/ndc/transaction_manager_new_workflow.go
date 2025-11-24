@@ -6,7 +6,6 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
@@ -56,12 +55,14 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	namespaceID := namespace.ID(targetExecutionInfo.NamespaceId)
 	workflowID := targetExecutionInfo.WorkflowId
 	targetRunID := targetExecutionState.RunId
+	archetypeID := targetWorkflow.GetMutableState().ChasmTree().ArchetypeID()
 
 	// we need to check the current workflow execution
 	currentRunID, err := r.transactionMgr.GetCurrentWorkflowRunID(
 		ctx,
 		namespaceID,
 		workflowID,
+		archetypeID,
 	)
 	if err != nil {
 		// error out or workflow already created
@@ -87,7 +88,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		namespaceID,
 		workflowID,
 		currentRunID,
-		chasm.ArchetypeAny,
+		archetypeID,
 	)
 	if err != nil {
 		return err

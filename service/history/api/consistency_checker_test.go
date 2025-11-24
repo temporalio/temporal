@@ -113,11 +113,12 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 	released := false
 	releaseFn := func(err error) { released = true }
 
-	s.workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+	s.workflowCache.EXPECT().GetOrCreateCurrentExecution(
 		ctx,
 		s.shardContext,
 		namespace.ID(s.namespaceID),
 		s.workflowID,
+		chasm.WorkflowArchetype,
 		locks.PriorityHigh,
 	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
@@ -129,7 +130,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 		},
 	).Return(&persistence.GetCurrentExecutionResponse{RunID: s.currentRunID}, nil)
 
-	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, locks.PriorityHigh)
+	runID, err := s.checker.GetCurrentWorkflowRunID(ctx, s.namespaceID, s.workflowID, locks.PriorityHigh)
 	s.NoError(err)
 	s.Equal(s.currentRunID, runID)
 	s.True(released)
@@ -141,11 +142,12 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 	released := false
 	releaseFn := func(err error) { released = true }
 
-	s.workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+	s.workflowCache.EXPECT().GetOrCreateCurrentExecution(
 		ctx,
 		s.shardContext,
 		namespace.ID(s.namespaceID),
 		s.workflowID,
+		chasm.WorkflowArchetype,
 		locks.PriorityHigh,
 	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
@@ -157,7 +159,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 		},
 	).Return(nil, serviceerror.NewUnavailable(""))
 
-	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, locks.PriorityHigh)
+	runID, err := s.checker.GetCurrentWorkflowRunID(ctx, s.namespaceID, s.workflowID, locks.PriorityHigh)
 	s.IsType(&serviceerror.Unavailable{}, err)
 	s.Empty(runID)
 	s.True(released)

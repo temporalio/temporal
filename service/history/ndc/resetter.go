@@ -150,7 +150,7 @@ func (r *resetterImpl) getBaseBranchToken(
 		r.namespaceID,
 		r.workflowID,
 		r.baseRunID,
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 	)
 	switch err.(type) {
 	case nil:

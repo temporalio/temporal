@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -101,6 +102,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 			WorkflowID:  tests.WorkflowID,
 			RunID:       tests.RunID,
 		},
+		chasm.WorkflowArchetypeID,
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
@@ -141,6 +143,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 			WorkflowID:  tests.WorkflowID,
 			RunID:       tests.RunID,
 		},
+		chasm.WorkflowArchetypeID,
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
@@ -180,6 +183,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 			WorkflowID:  tests.WorkflowID,
 			RunID:       tests.RunID,
 		},
+		chasm.WorkflowArchetypeID,
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),

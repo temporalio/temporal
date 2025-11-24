@@ -34,15 +34,18 @@ func getWorkflowExecutionContextForTask(
 	workflowCache wcache.Cache,
 	task tasks.Task,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
-	archetype := chasm.WorkflowArchetype
-	switch task.GetType() {
-	case enumsspb.TASK_TYPE_CHASM,
-		enumsspb.TASK_TYPE_CHASM_PURE,
-		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, // retention timer
-		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
-		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
-		// Those tasks work for all archetypes.
-		archetype = chasm.ArchetypeAny
+	archetypeID := chasm.WorkflowArchetypeID
+	if hasArchetypeID, ok := task.(tasks.HasArchetypeID); ok {
+		archetypeID = hasArchetypeID.GetArchetypeID()
+		if archetypeID == chasm.UnspecifiedArchetypeID {
+			archetypeID = chasm.WorkflowArchetypeID
+		}
+	}
+
+	// For backward compatibility, old tasks for workflow may not have archetypeID set.
+	// TODO: move this logic to task serializer after reversing the dependency between persistence and chasm package.
+	if archetypeID == 0 {
+		archetypeID = chasm.WorkflowArchetypeID
 	}
 
 	return getWorkflowExecutionContext(
@@ -50,7 +53,7 @@ func getWorkflowExecutionContextForTask(
 		shardContext,
 		workflowCache,
 		taskWorkflowKey(task),
-		archetype,
+		archetypeID,
 		locks.PriorityLow,
 	)
 }
@@ -60,7 +63,7 @@ func getWorkflowExecutionContext(
 	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	key definition.WorkflowKey,
-	archetype chasm.Archetype,
+	archetypeID chasm.ArchetypeID,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	if key.GetRunID() == "" {
@@ -70,7 +73,7 @@ func getWorkflowExecutionContext(
 			workflowCache,
 			key.NamespaceID,
 			key.WorkflowID,
-			archetype,
+			archetypeID,
 			lockPriority,
 		)
 	}
@@ -87,7 +90,7 @@ func getWorkflowExecutionContext(
 		shardContext,
 		namespaceID,
 		execution,
-		archetype,
+		archetypeID,
 		lockPriority,
 	)
 	if common.IsContextDeadlineExceededErr(err) {
@@ -103,7 +106,7 @@ func getCurrentWorkflowExecutionContext(
 	workflowCache wcache.Cache,
 	namespaceID string,
 	workflowID string,
-	archetype chasm.Archetype,
+	archetypeID chasm.ArchetypeID,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	currentRunID, err := wcache.GetCurrentRunID(
@@ -112,6 +115,7 @@ func getCurrentWorkflowExecutionContext(
 		workflowCache,
 		namespaceID,
 		workflowID,
+		archetypeID,
 		lockPriority,
 	)
 	if err != nil {
@@ -123,7 +127,7 @@ func getCurrentWorkflowExecutionContext(
 		shardContext,
 		workflowCache,
 		definition.NewWorkflowKey(namespaceID, workflowID, currentRunID),
-		archetype,
+		archetypeID,
 		lockPriority,
 	)
 	if err != nil {
@@ -149,6 +153,7 @@ func getCurrentWorkflowExecutionContext(
 		workflowCache,
 		namespaceID,
 		workflowID,
+		archetypeID,
 		lockPriority,
 	)
 	if err != nil {
@@ -326,7 +331,7 @@ func (e *stateMachineEnvironment) getValidatedMutableState(
 	key definition.WorkflowKey,
 	validate func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, historyi.MutableState, error) {
-	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, chasm.WorkflowArchetype, locks.PriorityLow)
+	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, chasm.WorkflowArchetypeID, locks.PriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
 	}

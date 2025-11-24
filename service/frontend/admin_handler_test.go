@@ -31,6 +31,8 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	clientmocks "go.temporal.io/server/client"
 	historyclient "go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/clock"
@@ -145,6 +147,11 @@ func (s *adminHandlerSuite) SetupTest() {
 		VisibilityAllowList:                   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		SuppressErrorSetSystemSearchAttribute: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	}
+
+	chasmRegistry := chasm.NewRegistry(s.mockResource.GetLogger())
+	err := chasmRegistry.Register(chasmworkflow.NewLibrary())
+	s.NoError(err)
+
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
 		cfg,
@@ -172,6 +179,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		health.NewServer(),
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
+		chasmRegistry,
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}

@@ -196,6 +196,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
+		chasm.WorkflowArchetypeID,
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
@@ -260,6 +261,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
+		chasm.WorkflowArchetypeID,
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
@@ -712,10 +714,10 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	resetContext.EXPECT().Unlock()
 	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	resetContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 	resetMutableState := historyi.NewMockMutableState(s.controller)
 	resetContextCacheKey := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	resetContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(resetMutableState, nil)

@@ -13,6 +13,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -825,6 +826,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
 				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
 				require.True(t, ok)
+				require.Equal(t, chasm.WorkflowArchetypeID, syncVersionTask.GetArchetypeID())
 				taskEquivalent := syncVersionTask.TaskEquivalents
 				require.Equal(t, len(tc.expectedTaskEquivalentTypes), len(taskEquivalent))
 				for i, equivalent := range taskEquivalent {

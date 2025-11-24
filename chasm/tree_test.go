@@ -2173,7 +2173,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	}, newPureTask)
 	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTimer], 1)
 	chasmPureTask := s.nodeBackend.TasksByCategory[tasks.CategoryTimer][0].(*tasks.ChasmTaskPure)
-	s.Equal(tasks.CategoryTimer, chasmPureTask.Category)
+	s.Equal(tasks.CategoryTimer, chasmPureTask.GetCategory())
 	s.True(chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
 
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()

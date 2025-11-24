@@ -9,12 +9,14 @@ import (
 )
 
 var _ Task = (*DeleteExecutionTask)(nil)
+var _ HasArchetypeID = (*DeleteExecutionTask)(nil)
 
 type (
 	DeleteExecutionTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
+		ArchetypeID         uint32
 
 		ProcessStage DeleteWorkflowExecutionStage
 	}
@@ -46,6 +48,10 @@ func (a *DeleteExecutionTask) GetCategory() Category {
 
 func (a *DeleteExecutionTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
+}
+
+func (t *DeleteExecutionTask) GetArchetypeID() uint32 {
+	return t.ArchetypeID
 }
 
 func (a *DeleteExecutionTask) String() string {

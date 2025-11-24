@@ -628,6 +628,7 @@ func (e *ExecutableTaskImpl) SyncState(
 			WorkflowId: syncStateErr.WorkflowId,
 			RunId:      syncStateErr.RunId,
 		},
+		ArchetypeId:         syncStateErr.ArchetypeId,
 		VersionedTransition: syncStateErr.VersionedTransition,
 		VersionHistories:    syncStateErr.VersionHistories,
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
@@ -690,7 +691,7 @@ func (e *ExecutableTaskImpl) SyncState(
 	if err != nil {
 		return false, err
 	}
-	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, e.SourceClusterName())
+	err = engine.ReplicateVersionedTransition(ctx, syncStateErr.ArchetypeId, resp.VersionedTransitionArtifact, e.SourceClusterName())
 	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
 	}

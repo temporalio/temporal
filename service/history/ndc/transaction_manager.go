@@ -110,18 +110,20 @@ type (
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
+			archetypeID chasm.ArchetypeID,
 		) (bool, error)
 		GetCurrentWorkflowRunID(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
+			archetypeID chasm.ArchetypeID,
 		) (string, error)
 		LoadWorkflow(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
-			archetype chasm.Archetype,
+			archetypeID chasm.ArchetypeID,
 		) (Workflow, error)
 	}
 
@@ -366,6 +368,7 @@ func (r *transactionMgrImpl) CheckWorkflowExists(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
+	archetypeID chasm.ArchetypeID,
 ) (bool, error) {
 
 	_, err := r.shardContext.GetWorkflowExecution(
@@ -375,6 +378,7 @@ func (r *transactionMgrImpl) CheckWorkflowExists(
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  workflowID,
 			RunID:       runID,
+			ArchetypeID: archetypeID,
 		},
 	)
 
@@ -392,6 +396,7 @@ func (r *transactionMgrImpl) GetCurrentWorkflowRunID(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
+	archetypeID chasm.ArchetypeID,
 ) (string, error) {
 
 	resp, err := r.shardContext.GetCurrentExecution(
@@ -400,6 +405,7 @@ func (r *transactionMgrImpl) GetCurrentWorkflowRunID(
 			ShardID:     r.shardContext.GetShardID(),
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  workflowID,
+			ArchetypeID: archetypeID,
 		},
 	)
 
@@ -418,7 +424,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	archetype chasm.Archetype,
+	archetypeID chasm.ArchetypeID,
 ) (Workflow, error) {
 
 	weContext, release, err := r.workflowCache.GetOrCreateChasmExecution(
@@ -429,7 +435,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		archetype,
+		archetypeID,
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -467,6 +473,7 @@ func (r *transactionMgrImpl) isWorkflowCurrent(
 		ctx,
 		namespaceID,
 		workflowID,
+		targetWorkflow.GetMutableState().ChasmTree().ArchetypeID(),
 	)
 	if err != nil {
 		return false, err

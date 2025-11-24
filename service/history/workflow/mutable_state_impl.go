@@ -7054,6 +7054,12 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	replicationTasks = append(replicationTasks, ms.syncActivityToReplicationTask(transactionPolicy)...)
 	replicationTasks = append(replicationTasks, ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...)
 
+	archetypeID := ms.ChasmTree().ArchetypeID()
+	isWorkflow := archetypeID == chasm.WorkflowArchetypeID
+	if !isWorkflow && len(replicationTasks) != 0 {
+		return softassert.UnexpectedInternalErr(ms.logger, "chasm execution generated workflow replication tasks", nil)
+	}
+
 	if ms.transitionHistoryEnabled {
 		switch transactionPolicy {
 		case historyi.TransactionPolicyActive:
@@ -7096,6 +7102,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
 						WorkflowKey:            workflowKey,
 						VisibilityTimestamp:    now,
+						ArchetypeID:            archetypeID,
 						Priority:               enumsspb.TASK_PRIORITY_HIGH,
 						VersionedTransition:    currentVersionedTransition,
 						FirstEventID:           firstEventID,
@@ -7120,11 +7127,13 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 		default:
 			panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 		}
-	} else {
+	} else if isWorkflow {
 		ms.InsertTasks[tasks.CategoryReplication] = append(
 			ms.InsertTasks[tasks.CategoryReplication],
 			replicationTasks...,
 		)
+	} else {
+		return softassert.UnexpectedInternalErr(ms.logger, "state-based replication not enabled for chasm execution", nil)
 	}
 
 	if transactionPolicy == historyi.TransactionPolicyPassive &&

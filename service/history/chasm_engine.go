@@ -96,11 +96,17 @@ func (e *ChasmEngine) NewExecution(
 		return chasm.ExecutionKey{}, nil, err
 	}
 
+	archetypeID, err := executionRef.ArchetypeID(e.registry)
+	if err != nil {
+		return chasm.ExecutionKey{}, nil, err
+	}
+
 	currentExecutionReleaseFn, err := e.lockCurrentExecution(
 		ctx,
 		shardContext,
 		namespace.ID(executionRef.NamespaceID),
 		executionRef.BusinessID,
+		archetypeID,
 	)
 	if err != nil {
 		return chasm.ExecutionKey{}, nil, err
@@ -113,6 +119,7 @@ func (e *ChasmEngine) NewExecution(
 		ctx,
 		shardContext,
 		executionRef,
+		archetypeID,
 		newFn,
 		options,
 	)
@@ -269,12 +276,14 @@ func (e *ChasmEngine) lockCurrentExecution(
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	businessID string,
+	archetypeID chasm.ArchetypeID,
 ) (historyi.ReleaseWorkflowContextFunc, error) {
-	currentExecutionReleaseFn, err := e.executionCache.GetOrCreateCurrentWorkflowExecution(
+	currentExecutionReleaseFn, err := e.executionCache.GetOrCreateCurrentExecution(
 		ctx,
 		shardContext,
 		namespaceID,
 		businessID,
+		archetypeID,
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -288,6 +297,7 @@ func (e *ChasmEngine) createNewExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	executionRef chasm.ComponentRef,
+	archetypeID chasm.ArchetypeID,
 	newFn func(chasm.MutableContext) (chasm.Component, error),
 	options chasm.TransitionOptions,
 ) (newExecutionParams, error) {
@@ -346,6 +356,7 @@ func (e *ChasmEngine) createNewExecution(
 				executionKey.BusinessID,
 				executionKey.RunID,
 			),
+			archetypeID,
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
@@ -587,13 +598,6 @@ func (e *ChasmEngine) getExecutionLease(
 		return nil, nil, err
 	}
 
-	// TODO: use archetypeID as well in execution cache and then we don't need
-	// this extra conversion.
-	archetype, ok := e.registry.ComponentFqnByID(archetypeID)
-	if !ok {
-		return nil, nil, serviceerror.NewInternalf("unknown archetype ID: %v", archetypeID)
-	}
-
 	var staleReferenceErr error
 	executionLease, err := consistencyChecker.GetChasmLeaseWithConsistencyCheck(
 		ctx,
@@ -614,7 +618,7 @@ func (e *ChasmEngine) getExecutionLease(
 			ref.BusinessID,
 			ref.RunID,
 		),
-		chasm.Archetype(archetype),
+		archetypeID,
 		lockPriority,
 	)
 	if err == nil && staleReferenceErr != nil {

@@ -26,7 +26,7 @@ import (
 
 const longPollSoftTimeout = time.Second
 
-func GetOrPollMutableState(
+func GetOrPollWorkflowMutableState(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	request *historyservice.GetMutableStateRequest,
@@ -42,7 +42,7 @@ func GetOrPollMutableState(
 	}
 
 	if len(request.Execution.RunId) == 0 {
-		request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentRunID(
+		request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentWorkflowRunID(
 			ctx,
 			request.NamespaceId,
 			request.Execution.WorkflowId,

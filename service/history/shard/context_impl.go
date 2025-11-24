@@ -941,6 +941,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 func (s *ContextImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	key definition.WorkflowKey,
+	archetypeID chasm.ArchetypeID,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
@@ -1028,6 +1029,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
 					WorkflowID:  key.WorkflowID,
+					ArchetypeID: archetypeID,
 
 					Tasks: newTasks,
 				}
@@ -1048,10 +1050,12 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 				defer cancel()
+
 				delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
 					WorkflowID:  key.WorkflowID,
+					ArchetypeID: archetypeID,
 					RunID:       key.RunID,
 				}
 				if err := s.GetExecutionManager().DeleteCurrentWorkflowExecution(
@@ -1070,13 +1074,16 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 				defer cancel()
-				delRequest := &persistence.DeleteWorkflowExecutionRequest{
-					ShardID:     s.shardID,
-					NamespaceID: key.NamespaceID,
-					WorkflowID:  key.WorkflowID,
-					RunID:       key.RunID,
-				}
-				if err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest); err != nil {
+				if err := s.GetExecutionManager().DeleteWorkflowExecution(
+					ctx,
+					&persistence.DeleteWorkflowExecutionRequest{
+						ShardID:     s.shardID,
+						NamespaceID: key.NamespaceID,
+						WorkflowID:  key.WorkflowID,
+						RunID:       key.RunID,
+						ArchetypeID: archetypeID,
+					},
+				); err != nil {
 					return err
 				}
 			}

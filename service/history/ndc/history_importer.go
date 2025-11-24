@@ -351,7 +351,7 @@ func (r *HistoryImporterImpl) commit(
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
 		workflowKey.RunID,
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 	)
 	if err != nil {
 		r.logger.Error("HistoryImporter::commit unable to find workflow in DB", tag.Error(err))

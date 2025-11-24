@@ -276,7 +276,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			tc.mutateNode(node)
 			tc.mutateRef(&ref)
 
-			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 			if tc.clearTransitionHistory {
 				mutableState.GetExecutionInfo().TransitionHistory = nil
 			}
@@ -499,11 +499,12 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID.String(), workflowID, currentRunID)).AnyTimes()
 
 			mockWorkflowCache := cache.NewMockCache(controller)
-			mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+			mockWorkflowCache.EXPECT().GetOrCreateCurrentExecution(
 				gomock.Any(),
 				mockShard,
 				namespaceID,
 				workflowID,
+				chasm.WorkflowArchetypeID,
 				locks.PriorityLow,
 			).Return(cache.NoopReleaseFn, nil).AnyTimes()
 			mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(
@@ -547,7 +548,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				mockWorkflowCache,
 				namespaceID.String(),
 				workflowID,
-				chasm.WorkflowArchetype,
+				chasm.WorkflowArchetypeID,
 				locks.PriorityLow,
 			)
 			if tc.currentRunChanged {

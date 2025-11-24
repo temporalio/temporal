@@ -29,6 +29,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -178,6 +179,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 		_, err := historyClient0.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
 			NamespaceId: s.namespaceID,
 			Execution:   execution,
+			ArchetypeId: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
 	}
@@ -509,6 +511,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 
@@ -738,6 +741,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -761,6 +765,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -784,6 +789,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp2.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -938,6 +944,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.Require().NoError(err, "Failed to generate last history replication tasks")
 	s.T().Log("Generated last history replication tasks to force replication of completed workflow")

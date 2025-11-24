@@ -9,6 +9,7 @@ import (
 )
 
 var _ Task = (*DeleteHistoryEventTask)(nil)
+var _ HasArchetypeID = (*DeleteHistoryEventTask)(nil)
 
 type (
 	DeleteHistoryEventTask struct {
@@ -17,7 +18,9 @@ type (
 		TaskID              int64
 		Version             int64
 		BranchToken         []byte
-		ProcessStage        DeleteWorkflowExecutionStage
+		ArchetypeID         uint32
+
+		ProcessStage DeleteWorkflowExecutionStage
 	}
 )
 
@@ -55,6 +58,10 @@ func (a *DeleteHistoryEventTask) GetCategory() Category {
 
 func (a *DeleteHistoryEventTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT
+}
+
+func (t *DeleteHistoryEventTask) GetArchetypeID() uint32 {
+	return t.ArchetypeID
 }
 
 func (a *DeleteHistoryEventTask) String() string {

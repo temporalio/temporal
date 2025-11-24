@@ -4175,6 +4175,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 	}
 	expectedTask := &tasks.SyncVersionedTransitionTask{
 		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		ArchetypeID:         chasm.WorkflowArchetypeID,
 		VisibilityTimestamp: now,
 		Priority:            enumsspb.TASK_PRIORITY_HIGH,
 		VersionedTransition: transitionHistory[0],
@@ -4186,6 +4187,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 	s.True(ok)
 	s.Equal(expectedTask.WorkflowKey, actualTask.WorkflowKey)
 	s.Equal(expectedTask.VersionedTransition, actualTask.VersionedTransition)
+	s.Equal(expectedTask.ArchetypeID, actualTask.ArchetypeID)
 	s.Equal(3, len(actualTask.TaskEquivalents))
 	s.Equal(historyTasks[0], actualTask.TaskEquivalents[0])
 	s.Equal(historyTasks[1], actualTask.TaskEquivalents[1])
@@ -5734,7 +5736,6 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	for i := 0; i < totalTasks; i++ {
 		task := &tasks.ChasmTaskPure{
 			VisibilityTimestamp: visTimestamp,
-			Category:            tasks.CategoryTimer,
 		}
 		s.mutableState.AddTasks(task)
 		s.LessOrEqual(len(s.mutableState.chasmPureTasks), s.mockConfig.ChasmMaxInMemoryPureTasks())
@@ -5745,7 +5746,6 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(2)
 	s.mutableState.AddTasks(&tasks.ChasmTaskPure{
 		VisibilityTimestamp: visTimestamp,
-		Category:            tasks.CategoryTimer,
 	})
 	s.Len(s.mutableState.chasmPureTasks, 2)
 }
@@ -5780,15 +5780,12 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			s.mutableState.chasmPureTasks = []*tasks.ChasmTaskPure{
 				{
 					VisibilityTimestamp: now.Add(3 * time.Minute),
-					Category:            tasks.CategoryTimer,
 				},
 				{
 					VisibilityTimestamp: now.Add(2 * time.Minute),
-					Category:            tasks.CategoryTimer,
 				},
 				{
 					VisibilityTimestamp: now.Add(time.Minute),
-					Category:            tasks.CategoryTimer,
 				},
 			}
 			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)

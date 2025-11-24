@@ -63,18 +63,18 @@ func (mr *MockTransactionManagerMockRecorder) BackfillWorkflow(ctx, targetWorkfl
 }
 
 // CheckWorkflowExists mocks base method.
-func (m *MockTransactionManager) CheckWorkflowExists(ctx context.Context, namespaceID namespace.ID, workflowID, runID string) (bool, error) {
+func (m *MockTransactionManager) CheckWorkflowExists(ctx context.Context, namespaceID namespace.ID, workflowID, runID string, archetypeID chasm.ArchetypeID) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckWorkflowExists", ctx, namespaceID, workflowID, runID)
+	ret := m.ctrl.Call(m, "CheckWorkflowExists", ctx, namespaceID, workflowID, runID, archetypeID)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CheckWorkflowExists indicates an expected call of CheckWorkflowExists.
-func (mr *MockTransactionManagerMockRecorder) CheckWorkflowExists(ctx, namespaceID, workflowID, runID any) *gomock.Call {
+func (mr *MockTransactionManagerMockRecorder) CheckWorkflowExists(ctx, namespaceID, workflowID, runID, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckWorkflowExists", reflect.TypeOf((*MockTransactionManager)(nil).CheckWorkflowExists), ctx, namespaceID, workflowID, runID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckWorkflowExists", reflect.TypeOf((*MockTransactionManager)(nil).CheckWorkflowExists), ctx, namespaceID, workflowID, runID, archetypeID)
 }
 
 // CreateWorkflow mocks base method.
@@ -92,33 +92,33 @@ func (mr *MockTransactionManagerMockRecorder) CreateWorkflow(ctx, targetWorkflow
 }
 
 // GetCurrentWorkflowRunID mocks base method.
-func (m *MockTransactionManager) GetCurrentWorkflowRunID(ctx context.Context, namespaceID namespace.ID, workflowID string) (string, error) {
+func (m *MockTransactionManager) GetCurrentWorkflowRunID(ctx context.Context, namespaceID namespace.ID, workflowID string, archetypeID chasm.ArchetypeID) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentWorkflowRunID", ctx, namespaceID, workflowID)
+	ret := m.ctrl.Call(m, "GetCurrentWorkflowRunID", ctx, namespaceID, workflowID, archetypeID)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCurrentWorkflowRunID indicates an expected call of GetCurrentWorkflowRunID.
-func (mr *MockTransactionManagerMockRecorder) GetCurrentWorkflowRunID(ctx, namespaceID, workflowID any) *gomock.Call {
+func (mr *MockTransactionManagerMockRecorder) GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentWorkflowRunID", reflect.TypeOf((*MockTransactionManager)(nil).GetCurrentWorkflowRunID), ctx, namespaceID, workflowID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentWorkflowRunID", reflect.TypeOf((*MockTransactionManager)(nil).GetCurrentWorkflowRunID), ctx, namespaceID, workflowID, archetypeID)
 }
 
 // LoadWorkflow mocks base method.
-func (m *MockTransactionManager) LoadWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, runID string, archetype chasm.Archetype) (Workflow, error) {
+func (m *MockTransactionManager) LoadWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, runID string, archetypeID chasm.ArchetypeID) (Workflow, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LoadWorkflow", ctx, namespaceID, workflowID, runID, archetype)
+	ret := m.ctrl.Call(m, "LoadWorkflow", ctx, namespaceID, workflowID, runID, archetypeID)
 	ret0, _ := ret[0].(Workflow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // LoadWorkflow indicates an expected call of LoadWorkflow.
-func (mr *MockTransactionManagerMockRecorder) LoadWorkflow(ctx, namespaceID, workflowID, runID, archetype any) *gomock.Call {
+func (mr *MockTransactionManagerMockRecorder) LoadWorkflow(ctx, namespaceID, workflowID, runID, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadWorkflow", reflect.TypeOf((*MockTransactionManager)(nil).LoadWorkflow), ctx, namespaceID, workflowID, runID, archetype)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadWorkflow", reflect.TypeOf((*MockTransactionManager)(nil).LoadWorkflow), ctx, namespaceID, workflowID, runID, archetypeID)
 }
 
 // UpdateWorkflow mocks base method.

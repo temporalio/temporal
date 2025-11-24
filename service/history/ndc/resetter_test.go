@@ -90,6 +90,7 @@ func (s *resetterSuite) SetupTest() {
 			s.workflowID,
 			s.newRunID,
 		),
+		chasm.WorkflowArchetypeID,
 		s.logger,
 		s.mockShard.GetThrottledLogger(),
 		s.mockShard.GetMetricsHandler(),
