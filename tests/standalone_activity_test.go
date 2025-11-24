@@ -366,8 +366,9 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 			},
 		},
 	})
-	require.Error(t, err)
-	require.ErrorContains(t, err, "cached mutable state could potentially be stale")
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
+	require.ErrorContains(t, err, "please retry")
 }
 
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion() {
@@ -451,32 +452,14 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_DeadlineExceede
 	require.Empty(t, pollResp.GetInfo())
 }
 
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_UnavailableErrors() {
-	t := s.T()
-	// The stale state scenario is already tested in Test_PollActivityExecutionLongPollStaleReference
-	// This test would verify other Unavailable scenarios if we could simulate them:
-	// - Shard temporarily unavailable
-	// - Service temporarily unable to process request
-	// - Namespace failover in progress
-
-	// These scenarios are difficult to simulate in unit tests without mocking internal components
-	t.Skip("Unavailable error scenarios other than stale state require internal mocking")
-}
-
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 	t := s.T()
 	ctx := testcore.NewContext()
-
-	// Start a valid activity first to get a valid namespace and run ID format
 	activityID := "test-activity-" + t.Name()
 	taskQueue := "test-task-queue-" + t.Name()
 	startResp, err := s.startActivity(ctx, activityID, taskQueue)
 	require.NoError(t, err)
 	require.NotEmpty(t, startResp.RunId)
-
-	// Generate a non-existent but valid UUID for testing
-	nonExistentRunID := "11111111-2222-3333-4444-555555555555"
-	nonExistentActivityID := "non-existent-activity-" + t.Name()
 
 	testCases := []struct {
 		name        string
@@ -484,93 +467,47 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 		expectedErr string
 	}{
 		{
+			name: "NonExistentNamespace",
+			request: &workflowservice.PollActivityExecutionRequest{
+				Namespace:  "non-existent-namespace",
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			},
+			expectedErr: "Namespace non-existent-namespace is not found.",
+		},
+		{
 			name: "NonExistentActivityID",
 			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
-				ActivityId: nonExistentActivityID, // Activity that was never started
-				RunId:      startResp.RunId,       // Valid run ID from a different activity
+				ActivityId: "non-existent-activity",
+				RunId:      startResp.RunId,
 			},
-			// The internal error message says "workflow execution not found" because
-			// activities are stored as workflows internally
-			expectedErr: "workflow execution not found",
+			expectedErr: "execution not found",
 		},
 		{
 			name: "NonExistentRunID",
 			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,       // Valid activity ID
-				RunId:      nonExistentRunID, // Run ID that doesn't exist
+				ActivityId: activityID,
+				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
-			expectedErr: "workflow execution not found",
-		},
-		{
-			name: "BothNonExistent",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: nonExistentActivityID, // Non-existent activity
-				RunId:      nonExistentRunID,      // Non-existent run ID
-			},
-			expectedErr: "not found",
-		},
-		{
-			name: "ActivityIDFromDifferentNamespace",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: "activity-from-another-namespace",
-				RunId:      nonExistentRunID,
-			},
-			expectedErr: "not found",
-		},
-		{
-			name: "WrongRunIDForActivity",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,       // This activity exists
-				RunId:      nonExistentRunID, // But not with this run ID
-			},
-			expectedErr: "workflow execution not found",
+			expectedErr: "execution not found",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
-			require.Error(t, err, "Expected error for test case: %s", tc.name)
-
-			// Check that it's a not found error
+			require.Error(t, err)
 			statusErr := serviceerror.ToStatus(err)
-			require.NotNil(t, statusErr, "Expected error to be convertible to status for test case: %s", tc.name)
-			require.Equal(t, codes.NotFound, statusErr.Code(),
-				"Expected NotFound error code for test case: %s, got: %v with message: %s",
-				tc.name, statusErr.Code(), statusErr.Message())
-
-			// Check that the error message contains expected text
-			if tc.expectedErr != "" {
-				require.Contains(t, strings.ToLower(statusErr.Message()), strings.ToLower(tc.expectedErr),
-					"Expected error message to contain '%s' for test case: %s, got: %s",
-					tc.expectedErr, tc.name, statusErr.Message())
-			}
+			require.NotNil(t, statusErr)
+			require.Equal(t, codes.NotFound, statusErr.Code())
+			require.Equal(t, tc.expectedErr, statusErr.Message())
 		})
 	}
 
-	// Additional test: Verify that a valid activity can still be found
-	t.Run("ValidActivityStillFound", func(t *testing.T) {
-		resp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err, "Should find the valid activity")
-		require.NotNil(t, resp)
-		if resp.Info != nil {
-			require.Equal(t, activityID, resp.Info.ActivityId)
-			require.Equal(t, startResp.RunId, resp.Info.RunId)
-		}
-	})
-
-	// Test with long-poll token for non-existent activity
 	t.Run("LongPollNonExistentActivity", func(t *testing.T) {
-		// First poll to get a token from the valid activity
+		// Poll to get a token
 		validPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
@@ -583,11 +520,11 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 		})
 		require.NoError(t, err)
 
-		// Try to use the token with a non-existent activity
+		// Use the token with a non-existent activity
 		_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
-			ActivityId: nonExistentActivityID,
-			RunId:      nonExistentRunID,
+			ActivityId: "non-existent-activity",
+			RunId:      startResp.RunId,
 			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
 				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
 					LongPollToken: validPollResp.StateChangeLongPollToken,
@@ -597,10 +534,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.NotNil(t, statusErr)
-		// This could be either NotFound or InvalidArgument depending on implementation
-		// but NotFound is more appropriate for non-existent resources
-		require.Contains(t, []codes.Code{codes.NotFound, codes.InvalidArgument}, statusErr.Code(),
-			"Expected NotFound or InvalidArgument for mismatched token, got: %v", statusErr.Code())
+		require.Equal(t, codes.NotFound, statusErr.Code())
+		require.Equal(t, "execution not found", statusErr.Message())
 	})
 }
 

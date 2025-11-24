@@ -270,6 +270,12 @@ func (e *ChasmEngine) PollComponent(
 	requestRef chasm.ComponentRef,
 	monotonicPredicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
+	defer func() {
+		if errors.Is(retError, consts.ErrStaleState) {
+			retError = serviceerror.NewUnavailable("please retry")
+		}
+	}()
+
 	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
 	if err != nil {
 		// E.g. requestRef VT inconsistent with shard VT ('stale reference')

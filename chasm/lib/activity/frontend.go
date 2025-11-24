@@ -92,6 +92,14 @@ func (h *frontendHandler) PollActivityExecution(
 	ctx context.Context,
 	req *workflowservice.PollActivityExecutionRequest,
 ) (*workflowservice.PollActivityExecutionResponse, error) {
+	// Validate the request
+	if err := ValidatePollActivityExecutionRequest(
+		req,
+		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
+	); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err

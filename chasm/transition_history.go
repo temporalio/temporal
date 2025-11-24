@@ -38,9 +38,6 @@ func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) ([]byte, b
 	case 1:
 		// Execution state is behind submitted ref
 		return nil, false, consts.ErrStaleState
-	default:
-		// Impossible: Compare only returns -1, 0, or 1
-		return nil, false, serviceerror.NewInternal("unexpected transition history comparison result")
 	}
-
+	panic("unexpected result from transitionhistory.Compare")
 }
