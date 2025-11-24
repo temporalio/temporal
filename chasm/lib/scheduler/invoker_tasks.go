@@ -23,7 +23,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/history/queues"
+	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -89,7 +89,7 @@ const (
 )
 
 var (
-	errRetryLimitExceeded       = queues.NewUnprocessableTaskError("retry limit exceeded")
+	errRetryLimitExceeded       = queueerrors.NewUnprocessableTaskError("retry limit exceeded")
 	_                     error = &rateLimitedError{}
 )
 
@@ -385,7 +385,7 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
 	if executionInfo == nil {
-		return queues.NewUnprocessableTaskError("schedules must have an Action set")
+		return queueerrors.NewUnprocessableTaskError("schedules must have an Action set")
 	}
 
 	// Compute actions to take from the current buffer.

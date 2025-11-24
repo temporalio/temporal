@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/queues"
+	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -90,7 +90,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
-		return queues.NewUnprocessableTaskError(
+		return queueerrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to process a time range: %s", err.Error()))
 	}
 
@@ -102,7 +102,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 	if err := g.updateFutureActionTimes(generator, scheduler); err != nil {
-		return queues.NewUnprocessableTaskError(
+		return queueerrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to update future action times: %s", err.Error()))
 	}
 

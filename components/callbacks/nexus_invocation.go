@@ -21,6 +21,8 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/queues"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -78,7 +80,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
-		return invocationResultFail{queues.NewUnprocessableTaskError(
+		return invocationResultFail{queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
 		)}
 	}
@@ -89,7 +91,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		request.Header.Set(k, v)
 	}
 
-	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
+	caller := e.HTTPCallerProvider(queuescommon.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
 		Destination: task.Destination(),
 	})
