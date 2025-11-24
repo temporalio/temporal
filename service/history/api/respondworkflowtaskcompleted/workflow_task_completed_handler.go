@@ -497,12 +497,19 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
 		(!versioningUsed || attr.UseWorkflowBuildId)
 
-	// we bypass activity task generation if either eagerStartActivity is true or the workflow is paused.
-	bypassTaskGeneration := eagerStartActivity || (handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED)
+	// if the workflow is paused, we bypass activity task generation and also prevent eager activity execution.
+	bypassActivityTaskGeneration := eagerStartActivity
+	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		bypassActivityTaskGeneration = true
+		eagerStartActivity = false
+	} else { // if not we bypass activity task generation if eager start activity is requested.
+		bypassActivityTaskGeneration = eagerStartActivity
+	}
+
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
 		attr,
-		bypassTaskGeneration,
+		bypassActivityTaskGeneration,
 	)
 	if err != nil {
 		return nil, nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
