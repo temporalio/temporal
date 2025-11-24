@@ -415,14 +415,14 @@ func (s *FunctionalTestBase) TearDownCluster() {
 	}
 }
 
-// **IMPORTANT**: When overriding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
+// TearDownTest tears down the test environment. **IMPORTANT**: When overriding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
 	s.tearDownSdk()
 	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
-// **IMPORTANT**: When overriding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
+// TearDownSubTest tears down the sub-test environment. **IMPORTANT**: When overriding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
 func (s *FunctionalTestBase) TearDownSubTest() {
 	s.exportOTELTraces()
 }

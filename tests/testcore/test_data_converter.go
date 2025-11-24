@@ -21,7 +21,7 @@ type TestDataConverter struct {
 	NumOfCallFromPayloads int
 }
 
-// TODO (alex): use it by default SdkClient everywhere?
+// NewTestDataConverter creates a new test data converter. TODO (alex): use it by default SdkClient everywhere?
 func NewTestDataConverter() converter.DataConverter {
 	return &TestDataConverter{}
 }

@@ -181,7 +181,7 @@ func (s *Scanner) Start() error {
 
 	if s.context.cfg.BuildIdScavengerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIdScavengerWorkflowName)
+		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIDScavengerWorkflowName)
 
 		buildIdsActivities := build_ids.NewActivities(
 			s.context.logger,
@@ -196,8 +196,8 @@ func (s *Scanner) Start() error {
 		)
 
 		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)
-		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavengerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavengerWorkflowName})
-		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavengerActivityName})
+		work.RegisterWorkflowWithOptions(build_ids.BuildIDScavengerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIDScavengerWorkflowName})
+		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIDScavengerActivityName})
 
 		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
 		if err := work.Start(); err != nil {

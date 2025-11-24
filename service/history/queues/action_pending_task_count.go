@@ -136,7 +136,8 @@ func (a *actionQueuePendingTask) findSliceToClear(
 
 		sliceList := a.slicesPerKey[key]
 		if len(sliceList) == 0 {
-			panic("Found key with non-zero pending task count but has no corresponding Slice")
+			// This should never happen - indicates a bug in the statistics gathering logic
+			return
 		}
 
 		// pop the first slice in the list

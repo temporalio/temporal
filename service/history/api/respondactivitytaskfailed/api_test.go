@@ -2,6 +2,7 @@ package respondactivitytaskfailed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -261,7 +262,7 @@ func (s *workflowSuite) Test_LastHeartBeatDetailsExist_UpdatesMutableState() {
 }
 
 func (s *workflowSuite) Test_RetryActivityFailsWithAnError_WillReturnTheError() {
-	retryError := fmt.Errorf("bizarre error")
+	retryError := errors.New("bizarre error")
 	uc := newUseCase(UsecaseConfig{
 		attempt:             int32(1),
 		startedEventId:      int64(40),
