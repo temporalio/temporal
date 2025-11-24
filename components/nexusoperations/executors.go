@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/queues"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
@@ -298,7 +297,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	err = e.saveResult(ctx, env, ref, result, callErr)
 
 	if callErr != nil && isDestinationDown(callErr) {
-		err = queues.NewDestinationDownError(callErr.Error(), err)
+		err = queueserrors.NewDestinationDownError(callErr.Error(), err)
 	}
 
 	return err
@@ -643,7 +642,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
 
 	if callErr != nil && isDestinationDown(callErr) {
-		err = queues.NewDestinationDownError(callErr.Error(), err)
+		err = queueserrors.NewDestinationDownError(callErr.Error(), err)
 	}
 
 	return err
