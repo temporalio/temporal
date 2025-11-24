@@ -138,7 +138,7 @@ func buildCLI() *cli.App {
 					Aliases: []string{"svc"},
 					Value:   cli.NewStringSlice(temporal.DefaultServices...),
 					Usage:   "service(s) to start",
-					EnvVars: []string{"SERVICES"},
+					EnvVars: []string{"TEMPORAL_SERVICES"},
 				},
 			},
 			Before: func(c *cli.Context) error {
