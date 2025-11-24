@@ -2404,7 +2404,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	// New run initiated by ContinueAsNew of an AUTO_UPGRADE workflow execution will inherit the previous run's
-	// deployment version and revision number iff the new run's Task Queue belongs to that deployment.
+	// deployment version and revision number iff the new run's Task Queue belongs to source deployment version.
 	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var sourceDeploymentRevisionNumber int64
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
@@ -2414,7 +2414,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			// Cross-TQ CAN: check if new TQ is in parent's deployment
-			TQInSourceDeployment, err := IsWFTaskQueueInVersionDetector(
+			TQInSourceDeploymentVersion, err := IsWFTaskQueueInVersionDetector(
 				context.Background(),
 				ms.GetNamespaceEntry().ID().String(),
 				newTQ,
@@ -2423,7 +2423,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 			if err != nil {
 				return nil, fmt.Errorf("error determining CAN task queue presence in auto upgrade deployment: %w", err)
 			}
-			if !TQInSourceDeployment {
+			if !TQInSourceDeploymentVersion {
 				sourceDeploymentVersion = nil
 				sourceDeploymentRevisionNumber = 0
 			}
