@@ -241,11 +241,13 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 // by the supplied component reference. If it times out due to a server-imposed long-poll timeout
 // then it returns (nil, nil, nil). Otherwise it returns (output, ref, err), where output is the
 // output of the predicate function, and ref is a component reference identifying the state at which
-// the predicate was satisfied. If the predicate is true at the outset then it returns immediately.
+// the predicate was satisfied. The predicate must be monotonic: if it returns true at execution
+// state transition s it must return true at all transitions t > s. If the predicate is true at the
+// outset then PollComponent returns immediately.
 func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
-	predicateFn func(C, Context, I) (O, bool, error),
+	monotonicPredicateFn func(C, Context, I) (O, bool, error),
 	input I,
 ) (O, []byte, error) {
 	var output O
@@ -259,7 +261,7 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 		ctx,
 		ref,
 		func(ctx Context, c Component) (bool, error) {
-			out, satisfied, err := predicateFn(c.(C), ctx, input)
+			out, satisfied, err := monotonicPredicateFn(c.(C), ctx, input)
 			if satisfied {
 				output = out
 			}

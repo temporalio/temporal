@@ -269,7 +269,7 @@ func (e *ChasmEngine) ReadComponent(
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
-	predicateFn func(chasm.Context, chasm.Component) (bool, error),
+	monotonicPredicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
 	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
 	if err != nil {
@@ -283,7 +283,7 @@ func (e *ChasmEngine) PollComponent(
 
 	// At this point it's possible that shard VT < requestRef VT (getExecutionLease does not
 	// guarantee that returned shard state is non-stale w.r.t. requestRef).
-	satisfiedRef, err := e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
+	satisfiedRef, err := e.predicateSatisfied(ctx, requestRef, executionLease, monotonicPredicateFn)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (e *ChasmEngine) PollComponent(
 			}
 			func() {
 				defer executionLease.GetReleaseFn()(nil)
-				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, predicateFn)
+				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, monotonicPredicateFn)
 				if err == nil && satisfiedRef == nil {
 					ch, err = e.notifier.Subscribe(requestRef.EntityKey)
 				}
