@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/queues"
+	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -46,9 +46,9 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 	// Execute the generate task.
 	generator := sched.Generator.Get(ctx)
 	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.ErrorIs(err, queues.UnprocessableTaskError{
-		Message: "failed to process a time range: processTimeRange bug",
-	})
+	var target *queueerrors.UnprocessableTaskError
+	s.ErrorAs(err, &target)
+	s.Equal("failed to process a time range: processTimeRange bug", target.Message)
 }
 
 func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {

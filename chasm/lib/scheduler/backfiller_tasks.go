@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/queues"
+	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -85,10 +85,10 @@ func (b *BackfillerTaskExecutor) Execute(
 	case RequestTypeTrigger:
 		result, err = b.processTrigger(ctx, scheduler, backfiller)
 	default:
-		return queues.NewUnprocessableTaskError(fmt.Sprintf("unknown backfill type: %v", backfiller.RequestType()))
+		return queueerrors.NewUnprocessableTaskError(fmt.Sprintf("unknown backfill type: %v", backfiller.RequestType()))
 	}
 	if err != nil {
-		return queues.NewUnprocessableTaskError(fmt.Sprintf("failed to process backfill: %s", err.Error()))
+		return queueerrors.NewUnprocessableTaskError(fmt.Sprintf("failed to process backfill: %s", err.Error()))
 	}
 
 	// Enqueue new BufferedStarts on the Invoker, if we have any.
