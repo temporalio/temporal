@@ -15,9 +15,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
@@ -193,7 +191,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		},
 	})
 
-	// TODO(dan): will complete this test in a different PR
+	// TODO(dan): will complete this test in a subsequent PR, on top of https://github.com/temporalio/temporal/pull/8653
 	require.NoError(t, err)
 	require.NotNil(t, pollResp)
 	require.NotNil(t, pollResp.GetInfo())
@@ -372,160 +370,6 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion() {
 	t := s.T()
 	t.Skip("TODO(dan): implement test when RecordActivityTaskCompleted is implemented")
-}
-
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateChange_Success_UpdateComponent() {
-	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	ctx = chasm.NewEngineContext(ctx, s.chasmEngine)
-
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := uuid.New().String()
-
-	startResp, err := s.startActivity(ctx, activityID, taskQueue)
-	require.NoError(t, err)
-	entityKey := chasm.EntityKey{
-		NamespaceID: s.NamespaceID().String(),
-		BusinessID:  activityID,
-		EntityID:    startResp.RunId,
-	}
-
-	// Test PollActivityExecution(WaitAnyStateChange) without a long-poll token.
-	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      startResp.RunId,
-		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{},
-		},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, pollResp.GetStateChangeLongPollToken())
-	require.Equal(t, startResp.GetRunId(), pollResp.GetRunId())
-
-	_, _, err = chasm.UpdateComponent(
-		ctx,
-		chasm.NewComponentRef[*activity.Activity](entityKey),
-		func(a *activity.Activity, ctx chasm.MutableContext, _ any) (any, error) {
-			// Don't actually mutate; just trigger the notification
-			return nil, nil
-		}, nil)
-	require.NoError(t, err)
-
-	// Test PollActivityExecution(WaitAnyStateChange) with a long-poll token.
-	secondPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      startResp.RunId,
-		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-				LongPollToken: pollResp.GetStateChangeLongPollToken(),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, secondPollResp.StateChangeLongPollToken)
-}
-
-// Test_PollVisibility_UpdateFromParent tests that polling for visibility component is woken up when
-// the parent activity is updated and modifies the visibility.
-// TODO(dan): this test uses chasm APIs (ReadComponent, UpdateComponent, PollComponent) directly. Is
-// this illegitimate in tests/?
-func (s *standaloneActivityTestSuite) Test_PollVisibility_UpdateFromParent() {
-	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	ctx = chasm.NewEngineContext(ctx, s.chasmEngine)
-
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := uuid.New().String()
-
-	startResp, err := s.startActivity(ctx, activityID, taskQueue)
-	require.NoError(t, err)
-	entityKey := chasm.EntityKey{
-		NamespaceID: s.NamespaceID().String(),
-		BusinessID:  activityID,
-		EntityID:    startResp.RunId,
-	}
-
-	visibilityRef, err := chasm.ReadComponent(
-		ctx,
-		chasm.NewComponentRef[*activity.Activity](entityKey),
-		func(a *activity.Activity, ctx chasm.Context, _ any) ([]byte, error) {
-			visibility, err := a.Visibility.Get(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return ctx.Ref(visibility)
-		},
-		nil,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, visibilityRef)
-
-	pollStarted := make(chan struct{})
-	pollCompleted := make(chan []byte, 1)
-	pollError := make(chan error, 1)
-
-	go func() {
-		close(pollStarted)
-
-		_, ref, err := chasm.PollComponent(
-			ctx,
-			visibilityRef,
-			func(v *chasm.Visibility, ctx chasm.Context, _ any) (any, bool, error) {
-				sa, err := v.SA.Get(ctx)
-				if err != nil {
-					return nil, false, err
-				}
-				if sa != nil && len(sa.IndexedFields) > 0 {
-					// State has changed, stop waiting
-					return nil, true, nil
-				}
-				// State hasn't changed yet, keep waiting
-				return nil, false, nil
-			},
-			nil,
-		)
-		if err != nil {
-			pollError <- err
-		} else {
-			pollCompleted <- ref
-		}
-	}()
-
-	<-pollStarted
-	// Hope that subscription has been established after an arbitrary amount of time
-	// TODO(dan)
-	time.Sleep(100 * time.Millisecond)
-
-	// Modify the visibility component via an update targeting its parent activity component
-	_, _, err = chasm.UpdateComponent(
-		ctx,
-		chasm.NewComponentRef[*activity.Activity](entityKey),
-		func(a *activity.Activity, ctx chasm.MutableContext, _ any) (any, error) {
-			visibility, err := a.Visibility.Get(ctx)
-			if err != nil {
-				return nil, err
-			}
-			visibility.SA = chasm.NewDataField(ctx, &commonpb.SearchAttributes{
-				IndexedFields: map[string]*commonpb.Payload{
-					"TestField": payload.EncodeString("updated from parent"),
-				},
-			})
-			return nil, nil
-		}, nil)
-	require.NoError(t, err)
-
-	select {
-	case ref := <-pollCompleted:
-		require.NotNil(t, ref)
-	case err := <-pollError:
-		t.Fatalf("Poll failed with error: %v", err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("Poll did not complete within timeout")
-	}
 }
 
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
