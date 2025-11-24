@@ -87,7 +87,7 @@ func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
 		fc.keys.Set(key, normalized)
 	}
 
-	values := fc.values.Load().(ConfigValueMap)
+	values := fc.values.Load().(ConfigValueMap) // nolint:revive // unchecked-type-assertion
 	return values[Key(normalized)]
 }
 
@@ -149,7 +149,7 @@ func (fc *fileBasedClient) Update() error {
 	}
 
 	prev := fc.values.Swap(lr.Map)
-	oldValues, _ := prev.(ConfigValueMap)
+	oldValues, _ := prev.(ConfigValueMap) // nolint:revive // unchecked-type-assertion
 	changedMap := DiffAndLogConfigs(fc.logger, oldValues, lr.Map)
 	fc.logger.Info("Updated dynamic config")
 

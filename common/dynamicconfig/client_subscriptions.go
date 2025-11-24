@@ -22,7 +22,7 @@ func NewNotifyingClientImpl() NotifyingClientImpl {
 	return NotifyingClientImpl{subscriptions: make(map[int]ClientUpdateFunc)}
 }
 
-// Adds a subscription to all updates from this Client.
+// Subscribe adds a subscription to all updates from this Client.
 func (n *NotifyingClientImpl) Subscribe(f ClientUpdateFunc) (cancel func()) {
 	n.subscriptionLock.Lock()
 	defer n.subscriptionLock.Unlock()
