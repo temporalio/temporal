@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -100,7 +101,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	}
 
-	return respond(queues.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))
+	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))
 }
 
 func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(

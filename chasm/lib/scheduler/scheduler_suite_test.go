@@ -85,6 +85,7 @@ func (s *schedulerSuite) SetupTest() {
 	s.scheduler = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	s.node.SetRootComponent(s.scheduler)
 	_, err = s.node.CloseTransaction()
+	s.NoError(err)
 
 	// Advance Generator's high water mark to 'now'.
 	generator := s.scheduler.Generator.Get(ctx)
