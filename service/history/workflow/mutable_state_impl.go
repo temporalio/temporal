@@ -2385,7 +2385,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(context.Background(), ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 			if err != nil {
-				return nil, errors.New(fmt.Sprintf("error determining child task queue presence in inherited version: %s", err.Error()))
+				return nil, fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
 			if !newTQInPinnedVersion {
 				inheritedPinnedVersion = nil
@@ -2421,8 +2421,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 				sourceDeploymentVersion,
 			)
 			if err != nil {
-				//nolint:staticcheck
-				return nil, errors.New(fmt.Sprintf("error determining CAN task queue presence in auto upgrade deployment: %s", err.Error()))
+				return nil, fmt.Errorf("error determining CAN task queue presence in auto upgrade deployment: %w", err)
 			}
 			if !TQInSourceDeployment {
 				sourceDeploymentVersion = nil

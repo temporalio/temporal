@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -957,8 +956,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
 			TQInSourceDeployment, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
 			if err != nil {
-				//nolint:staticcheck
-				return errors.New(fmt.Sprintf("error determining child task queue presence in auto upgrade deployment: %s", err.Error()))
+				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
 			if !TQInSourceDeployment {
 				inheritedAutoUpgradeInfo = nil
