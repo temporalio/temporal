@@ -87,10 +87,7 @@ func (h *handler) PollActivityExecution(
 			}
 			if changed {
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
-				if err != nil {
-					return nil, true, err
-				}
-				return response, true, nil
+				return response, true, err
 			} else {
 				return nil, false, nil
 			}
