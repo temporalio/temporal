@@ -270,7 +270,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 	firstPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
-		RunId:      startResp.RunId,
+		// Check that RunID defaults to current
 		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
 			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{},
 		},
@@ -280,6 +280,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 	require.NoError(t, err)
 	require.NotNil(t, firstPollResp.StateChangeLongPollToken)
 	require.NotNil(t, firstPollResp.Info)
+	require.Equal(t, firstPollResp.RunId, startResp.RunId)
 	s.assertActivityExecutionInfo(
 		t,
 		firstPollResp.Info,
