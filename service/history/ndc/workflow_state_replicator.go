@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
@@ -387,6 +388,9 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		executionState.RunId,
 		timestamp.TimeValue(executionState.StartTime),
 	)
+	// TODO: skip SetHistoryTree for non-workflow archetype
+	// This will be done in a follow up PR since we need the archetypeID info from caller.
+	// For now, the archetypeID for newly created mutable state is always workflow.
 	err = localMutableState.SetHistoryTree(executionInfo.WorkflowExecutionTimeout, executionInfo.WorkflowRunTimeout, executionState.RunId)
 	if err != nil {
 		return err
@@ -1330,10 +1334,25 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	if err != nil {
 		return err
 	}
+
+	archetypeID := mutableState.ChasmTree().ArchetypeID()
+	if archetypeID != chasm.WorkflowArchetypeID {
+		return softassert.UnexpectedInternalErr(
+			r.logger,
+			"Backfilling history for non-workflow archetype",
+			nil,
+			tag.ArchetypeID(archetypeID),
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+		)
+	}
+
 	backfillBranchToken, err := r.shardContext.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
 		namespaceID.String(),
 		workflowID,
 		runID,
+		archetypeID,
 		branchInfo.GetTreeId(),
 		&branchInfo.BranchId,
 		branchInfo.Ancestors,

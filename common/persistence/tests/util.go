@@ -13,6 +13,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -353,6 +354,7 @@ func RandomBranchToken(
 		namespaceID,
 		workflowID,
 		runID,
+		chasm.WorkflowArchetypeID,
 		uuid.NewString(),
 		nil,
 		nil,
