@@ -35,6 +35,9 @@ message SchedulerState {
 message GeneratorState {
     // High water mark.
     google.protobuf.Timestamp last_processed_time = 3;
+
+    // A list of upcoming times an action will be triggered.
+    repeated google.protobuf.Timestamp future_action_times = 4;
 }
 
 // CHASM scheduler's Invoker internal state.

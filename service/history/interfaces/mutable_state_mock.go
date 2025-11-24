@@ -743,6 +743,21 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionTerminatedEvent(firs
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionTerminatedEvent), firstEventID, reason, details, identity, deleteAfterTerminate, links)
 }
 
+// AddWorkflowExecutionUnpausedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionUnpausedEvent(identity, reason, requestID string) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionUnpausedEvent", identity, reason, requestID)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionUnpausedEvent indicates an expected call of AddWorkflowExecutionUnpausedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionUnpausedEvent(identity, reason, requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionUnpausedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionUnpausedEvent), identity, reason, requestID)
+}
+
 // AddWorkflowExecutionUpdateAcceptedEvent mocks base method.
 func (m *MockMutableState) AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *update.Request) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -1471,6 +1486,20 @@ func (m *MockMutableState) ApplyWorkflowExecutionTimedoutEvent(arg0 int64, arg1 
 func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTimedoutEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTimedoutEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTimedoutEvent), arg0, arg1)
+}
+
+// ApplyWorkflowExecutionUnpausedEvent mocks base method.
+func (m *MockMutableState) ApplyWorkflowExecutionUnpausedEvent(event *history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionUnpausedEvent", event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyWorkflowExecutionUnpausedEvent indicates an expected call of ApplyWorkflowExecutionUnpausedEvent.
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionUnpausedEvent(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionUnpausedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionUnpausedEvent), event)
 }
 
 // ApplyWorkflowExecutionUpdateAcceptedEvent mocks base method.
