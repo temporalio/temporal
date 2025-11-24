@@ -1025,6 +1025,22 @@ func (b *EventFactory) CreateWorkflowExecutionPausedEvent(
 	return event
 }
 
+func (b *EventFactory) CreateWorkflowExecutionUnpausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUnpausedEventAttributes{
+		WorkflowExecutionUnpausedEventAttributes: &historypb.WorkflowExecutionUnpausedEventAttributes{
+			Identity:  identity,
+			Reason:    reason,
+			RequestId: requestID,
+		},
+	}
+	return event
+}
+
 func (b *EventFactory) createHistoryEvent(
 	eventType enumspb.EventType,
 	time time.Time,

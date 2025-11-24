@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -42,10 +43,10 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 		key   string
 		value interface{}
 	}{
-		{key: searchattribute.StartTime, value: int64(1528358645123456789)},
-		{key: searchattribute.CloseTime, value: "2018-06-07T15:04:05+07:00"},
-		{key: searchattribute.ExecutionTime, value: "some invalid time string"},
-		{key: searchattribute.WorkflowID, value: "should not be modified"},
+		{key: sadefs.StartTime, value: int64(1528358645123456789)},
+		{key: sadefs.CloseTime, value: "2018-06-07T15:04:05+07:00"},
+		{key: sadefs.ExecutionTime, value: "some invalid time string"},
+		{key: sadefs.WorkflowID, value: "should not be modified"},
 	}
 	expected := []struct {
 		value     string
@@ -79,13 +80,13 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 		key   string
 		value interface{}
 	}{
-		{key: searchattribute.ExecutionStatus, value: "Completed"},
-		{key: searchattribute.ExecutionStatus, value: int64(1)},
-		{key: searchattribute.ExecutionStatus, value: "1"},
-		{key: searchattribute.ExecutionStatus, value: int64(100)},
-		{key: searchattribute.ExecutionStatus, value: "100"},
-		{key: searchattribute.ExecutionStatus, value: "BadStatus"},
-		{key: searchattribute.WorkflowID, value: "should not be modified"},
+		{key: sadefs.ExecutionStatus, value: "Completed"},
+		{key: sadefs.ExecutionStatus, value: int64(1)},
+		{key: sadefs.ExecutionStatus, value: "1"},
+		{key: sadefs.ExecutionStatus, value: int64(100)},
+		{key: sadefs.ExecutionStatus, value: "100"},
+		{key: sadefs.ExecutionStatus, value: "BadStatus"},
+		{key: sadefs.WorkflowID, value: "should not be modified"},
 	}
 	expected := []struct {
 		value     string
@@ -122,13 +123,13 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		key   string
 		value interface{}
 	}{
-		{key: searchattribute.ExecutionDuration, value: "1"},
-		{key: searchattribute.ExecutionDuration, value: int64(1)},
-		{key: searchattribute.ExecutionDuration, value: "5h3m"},
-		{key: searchattribute.ExecutionDuration, value: "00:00:01"},
-		{key: searchattribute.ExecutionDuration, value: "00:00:61"},
-		{key: searchattribute.ExecutionDuration, value: "bad value"},
-		{key: searchattribute.WorkflowID, value: "should not be modified"},
+		{key: sadefs.ExecutionDuration, value: "1"},
+		{key: sadefs.ExecutionDuration, value: int64(1)},
+		{key: sadefs.ExecutionDuration, value: "5h3m"},
+		{key: sadefs.ExecutionDuration, value: "00:00:01"},
+		{key: sadefs.ExecutionDuration, value: "00:00:61"},
+		{key: sadefs.ExecutionDuration, value: "bad value"},
+		{key: sadefs.WorkflowID, value: "should not be modified"},
 	}
 	expected := []struct {
 		value     interface{}
@@ -161,9 +162,9 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 	ni := s.createMockNameInterceptor(nil)
 
-	fieldName, err := ni.Name(searchattribute.ScheduleID, query.FieldNameFilter)
+	fieldName, err := ni.Name(sadefs.ScheduleID, query.FieldNameFilter)
 	s.NoError(err)
-	s.Equal(searchattribute.WorkflowID, fieldName)
+	s.Equal(sadefs.WorkflowID, fieldName)
 }
 
 // Ensures the valuesInterceptor applies the ScheduleID to WorkflowID transformation,
@@ -174,13 +175,13 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 		searchattribute.TestEsNameTypeMap(),
 	)
 
-	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.WorkflowID, "test-schedule-id")
+	values, err := vi.Values(sadefs.ScheduleID, sadefs.WorkflowID, "test-schedule-id")
 	s.NoError(err)
 	s.Len(values, 1)
 	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
 
-	values, err = vi.Values(searchattribute.ScheduleID,
-		searchattribute.WorkflowID,
+	values, err = vi.Values(sadefs.ScheduleID,
+		sadefs.WorkflowID,
 		"test-schedule-id-1",
 		"test-schedule-id-2")
 	s.NoError(err)
@@ -196,13 +197,13 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 		searchattribute.TestEsNameTypeMapWithScheduleID(),
 	)
 
-	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.ScheduleID, "test-workflow-id")
+	values, err := vi.Values(sadefs.ScheduleID, sadefs.ScheduleID, "test-workflow-id")
 	s.NoError(err)
 	s.Len(values, 1)
 	s.Equal("test-workflow-id", values[0])
 
-	values, err = vi.Values(searchattribute.ScheduleID,
-		searchattribute.ScheduleID,
+	values, err = vi.Values(sadefs.ScheduleID,
+		sadefs.ScheduleID,
 		"test-workflow-id-1",
 		"test-workflow-id-2")
 	s.NoError(err)

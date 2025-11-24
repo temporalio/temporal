@@ -28,21 +28,21 @@ import (
 
 type (
 	ChasmEngine struct {
-		entityCache     cache.Cache
+		executionCache  cache.Cache
 		shardController shard.Controller
 		registry        *chasm.Registry
 		config          *configs.Config
 	}
 
-	newEntityParams struct {
-		entityRef     chasm.ComponentRef
-		entityContext historyi.WorkflowContext
-		mutableState  historyi.MutableState
-		snapshot      *persistence.WorkflowSnapshot
-		events        []*persistence.WorkflowEvents
+	newExecutionParams struct {
+		executionRef     chasm.ComponentRef
+		executionContext historyi.WorkflowContext
+		mutableState     historyi.MutableState
+		snapshot         *persistence.WorkflowSnapshot
+		events           []*persistence.WorkflowEvents
 	}
 
-	currentRunInfo struct {
+	currentExecutionInfo struct {
 		createRequestID string
 		*persistence.CurrentWorkflowConditionFailedError
 	}
@@ -64,14 +64,14 @@ var ChasmEngineModule = fx.Options(
 )
 
 func newChasmEngine(
-	entityCache cache.Cache,
+	executionCache cache.Cache,
 	registry *chasm.Registry,
 	config *configs.Config,
 ) *ChasmEngine {
 	return &ChasmEngine{
-		entityCache: entityCache,
-		registry:    registry,
-		config:      config,
+		executionCache: executionCache,
+		registry:       registry,
+		config:         config,
 	}
 }
 
@@ -83,76 +83,76 @@ func (e *ChasmEngine) SetShardController(
 	e.shardController = shardController
 }
 
-func (e *ChasmEngine) NewEntity(
+func (e *ChasmEngine) NewExecution(
 	ctx context.Context,
-	entityRef chasm.ComponentRef,
+	executionRef chasm.ComponentRef,
 	newFn func(chasm.MutableContext) (chasm.Component, error),
 	opts ...chasm.TransitionOption,
-) (entityKey chasm.EntityKey, newEntityRef []byte, retErr error) {
+) (executionKey chasm.ExecutionKey, newExecutionRef []byte, retErr error) {
 	options := e.constructTransitionOptions(opts...)
 
-	shardContext, err := e.getShardContext(entityRef)
+	shardContext, err := e.getShardContext(executionRef)
 	if err != nil {
-		return chasm.EntityKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, err
 	}
 
-	currentEntityReleaseFn, err := e.lockCurrentEntity(
+	currentExecutionReleaseFn, err := e.lockCurrentExecution(
 		ctx,
 		shardContext,
-		namespace.ID(entityRef.NamespaceID),
-		entityRef.BusinessID,
+		namespace.ID(executionRef.NamespaceID),
+		executionRef.BusinessID,
 	)
 	if err != nil {
-		return chasm.EntityKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, err
 	}
 	defer func() {
-		currentEntityReleaseFn(retErr)
+		currentExecutionReleaseFn(retErr)
 	}()
 
-	newEntityParams, err := e.createNewEntity(
+	newExecutionParams, err := e.createNewExecution(
 		ctx,
 		shardContext,
-		entityRef,
+		executionRef,
 		newFn,
 		options,
 	)
 	if err != nil {
-		return chasm.EntityKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, err
 	}
 
 	currentRunInfo, hasCurrentRun, err := e.persistAsBrandNew(
 		ctx,
 		shardContext,
-		newEntityParams,
+		newExecutionParams,
 	)
 	if err != nil {
-		return chasm.EntityKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, err
 	}
 	if !hasCurrentRun {
-		serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
+		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 		if err != nil {
-			return chasm.EntityKey{}, nil, err
+			return chasm.ExecutionKey{}, nil, err
 		}
-		return newEntityParams.entityRef.EntityKey, serializedRef, nil
+		return newExecutionParams.executionRef.ExecutionKey, serializedRef, nil
 	}
 
-	return e.handleEntityConflict(
+	return e.handleExecutionConflict(
 		ctx,
 		shardContext,
-		newEntityParams,
+		newExecutionParams,
 		currentRunInfo,
 		options,
 	)
 }
 
-func (e *ChasmEngine) UpdateWithNewEntity(
+func (e *ChasmEngine) UpdateWithNewExecution(
 	ctx context.Context,
-	entityRef chasm.ComponentRef,
+	executionRef chasm.ComponentRef,
 	newFn func(chasm.MutableContext) (chasm.Component, error),
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	opts ...chasm.TransitionOption,
-) (newEntityKey chasm.EntityKey, newEntityRef []byte, retError error) {
-	return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("UpdateWithNewEntity is not yet supported")
+) (newExecutionKey chasm.ExecutionKey, newExecutionRef []byte, retError error) {
+	return chasm.ExecutionKey{}, nil, serviceerror.NewUnimplemented("UpdateWithNewExecution is not yet supported")
 }
 
 func (e *ChasmEngine) UpdateComponent(
@@ -243,11 +243,11 @@ func (e *ChasmEngine) ReadComponent(
 
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
-	entityRef chasm.ComponentRef,
+	executionRef chasm.ComponentRef,
 	predicateFn func(chasm.Context, chasm.Component) (any, bool, error),
 	operationFn func(chasm.MutableContext, chasm.Component, any) error,
 	opts ...chasm.TransitionOption,
-) (newEntityRef []byte, retError error) {
+) (newExecutionRef []byte, retError error) {
 	return nil, serviceerror.NewUnimplemented("PollComponent is not yet supported")
 }
 
@@ -264,13 +264,13 @@ func (e *ChasmEngine) constructTransitionOptions(
 	return options
 }
 
-func (e *ChasmEngine) lockCurrentEntity(
+func (e *ChasmEngine) lockCurrentExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	businessID string,
 ) (historyi.ReleaseWorkflowContextFunc, error) {
-	currentEntityReleaseFn, err := e.entityCache.GetOrCreateCurrentWorkflowExecution(
+	currentExecutionReleaseFn, err := e.executionCache.GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		shardContext,
 		namespaceID,
@@ -281,23 +281,23 @@ func (e *ChasmEngine) lockCurrentEntity(
 		return nil, err
 	}
 
-	return currentEntityReleaseFn, nil
+	return currentExecutionReleaseFn, nil
 }
 
-func (e *ChasmEngine) createNewEntity(
+func (e *ChasmEngine) createNewExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	entityRef chasm.ComponentRef,
+	executionRef chasm.ComponentRef,
 	newFn func(chasm.MutableContext) (chasm.Component, error),
 	options chasm.TransitionOptions,
-) (newEntityParams, error) {
-	entityRef.EntityID = primitives.NewUUID().String()
+) (newExecutionParams, error) {
+	executionRef.RunID = primitives.NewUUID().String()
 
-	entityKey := entityRef.EntityKey
+	executionKey := executionRef.ExecutionKey
 	nsRegistry := shardContext.GetNamespaceRegistry()
-	nsEntry, err := nsRegistry.GetNamespaceByID(namespace.ID(entityKey.NamespaceID))
+	nsEntry, err := nsRegistry.GetNamespaceByID(namespace.ID(executionKey.NamespaceID))
 	if err != nil {
-		return newEntityParams{}, err
+		return newExecutionParams{}, err
 	}
 
 	mutableState := workflow.NewMutableState(
@@ -305,15 +305,15 @@ func (e *ChasmEngine) createNewEntity(
 		shardContext.GetEventsCache(),
 		shardContext.GetLogger(),
 		nsEntry,
-		entityKey.BusinessID,
-		entityKey.EntityID,
+		executionKey.BusinessID,
+		executionKey.RunID,
 		shardContext.GetTimeSource().Now(),
 	)
 	mutableState.AttachRequestID(options.RequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, 0)
 
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
 	if !ok {
-		return newEntityParams{}, serviceerror.NewInternalf(
+		return newExecutionParams{}, serviceerror.NewInternalf(
 			"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
 			mutableState.ChasmTree(),
 			&chasm.Node{},
@@ -323,28 +323,28 @@ func (e *ChasmEngine) createNewEntity(
 	chasmContext := chasm.NewMutableContext(ctx, chasmTree)
 	rootComponent, err := newFn(chasmContext)
 	if err != nil {
-		return newEntityParams{}, err
+		return newExecutionParams{}, err
 	}
 	chasmTree.SetRootComponent(rootComponent)
 
 	snapshot, events, err := mutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 	if err != nil {
-		return newEntityParams{}, err
+		return newExecutionParams{}, err
 	}
 	if len(events) != 0 {
-		return newEntityParams{}, serviceerror.NewInternal(
+		return newExecutionParams{}, serviceerror.NewInternal(
 			fmt.Sprintf("CHASM framework does not support events yet, found events for new run: %v", events),
 		)
 	}
 
-	return newEntityParams{
-		entityRef: entityRef,
-		entityContext: workflow.NewContext(
+	return newExecutionParams{
+		executionRef: executionRef,
+		executionContext: workflow.NewContext(
 			e.config,
 			definition.NewWorkflowKey(
-				entityKey.NamespaceID,
-				entityKey.BusinessID,
-				entityKey.EntityID,
+				executionKey.NamespaceID,
+				executionKey.BusinessID,
+				executionKey.RunID,
 			),
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
@@ -359,26 +359,26 @@ func (e *ChasmEngine) createNewEntity(
 func (e *ChasmEngine) persistAsBrandNew(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	newEntityParams newEntityParams,
-) (currentRunInfo, bool, error) {
-	err := newEntityParams.entityContext.CreateWorkflowExecution(
+	newExecutionParams newExecutionParams,
+) (currentExecutionInfo, bool, error) {
+	err := newExecutionParams.executionContext.CreateWorkflowExecution(
 		ctx,
 		shardContext,
 		persistence.CreateWorkflowModeBrandNew,
 		"", // previousRunID
 		0,  // prevlastWriteVersion
-		newEntityParams.mutableState,
-		newEntityParams.snapshot,
-		newEntityParams.events,
+		newExecutionParams.mutableState,
+		newExecutionParams.snapshot,
+		newExecutionParams.events,
 	)
 	if err == nil {
-		return currentRunInfo{}, false, nil
+		return currentExecutionInfo{}, false, nil
 	}
 
 	var currentRunConditionFailedError *persistence.CurrentWorkflowConditionFailedError
 	if !errors.As(err, &currentRunConditionFailedError) ||
 		len(currentRunConditionFailedError.RunID) == 0 {
-		return currentRunInfo{}, false, err
+		return currentExecutionInfo{}, false, err
 	}
 
 	createRequestID := ""
@@ -387,31 +387,31 @@ func (e *ChasmEngine) persistAsBrandNew(
 			createRequestID = requestID
 		}
 	}
-	return currentRunInfo{
+	return currentExecutionInfo{
 		createRequestID:                     createRequestID,
 		CurrentWorkflowConditionFailedError: currentRunConditionFailedError,
 	}, true, nil
 }
 
-func (e *ChasmEngine) handleEntityConflict(
+func (e *ChasmEngine) handleExecutionConflict(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	newEntityParams newEntityParams,
-	currentRunInfo currentRunInfo,
+	newExecutionParams newExecutionParams,
+	currentRunInfo currentExecutionInfo,
 	options chasm.TransitionOptions,
-) (chasm.EntityKey, []byte, error) {
+) (chasm.ExecutionKey, []byte, error) {
 	// Check if this a retired request using requestID.
 	if _, ok := currentRunInfo.RequestIDs[options.RequestID]; ok {
-		newEntityParams.entityRef.EntityID = currentRunInfo.RunID
-		serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
+		newExecutionParams.executionRef.RunID = currentRunInfo.RunID
+		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 		if err != nil {
-			return chasm.EntityKey{}, nil, err
+			return chasm.ExecutionKey{}, nil, err
 		}
-		return newEntityParams.entityRef.EntityKey, serializedRef, nil
+		return newExecutionParams.executionRef.ExecutionKey, serializedRef, nil
 	}
 
 	// Verify failover version and make sure it won't go backwards even if the case of split brain.
-	mutableState := newEntityParams.mutableState
+	mutableState := newExecutionParams.mutableState
 	nsEntry := mutableState.GetNamespaceEntry()
 	if mutableState.GetCurrentVersion() < currentRunInfo.LastWriteVersion {
 		clusterMetadata := shardContext.GetClusterMetadata()
@@ -419,7 +419,7 @@ func (e *ChasmEngine) handleEntityConflict(
 			nsEntry.IsGlobalNamespace(),
 			currentRunInfo.LastWriteVersion,
 		)
-		return chasm.EntityKey{}, nil, serviceerror.NewNamespaceNotActive(
+		return chasm.ExecutionKey{}, nil, serviceerror.NewNamespaceNotActive(
 			nsEntry.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
 			clusterName,
@@ -428,12 +428,12 @@ func (e *ChasmEngine) handleEntityConflict(
 
 	switch currentRunInfo.State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-		return e.handleConflictPolicy(ctx, shardContext, newEntityParams, currentRunInfo, options.ConflictPolicy)
+		return e.handleConflictPolicy(ctx, shardContext, newExecutionParams, currentRunInfo, options.ConflictPolicy)
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-		return e.handleReusePolicy(ctx, shardContext, newEntityParams, currentRunInfo, options.ReusePolicy)
+		return e.handleReusePolicy(ctx, shardContext, newExecutionParams, currentRunInfo, options.ReusePolicy)
 	default:
-		return chasm.EntityKey{}, nil, serviceerror.NewInternal(
-			fmt.Sprintf("unexpected current run state when creating new entity: %v", currentRunInfo.State),
+		return chasm.ExecutionKey{}, nil, serviceerror.NewInternal(
+			fmt.Sprintf("unexpected current run state when creating new execution: %v", currentRunInfo.State),
 		)
 	}
 }
@@ -441,16 +441,16 @@ func (e *ChasmEngine) handleEntityConflict(
 func (e *ChasmEngine) handleConflictPolicy(
 	_ context.Context,
 	_ historyi.ShardContext,
-	newEntityParams newEntityParams,
-	currentRunInfo currentRunInfo,
+	newExecutionParams newExecutionParams,
+	currentRunInfo currentExecutionInfo,
 	conflictPolicy chasm.BusinessIDConflictPolicy,
-) (chasm.EntityKey, []byte, error) {
+) (chasm.ExecutionKey, []byte, error) {
 	switch conflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.EntityKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
+		return chasm.ExecutionKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
-				newEntityParams.entityRef.EntityKey.BusinessID,
+				newExecutionParams.executionRef.BusinessID,
 				currentRunInfo.RunID,
 				conflictPolicy,
 			),
@@ -458,7 +458,7 @@ func (e *ChasmEngine) handleConflictPolicy(
 			currentRunInfo.RunID,
 		)
 	case chasm.BusinessIDConflictPolicyTerminateExisting:
-		// TODO: handle BusinessIDConflictPolicyTerminateExisting and update TestNewEntity_ConflictPolicy_TerminateExisting.
+		// TODO: handle BusinessIDConflictPolicyTerminateExisting and update TestNewExecution_ConflictPolicy_TerminateExisting.
 		//
 		// Today's state-based replication logic can not existly handle this policy correctly
 		// (or any operation that close and starts a new run in one transaction).
@@ -468,18 +468,18 @@ func (e *ChasmEngine) handleConflictPolicy(
 		// and we may have a chain of runs all created via TerminateExisting policy, meaning
 		// replication has to replicated all of them transactionally.
 		// We need a way to break this chain into consistent pieces and replicate them one by one.
-		return chasm.EntityKey{}, nil, serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not yet supported")
+		return chasm.ExecutionKey{}, nil, serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not yet supported")
 	case chasm.BusinessIDConflictPolicyUseExisting:
-		existingEntityRef := newEntityParams.entityRef
-		existingEntityRef.EntityID = currentRunInfo.RunID
-		serializedRef, err := existingEntityRef.Serialize(e.registry)
+		existingExecutionRef := newExecutionParams.executionRef
+		existingExecutionRef.RunID = currentRunInfo.RunID
+		serializedRef, err := existingExecutionRef.Serialize(e.registry)
 		if err != nil {
-			return chasm.EntityKey{}, nil, err
+			return chasm.ExecutionKey{}, nil, err
 		}
-		return existingEntityRef.EntityKey, serializedRef, nil
+		return existingExecutionRef.ExecutionKey, serializedRef, nil
 	default:
-		return chasm.EntityKey{}, nil, serviceerror.NewInternal(
-			fmt.Sprintf("unknown business ID conflict policy for newEntity: %v", conflictPolicy),
+		return chasm.ExecutionKey{}, nil, serviceerror.NewInternal(
+			fmt.Sprintf("unknown business ID conflict policy for NewExecution: %v", conflictPolicy),
 		)
 	}
 }
@@ -487,20 +487,20 @@ func (e *ChasmEngine) handleConflictPolicy(
 func (e *ChasmEngine) handleReusePolicy(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	newEntityParams newEntityParams,
-	currentRunInfo currentRunInfo,
+	newExecutionParams newExecutionParams,
+	currentRunInfo currentExecutionInfo,
 	reusePolicy chasm.BusinessIDReusePolicy,
-) (chasm.EntityKey, []byte, error) {
+) (chasm.ExecutionKey, []byte, error) {
 	switch reusePolicy {
 	case chasm.BusinessIDReusePolicyAllowDuplicate:
 		// No more check needed.
-		// Fallthrough to persist the new entity as current run.
+		// Fallthrough to persist the new execution as current run.
 	case chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly:
 		if _, ok := consts.FailedWorkflowStatuses[currentRunInfo.Status]; !ok {
-			return chasm.EntityKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
+			return chasm.ExecutionKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 				fmt.Sprintf(
 					"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
-					newEntityParams.entityRef.EntityKey.BusinessID,
+					newExecutionParams.executionRef.BusinessID,
 					currentRunInfo.RunID,
 					reusePolicy,
 				),
@@ -508,12 +508,12 @@ func (e *ChasmEngine) handleReusePolicy(
 				currentRunInfo.RunID,
 			)
 		}
-		// Fallthrough to persist the new entity as current run.
+		// Fallthrough to persist the new execution as current run.
 	case chasm.BusinessIDReusePolicyRejectDuplicate:
-		return chasm.EntityKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
+		return chasm.ExecutionKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
-				newEntityParams.entityRef.EntityKey.BusinessID,
+				newExecutionParams.executionRef.BusinessID,
 				currentRunInfo.RunID,
 				reusePolicy,
 			),
@@ -521,30 +521,30 @@ func (e *ChasmEngine) handleReusePolicy(
 			currentRunInfo.RunID,
 		)
 	default:
-		return chasm.EntityKey{}, nil, serviceerror.NewInternal(
-			fmt.Sprintf("unknown business ID reuse policy for newEntity: %v", reusePolicy),
+		return chasm.ExecutionKey{}, nil, serviceerror.NewInternal(
+			fmt.Sprintf("unknown business ID reuse policy for NewExecution: %v", reusePolicy),
 		)
 	}
 
-	err := newEntityParams.entityContext.CreateWorkflowExecution(
+	err := newExecutionParams.executionContext.CreateWorkflowExecution(
 		ctx,
 		shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunInfo.RunID,
 		currentRunInfo.LastWriteVersion,
-		newEntityParams.mutableState,
-		newEntityParams.snapshot,
-		newEntityParams.events,
+		newExecutionParams.mutableState,
+		newExecutionParams.snapshot,
+		newExecutionParams.events,
 	)
 	if err != nil {
-		return chasm.EntityKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, err
 	}
 
-	serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
+	serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 	if err != nil {
-		return chasm.EntityKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, err
 	}
-	return newEntityParams.entityRef.EntityKey, serializedRef, nil
+	return newExecutionParams.executionRef.ExecutionKey, serializedRef, nil
 }
 
 func (e *ChasmEngine) getShardContext(
@@ -573,7 +573,7 @@ func (e *ChasmEngine) getExecutionLease(
 
 	consistencyChecker := api.NewWorkflowConsistencyChecker(
 		shardContext,
-		e.entityCache,
+		e.executionCache,
 	)
 
 	lockPriority := locks.PriorityHigh
@@ -595,7 +595,7 @@ func (e *ChasmEngine) getExecutionLease(
 	}
 
 	var staleReferenceErr error
-	entityLease, err := consistencyChecker.GetChasmLeaseWithConsistencyCheck(
+	executionLease, err := consistencyChecker.GetChasmLeaseWithConsistencyCheck(
 		ctx,
 		nil,
 		func(mutableState historyi.MutableState) bool {
@@ -610,17 +610,17 @@ func (e *ChasmEngine) getExecutionLease(
 			return true
 		},
 		definition.NewWorkflowKey(
-			ref.EntityKey.NamespaceID,
-			ref.EntityKey.BusinessID,
-			ref.EntityKey.EntityID,
+			ref.NamespaceID,
+			ref.BusinessID,
+			ref.RunID,
 		),
 		chasm.Archetype(archetype),
 		lockPriority,
 	)
 	if err == nil && staleReferenceErr != nil {
-		entityLease.GetReleaseFn()(nil)
+		executionLease.GetReleaseFn()(nil)
 		err = staleReferenceErr
 	}
 
-	return shardContext, entityLease, err
+	return shardContext, executionLease, err
 }

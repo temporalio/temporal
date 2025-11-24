@@ -1833,7 +1833,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		// taskMinScheduledTime = util.MaxTime(taskMinScheduledTime, maxReadTime)
 		taskMinScheduledTime = util.MaxTime(
 			taskMinScheduledTime,
-			exclusiveMaxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
+			exclusiveMaxReadTime.Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
 		)
 
 		if clusterName != currentClusterName {

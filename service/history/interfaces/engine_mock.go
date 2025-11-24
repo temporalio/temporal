@@ -452,6 +452,21 @@ func (mr *MockEngineMockRecorder) PauseActivity(ctx, request any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockEngine)(nil).PauseActivity), ctx, request)
 }
 
+// PauseWorkflowExecution mocks base method.
+func (m *MockEngine) PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (*historyservice.PauseWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(*historyservice.PauseWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseWorkflowExecution indicates an expected call of PauseWorkflowExecution.
+func (mr *MockEngineMockRecorder) PauseWorkflowExecution(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).PauseWorkflowExecution), ctx, request)
+}
+
 // PollMutableState mocks base method.
 func (m *MockEngine) PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (*historyservice.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -1030,6 +1045,21 @@ func (m *MockEngine) UnpauseActivity(ctx context.Context, request *historyservic
 func (mr *MockEngineMockRecorder) UnpauseActivity(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseActivity", reflect.TypeOf((*MockEngine)(nil).UnpauseActivity), ctx, request)
+}
+
+// UnpauseWorkflowExecution mocks base method.
+func (m *MockEngine) UnpauseWorkflowExecution(ctx context.Context, request *historyservice.UnpauseWorkflowExecutionRequest) (*historyservice.UnpauseWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpauseWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(*historyservice.UnpauseWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpauseWorkflowExecution indicates an expected call of UnpauseWorkflowExecution.
+func (mr *MockEngineMockRecorder) UnpauseWorkflowExecution(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).UnpauseWorkflowExecution), ctx, request)
 }
 
 // UnsubscribeReplicationNotification mocks base method.

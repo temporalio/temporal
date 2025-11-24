@@ -8,7 +8,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -45,14 +45,14 @@ var _ sqlparser.Expr = (*SAColumn)(nil)
 
 var (
 	NamespaceIDSAColumn = NewSAColumn(
-		searchattribute.NamespaceID,
-		searchattribute.NamespaceID,
+		sadefs.NamespaceID,
+		sadefs.NamespaceID,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
 	CloseTimeSAColumn = NewSAColumn(
-		searchattribute.CloseTime,
-		searchattribute.CloseTime,
+		sadefs.CloseTime,
+		sadefs.CloseTime,
 		enumspb.INDEXED_VALUE_TYPE_DATETIME,
 	)
 )
@@ -66,7 +66,7 @@ func (node *ColumnName) Format(buf *sqlparser.TrackedBuffer) {
 }
 
 func (node *SAColumn) Format(buf *sqlparser.TrackedBuffer) {
-	buf.Myprintf("%s", searchattribute.GetSqlDbColName(node.FieldName))
+	buf.Myprintf("%s", sadefs.GetSqlDbColName(node.FieldName))
 }
 
 func NewUnsafeSQLString(val string) *UnsafeSQLString {
@@ -87,8 +87,8 @@ func NewSAColumn(alias string, fieldName string, valueType enumspb.IndexedValueT
 
 func NamespaceDivisionSAColumn() *SAColumn {
 	return NewSAColumn(
-		searchattribute.TemporalNamespaceDivision,
-		searchattribute.TemporalNamespaceDivision,
+		sadefs.TemporalNamespaceDivision,
+		sadefs.TemporalNamespaceDivision,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 }

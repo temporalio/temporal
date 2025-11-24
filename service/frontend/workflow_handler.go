@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -2235,7 +2236,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 
 	query = append(query, fmt.Sprintf(
 		"%s = '%s'",
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	))
 
@@ -2246,20 +2247,20 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s BETWEEN '%s' AND '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s >= '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s <= '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	}
@@ -2270,7 +2271,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowID,
+			sadefs.WorkflowID,
 			request.GetExecutionFilter().GetWorkflowId()))
 
 		wh.logger.Debug("List open workflow with filter",
@@ -2281,7 +2282,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowType,
+			sadefs.WorkflowType,
 			request.GetTypeFilter().GetName()))
 
 		wh.logger.Debug("List open workflow with filter",
@@ -2336,7 +2337,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	query = append(query, fmt.Sprintf(
 		"%s != '%s'",
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	))
 
@@ -2347,20 +2348,20 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s BETWEEN '%s' AND '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s >= '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s <= '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	}
@@ -2371,7 +2372,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowID,
+			sadefs.WorkflowID,
 			request.GetExecutionFilter().GetWorkflowId()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -2382,7 +2383,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowType,
+			sadefs.WorkflowType,
 			request.GetTypeFilter().GetName()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -2396,7 +2397,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.ExecutionStatus,
+			sadefs.ExecutionStatus,
 			request.GetStatusFilter().GetStatus()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -3098,7 +3099,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 	}
 
 	// Add namespace division before unaliasing search attributes.
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 
 	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
@@ -4551,9 +4552,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		case *batchpb.BatchOperationUnpauseActivities_Type:
 			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
 			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
+			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
+			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", sadefs.TemporalPauseInfo)
 			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
@@ -4584,8 +4585,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	// Add pre-define search attributes
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
@@ -4728,7 +4729,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, err
 	}
 	var identity string
-	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[searchattribute.BatcherUser]
+	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser]
 	err = payload.Decode(encodedBatcherIdentity, &identity)
 	if err != nil {
 		return nil, err
@@ -4837,7 +4838,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		PageSize:      request.PageSize,
 		NextPageToken: request.GetNextPageToken(),
 		Query: fmt.Sprintf("%s = '%s'",
-			searchattribute.TemporalNamespaceDivision,
+			sadefs.TemporalNamespaceDivision,
 			batcher.NamespaceDivision,
 		),
 	})
@@ -5616,14 +5617,14 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commo
 		return nil
 	}
 
-	delete(fields, searchattribute.TemporalSchedulePaused)
+	delete(fields, sadefs.TemporalSchedulePaused)
 	delete(fields, "TemporalScheduleInfoJSON") // used by older version, clean this up if present
 	// these aren't schedule-related but they aren't relevant to the user for
 	// scheduler workflows since it's the server worker
-	delete(fields, searchattribute.BinaryChecksums)
-	delete(fields, searchattribute.BuildIds)
+	delete(fields, sadefs.BinaryChecksums)
+	delete(fields, sadefs.BuildIds)
 	// all schedule workflows should be in this namespace division so there's no need to include it
-	delete(fields, searchattribute.TemporalNamespaceDivision)
+	delete(fields, sadefs.TemporalNamespaceDivision)
 
 	if len(fields) == 0 {
 		return nil
@@ -6125,4 +6126,66 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 	return &workflowservice.DescribeWorkerResponse{
 		WorkerInfo: resp.GetWorkerInfo(),
 	}, nil
+}
+
+// PauseWorkflowExecution pauses a workflow execution.
+func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *workflowservice.PauseWorkflowExecutionRequest) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.WorkflowPauseEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", request.GetNamespace())
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, historyErr := wh.historyClient.PauseWorkflowExecution(ctx, &historyservice.PauseWorkflowExecutionRequest{
+		NamespaceId:  namespaceID.String(),
+		PauseRequest: request,
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+
+	return &workflowservice.PauseWorkflowExecutionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request *workflowservice.UnpauseWorkflowExecutionRequest) (_ *workflowservice.UnpauseWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// verify size limits of reason, request id and identity.
+	if len(request.GetReason()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("reason is too long.")
+	}
+	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("request id is too long.")
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("identity is too long.")
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, historyErr := wh.historyClient.UnpauseWorkflowExecution(ctx, &historyservice.UnpauseWorkflowExecutionRequest{
+		NamespaceId:    namespaceID.String(),
+		UnpauseRequest: request,
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+
+	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
 }

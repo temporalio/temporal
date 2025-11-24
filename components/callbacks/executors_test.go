@@ -17,7 +17,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -296,7 +296,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 	dummyRef := persistencespb.ChasmComponentRef{
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
-		EntityId:    "entity-id",
+		RunId:       "run-id",
 		ArchetypeId: 1234,
 	}
 
@@ -335,7 +335,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					require.NoError(t, proto.Unmarshal(req.Completion.ComponentRef, &ref))
 					require.Equal(t, "namespace-id", ref.NamespaceId)
 					require.Equal(t, "business-id", ref.BusinessId)
-					require.Equal(t, "entity-id", ref.EntityId)
+					require.Equal(t, "run-id", ref.RunId)
 					require.Equal(t, dummyRef.ArchetypeId, ref.ArchetypeId)
 					require.Equal(t, "request-id", req.Completion.RequestId)
 
@@ -505,7 +505,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					Callback: &persistencespb.Callback{
 						Variant: &persistencespb.Callback_Nexus_{
 							Nexus: &persistencespb.Callback_Nexus{
-								Url:    chasm.NexusCompletionHandlerURL,
+								Url:    chasmnexus.CompletionHandlerURL,
 								Header: headers,
 							},
 						},

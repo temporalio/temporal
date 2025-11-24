@@ -244,7 +244,7 @@ message RecordWorkflowTaskStartedRequest {
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     // Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
     int32 stamp = 11;
-    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues 
+    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
     // that may arise due to stale routing configs in task queue partitions.
     int64 task_dispatch_revision_number = 12;
 }
@@ -320,7 +320,7 @@ message RecordActivityTaskStartedRequest {
     reserved 11;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 12;
-    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues 
+    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
     // that may arise due to stale routing configs in task queue partitions.
     int64 task_dispatch_revision_number = 13;
 }
@@ -740,7 +740,7 @@ message DescribeMutableStateRequest {
 message DescribeMutableStateResponse {
     // CacheMutableState is only available when mutable state is in cache.
     temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 1;
-    // DatabaseMutableState is always available, 
+    // DatabaseMutableState is always available,
     // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
     temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
 }
@@ -1328,3 +1328,25 @@ message UpdateWorkflowExecutionOptionsResponse {
     // Workflow Execution options after update.
     temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
 }
+
+message PauseWorkflowExecutionRequest {
+    option (routing).workflow_id = "pause_request.workflow_id";
+
+    // Namespace ID of the workflow which is being paused
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PauseWorkflowExecutionRequest pause_request = 2;
+}
+
+message PauseWorkflowExecutionResponse { }
+
+message UnpauseWorkflowExecutionRequest {
+    option (routing).workflow_id = "unpause_request.workflow_id";
+
+    // Namespace ID of the workflow which is being unpaused
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.UnpauseWorkflowExecutionRequest unpause_request = 2;
+}
+
+message UnpauseWorkflowExecutionResponse { }

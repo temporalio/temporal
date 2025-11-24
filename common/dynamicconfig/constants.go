@@ -295,9 +295,9 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = NewNamespaceIntSetting(
 		"system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute",
-		0,
+		5,
 		`NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute is the number of consecutive workflow task problems to trigger the TemporalReportedProblems search attribute.
-Setting this to 0 (the default) prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
+Setting this to 0 prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
 	)
 
 	// keys for size limit
@@ -1378,8 +1378,8 @@ second per poller by one physical queue manager`,
 	MatchingEnableWorkerPluginMetrics = NewGlobalBoolSetting(
 		"matching.enableWorkerPluginMetrics",
 		false,
-		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics. 
-The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is 
+		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics.
+The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
 
@@ -1657,13 +1657,13 @@ NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicate
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
 		500,
-		`The base number of pending tasks count for a task group to be moved to the next level reader. 
+		`The base number of pending tasks count for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
 	)
 	QueueMoveGroupTaskCountMultiplier = NewGlobalFloatSetting(
 		"history.queueMoveGroupTaskCountMultiplier",
 		3.0,
-		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader. 
+		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
 	)
 
@@ -2942,5 +2942,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkerCommandsEnabled",
 		false,
 		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
+	)
+
+	WorkflowPauseEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkflowPauseEnabled",
+		false,
+		`WorkflowPauseEnabled is a "feature enable" flag. When enabled it allows clients to pause workflows.`,
 	)
 )
