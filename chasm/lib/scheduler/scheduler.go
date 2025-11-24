@@ -621,7 +621,7 @@ func (s *Scheduler) Memo(
 ) map[string]chasm.VisibilityValue {
 	newInfo := s.ListInfo(ctx)
 
-	payload, err := proto.MarshalOptions{
+	infoPayload, err := proto.MarshalOptions{
 		Deterministic: true,
 	}.Marshal(newInfo)
 	if err != nil {
@@ -629,7 +629,7 @@ func (s *Scheduler) Memo(
 	}
 
 	return map[string]chasm.VisibilityValue{
-		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(payload),
+		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(infoPayload),
 	}
 }
 
