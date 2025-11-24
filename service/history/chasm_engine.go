@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -310,9 +311,22 @@ func (e *ChasmEngine) PollComponent(
 	// than the internally-imposed long-poll timeout then the initiator of the long-poll will get a
 	// deadline exceeded error.
 
+	if parentDeadline, ok := ctx.Deadline(); ok {
+		fmt.Println("⏰ parent timeout:", time.Until(parentDeadline))
+	} else {
+		fmt.Println("⏰ parent has no timeout")
+	}
+
 	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
 	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
 	defer cancel()
+
+	fmt.Println("⏰ after applying timeout:", internalLongPollTimeout)
+	if childDeadline, ok := ctx.Deadline(); ok {
+		fmt.Println("⏰ child timeout:", time.Until(childDeadline))
+	} else {
+		fmt.Println("⏰ child has no timeout")
+	}
 
 	// For now, PollComponent subscribes to execution-level notifications. Suppose that an
 	// execution consists of one component A, and A has subcomponent B. Subscribers interested
@@ -367,6 +381,8 @@ func (e *ChasmEngine) predicateSatisfied(
 	executionLease api.WorkflowLease,
 	predicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) ([]byte, error) {
+	fmt.Println("🔎 checkPredicate")
+
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
 	if !ok {
 		return nil, serviceerror.NewInternalf(
@@ -399,6 +415,7 @@ func (e *ChasmEngine) predicateSatisfied(
 		return nil, err
 	}
 	if !satisfied {
+		fmt.Println("    🟠 checkPredicate: predicate not satisfied")
 		return nil, nil
 	}
 
@@ -406,6 +423,7 @@ func (e *ChasmEngine) predicateSatisfied(
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("    🟢 checkPredicate: predicate satisfied")
 	return newRef, nil
 }
 

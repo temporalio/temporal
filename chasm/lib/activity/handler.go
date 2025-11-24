@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -115,7 +116,10 @@ func (h *handler) PollActivityExecution(
 		return nil, serviceerror.NewInvalidArgumentf("unexpected wait policy type: %T", waitPolicy)
 	}
 	if err != nil {
+		fmt.Println("❌ error received from PollComponent:", err)
 		return nil, err
+	} else {
+		fmt.Println("✅ no error received from PollComponent")
 	}
 	if response == nil {
 		// nil response indicates server-imposed long-poll timeout. Communicate this to callers by
