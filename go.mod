@@ -172,4 +172,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace go.temporal.io/api => github.com/temporalio/api-go v1.57.1-0.20251120031542-8c0c39bd0ecd
+replace go.temporal.io/api => github.com/temporalio/api-go v1.57.1-0.20251124135811-dc6d73381665
