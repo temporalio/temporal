@@ -425,6 +425,10 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternalf("it could be a bug, GenerateScheduleSpeculativeWorkflowTaskTasks must be called for speculative workflow task: %v", workflowTaskScheduledEventID)
 	}
 
+	if r.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		return nil // we bypass task generation if the workflow is paused.
+	}
+
 	if r.mutableState.IsStickyTaskQueueSet() {
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 		wttt := &tasks.WorkflowTaskTimeoutTask{
