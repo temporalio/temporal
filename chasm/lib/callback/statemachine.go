@@ -20,7 +20,7 @@ var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventScheduled) error {
-		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
 		if err != nil {
 			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
 		}
