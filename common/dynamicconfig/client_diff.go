@@ -13,11 +13,11 @@ import (
 // DiffAndLogConfigs computes the difference between two ConfigValueMaps. The result is
 // returned as a ConfigValueMap that can be merged with old to produce new, except with deleted
 // keys mapped to nil. It also logs the differences to a logger.
-func DiffAndLogConfigs(logger log.Logger, old ConfigValueMap, new ConfigValueMap) ConfigValueMap {
+func DiffAndLogConfigs(logger log.Logger, oldValues ConfigValueMap, newValues ConfigValueMap) ConfigValueMap {
 	changedMap := make(map[Key][]ConstrainedValue)
 
-	for key, newValues := range new {
-		oldValues, ok := old[key]
+	for key, newValues := range newValues {
+		oldValues, ok := oldValues[key]
 		if !ok {
 			for _, newValue := range newValues {
 				// new key added
@@ -34,8 +34,8 @@ func DiffAndLogConfigs(logger log.Logger, old ConfigValueMap, new ConfigValueMap
 	}
 
 	// check for removed values
-	for key, oldValues := range old {
-		if _, ok := new[key]; !ok {
+	for key, oldValues := range oldValues {
+		if _, ok := newValues[key]; !ok {
 			for _, oldValue := range oldValues {
 				diffAndLogValue(logger, key, &oldValue, nil)
 			}
@@ -98,26 +98,26 @@ func appendConstrainedValue(logLine *strings.Builder, value *ConstrainedValue) {
 	} else {
 		logLine.WriteString("{ constraints: {")
 		if value.Constraints.Namespace != "" {
-			logLine.WriteString(fmt.Sprintf("{Namespace:%s}", value.Constraints.Namespace))
+			fmt.Fprintf(logLine, "{Namespace:%s}", value.Constraints.Namespace)
 		}
 		if value.Constraints.NamespaceID != "" {
-			logLine.WriteString(fmt.Sprintf("{NamespaceID:%s}", value.Constraints.NamespaceID))
+			fmt.Fprintf(logLine, "{NamespaceID:%s}", value.Constraints.NamespaceID)
 		}
 		if value.Constraints.TaskQueueName != "" {
-			logLine.WriteString(fmt.Sprintf("{TaskQueueName:%s}", value.Constraints.TaskQueueName))
+			fmt.Fprintf(logLine, "{TaskQueueName:%s}", value.Constraints.TaskQueueName)
 		}
 		if value.Constraints.TaskQueueType != enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-			logLine.WriteString(fmt.Sprintf("{TaskQueueType:%s}", value.Constraints.TaskQueueType))
+			fmt.Fprintf(logLine, "{TaskQueueType:%s}", value.Constraints.TaskQueueType)
 		}
 		if value.Constraints.ShardID != 0 {
-			logLine.WriteString(fmt.Sprintf("{ShardID:%d}", value.Constraints.ShardID))
+			fmt.Fprintf(logLine, "{ShardID:%d}", value.Constraints.ShardID)
 		}
 		if value.Constraints.TaskType != enumsspb.TASK_TYPE_UNSPECIFIED {
-			logLine.WriteString(fmt.Sprintf("{HistoryTaskType:%s}", value.Constraints.TaskType))
+			fmt.Fprintf(logLine, "{HistoryTaskType:%s}", value.Constraints.TaskType)
 		}
 		if value.Constraints.Destination != "" {
-			logLine.WriteString(fmt.Sprintf("{Destination:%s}", value.Constraints.Destination))
+			fmt.Fprintf(logLine, "{Destination:%s}", value.Constraints.Destination)
 		}
-		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
+		fmt.Fprint(logLine, "} value: ", value.Value, " }")
 	}
 }
