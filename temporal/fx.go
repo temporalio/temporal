@@ -21,9 +21,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/callback"
-	"go.temporal.io/server/chasm/lib/scheduler"
-	"go.temporal.io/server/chasm/lib/workflow"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
@@ -436,9 +436,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		membershipModule,
 		FxLogAdapter,
 		chasm.Module,
-		scheduler.Module,
-		callback.Module,
-		workflow.Module,
+		chasmscheduler.Module,
+		chasmcallback.Module,
+		chasmworkflow.Module,
 	)
 }
 
