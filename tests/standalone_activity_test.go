@@ -237,11 +237,12 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
 	require.NoError(t, err)
 
 	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		ActivityId:   activityID,
-		RunId:        startResp.RunId,
-		IncludeInfo:  true,
-		IncludeInput: true,
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          startResp.RunId,
+		IncludeInfo:    true,
+		IncludeInput:   true,
+		IncludeOutcome: true,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, pollResp.StateChangeLongPollToken)
@@ -255,7 +256,10 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
 	)
 	require.NotNil(t, pollResp.Input)
 	require.Equal(t, "test-activity-input", string(pollResp.Input.Payloads[0].Data))
-	// TODO(dan): test IncludeOutcome
+
+	// Activity is scheduled but not completed, so no outcome yet
+	require.Nil(t, pollResp.GetResult())
+	require.Nil(t, pollResp.GetFailure())
 }
 
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateChange() {
