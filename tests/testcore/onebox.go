@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/temporal"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
@@ -403,6 +404,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
+			fx.Provide(scheduler.NewSpecBuilder),
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
@@ -626,6 +628,7 @@ func (c *TemporalImpl) startWorker() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			worker.Module,
+			fx.Provide(scheduler.NewSpecBuilder),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 			fx.Populate(&namespaceRegistry),
