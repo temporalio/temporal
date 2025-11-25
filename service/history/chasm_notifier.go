@@ -13,9 +13,8 @@ import (
 type (
 	// ChasmNotifier allows subscribers to subscribe to notifications relating to a CHASM execution.
 	ChasmNotifier struct {
-		metricsHandler metrics.Handler
-		executions     map[chasm.EntityKey]chan struct{}
-		lock           sync.Mutex
+		executions map[chasm.EntityKey]chan struct{}
+		lock       sync.Mutex
 	}
 )
 
@@ -23,8 +22,7 @@ type (
 // notifications relating to a CHASM execution.
 func NewChasmNotifier(metricsHandler metrics.Handler) *ChasmNotifier {
 	return &ChasmNotifier{
-		metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.ChasmComponentNotificationScope)),
-		executions:     make(map[chasm.EntityKey]chan struct{}),
+		executions: make(map[chasm.EntityKey]chan struct{}),
 	}
 }
 
