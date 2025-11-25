@@ -6151,3 +6151,37 @@ func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *
 
 	return &workflowservice.PauseWorkflowExecutionResponse{}, nil
 }
+
+func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request *workflowservice.UnpauseWorkflowExecutionRequest) (_ *workflowservice.UnpauseWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// verify size limits of reason, request id and identity.
+	if len(request.GetReason()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("reason is too long.")
+	}
+	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("request id is too long.")
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("identity is too long.")
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, historyErr := wh.historyClient.UnpauseWorkflowExecution(ctx, &historyservice.UnpauseWorkflowExecutionRequest{
+		NamespaceId:    namespaceID.String(),
+		UnpauseRequest: request,
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+
+	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
+}

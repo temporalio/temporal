@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
-	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
 )
 
@@ -534,7 +534,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				nexusoperations.InvocationTask{EndpointName: "endpoint-id"},
 			)
 			if tc.destinationDown {
-				var destinationDownErr *queues.DestinationDownError
+				var destinationDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destinationDownErr)
 			} else {
 				require.NoError(t, err)
@@ -848,7 +848,8 @@ func TestProcessCancelationTask(t *testing.T) {
 				nexusoperations.CancelationTask{EndpointName: "endpoint-id"},
 			)
 			if tc.destinationDown {
-				require.IsType(t, &queues.DestinationDownError{}, err)
+				var destinationDownErr *queueserrors.DestinationDownError
+				require.ErrorAs(t, err, &destinationDownErr)
 			} else {
 				require.NoError(t, err)
 			}

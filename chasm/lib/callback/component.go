@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/timestamppb"
-)
-
-const (
-	Archetype chasm.Archetype = "Callback"
 )
 
 type CompletionSource interface {
@@ -82,12 +80,12 @@ func (c *Callback) loadInvocationArgs(
 
 	variant := c.GetCallback().GetNexus()
 	if variant == nil {
-		return nil, queues.NewUnprocessableTaskError(
+		return nil, queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("unprocessable callback variant: %v", variant),
 		)
 	}
 
-	if variant.Url == chasmnexus.CompletionHandlerURL {
+	if variant.Url == chasm.NexusCompletionHandlerURL {
 		return chasmInvocation{
 			nexus:      variant,
 			attempt:    c.Attempt,
@@ -104,11 +102,16 @@ func (c *Callback) loadInvocationArgs(
 	}, nil
 }
 
+type saveResultInput struct {
+	result      invocationResult
+	retryPolicy backoff.RetryPolicy
+}
+
 func (c *Callback) saveResult(
 	ctx chasm.MutableContext,
-	result invocationResult,
+	input saveResultInput,
 ) (chasm.NoValue, error) {
-	switch r := result.(type) {
+	switch r := input.result.(type) {
 	case invocationResultOK:
 		err := TransitionSucceeded.Apply(ctx, c, EventSucceeded{Time: ctx.Now(c)})
 		return nil, err
@@ -116,7 +119,7 @@ func (c *Callback) saveResult(
 		err := TransitionAttemptFailed.Apply(ctx, c, EventAttemptFailed{
 			Time:        ctx.Now(c),
 			Err:         r.err,
-			RetryPolicy: r.retryPolicy,
+			RetryPolicy: input.retryPolicy,
 		})
 		return nil, err
 	case invocationResultFail:
@@ -126,8 +129,31 @@ func (c *Callback) saveResult(
 		})
 		return nil, err
 	default:
-		return nil, queues.NewUnprocessableTaskError(
-			fmt.Sprintf("unrecognized callback result %v", result),
+		return nil, queueserrors.NewUnprocessableTaskError(
+			fmt.Sprintf("unrecognized callback result %v", input.result),
 		)
 	}
+}
+
+// ToAPICallback converts a CHASM callback to API callback proto.
+func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
+	// Convert CHASM callback proto to API callback proto
+	chasmCB := c.GetCallback()
+	res := &commonpb.Callback{
+		Links: chasmCB.GetLinks(),
+	}
+
+	// CHASM currently only supports Nexus callbacks
+	if variant, ok := chasmCB.Variant.(*callbackspb.Callback_Nexus_); ok {
+		res.Variant = &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: variant.Nexus.GetHeader(),
+			},
+		}
+		return res, nil
+	}
+
+	// This should not happen as CHASM only supports Nexus callbacks currently
+	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }

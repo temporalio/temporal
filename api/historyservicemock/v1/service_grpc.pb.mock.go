@@ -1403,6 +1403,26 @@ func (mr *MockHistoryServiceClientMockRecorder) UnpauseActivity(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).UnpauseActivity), varargs...)
 }
 
+// UnpauseWorkflowExecution mocks base method.
+func (m *MockHistoryServiceClient) UnpauseWorkflowExecution(ctx context.Context, in *historyservice.UnpauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.UnpauseWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnpauseWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.UnpauseWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpauseWorkflowExecution indicates an expected call of UnpauseWorkflowExecution.
+func (mr *MockHistoryServiceClientMockRecorder) UnpauseWorkflowExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).UnpauseWorkflowExecution), varargs...)
+}
+
 // UpdateActivityOptions mocks base method.
 func (m *MockHistoryServiceClient) UpdateActivityOptions(ctx context.Context, in *historyservice.UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*historyservice.UpdateActivityOptionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -2682,6 +2702,21 @@ func (m *MockHistoryServiceServer) UnpauseActivity(arg0 context.Context, arg1 *h
 func (mr *MockHistoryServiceServerMockRecorder) UnpauseActivity(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).UnpauseActivity), arg0, arg1)
+}
+
+// UnpauseWorkflowExecution mocks base method.
+func (m *MockHistoryServiceServer) UnpauseWorkflowExecution(arg0 context.Context, arg1 *historyservice.UnpauseWorkflowExecutionRequest) (*historyservice.UnpauseWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpauseWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.UnpauseWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpauseWorkflowExecution indicates an expected call of UnpauseWorkflowExecution.
+func (mr *MockHistoryServiceServerMockRecorder) UnpauseWorkflowExecution(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).UnpauseWorkflowExecution), arg0, arg1)
 }
 
 // UpdateActivityOptions mocks base method.

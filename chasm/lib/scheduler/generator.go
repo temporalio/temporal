@@ -32,6 +32,12 @@ func NewGenerator(ctx chasm.MutableContext, scheduler *Scheduler, invoker *Invok
 	return generator
 }
 
+// Generate immediately kicks off a new GeneratorTask. Used after updating the
+// schedule specification.
+func (g *Generator) Generate(ctx chasm.MutableContext) {
+	ctx.AddTask(g, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+}
+
 func (g *Generator) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
