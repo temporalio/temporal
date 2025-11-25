@@ -171,7 +171,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 		Version:             version,
 		ScheduledEventID:    scheduledEventID,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -206,7 +206,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 		Version:             version,
 		ScheduledEventID:    scheduledEventID,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -242,7 +242,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		Version:             version,
 		ScheduledEventID:    scheduledEventID,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -279,7 +279,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		Version:             version,
 		ScheduledEventID:    scheduledEventID,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -389,7 +389,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		Version:             version,
 		ScheduledEventID:    scheduledEventID,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -498,7 +498,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		TaskID:              taskID,
 		Version:             version,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -532,7 +532,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		TaskID:              taskID,
 		Version:             version,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -921,7 +921,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowMissing() {
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -953,7 +953,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -1046,7 +1046,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -1134,7 +1134,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		{NamespaceFailoverVersion: 3, TransitionCount: 6},
 	}
 
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -1288,7 +1288,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTask
 			},
 		},
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -1368,7 +1368,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_AddTaskEqui
 		},
 		TaskEquivalents: []tasks.Task{syncActivityTask, historyReplicationTask},
 	}
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -1453,7 +1453,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		{NamespaceFailoverVersion: 3, TransitionCount: 6},
 	}
 
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -1586,7 +1586,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask
 		{NamespaceFailoverVersion: 3, TransitionCount: 6},
 	}
 
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
@@ -1699,7 +1699,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_HasBuffer
 		{NamespaceFailoverVersion: 3, TransitionCount: 6},
 	}
 
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),

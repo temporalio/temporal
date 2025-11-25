@@ -20,6 +20,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2396,7 +2397,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		request.GetCompletion().GetComponentRef(),
-		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+		func(c chasmnexus.CompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
 		completion)
@@ -2612,7 +2613,7 @@ func (h *Handler) ResetActivity(
 	return response, nil
 }
 
-// PauseWorkflowExecution is used to pause a running workflow execution.  This results in
+// PauseWorkflowExecution is used to pause a running workflow execution. This results in
 // WorkflowExecutionPaused event recorded in the history.
 func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (_ *historyservice.PauseWorkflowExecutionResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
@@ -2642,4 +2643,34 @@ func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyse
 	}
 
 	return resp, nil
+}
+
+func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *historyservice.UnpauseWorkflowExecutionRequest) (_ *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.GetUnpauseRequest().GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	unpauseResp, unpauseErr := engine.UnpauseWorkflowExecution(ctx, request)
+	if unpauseErr != nil {
+		return nil, h.convertError(unpauseErr)
+	}
+
+	return unpauseResp, nil
 }

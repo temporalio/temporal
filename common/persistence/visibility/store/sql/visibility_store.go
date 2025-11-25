@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -650,7 +651,7 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		// TODO: CHASM search attributes are not in the typeMap and SQL only stores raw values (no metadata).
 		// The Encode() call below will fail to add type metadata, causing decode issues.
-		if searchattribute.IsChasmSearchAttribute(name) {
+		if sadefs.IsChasmSearchAttribute(name) {
 			continue
 		}
 		tp, err := saTypeMap.GetType(name)

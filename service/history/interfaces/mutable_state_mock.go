@@ -31,6 +31,8 @@ import (
 	persistence "go.temporal.io/server/api/persistence/v1"
 	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
 	workflow0 "go.temporal.io/server/api/workflow/v1"
+	chasm "go.temporal.io/server/chasm"
+	workflow1 "go.temporal.io/server/chasm/lib/workflow"
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
@@ -739,6 +741,21 @@ func (m *MockMutableState) AddWorkflowExecutionTerminatedEvent(firstEventID int6
 func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionTerminatedEvent(firstEventID, reason, details, identity, deleteAfterTerminate, links any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionTerminatedEvent), firstEventID, reason, details, identity, deleteAfterTerminate, links)
+}
+
+// AddWorkflowExecutionUnpausedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionUnpausedEvent(identity, reason, requestID string) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionUnpausedEvent", identity, reason, requestID)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionUnpausedEvent indicates an expected call of AddWorkflowExecutionUnpausedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionUnpausedEvent(identity, reason, requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionUnpausedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionUnpausedEvent), identity, reason, requestID)
 }
 
 // AddWorkflowExecutionUpdateAcceptedEvent mocks base method.
@@ -1471,6 +1488,20 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTimedoutEvent(arg0
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTimedoutEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTimedoutEvent), arg0, arg1)
 }
 
+// ApplyWorkflowExecutionUnpausedEvent mocks base method.
+func (m *MockMutableState) ApplyWorkflowExecutionUnpausedEvent(event *history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionUnpausedEvent", event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyWorkflowExecutionUnpausedEvent indicates an expected call of ApplyWorkflowExecutionUnpausedEvent.
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionUnpausedEvent(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionUnpausedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionUnpausedEvent), event)
+}
+
 // ApplyWorkflowExecutionUpdateAcceptedEvent mocks base method.
 func (m *MockMutableState) ApplyWorkflowExecutionUpdateAcceptedEvent(arg0 *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
@@ -1609,6 +1640,20 @@ func (mr *MockMutableStateMockRecorder) AttachRequestID(requestID, eventType, ev
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachRequestID", reflect.TypeOf((*MockMutableState)(nil).AttachRequestID), requestID, eventType, eventID)
 }
 
+// ChasmEnabled mocks base method.
+func (m *MockMutableState) ChasmEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ChasmEnabled indicates an expected call of ChasmEnabled.
+func (mr *MockMutableStateMockRecorder) ChasmEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmEnabled", reflect.TypeOf((*MockMutableState)(nil).ChasmEnabled))
+}
+
 // ChasmTree mocks base method.
 func (m *MockMutableState) ChasmTree() ChasmTree {
 	m.ctrl.T.Helper()
@@ -1621,6 +1666,38 @@ func (m *MockMutableState) ChasmTree() ChasmTree {
 func (mr *MockMutableStateMockRecorder) ChasmTree() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmTree", reflect.TypeOf((*MockMutableState)(nil).ChasmTree))
+}
+
+// ChasmWorkflowComponent mocks base method.
+func (m *MockMutableState) ChasmWorkflowComponent(ctx context.Context) (*workflow1.Workflow, chasm.MutableContext, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmWorkflowComponent", ctx)
+	ret0, _ := ret[0].(*workflow1.Workflow)
+	ret1, _ := ret[1].(chasm.MutableContext)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ChasmWorkflowComponent indicates an expected call of ChasmWorkflowComponent.
+func (mr *MockMutableStateMockRecorder) ChasmWorkflowComponent(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmWorkflowComponent", reflect.TypeOf((*MockMutableState)(nil).ChasmWorkflowComponent), ctx)
+}
+
+// ChasmWorkflowComponentReadOnly mocks base method.
+func (m *MockMutableState) ChasmWorkflowComponentReadOnly(ctx context.Context) (*workflow1.Workflow, chasm.Context, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmWorkflowComponentReadOnly", ctx)
+	ret0, _ := ret[0].(*workflow1.Workflow)
+	ret1, _ := ret[1].(chasm.Context)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ChasmWorkflowComponentReadOnly indicates an expected call of ChasmWorkflowComponentReadOnly.
+func (mr *MockMutableStateMockRecorder) ChasmWorkflowComponentReadOnly(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmWorkflowComponentReadOnly", reflect.TypeOf((*MockMutableState)(nil).ChasmWorkflowComponentReadOnly), ctx)
 }
 
 // CheckResettable mocks base method.

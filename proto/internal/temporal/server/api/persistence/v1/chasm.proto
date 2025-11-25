@@ -38,7 +38,7 @@ message ChasmComponentAttributes {
         string destination = 2;
         google.protobuf.Timestamp scheduled_time = 3;
         temporal.api.common.v1.DataBlob data = 4;
-        // Versioned transition of the Entity when the task was created.
+        // Versioned transition of the execution when the task was created.
         VersionedTransition versioned_transition = 5;
         // The xth task generated in this versioned transition.
         // Together with the versioned transition, this is a unique identifier for
@@ -72,10 +72,10 @@ message ChasmPointerAttributes {
 
 // ChasmTaskInfo includes component-facing task metadata
 message ChasmTaskInfo {
-    // Initial versioned transition of the entity being referenced.
+    // Initial versioned transition of the component being referenced.
     VersionedTransition component_initial_versioned_transition = 1;
 
-    // Last updated transition of the entity being referenced at the time the
+    // Last updated transition of the component being referenced at the time the
     // reference was created. Can be used to invalidate this reference.
     VersionedTransition component_last_update_versioned_transition = 2;
 
@@ -95,13 +95,13 @@ message ChasmTaskInfo {
 message ChasmComponentRef {
     string namespace_id = 1;
     string business_id = 2;
-    string entity_id = 3;
+    string run_id = 3;
 
     // Executions's root component's type ID.
     // (-- api-linter: core::0141::forbidden-types=disabled --)
     uint32 archetype_id = 4;
     
-    VersionedTransition entity_versioned_transition = 5;
+    VersionedTransition execution_versioned_transition = 5;
 
     repeated string component_path = 6;
     VersionedTransition component_initial_versioned_transition = 7;

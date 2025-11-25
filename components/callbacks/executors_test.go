@@ -17,7 +17,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -29,7 +29,8 @@ import (
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
-	"go.temporal.io/server/service/history/queues"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -172,7 +173,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 				callbacks.TaskExecutorOptions{
 					NamespaceRegistry: namespaceRegistryMock,
 					MetricsHandler:    metricsHandler,
-					HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+					HTTPCallerProvider: func(nid queuescommon.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
 					Logger: log.NewNoopLogger(),
@@ -203,7 +204,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 
 			if tc.retryable {
-				require.NotErrorAs(t, err, &queues.UnprocessableTaskError{})
+				var target *queueserrors.UnprocessableTaskError
+				require.NotErrorAs(t, err, &target)
 			} else {
 				require.NoError(t, err)
 			}
@@ -238,7 +240,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	require.NoError(t, callbacks.RegisterExecutor(
 		reg,
 		callbacks.TaskExecutorOptions{
-			HTTPCallerProvider: func(nid queues.NamespaceIDAndDestination) callbacks.HTTPCaller {
+			HTTPCallerProvider: func(nid queuescommon.NamespaceIDAndDestination) callbacks.HTTPCaller {
 				return nil
 			},
 			Logger: log.NewNoopLogger(),
@@ -296,7 +298,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 	dummyRef := persistencespb.ChasmComponentRef{
 		NamespaceId: "namespace-id",
 		BusinessId:  "business-id",
-		EntityId:    "entity-id",
+		RunId:       "run-id",
 		ArchetypeId: 1234,
 	}
 
@@ -335,7 +337,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					require.NoError(t, proto.Unmarshal(req.Completion.ComponentRef, &ref))
 					require.Equal(t, "namespace-id", ref.NamespaceId)
 					require.Equal(t, "business-id", ref.BusinessId)
-					require.Equal(t, "entity-id", ref.EntityId)
+					require.Equal(t, "run-id", ref.RunId)
 					require.Equal(t, dummyRef.ArchetypeId, ref.ArchetypeId)
 					require.Equal(t, "request-id", req.Completion.RequestId)
 
@@ -505,7 +507,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					Callback: &persistencespb.Callback{
 						Variant: &persistencespb.Callback_Nexus_{
 							Nexus: &persistencespb.Callback_Nexus{
-								Url:    chasm.NexusCompletionHandlerURL,
+								Url:    chasmnexus.CompletionHandlerURL,
 								Header: headers,
 							},
 						},

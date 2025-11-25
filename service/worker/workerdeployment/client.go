@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
@@ -338,9 +340,9 @@ func newResourceExhaustedError(message string) *serviceerror.ResourceExhausted {
 	}
 }
 
-func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome) error {
+func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome, deploymentName, buildID string) error {
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
-		return serviceerror.NewNotFound(errVersionNotFound)
+		return serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
@@ -704,7 +706,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		if err != nil {
 			var notFound *serviceerror.NotFound
 			if errors.As(err, &notFound) {
-				return nil, serviceerror.NewFailedPreconditionf(ErrWorkerDeploymentNotFound, deploymentName)
+				return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 			}
 			return nil, err
 		}
@@ -719,7 +721,7 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
-	} else if updateErr := d.handleUpdateVersionFailures(outcome); updateErr != nil {
+	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
 	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
 		return nil, registerErr
@@ -818,7 +820,7 @@ func (d *ClientImpl) SetRampingVersion(
 		if err != nil {
 			var notFound *serviceerror.NotFound
 			if errors.As(err, &notFound) {
-				return nil, serviceerror.NewFailedPreconditionf(ErrWorkerDeploymentNotFound, deploymentName)
+				return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 			}
 			return nil, err
 		}
@@ -836,7 +838,7 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
-	} else if updateErr := d.handleUpdateVersionFailures(outcome); updateErr != nil {
+	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
 	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
 		return nil, registerErr
@@ -1153,10 +1155,10 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		if failure.Message == ErrVersionIsDraining {
-			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
-		} else if failure.Message == ErrVersionHasPollers {
-			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
+		if strings.Contains(failure.Message, errVersionIsDrainingSuffix) {
+			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionIsDraining, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
+		} else if strings.Contains(failure.Message, errVersionHasPollersSuffix) {
+			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionHasPollers, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -1439,7 +1441,7 @@ func isRetryableUpdateError(err error) bool {
 
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
 	return sa
 }
 
@@ -1656,7 +1658,7 @@ func makeDeploymentQuery(version string) string {
 	var statusFilter string
 	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(version))
 	statusFilter = "= 'Running'"
-	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
+	return fmt.Sprintf("%s %s AND %s %s", sadefs.BuildIds, deploymentFilter, sadefs.ExecutionStatus, statusFilter)
 }
 
 func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {

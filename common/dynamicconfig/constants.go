@@ -295,9 +295,9 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = NewNamespaceIntSetting(
 		"system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute",
-		0,
+		5,
 		`NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute is the number of consecutive workflow task problems to trigger the TemporalReportedProblems search attribute.
-Setting this to 0 (the default) prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
+Setting this to 0 prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
 	)
 
 	// keys for size limit
@@ -958,6 +958,13 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"system.maxCallbacksPerWorkflow",
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+	)
+	// NOTE (seankane): MaxCHASMCallbacksPerWorkflow is temporary, this will be removed and replaced with MaxCallbacksPerWorkflow
+	// once CHASM is fully enabled
+	MaxCHASMCallbacksPerWorkflow = NewNamespaceIntSetting(
+		"system.maxCHASMCallbacksPerWorkflow",
+		2000,
+		`MaxCHASMCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow when using the CHASM implementation.`,
 	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
@@ -2651,6 +2658,13 @@ instead of the existing (V1) implementation.`,
 		false,
 		`EnableCHASMSchedulerMigration controls whether existing V1 schedules are automatically migrated
 to the CHASM (V2) implementation on active scheduler workflows.`,
+	)
+
+	EnableCHASMCallbacks = NewNamespaceBoolSetting(
+		"history.enableCHASMCallbacks",
+		false,
+		`Controls whether new callbacks are created using the CHASM implementation
+instead of the previous HSM backed implementation.`,
 	)
 
 	// keys for worker

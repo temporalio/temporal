@@ -232,7 +232,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmEntity(
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		r.shardContext,
 		namespaceID,
@@ -352,7 +352,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		return mutation.StateMutation.ExecutionState, mutation.StateMutation.ExecutionInfo
 	}()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmEntity(
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		r.shardContext,
 		namespace.ID(executionInfo.NamespaceId),

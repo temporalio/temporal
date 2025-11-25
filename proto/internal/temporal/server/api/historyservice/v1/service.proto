@@ -426,4 +426,7 @@ service HistoryService {
     rpc PauseWorkflowExecution (PauseWorkflowExecutionRequest) returns (PauseWorkflowExecutionResponse) {
     }
 
+    // UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
+    rpc UnpauseWorkflowExecution (UnpauseWorkflowExecutionRequest) returns (UnpauseWorkflowExecutionResponse) {
+    }
 }

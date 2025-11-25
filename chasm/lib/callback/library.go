@@ -14,7 +14,7 @@ type (
 	}
 )
 
-func NewLibrary(
+func newLibrary(
 	InvocationTaskExecutor *InvocationTaskExecutor,
 	BackoffTaskExecutor *BackoffTaskExecutor,
 ) *Library {

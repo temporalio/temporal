@@ -421,7 +421,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 	archetype chasm.Archetype,
 ) (Workflow, error) {
 
-	weContext, release, err := r.workflowCache.GetOrCreateChasmEntity(
+	weContext, release, err := r.workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		r.shardContext,
 		namespaceID,
