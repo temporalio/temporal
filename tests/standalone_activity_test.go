@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
@@ -366,32 +365,6 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 
 	err = <-taskQueuePollErr
 	require.NoError(t, err)
-
-	// Manipulate the token to verify token staleness checks (simulate ErrStaleReference). To do so
-	// we make use of the internal implementation detail that the bytes are a serialized ref.
-	token := firstPollResp.StateChangeLongPollToken
-	var pRef persistencespb.ChasmComponentRef
-	err = pRef.Unmarshal(token)
-	require.NoError(t, err)
-	if pRef.EntityVersionedTransition != nil {
-		pRef.EntityVersionedTransition.NamespaceFailoverVersion += 1
-	}
-	token, err = pRef.Marshal()
-	require.NoError(t, err)
-
-	_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      startResp.RunId,
-		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-				LongPollToken: token,
-			},
-		},
-	})
-	var unavailableErr *serviceerror.Unavailable
-	require.ErrorAs(t, err, &unavailableErr)
-	require.ErrorContains(t, err, "please retry")
 }
 
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion() {

@@ -719,6 +719,53 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	s.Equal(activityID, <-newActivityID)
 }
 
+// TestPollComponent_StaleState tests that PollComponent returns a user-friendly Unavailable error
+// when the submitted component reference is ahead of persisted state (e.g. due to namespace
+// failover).
+func (s *chasmEngineSuite) TestPollComponent_StaleState() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	entityKey := chasm.EntityKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		EntityID:    tv.RunID(),
+	}
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(entityKey, &persistencespb.ActivityInfo{}),
+		}, nil).AnyTimes()
+
+	pRef := &persistencespb.ChasmComponentRef{
+		NamespaceId: entityKey.NamespaceID,
+		BusinessId:  entityKey.BusinessID,
+		EntityId:    entityKey.EntityID,
+		Archetype:   "TestLibrary.test_component",
+		EntityVersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 1, // ahead of persisted state
+			TransitionCount:          testTransitionCount,
+		},
+	}
+	staleToken, err := pRef.Marshal()
+	s.NoError(err)
+	staleRef, err := chasm.DeserializeComponentRef(staleToken)
+	s.NoError(err)
+
+	_, err = s.engine.PollComponent(
+		context.Background(),
+		staleRef,
+		func(ctx chasm.Context, component chasm.Component) (bool, error) {
+			s.Fail("predicate should not be called with stale ref")
+			return false, nil
+		},
+	)
+	s.Error(err)
+	var unavailable *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailable)
+	s.Equal("please retry", unavailable.Message)
+}
+
 func (s *chasmEngineSuite) buildPersistenceMutableState(
 	key chasm.EntityKey,
 	componentState proto.Message,
@@ -736,7 +783,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			TransitionHistory: []*persistencespb.VersionedTransition{
 				{
 					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
-					TransitionCount:          10,
+					TransitionCount:          testTransitionCount,
 				},
 			},
 			ExecutionStats: &persistencespb.ExecutionStats{},
@@ -756,7 +803,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 					},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
-						TransitionCount:          10,
+						TransitionCount:          testTransitionCount,
 					},
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
 						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
@@ -781,6 +828,7 @@ func (s *chasmEngineSuite) serializeComponentState(
 const (
 	testComponentPausedSAName   = "PausedSA"
 	testComponentPausedMemoName = "PausedMemo"
+	testTransitionCount         = 10
 )
 
 var (
