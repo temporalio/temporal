@@ -280,17 +280,11 @@ func ValidatePollActivityExecutionRequest(
 		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
-	hasRunID := req.GetRunId() != ""
-	hasLongPollToken := len(req.GetWaitAnyStateChange().GetLongPollToken()) > 0
-
-	if hasLongPollToken && !hasRunID {
-		return serviceerror.NewInvalidArgument("run id is required when long poll token is provided")
+	if req.GetRunId() == "" {
+		return serviceerror.NewInvalidArgument("run id is required")
 	}
-	if hasRunID {
-		_, err := uuid.Parse(req.GetRunId())
-		if err != nil {
-			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
-		}
+	if _, err := uuid.Parse(req.GetRunId()); err != nil {
+		return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
 	}
 	return nil
 }

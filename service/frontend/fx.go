@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -754,6 +755,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
+	registry *chasm.Registry,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -782,6 +784,7 @@ func HandlerProvider(
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
 		activityHandler,
+		registry,
 	)
 	return wfHandler
 }
