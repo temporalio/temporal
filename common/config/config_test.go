@@ -30,10 +30,8 @@ func skipComments(fb []byte, first int) string {
 	lines := strings.Split(string(fb), "\n")
 	i := 0
 	var filtered []string
-	for {
-		if i >= first || i >= len(lines) {
-			break
-		}
+	for i < first && i < len(lines) {
+
 		if strings.HasPrefix(strings.TrimSpace(lines[i]), "#") {
 			i++
 			continue
