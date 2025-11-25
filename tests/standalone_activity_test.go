@@ -226,7 +226,6 @@ func createDefaultInput() *commonpb.Payloads {
 }
 
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
-	// Long poll for any state change. PollActivityTaskQueue is used to cause a state change.
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -236,30 +235,50 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
 	startResp, err := s.startActivity(ctx, activityID, taskQueue)
 	require.NoError(t, err)
 
-	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:      s.Namespace().String(),
-		ActivityId:     activityID,
-		RunId:          startResp.RunId,
-		IncludeInfo:    true,
-		IncludeInput:   true,
-		IncludeOutcome: true,
+	t.Run("MinimalResponse", func(t *testing.T) {
+		pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeInfo:    false,
+			IncludeInput:   false,
+			IncludeOutcome: false,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, pollResp.StateChangeLongPollToken)
+		require.Equal(t, startResp.RunId, pollResp.RunId)
+		require.Nil(t, pollResp.Info)
+		require.Nil(t, pollResp.Input)
+		require.Nil(t, pollResp.GetResult())
+		require.Nil(t, pollResp.GetFailure())
 	})
-	require.NoError(t, err)
-	require.NotNil(t, pollResp.StateChangeLongPollToken)
-	require.NotNil(t, pollResp.Info)
-	s.assertActivityExecutionInfo(
-		t,
-		pollResp.Info,
-		activityID,
-		startResp.RunId,
-		enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
-	)
-	require.NotNil(t, pollResp.Input)
-	require.Equal(t, "test-activity-input", string(pollResp.Input.Payloads[0].Data))
 
-	// Activity is scheduled but not completed, so no outcome yet
-	require.Nil(t, pollResp.GetResult())
-	require.Nil(t, pollResp.GetFailure())
+	t.Run("FullResponse", func(t *testing.T) {
+		pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeInfo:    true,
+			IncludeInput:   true,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, pollResp.StateChangeLongPollToken)
+		require.NotNil(t, pollResp.Info)
+		s.assertActivityExecutionInfo(
+			t,
+			pollResp.Info,
+			activityID,
+			startResp.RunId,
+			enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		)
+		require.NotNil(t, pollResp.Input)
+		require.Equal(t, "test-activity-input", string(pollResp.Input.Payloads[0].Data))
+
+		// Activity is scheduled but not completed, so no outcome yet
+		require.Nil(t, pollResp.GetResult())
+		require.Nil(t, pollResp.GetFailure())
+	})
 }
 
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateChange() {
