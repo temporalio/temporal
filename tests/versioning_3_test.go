@@ -90,7 +90,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
-	t.Run("async_new_deployment_data", func(t *testing.T) {
+	t.Run("async_without_revision_number", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
 			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
 			useV32:                    true,
@@ -99,7 +99,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
-	t.Run("async_new_deployment_data_and_revisions", func(t *testing.T) {
+	t.Run("async_with_revision_number", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
 			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
 			useV32:                    true,
@@ -868,8 +868,7 @@ func (s *Versioning3Suite) TestWorkflowRetry_Pinned_ExpectNoInherit() {
 	s.testWorkflowRetry(workflow.VersioningBehaviorPinned, false, false, false)
 }
 
-// TODO (Shivam): I think one may need to slightly modify this now that we are actually "inheriting" the autoupgrade version.
-func (s *Versioning3Suite) TestWorkflowRetry_Unpinned_ExpectNoInherit() {
+func (s *Versioning3Suite) TestWorkflowRetry_Unpinned_ExpectAutoUpgradeToCurrent() {
 	s.testWorkflowRetry(workflow.VersioningBehaviorAutoUpgrade, false, false, false)
 }
 
