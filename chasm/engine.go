@@ -247,7 +247,7 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
-	monotonicPredicateFn func(C, Context, I) (O, bool, error),
+	monotonicPredicate func(C, Context, I) (O, bool, error),
 	input I,
 ) (O, []byte, error) {
 	var output O
@@ -261,7 +261,7 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 		ctx,
 		ref,
 		func(ctx Context, c Component) (bool, error) {
-			out, satisfied, err := monotonicPredicateFn(c.(C), ctx, input)
+			out, satisfied, err := monotonicPredicate(c.(C), ctx, input)
 			if satisfied {
 				output = out
 			}
