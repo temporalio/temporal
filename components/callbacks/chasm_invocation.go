@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -44,8 +45,13 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 
 func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
 	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
-	if !ok {
+	header := nexus.Header(c.nexus.GetHeader())
+	if header == nil {
+		header = nexus.Header{}
+	}
+
+	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
+	if encodedRef == "" {
 		return invocationResultFail{logInternalError(e.Logger, "callback missing token", nil)}
 	}
 
