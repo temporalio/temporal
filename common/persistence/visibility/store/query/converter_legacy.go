@@ -157,7 +157,8 @@ func NewComparisonExprConverter(
 		fvInterceptor = &NopFieldValuesInterceptor{}
 	}
 
-	combinedTypeMap := maps.Clone(customSaNameType.Custom())
+	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
+	maps.Copy(combinedTypeMap, customSaNameType.Custom())
 	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
 	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
 

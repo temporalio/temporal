@@ -996,7 +996,8 @@ func (s *VisibilityStore) ParseESDoc(
 		return nil, serviceerror.NewInternalf("unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err)
 	}
 
-	combinedTypeMap := maps.Clone(saTypeMap.Custom())
+	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
+	maps.Copy(combinedTypeMap, saTypeMap.Custom())
 	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
 	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
 
