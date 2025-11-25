@@ -383,7 +383,7 @@ func (a *activities) generateWorkflowReplicationTask(
 		resp, err := a.adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
 			Namespace: namespaceName,
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: execution.WorkflowId,
+				WorkflowId: execution.BusinessId,
 				RunId:      execution.RunId,
 			},
 			Archetype:      archetype,
@@ -398,7 +398,7 @@ func (a *activities) generateWorkflowReplicationTask(
 		resp, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
 			NamespaceId: namespaceID,
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: execution.WorkflowId,
+				WorkflowId: execution.BusinessId,
 				RunId:      execution.RunId,
 			},
 			ArchetypeId:    execution.ArchetypeId,
@@ -493,7 +493,7 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 	executions := make([]*replicationspb.MigrationExecutionInfo, 0, len(resp.Executions))
 	for _, e := range resp.Executions {
 		executionInfo := &replicationspb.MigrationExecutionInfo{
-			WorkflowId: e.Execution.GetWorkflowId(),
+			BusinessId: e.Execution.GetWorkflowId(),
 			RunId:      e.Execution.GetRunId(),
 			// Ideally we should use chasm.WorkflowArchetypeID by default,
 			// but for backward compatibility reason we need this field to be 0
@@ -590,7 +590,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 			if !common.IsNotFoundError(err) {
 				a.logger.Error("force-replication failed to generate replication task",
 					tag.WorkflowNamespaceID(request.NamespaceID),
-					tag.WorkflowID(we.GetWorkflowId()),
+					tag.WorkflowID(we.GetBusinessId()),
 					tag.WorkflowRunID(we.GetRunId()),
 					tag.Error(err))
 				return err
@@ -598,7 +598,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 
 			a.logger.Warn("force-replication ignore replication task due to NotFoundServiceError",
 				tag.WorkflowNamespaceID(request.NamespaceID),
-				tag.WorkflowID(we.GetWorkflowId()),
+				tag.WorkflowID(we.GetBusinessId()),
 				tag.WorkflowRunID(we.GetRunId()),
 				tag.Error(err))
 		}
@@ -707,11 +707,11 @@ func (a *activities) checkSkipWorkflowExecution(
 	ns *namespace.Namespace,
 ) (verifyResult, error) {
 	namespaceID := request.NamespaceID
-	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(execution.WorkflowId), tag.WorkflowRunID(execution.RunId)}
+	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(execution.BusinessId), tag.WorkflowRunID(execution.RunId)}
 	resp, err := a.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		NamespaceId: namespaceID,
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
+			WorkflowId: execution.BusinessId,
 			RunId:      execution.RunId,
 		},
 		ArchetypeId:     execution.ArchetypeId,
@@ -784,7 +784,7 @@ func (a *activities) verifySingleReplicationTask(
 	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: request.Namespace,
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
+			WorkflowId: execution.BusinessId,
 			RunId:      execution.RunId,
 		},
 		Archetype:       archetype,

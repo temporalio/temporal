@@ -260,7 +260,7 @@ message VersionedTransitionArtifact {
 message MigrationExecutionInfo {
     // Should be called business_id, but to maintain backward compatibility
     // with old type definition used in migration workflows.
-    string workflow_id = 1;
+    string business_id = 1 [json_name = "workflowId"];
     string run_id = 2;
     // (-- api-linter: core::0141::forbidden-types=disabled --)
     uint32 archetype_id = 3; 

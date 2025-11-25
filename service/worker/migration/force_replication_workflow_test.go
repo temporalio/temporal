@@ -82,7 +82,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*replicationspb.MigrationExecutionInfo{{WorkflowId: "wf-1"}},
+				Executions:    []*replicationspb.MigrationExecutionInfo{{BusinessId: "wf-1"}},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -559,9 +559,9 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 1, NamespaceID: namespaceID}, nil)
 
 	pages := [][]*replicationspb.MigrationExecutionInfo{
-		{{WorkflowId: "wf-1a"}},
-		{{WorkflowId: "wf-2a"}, {WorkflowId: "wf-2b"}},
-		{{WorkflowId: "wf-3a"}},
+		{{BusinessId: "wf-1a"}},
+		{{BusinessId: "wf-2a"}, {BusinessId: "wf-2b"}},
+		{{BusinessId: "wf-3a"}},
 	}
 
 	totalPageCount := len(pages)
@@ -580,7 +580,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(func(ctx context.Context, req *generateReplicationTasksRequest) error {
 		ids := make([]string, len(req.Executions))
 		for i, we := range req.Executions {
-			ids[i] = we.GetWorkflowId()
+			ids[i] = we.GetBusinessId()
 		}
 		capturedGenerateMu.Lock()
 		capturedGenerate = append(capturedGenerate, ids)
@@ -595,7 +595,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(func(ctx context.Context, req *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
 		ids := make([]string, len(req.Executions))
 		for i, we := range req.Executions {
-			ids[i] = we.GetWorkflowId()
+			ids[i] = we.GetBusinessId()
 		}
 		capturedVerifyMu.Lock()
 		capturedVerify = append(capturedVerify, ids)

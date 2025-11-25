@@ -2050,7 +2050,7 @@ type MigrationExecutionInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Should be called business_id, but to maintain backward compatibility
 	// with old type definition used in migration workflows.
-	WorkflowId string `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	BusinessId string `protobuf:"bytes,1,opt,name=business_id,json=workflowId,proto3" json:"business_id,omitempty"`
 	RunId      string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// (-- api-linter: core::0141::forbidden-types=disabled --)
 	ArchetypeId   uint32 `protobuf:"varint,3,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
@@ -2088,9 +2088,9 @@ func (*MigrationExecutionInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_replication_v1_message_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *MigrationExecutionInfo) GetWorkflowId() string {
+func (x *MigrationExecutionInfo) GetBusinessId() string {
 	if x != nil {
-		return x.WorkflowId
+		return x.BusinessId
 	}
 	return ""
 }
@@ -2293,7 +2293,7 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x14is_force_replication\x18\a \x01(\bR\x12isForceReplicationB\x12\n" +
 	"\x10state_attributes\"s\n" +
 	"\x16MigrationExecutionInfo\x12\x1f\n" +
-	"\vworkflow_id\x18\x01 \x01(\tR\n" +
+	"\vbusiness_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12!\n" +
 	"\farchetype_id\x18\x03 \x01(\rR\varchetypeIdB5Z3go.temporal.io/server/api/replication/v1;repicationb\x06proto3"
