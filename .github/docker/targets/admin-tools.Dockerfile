@@ -1,6 +1,5 @@
 ARG ALPINE_IMAGE
-
-FROM ${ALPINE_IMAGE} AS temporal-admin-tools
+FROM ${ALPINE_IMAGE}
 
 ARG TARGETARCH
 
@@ -13,13 +12,7 @@ COPY --chmod=755 ./build/${TARGETARCH}/temporal /usr/local/bin/
 COPY --chmod=755 ./build/${TARGETARCH}/tdbg /usr/local/bin/
 COPY --chmod=755 ./build/${TARGETARCH}/temporal-cassandra-tool /usr/local/bin/
 COPY --chmod=755 ./build/${TARGETARCH}/temporal-sql-tool /usr/local/bin/
-COPY ./build/${TARGETARCH}/ /tmp/binaries/
-
-RUN if [ -f /tmp/binaries/temporal-elasticsearch-tool ]; then \
-        cp /tmp/binaries/temporal-elasticsearch-tool /usr/local/bin/ && \
-        chmod 755 /usr/local/bin/temporal-elasticsearch-tool; \
-    fi && \
-    rm -rf /tmp/binaries
+COPY --chmod=755 ./build/${TARGETARCH}/temporal-elasticsearch-tool /usr/local/bin/
 
 COPY ./build/temporal/schema /etc/temporal/schema
 

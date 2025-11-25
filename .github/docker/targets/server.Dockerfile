@@ -6,18 +6,12 @@ ARG TARGETARCH
 
 RUN apk add --no-cache \
     ca-certificates \
-    tzdata
-
-
-RUN addgroup -g 1000 temporal && \
-    adduser -u 1000 -G temporal -D temporal && \
-    mkdir -p /etc/temporal/config/dynamicconfig && \
-    touch /etc/temporal/config/dynamicconfig/docker.yaml && \
-    chown -R temporal:temporal /etc/temporal/config
-
-WORKDIR /etc/temporal
+    tzdata && addgroup -g 1000 temporal && \
+    adduser -u 1000 -G temporal -D temporal 
 
 COPY --chmod=755 ./build/${TARGETARCH}/temporal-server /usr/local/bin/
 
+WORKDIR /etc/temporal
 USER temporal
+
 ENTRYPOINT [ "temporal-server", "start" ]

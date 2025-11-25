@@ -12,7 +12,7 @@ RUN apk add --update --no-cache \
 
 RUN pipx install --global cqlsh
 
-FROM ${ALPINE_IMAGE}
+FROM ${ALPINE_IMAGE} AS temporal-admin-tools
 
 RUN apk upgrade --no-cache
 RUN apk add --no-cache \
@@ -35,8 +35,6 @@ RUN ln -s /opt/pipx/venvs/cqlsh/bin/cqlsh /usr/local/bin/cqlsh
 # validate cqlsh installation
 RUN cqlsh --version
 
-SHELL ["", "-c"]
-
 ARG TARGETARCH
 
 COPY ./build/${TARGETARCH}/tctl /usr/local/bin
@@ -55,8 +53,11 @@ RUN apk add bash-completion && \
     temporal completion bash > /etc/bash/temporal-completion.sh
 
 RUN addgroup -g 1000 temporal && adduser -u 1000 -G temporal -D temporal
+
 USER temporal
 WORKDIR /etc/temporal
+
+SHELL ["/bin/bash", "-c"]
 
 # Keep the container running.
 ENTRYPOINT ["tini", "--", "sleep", "infinity"]

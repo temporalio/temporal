@@ -40,7 +40,6 @@ variable "TAG_LATEST" {
 
 target "admin-tools" {
   dockerfile = "targets/admin-tools.Dockerfile"
-  target = "temporal-admin-tools"
   tags = compact([
     "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}",
     "${IMAGE_REPO}/admin-tools:${SAFE_IMAGE_BRANCH_TAG}",
