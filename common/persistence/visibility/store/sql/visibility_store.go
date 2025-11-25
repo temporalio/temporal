@@ -62,7 +62,6 @@ func NewSQLVisibilityStore(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	chasmRegistry *chasm.Registry,
 	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
-	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) (*VisibilityStore, error) {
@@ -77,18 +76,12 @@ func NewSQLVisibilityStore(
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		chasmRegistry:                  chasmRegistry,
 
-		enableUnifiedQueryConverter:             enableUnifiedQueryConverter,
-		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
+		enableUnifiedQueryConverter: enableUnifiedQueryConverter,
 	}, nil
 }
 
 func (s *VisibilityStore) Close() {
 	s.sqlStore.Close()
-}
-
-func (s *VisibilityStore) getSearchAttributesTypeMap() (searchattribute.NameTypeMap, error) {
-	forceRefresh := s.forceSearchAttributesCacheRefreshOnRead != nil && s.forceSearchAttributesCacheRefreshOnRead()
-	return s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), forceRefresh)
 }
 
 func (s *VisibilityStore) GetName() string {
@@ -286,7 +279,7 @@ func (s *VisibilityStore) countChasmExecutionsLegacy(
 	request *manager.CountChasmExecutionsRequest,
 	mapper *chasm.VisibilitySearchAttributesMapper,
 ) (*manager.CountChasmExecutionsResponse, error) {
-	saTypeMap, err := s.getSearchAttributesTypeMap()
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +422,7 @@ func (s *VisibilityStore) listExecutionsInternalLegacy(
 	ctx context.Context,
 	request *listExecutionsRequestInternal,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	saTypeMap, err := s.getSearchAttributesTypeMap()
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +504,7 @@ func (s *VisibilityStore) countWorkflowExecutionsLegacy(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	saTypeMap, err := s.getSearchAttributesTypeMap()
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -601,7 +594,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
 	selectFilter *sqlplugin.VisibilitySelectFilter,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	saTypeMap, err := s.getSearchAttributesTypeMap()
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -650,7 +643,7 @@ func (s *VisibilityStore) buildQueryParams(
 	archetypeID chasm.ArchetypeID,
 	sqlQC *SQLQueryConverter,
 ) (*query.QueryParams[sqlparser.Expr], error) {
-	saTypeMap, err := s.getSearchAttributesTypeMap()
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -746,7 +739,7 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 		return nil, nil
 	}
 
-	saTypeMap, err := s.getSearchAttributesTypeMap()
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("Unable to read search attributes types: %v", err))
@@ -833,7 +826,7 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	nsName namespace.Name,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) (map[string]chasm.VisibilityValue, *commonpb.SearchAttributes, error) {
-	saTypeMap, err := s.getSearchAttributesTypeMap()
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
 		return nil, nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("Unable to read search attributes types: %v", err))
