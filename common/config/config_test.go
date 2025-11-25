@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,17 +14,33 @@ func TestToString(t *testing.T) {
 	require.NotEmpty(t, cfg.String())
 }
 
-func TestEmbeddedTemplateOnlyDiffersFromDockerByComment(t *testing.T) {
-	embeddedContent, err := os.ReadFile("config_template_embedded.yaml")
+func TestEmbeddedTemplateConsistentWithDockerTemplate(t *testing.T) {
+	embeddedBytes, err := os.ReadFile("config_template_embedded.yaml")
 	require.NoError(t, err)
 
-	dockerContent, err := os.ReadFile("../../docker/config_template.yaml")
+	embeddedFiltered := skipComments(embeddedBytes, 3)
+	dockerBytes, err := os.ReadFile("../../docker/config_template.yaml")
 	require.NoError(t, err)
-	embeddedWithComment := "# TODO: Remove this file after temporalio/docker-builds repository is archived#\n" + string(embeddedContent)
-	dockerWithComment := "# enable-template\n" + string(dockerContent)
+	dockerFiltered := skipComments(dockerBytes, 3)
+	require.Equal(t, embeddedFiltered, dockerFiltered, "embedded template does not match docker template")
 
-	require.Equal(t, dockerWithComment, embeddedWithComment,
-		"Embedded template (config_template_embedded.yaml) must only differ from docker template "+
-			"(docker/config_template.yaml) by the '# enable-template' comment at the top and the deprecation comment. "+
-			"This comment is required for the config loader to detect and process the template.")
+}
+
+func skipComments(fb []byte, first int) string {
+	lines := strings.Split(string(fb), "\n")
+	i := 0
+	var filtered []string
+	for {
+		if i >= first || i >= len(lines) {
+			break
+		}
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "#") {
+			i++
+			continue
+		}
+		filtered = append(filtered, strings.TrimSpace(lines[i]))
+		i++
+	}
+	filtered = append(filtered, lines[i:]...)
+	return strings.Join(filtered, "\n")
 }

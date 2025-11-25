@@ -1,5 +1,4 @@
 # enable-template
-# TODO: Remove this file after temporalio/docker-builds repository is archived
 log:
     stdout: true
     level: {{ default "info" (env "LOG_LEVEL") }}
