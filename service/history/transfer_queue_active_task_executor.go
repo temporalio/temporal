@@ -1648,12 +1648,16 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		},
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),
-		inheritedAutoUpgradeInfo,
 	)
 
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
+
+	// Only set the AutoUpgrade info if the Pinned version is not set.
+	if request.InheritedPinnedVersion == nil {
+		request.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
+	}
 
 	if shouldTerminateAndStartChild {
 		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE

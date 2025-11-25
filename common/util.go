@@ -12,7 +12,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -536,7 +535,6 @@ func CreateHistoryStartWorkflowRequest(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	now time.Time,
-	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
 ) *historyservice.StartWorkflowExecutionRequest {
 	// We include the original startRequest in the forwarded request to History, but
 	// we don't want to send workflow payloads twice. We deep copy to a new struct,
@@ -558,7 +556,6 @@ func CreateHistoryStartWorkflowRequest(
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
-	histRequest.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))

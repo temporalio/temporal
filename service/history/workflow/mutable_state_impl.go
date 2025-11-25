@@ -2537,8 +2537,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
 	}
 
-	// Add InheritedAutoUpgradeInfo if source deployment version and revision number are set
-	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+	// Add InheritedAutoUpgradeInfo if InheritedPinnedVersion is not set and source deployment version and revision number are set.
+	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 && inheritedPinnedVersion == nil {
 		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 			SourceDeploymentVersion:        sourceDeploymentVersion,
 			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
