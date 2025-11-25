@@ -18,6 +18,6 @@ func (l *Library) Name() string {
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Workflow]("Workflow"),
+		chasm.NewRegistrableComponent[*Workflow]("workflow"),
 	}
 }
