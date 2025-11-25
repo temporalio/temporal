@@ -228,9 +228,9 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
 
 	t.Run("MinimalResponse", func(t *testing.T) {
 		pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-			Namespace:      s.Namespace().String(),
-			ActivityId:     activityID,
-			RunId:          startResp.RunId,
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			// Omit RunID to verify that latest run will be used
 			IncludeInfo:    false,
 			IncludeInput:   false,
 			IncludeOutcome: false,
