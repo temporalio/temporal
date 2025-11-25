@@ -4,7 +4,6 @@
 package history
 
 import (
-	"fmt"
 	"sync"
 
 	"go.temporal.io/server/chasm"
@@ -20,13 +19,27 @@ type (
 	}
 )
 
-// NewChasmNotifier creates a new instance of ChasmNotifier allowing subscribers to subscribe to
-// notifications relating to components in a specified CHASM execution.
+// NewChasmNotifier creates a new instance of ChasmNotifier allowing subscribers to receive
+// notifications relating to a CHASM execution.
 func NewChasmNotifier(metricsHandler metrics.Handler) *ChasmNotifier {
 	return &ChasmNotifier{
 		metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.ChasmComponentNotificationScope)),
 		executions:     make(map[chasm.EntityKey]chan struct{}),
 	}
+}
+
+// Subscribe returns a channel that will be closed when there is a notification relating to the
+// execution. No data will be written to the channel.
+func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (<-chan struct{}, error) {
+	var ch chan struct{}
+	var ok bool
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	if ch, ok = n.executions[key]; !ok {
+		ch = make(chan struct{})
+		n.executions[key] = ch
+	}
+	return ch, nil
 }
 
 // Notify notifies all subscribers subscribed to key by closing the channel.
@@ -39,20 +52,4 @@ func (n *ChasmNotifier) Notify(key chasm.EntityKey) {
 		close(ch)
 		n.executions[key] = make(chan struct{})
 	}
-}
-
-// Subscribe returns a channel that will be closed to indicate that there is a notification relating to the execution.
-func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (<-chan struct{}, error) {
-	fmt.Println("🟠 Subscribe")
-	var ch chan struct{}
-	var ok bool
-
-	n.lock.Lock()
-	defer n.lock.Unlock()
-	if ch, ok = n.executions[key]; !ok {
-		fmt.Println("    ↳ Making new channel")
-		ch = make(chan struct{})
-		n.executions[key] = ch
-	}
-	return ch, nil
 }

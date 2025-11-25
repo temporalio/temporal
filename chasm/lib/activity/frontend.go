@@ -92,7 +92,6 @@ func (h *frontendHandler) PollActivityExecution(
 	ctx context.Context,
 	req *workflowservice.PollActivityExecutionRequest,
 ) (*workflowservice.PollActivityExecutionResponse, error) {
-	// Validate the request
 	if err := ValidatePollActivityExecutionRequest(
 		req,
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
