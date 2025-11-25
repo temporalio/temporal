@@ -167,7 +167,7 @@ func (s *VisibilityStore) DeleteWorkflowExecution(
 		RunID:       request.RunID,
 	})
 	if err != nil {
-		return convertSQLError("DeleteWorkflowExecution operation failed. Delete failed", err)
+		return convertSQLError("DeleteWorkflowExecution operation failed.", err)
 	}
 	return nil
 }
@@ -232,7 +232,7 @@ func (s *VisibilityStore) listWorkflowExecutions(
 
 	rows, err := s.sqlStore.DB.SelectFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, convertSQLError("ListWorkflowExecutions operation failed. Select failed", err)
+		return nil, convertSQLError("ListWorkflowExecutions operation failed.", err)
 	}
 	if len(rows) == 0 {
 		return &store.InternalListWorkflowExecutionsResponse{}, nil
@@ -302,7 +302,7 @@ func (s *VisibilityStore) listWorkflowExecutionsLegacy(
 
 	rows, err := s.sqlStore.DB.SelectFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, convertSQLError("ListWorkflowExecutions operation failed. Select failed", err)
+		return nil, convertSQLError("ListWorkflowExecutions operation failed.", err)
 	}
 	if len(rows) == 0 {
 		return &store.InternalListWorkflowExecutionsResponse{}, nil
@@ -386,7 +386,7 @@ func (s *VisibilityStore) countWorkflowExecutionsLegacy(
 
 	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, convertSQLError("CountWorkflowExecutions operation failed. Query failed", err)
+		return nil, convertSQLError("CountWorkflowExecutions operation failed.", err)
 	}
 
 	return &manager.CountWorkflowExecutionsResponse{Count: count}, nil
@@ -447,7 +447,7 @@ func (s *VisibilityStore) countWorkflowExecutions(
 
 	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, convertSQLError("CountWorkflowExecutions operation failed. Query failed", err)
+		return nil, convertSQLError("CountWorkflowExecutions operation failed.", err)
 	}
 
 	return &manager.CountWorkflowExecutionsResponse{Count: count}, nil
@@ -472,7 +472,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 
 	rows, err := s.sqlStore.DB.CountGroupByFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, convertSQLError("CountWorkflowExecutions operation failed. Query failed", err)
+		return nil, convertSQLError("CountWorkflowExecutions operation failed.", err)
 	}
 	resp := &manager.CountWorkflowExecutionsResponse{
 		Count:  0,
@@ -507,7 +507,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 		RunID:       request.RunID,
 	})
 	if err != nil {
-		return nil, convertSQLError("GetWorkflowExecution operation failed. Select failed", err)
+		return nil, convertSQLError("GetWorkflowExecution operation failed.", err)
 	}
 	info, err := s.rowToInfo(row, request.Namespace)
 	if err != nil {
