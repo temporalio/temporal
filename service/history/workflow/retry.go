@@ -260,10 +260,11 @@ func SetupNewWorkflowForRetryOrCron(
 	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
 
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+
 		if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 			startAttr.GetInheritedPinnedVersion() != nil {
 			inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
-			// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
 		} else if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
 			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()

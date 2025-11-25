@@ -544,7 +544,6 @@ func CreateHistoryStartWorkflowRequest(
 	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
 		startRequest = CloneProto(startRequest)
 	}
-
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              namespaceID,
 		StartRequest:             startRequest,
