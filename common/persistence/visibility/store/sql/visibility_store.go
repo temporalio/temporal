@@ -844,8 +844,8 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
 
 	// Split row search attributes into CHASM and custom based on field name pattern
-	chasmRowSAs := make(sqlplugin.VisibilitySearchAttributes)
-	customRowSAs := make(sqlplugin.VisibilitySearchAttributes)
+	chasmRowSAs := sqlplugin.VisibilitySearchAttributes{}
+	customRowSAs := sqlplugin.VisibilitySearchAttributes{}
 
 	for name, value := range rowSearchAttributes {
 		// Fix SQLite keyword list handling (convert string to []string for keyword lists)
