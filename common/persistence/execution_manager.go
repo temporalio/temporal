@@ -1192,6 +1192,7 @@ func (m *executionManagerImpl) assertAndConvertArchetypeID(
 		return chasm.WorkflowArchetypeID, true
 	}
 
+	// This is a temporary exception to allow Schedules run in the same ID space as workflows.
 	if archetypeID == chasm.SchedulerArchetypeID {
 		return chasm.WorkflowArchetypeID, true
 	}

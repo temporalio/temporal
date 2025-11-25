@@ -144,7 +144,7 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 			task,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
-			t.checkExecutionStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -375,7 +375,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -408,7 +408,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -496,7 +496,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -618,7 +618,7 @@ func (e *verificationErr) Unwrap() error {
 	return e.err
 }
 
-func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistOnSourceBeforeDiscard(
+func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBeforeDiscard(
 	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
@@ -627,7 +627,7 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistOnSourceBefor
 	if postActionInfo == nil {
 		return nil
 	}
-	if !isExecutionExistOnSource(
+	if !executionExistsOnSource(
 		ctx,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
@@ -656,7 +656,7 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
 	}
 
-	if !isExecutionExistOnSource(
+	if !executionExistsOnSource(
 		ctx,
 		*pushActivityInfo.parentWorkflowKey,
 		getTaskArchetypeID(taskInfo),

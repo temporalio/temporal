@@ -896,7 +896,7 @@ func (ms *MutableStateImpl) SetHistoryTree(
 	if archetypeID != chasm.WorkflowArchetypeID {
 		return softassert.UnexpectedInternalErr(
 			ms.logger,
-			"Backfilling history for non-workflow archetype",
+			"Backfilling history not supported for non-workflow archetype",
 			nil,
 			tag.ArchetypeID(archetypeID),
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),

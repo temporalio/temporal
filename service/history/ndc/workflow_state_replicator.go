@@ -1400,7 +1400,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	if archetypeID != chasm.WorkflowArchetypeID {
 		return softassert.UnexpectedInternalErr(
 			r.logger,
-			"Backfilling history for non-workflow archetype",
+			"Backfilling history not supported for non-workflow archetype",
 			nil,
 			tag.ArchetypeID(archetypeID),
 			tag.WorkflowNamespaceID(namespaceID.String()),

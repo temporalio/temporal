@@ -79,7 +79,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	return consts.ErrTaskDiscarded
 }
 
-func isExecutionExistOnSource(
+func executionExistsOnSource(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	archetypeID chasm.ArchetypeID,

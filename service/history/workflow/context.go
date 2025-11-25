@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"runtime/debug"
+	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -174,21 +175,31 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		c.MutableState = mutableState
 	}
 
-	actualArchetypeID := c.MutableState.ChasmTree().ArchetypeID()
-	if c.archetypeID != chasm.UnspecifiedArchetypeID && c.archetypeID != actualArchetypeID {
-		// TODO: convert to archetype name for better observability
+	mutableStateArchetypeID := c.MutableState.ChasmTree().ArchetypeID()
+	if c.archetypeID != chasm.UnspecifiedArchetypeID && c.archetypeID != mutableStateArchetypeID {
+		chasmRegistry := shardContext.ChasmRegistry()
+		contextArchetype, ok := chasmRegistry.ComponentFqnByID(c.archetypeID)
+		if !ok {
+			contextArchetype = strconv.FormatUint(uint64(c.archetypeID), 10)
+		}
+
+		mutableStateArchetype, ok := chasmRegistry.ComponentFqnByID(mutableStateArchetypeID)
+		if !ok {
+			mutableStateArchetype = strconv.FormatUint(uint64(mutableStateArchetypeID), 10)
+		}
+
 		c.logger.Warn("Potential ID conflict across different archetypes",
-			tag.ArchetypeID(c.archetypeID),
-			tag.NewUInt32("actual-archetype-id", actualArchetypeID),
+			tag.Archetype(contextArchetype),
+			tag.NewStringTag("mutable-state-archetype", mutableStateArchetype),
 		)
 		return nil, serviceerror.NewNotFoundf(
-			"CHASM Archetype missmatch for %v, expected: %d, actual: %d",
+			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
 			c.workflowKey,
-			c.archetypeID,
-			actualArchetypeID,
+			contextArchetype,
+			mutableStateArchetype,
 		)
 	}
-	c.archetypeID = actualArchetypeID
+	c.archetypeID = mutableStateArchetypeID
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
 	if err != nil {

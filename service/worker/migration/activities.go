@@ -375,8 +375,15 @@ func (a *activities) generateWorkflowReplicationTask(
 	if generateViaFrontend {
 		archetype, ok := a.chasmRegistry.ComponentFqnByID(execution.ArchetypeId)
 		if !ok {
+			activityInfo := activity.GetInfo(ctx)
 			err := fmt.Errorf("unknown archetypeID: %v", execution.ArchetypeId)
-			a.logger.Error("force-replication failed to translate archetypeID to name", tag.Error(err), tag.ArchetypeID(execution.ArchetypeId))
+			a.logger.Error("force-replication failed to translate archetypeID to name",
+				tag.Error(err),
+				tag.ArchetypeID(execution.ArchetypeId),
+				tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
+				tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+				tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
+			)
 			return err
 		}
 
@@ -505,19 +512,20 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 			ArchetypeId: chasm.UnspecifiedArchetypeID,
 		}
 
-		nsDivisionPayload, ok := e.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision]
-		if ok {
-			var nsDivisionStr string
-			if err := payload.Decode(nsDivisionPayload, &nsDivisionStr); err != nil {
-				return nil, fmt.Errorf("failed to decode TemporalNamespaceDivision field: %w", err)
-			}
-
-			if len(nsDivisionStr) != 0 && unicode.IsDigit(rune(nsDivisionStr[0])) {
-				archetypeID, err := strconv.ParseUint(nsDivisionStr, 10, 32)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse archetypeID: %w", err)
+		if indexedField := e.SearchAttributes.GetIndexedFields(); indexedField != nil {
+			if nsDivisionPayload, ok := indexedField[sadefs.TemporalNamespaceDivision]; ok {
+				var nsDivisionStr string
+				if err := payload.Decode(nsDivisionPayload, &nsDivisionStr); err != nil {
+					return nil, fmt.Errorf("failed to decode TemporalNamespaceDivision field: %w", err)
 				}
-				executionInfo.ArchetypeId = chasm.ArchetypeID(archetypeID)
+
+				if len(nsDivisionStr) != 0 && unicode.IsDigit(rune(nsDivisionStr[0])) {
+					archetypeID, err := strconv.ParseUint(nsDivisionStr, 10, 32)
+					if err != nil {
+						return nil, fmt.Errorf("failed to parse archetypeID: %w", err)
+					}
+					executionInfo.ArchetypeId = chasm.ArchetypeID(archetypeID)
+				}
 			}
 		}
 
@@ -774,8 +782,15 @@ func (a *activities) verifySingleReplicationTask(
 
 	archetype, ok := a.chasmRegistry.ComponentFqnByID(execution.ArchetypeId)
 	if !ok {
+		activityInfo := activity.GetInfo(ctx)
 		err := fmt.Errorf("unknown archetypeID: %v", execution.ArchetypeId)
-		a.logger.Error("force-replication failed to translate archetypeID to name", tag.Error(err), tag.ArchetypeID(execution.ArchetypeId))
+		a.logger.Error("force-replication failed to translate archetypeID to name",
+			tag.Error(err),
+			tag.ArchetypeID(execution.ArchetypeId),
+			tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
+			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
+		)
 		return verifyResult{
 			status: notVerified,
 		}, err

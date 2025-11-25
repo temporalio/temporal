@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -254,10 +256,15 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.Equal(0, totalCount)
 	var totalSize int
 	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalInt02"], &totalSize))
+	s.Equal(0, totalSize)
 	var scheduledByID string
 	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalScheduledById"], &scheduledByID))
 	s.Equal(tests.TestScheduleID, scheduledByID)
-	s.Equal(0, totalSize)
+	var archetypeIDStr string
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision], &archetypeIDStr))
+	parsedArchetypeID, err := strconv.ParseUint(archetypeIDStr, 10, 32)
+	s.NoError(err)
+	s.Equal(archetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
 	addPayloadResp, err := tests.AddPayloadHandler(
 		engineContext,
