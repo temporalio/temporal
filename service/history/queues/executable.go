@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
@@ -467,7 +466,6 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 	if errors.As(err, &resourceExhaustedErr) {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
-			softassert.Sometimes(e.logger).Debug("task throttled due to busy workflow", tag.TaskType(e.GetType()))
 			err = consts.ErrResourceExhaustedBusyWorkflow
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
 			err = consts.ErrResourceExhaustedAPSLimit
@@ -510,14 +508,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	var terr MaybeTerminalTaskError
 	if errors.As(err, &terr) {
-		isTerminal := terr.IsTerminalTaskError()
-		if isTerminal {
-			softassert.Sometimes(e.logger).Debug("terminal task error detected",
-				tag.TaskType(e.GetType()),
-				tag.Error(err),
-			)
-		}
-		return isTerminal
+		return terr.IsTerminalTaskError()
 	}
 
 	if _, isDataLoss := err.(*serviceerror.DataLoss); isDataLoss {
@@ -527,10 +518,6 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
 		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1)
-		softassert.Sometimes(e.logger).Debug("internal non-retryable task processing error",
-			tag.TaskType(e.GetType()),
-			tag.Error(err),
-		)
 		// Only DQL/drop when configured to
 		shouldDLQ := e.dlqInternalErrors()
 		return shouldDLQ
@@ -588,9 +575,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		tag.NewStringTag("task-category", e.GetCategory().Name()),
 	)
 	if attempt > taskCriticalLogMetricAttempts {
-		softassert.Sometimes(logger).Error("Critical error processing task, retrying.", tag.OperationCritical)
+		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
 	} else {
-		softassert.Sometimes(logger).Warn("Fail to process task")
+		logger.Warn("Fail to process task")
 	}
 
 	if e.isUnexpectedNonRetryableError(err) {
