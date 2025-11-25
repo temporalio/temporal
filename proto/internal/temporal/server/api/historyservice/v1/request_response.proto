@@ -93,11 +93,10 @@ message StartWorkflowExecutionRequest {
     bool child_workflow_only = 14;
     // If present, the new workflow should start on this version with pinned base behavior.
     temporal.api.deployment.v1.WorkerDeploymentVersion inherited_pinned_version = 15;
-    // If the parent workflow has AutoUpgrade behavior, then the first task of the
-    // child workflow or the continued-as-new workflow will also have AutoUpgrade behavior. This field is used to 
-    // pass along the source deployment version and revision number to the child/continued-as-new workflow. 
-    // The effective behavior of these workflows is set to AutoUpgrade prior to the dispatching of the first workflow task.
-    // After the first workflow task, the effective behavior of these workflows depends on worker sent values in subsequent workflow tasks.
+    // Passes deployment version and revision number from a parent/previous workflow with AutoUpgrade behavior
+    // to its child/continued-as-new workflow. The child/CAN workflow inherits AutoUpgrade behavior for its first
+    // workflow task, which is dispatched to either this deployment version or the current version of the task queue.
+    // After the first task, the effective behavior is determined by worker-sent values in subsequent workflow tasks.
     temporal.api.deployment.v1.InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
 }
 

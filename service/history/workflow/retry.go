@@ -271,8 +271,6 @@ func SetupNewWorkflowForRetryOrCron(
 				SourceDeploymentVersion:        sourceDeploymentVersion,
 				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
 			}
-
-			// retries and crons always go to the same task queue, so no need to check if source version is in new task queue
 		}
 	}
 
