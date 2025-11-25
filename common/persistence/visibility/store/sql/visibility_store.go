@@ -75,9 +75,9 @@ func (s *VisibilityStore) GetName() string {
 
 func convertSQLError(message string, err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("%s: %w", operation, err)
+		return fmt.Errorf("%s: %w", message, err)
 	}
-	return serviceerror.NewUnavailable(fmt.Sprintf("%s: %v", operation, err))
+	return serviceerror.NewUnavailable(fmt.Sprintf("%s: %v", message, err))
 }
 
 func (s *VisibilityStore) GetIndexName() string {
