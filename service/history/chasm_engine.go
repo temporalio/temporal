@@ -329,10 +329,7 @@ func (e *ChasmEngine) PollComponent(
 	// execution consists of one component A, and A has subcomponent B. Subscribers interested
 	// only in component B may be woken up unnecessarily due to changes in parts of A that do
 	// not also belong to B, but they will not miss notifications.
-	ch, err := e.notifier.Subscribe(requestRef.EntityKey)
-	if err != nil {
-		return nil, err
-	}
+	ch := e.notifier.Subscribe(requestRef.EntityKey)
 	executionLease.GetReleaseFn()(nil)
 
 	for {
@@ -349,7 +346,7 @@ func (e *ChasmEngine) PollComponent(
 				defer executionLease.GetReleaseFn()(nil)
 				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, monotonicPredicate)
 				if err == nil && satisfiedRef == nil {
-					ch, err = e.notifier.Subscribe(requestRef.EntityKey)
+					ch = e.notifier.Subscribe(requestRef.EntityKey)
 				}
 			}()
 			if err != nil {

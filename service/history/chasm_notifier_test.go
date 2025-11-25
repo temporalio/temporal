@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testvars"
@@ -28,8 +27,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	}, subscriberCount)
 
 	for i := range subscriberCount {
-		ch, err := notifier.Subscribe(entityKey)
-		require.NoError(t, err)
+		ch := notifier.Subscribe(entityKey)
 		subscribers[i].channel = ch
 	}
 
@@ -62,8 +60,7 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 		EntityID:    "different-run-id",
 	}
 
-	channel, err := notifier.Subscribe(entityKey1)
-	require.NoError(t, err)
+	channel := notifier.Subscribe(entityKey1)
 	notifier.Notify(entityKey2)
 	select {
 	case <-channel:

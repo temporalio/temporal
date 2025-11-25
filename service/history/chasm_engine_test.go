@@ -571,7 +571,7 @@ func (s *chasmEngineSuite) TestReadComponent_NotFound() {
 	s.Equal("execution not found", notFound.Message)
 }
 
-// TestPollComponent_Success_Wait tests the behavior of PollComponent when the predicate is
+// TestPollComponent_Success_NoWait tests the behavior of PollComponent when the predicate is
 // satisfied at the outset.
 func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 	tv := testvars.New(s.T())
