@@ -189,9 +189,9 @@ type StartWorkflowExecutionRequest struct {
 	// If present, the new workflow should start on this version with pinned base behavior.
 	InheritedPinnedVersion *v16.WorkerDeploymentVersion `protobuf:"bytes,15,opt,name=inherited_pinned_version,json=inheritedPinnedVersion,proto3" json:"inherited_pinned_version,omitempty"`
 	// Passes deployment version and revision number from a parent/previous workflow with AutoUpgrade behavior
-	// to its child/continued-as-new workflow. The child/CAN workflow inherits AutoUpgrade behavior for its first
-	// workflow task, which is dispatched to either this deployment version or the current version of the task queue.
-	// After the first task, the effective behavior is determined by worker-sent values in subsequent workflow tasks.
+	// to its child/continued-as-new workflow. The first workflow task of the child/CAN workflow is dispatched to
+	// either this deployment version or the current version of the task queue. After the first workflow task,
+	// the effective behavior of the workflow is determined by worker-sent values in subsequent workflow tasks.
 	InheritedAutoUpgradeInfo *v16.InheritedAutoUpgradeInfo `protobuf:"bytes,16,opt,name=inherited_auto_upgrade_info,json=inheritedAutoUpgradeInfo,proto3" json:"inherited_auto_upgrade_info,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
