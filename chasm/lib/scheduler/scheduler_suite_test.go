@@ -15,7 +15,9 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // schedulerSuite sets up a suite that has a basic CHASM tree ready
@@ -54,9 +56,14 @@ func (s *schedulerSuite) SetupTest() {
 	err := s.registry.Register(&scheduler.Library{})
 	s.NoError(err)
 
+	// Register the Core library as well, which we use for Visibility.
+	err = s.registry.Register(&chasm.CoreLibrary{})
+	s.NoError(err)
+
 	// Advance here, because otherwise ctx.Now().IsZero() will be true.
 	s.timeSource = clock.NewEventTimeSource()
-	s.timeSource.Update(time.Now())
+	now := time.Now()
+	s.timeSource.Update(now)
 
 	// Stub NodeBackend for NewEmptytree
 	tv := testvars.New(s.T())
@@ -79,6 +86,18 @@ func (s *schedulerSuite) SetupTest() {
 	s.node.SetRootComponent(s.scheduler)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
+
+	// Advance Generator's high water mark to 'now'.
+	generator := s.scheduler.Generator.Get(ctx)
+	generator.LastProcessedTime = timestamppb.New(now)
+
+	// Set up future action times.
+	futureTime := now.Add(time.Hour)
+	s.specProcessor.EXPECT().GetNextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{
+		Next:    futureTime,
+		Nominal: futureTime,
+	}, nil).MaxTimes(1)
+	s.specProcessor.EXPECT().GetNextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{}, nil).AnyTimes()
 }
 
 // hasTask returns true if the given task type was added at the end of the

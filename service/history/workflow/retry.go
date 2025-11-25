@@ -237,7 +237,7 @@ func SetupNewWorkflowForRetryOrCron(
 
 	var completionCallbacks []*commonpb.Callback
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		completionCallbacks, err = getCompletionCallbacksAsProtoSlice(previousMutableState)
+		completionCallbacks, err = getCompletionCallbacksAsProtoSlice(ctx, previousMutableState)
 		if err != nil {
 			return err
 		}
