@@ -16,8 +16,7 @@ func TestListInfo(t *testing.T) {
 	expectedFutureTimes := []*timestamppb.Timestamp{timestamppb.Now(), timestamppb.Now()}
 	generator.FutureActionTimes = expectedFutureTimes
 
-	listInfo, err := scheduler.ListInfo(ctx)
-	require.NoError(t, err)
+	listInfo := scheduler.ListInfo(ctx)
 
 	// Should return a populated info block.
 	require.NotNil(t, listInfo)
