@@ -452,7 +452,7 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 // If the value is found but the type does not match, the zero value for the type T is returned and the second return value is false.
 func GetSearchAttributeValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
 	var zero T
-	if m.values == nil {
+	if len(m.values) == 0 {
 		return zero, false
 	}
 
