@@ -41,6 +41,6 @@ func (n *ChasmNotifier) Notify(key chasm.EntityKey) {
 	defer n.lock.Unlock()
 	if ch, ok := n.executions[key]; ok {
 		close(ch)
-		n.executions[key] = make(chan struct{})
+		delete(n.executions, key)
 	}
 }

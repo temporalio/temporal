@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testvars"
@@ -67,4 +68,21 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 		t.Fatal("should not receive notification for different entity")
 	case <-time.After(50 * time.Millisecond):
 	}
+}
+
+func TestChasmNotifier_ConstantMemory(t *testing.T) {
+	key := chasm.EntityKey{
+		NamespaceID: "ns",
+		BusinessID:  "wf",
+		EntityID:    "run",
+	}
+	notifier := NewChasmNotifier(metrics.NoopMetricsHandler)
+	require.Empty(t, notifier.executions)
+	notifier.Subscribe(key)
+	require.Equal(t, 1, len(notifier.executions))
+	notifier.Notify(key)
+	require.Empty(t, notifier.executions)
+	// Ignored: no subscribers
+	notifier.Notify(key)
+	require.Empty(t, notifier.executions)
 }
