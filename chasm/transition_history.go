@@ -25,7 +25,7 @@ func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) (bool, err
 		return false, err
 	}
 
-	if len(refBytes) > 0 && ref.EntityKey != currentRef.EntityKey {
+	if ref.EntityKey != currentRef.EntityKey {
 		return false, serviceerror.NewInternalf(
 			"ref execution key (%v) does not match component execution (%v)", ref.EntityKey, currentRef.EntityKey)
 	}
