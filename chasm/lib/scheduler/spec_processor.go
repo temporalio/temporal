@@ -37,8 +37,8 @@ type (
 			limit *int,
 		) (*ProcessedTimeRange, error)
 
-		// GetNextTime provides a peek at the next time in the spec following 'after'.
-		GetNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error)
+		// NextTime provides a peek at the next time in the spec following 'after'.
+		NextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error)
 	}
 
 	SpecProcessorImpl struct {
@@ -94,7 +94,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	// Manual (backfill/patch) runs are always buffered here.
 	if !scheduler.useScheduledAction(false) && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
-		next, err := s.GetNextTime(scheduler, end)
+		next, err := s.NextTime(scheduler, end)
 		if err != nil {
 			return nil, err
 		}
@@ -117,7 +117,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
-	for next, err = s.GetNextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.GetNextTime(scheduler, next.Next) {
+	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
 
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
@@ -172,8 +172,8 @@ func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 	return max(cw.AsDuration(), tweakables.MinCatchupWindow)
 }
 
-// GetNextTime returns the next time result, or an error if the schedule cannot be compiled.
-func (s *SpecProcessorImpl) GetNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
+// NextTime returns the next time result, or an error if the schedule cannot be compiled.
+func (s *SpecProcessorImpl) NextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
 	spec, err := scheduler.getCompiledSpec(s.specBuilder)
 	if err != nil {
 		s.logger.Error("Invalid schedule", tag.Error(err))

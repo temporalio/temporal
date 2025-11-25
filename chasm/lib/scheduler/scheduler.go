@@ -18,8 +18,11 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -63,7 +66,7 @@ const (
 
 var (
 	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
-	ErrClosed                = serviceerror.NewInvalidArgument("schedule closed")
+	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
 	ErrUnprocessable         = serviceerror.NewInternal("unprocessable schedule")
 )
 
@@ -615,25 +618,17 @@ func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyVa
 func (s *Scheduler) Memo(
 	ctx chasm.Context,
 ) map[string]chasm.VisibilityValue {
-	newInfo, err := s.ListInfo(ctx)
+	newInfo := s.ListInfo(ctx)
+
+	infoPayload, err := proto.MarshalOptions{
+		Deterministic: true,
+	}.Marshal(newInfo)
 	if err != nil {
-		// Unable to retrieve list info. Return nil to skip memo update.
-		// Error will be logged once loggers are available in CHASM.
 		return nil
 	}
 
-	payload, err := newInfo.Marshal()
-	if err != nil {
-		// Unable to marshal list info. Return nil to skip memo update.
-		// Error will be logged once loggers are available in CHASM.
-		return nil
-	}
-
-	// TODO - Memo provider is being updated to support protobufs, byte slices
-	// may cause oscillating writes to visibility given that proto serialization is
-	// non-deterministic.
 	return map[string]chasm.VisibilityValue{
-		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(payload),
+		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(infoPayload),
 	}
 }
 
@@ -641,7 +636,7 @@ func (s *Scheduler) Memo(
 // answer List queries.
 func (s *Scheduler) ListInfo(
 	ctx chasm.Context,
-) (*schedulepb.ScheduleListInfo, error) {
+) *schedulepb.ScheduleListInfo {
 	spec := common.CloneProto(s.Schedule.Spec)
 
 	// Clear fields that are too large/not useful for the list view.
@@ -661,5 +656,24 @@ func (s *Scheduler) ListInfo(
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
 		FutureActionTimes: generator.FutureActionTimes,
-	}, nil
+	}
+}
+
+// startWorkflowSearchAttributes returns the search attributes to be applied to
+// workflows kicked off. Includes custom search attributes and Temporal-managed.
+func (s *Scheduler) startWorkflowSearchAttributes(
+	nominal time.Time,
+) *commonpb.SearchAttributes {
+	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
+
+	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
+	if p, err := payload.Encode(nominal); err == nil {
+		fields[sadefs.TemporalScheduledStartTime] = p
+	}
+	if p, err := payload.Encode(s.ScheduleId); err == nil {
+		fields[sadefs.TemporalScheduledById] = p
+	}
+	return &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
 }
