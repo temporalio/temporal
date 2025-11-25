@@ -144,7 +144,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 	).Return(mockBaseWorkflow, nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
@@ -223,7 +223,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 	).Return(mockBaseWorkflow, nil)
 
 	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(

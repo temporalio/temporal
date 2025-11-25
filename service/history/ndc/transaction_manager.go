@@ -91,11 +91,13 @@ type (
 	TransactionManager interface {
 		CreateWorkflow(
 			ctx context.Context,
+			archetypeID chasm.ArchetypeID,
 			targetWorkflow Workflow,
 		) error
 		UpdateWorkflow(
 			ctx context.Context,
 			isWorkflowRebuilt bool,
+			archetypeID chasm.ArchetypeID,
 			targetWorkflow Workflow,
 			newWorkflow Workflow,
 		) error
@@ -180,11 +182,13 @@ func NewTransactionManager(
 
 func (r *transactionMgrImpl) CreateWorkflow(
 	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 ) error {
 
 	return r.createMgr.dispatchForNewWorkflow(
 		ctx,
+		archetypeID,
 		targetWorkflow,
 	)
 }
@@ -192,6 +196,7 @@ func (r *transactionMgrImpl) CreateWorkflow(
 func (r *transactionMgrImpl) UpdateWorkflow(
 	ctx context.Context,
 	isWorkflowRebuilt bool,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
 ) error {
@@ -199,6 +204,7 @@ func (r *transactionMgrImpl) UpdateWorkflow(
 	return r.updateMgr.dispatchForExistingWorkflow(
 		ctx,
 		isWorkflowRebuilt,
+		archetypeID,
 		targetWorkflow,
 		newWorkflow,
 	)
@@ -255,7 +261,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
 ) (persistence.UpdateWorkflowMode, historyi.TransactionPolicy, error) {
 
-	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, targetWorkflow)
+	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	if err != nil {
 		return 0, historyi.TransactionPolicyActive, err
 	}
@@ -453,6 +459,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 
 func (r *transactionMgrImpl) isWorkflowCurrent(
 	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 ) (bool, error) {
 
@@ -473,7 +480,7 @@ func (r *transactionMgrImpl) isWorkflowCurrent(
 		ctx,
 		namespaceID,
 		workflowID,
-		targetWorkflow.GetMutableState().ChasmTree().ArchetypeID(),
+		archetypeID,
 	)
 	if err != nil {
 		return false, err

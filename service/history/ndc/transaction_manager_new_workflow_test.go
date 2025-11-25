@@ -71,7 +71,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() {
 
 	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return(runID, nil)
 
-	err := s.createMgr.dispatchForNewWorkflow(ctx, newWorkflow)
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, newWorkflow)
 	s.ErrorIs(err, consts.ErrDuplicate)
 }
 
@@ -124,7 +124,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew(
 		workflowEventsSeq,
 	).Return(nil)
 
-	err := s.createMgr.dispatchForNewWorkflow(ctx, newWorkflow)
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, newWorkflow)
 	s.NoError(err)
 	s.True(releaseCalled)
 }
@@ -197,7 +197,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 		targetWorkflowEventsSeq,
 	).Return(nil)
 
-	err := s.createMgr.dispatchForNewWorkflow(ctx, targetWorkflow)
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -267,7 +267,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
-	err := s.createMgr.dispatchForNewWorkflow(ctx, targetWorkflow)
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -346,7 +346,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, eventsToApply).Return(nil)
 
-	err := s.createMgr.dispatchForNewWorkflow(ctx, targetWorkflow)
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -416,7 +416,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	).Return(&persistence.WorkflowConditionFailedError{})
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
-	err := s.createMgr.dispatchForNewWorkflow(ctx, targetWorkflow)
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)
@@ -476,7 +476,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 		historyi.TransactionPolicyPassive.Ptr(),
 	).Return(nil)
 
-	err := s.createMgr.dispatchForNewWorkflow(ctx, targetWorkflow)
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(currentReleaseCalled)

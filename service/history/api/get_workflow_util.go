@@ -26,6 +26,7 @@ import (
 
 const longPollSoftTimeout = time.Second
 
+//nolint:revive // cognitive complexity 39 (> max enabled 25)
 func GetOrPollWorkflowMutableState(
 	ctx context.Context,
 	shardContext historyi.ShardContext,

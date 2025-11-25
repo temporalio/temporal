@@ -515,7 +515,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 					WorkflowId: workflowID,
 					RunId:      currentRunID,
 				},
-				chasm.WorkflowArchetype,
+				chasm.WorkflowArchetypeID,
 				locks.PriorityLow,
 			).Return(mockWorkflowContext, cache.NoopReleaseFn, nil).Times(1)
 

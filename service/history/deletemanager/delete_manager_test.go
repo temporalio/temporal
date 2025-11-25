@@ -20,6 +20,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -93,6 +94,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
@@ -134,6 +136,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
@@ -174,6 +177,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(

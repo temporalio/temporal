@@ -17,6 +17,7 @@ type (
 		dispatchForExistingWorkflow(
 			ctx context.Context,
 			isWorkflowRebuilt bool,
+			archetypeID chasm.ArchetypeID,
 			targetWorkflow Workflow,
 			newWorkflow Workflow,
 		) error
@@ -47,12 +48,12 @@ func newNDCTransactionMgrForExistingWorkflow(
 func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	ctx context.Context,
 	isWorkflowRebuilt bool,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
 ) error {
 
 	mutableState := targetWorkflow.GetMutableState()
-	archetypeID := mutableState.ChasmTree().ArchetypeID()
 
 	// NOTE: this function does NOT mutate current workflow, target workflow or new workflow,
 	//  workflow mutation is done in methods within executeTransaction function

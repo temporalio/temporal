@@ -86,7 +86,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		newMutableState,
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
@@ -161,7 +161,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		historyi.TransactionPolicyPassive.Ptr(),
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
@@ -237,7 +237,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		historyi.TransactionPolicyPassive.Ptr(),
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
@@ -287,9 +287,6 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mockChasmTree.EXPECT().Archetype().Return(chasm.WorkflowArchetypeID).AnyTimes()
-	targetMutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
@@ -315,7 +312,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		historyi.TransactionPolicyPassive.Ptr(),
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
@@ -390,7 +387,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
@@ -448,7 +445,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
@@ -522,7 +519,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		historyi.TransactionPolicyActive.Ptr(),
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
@@ -600,7 +597,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
@@ -678,7 +675,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)

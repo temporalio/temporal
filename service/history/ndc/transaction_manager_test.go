@@ -101,10 +101,10 @@ func (s *transactionMgrSuite) TestCreateWorkflow() {
 	targetWorkflow := NewMockWorkflow(s.controller)
 
 	s.mockCreateMgr.EXPECT().dispatchForNewWorkflow(
-		ctx, targetWorkflow,
+		ctx, chasm.WorkflowArchetypeID, targetWorkflow,
 	).Return(nil)
 
-	err := s.transactionMgr.CreateWorkflow(ctx, targetWorkflow)
+	err := s.transactionMgr.CreateWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	s.NoError(err)
 }
 
@@ -115,10 +115,10 @@ func (s *transactionMgrSuite) TestUpdateWorkflow() {
 	newWorkflow := NewMockWorkflow(s.controller)
 
 	s.mockUpdateMgr.EXPECT().dispatchForExistingWorkflow(
-		ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow,
+		ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow,
 	).Return(nil)
 
-	err := s.transactionMgr.UpdateWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.transactionMgr.UpdateWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
 	s.NoError(err)
 }
 

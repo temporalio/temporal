@@ -364,7 +364,7 @@ func (r *workflowResetterImpl) persistToDB(
 		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
-			resetWorkflow.GetMutableState().ChasmTree().ArchetypeID(), // TODO: validate always workflow
+			chasm.WorkflowArchetypeID,
 			currentWorkflow.GetMutableState().GetCurrentVersion(),
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,
@@ -403,7 +403,7 @@ func (r *workflowResetterImpl) persistToDB(
 	if _, _, _, err := r.transaction.ConflictResolveWorkflowExecution(
 		ctx,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
-		resetWorkflow.GetMutableState().ChasmTree().ArchetypeID(), // TODO: validate always workflow
+		chasm.WorkflowArchetypeID,
 		baseWorkflow.GetMutableState().GetCurrentVersion(),
 		baseSnapshot,
 		baseEventsSeq,

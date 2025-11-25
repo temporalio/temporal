@@ -337,6 +337,7 @@ func (r *HistoryImporterImpl) commit(
 		memMutableState.SetUpdateCondition(nextEventID, mutableStateSpec.DBRecordVersion)
 		if err := r.transactionMgr.CreateWorkflow(
 			ctx,
+			chasm.WorkflowArchetypeID,
 			memNDCWorkflow,
 		); err != nil {
 			r.logger.Error("HistoryImporter::commit encountered error", tag.Error(err))
@@ -431,6 +432,7 @@ func (r *HistoryImporterImpl) commit(
 	if err := r.transactionMgr.UpdateWorkflow(
 		ctx,
 		true,
+		chasm.WorkflowArchetypeID,
 		memNDCWorkflow,
 		nil,
 	); err != nil {

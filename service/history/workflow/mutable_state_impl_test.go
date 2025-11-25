@@ -4725,7 +4725,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 	s.Equal(int64(1), tombstoneBatches[0].VersionedTransition.TransitionCount)
 }
 
-func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
+func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workflow() {
 	dbState := s.buildWorkflowMutableState()
 
 	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
@@ -4743,20 +4743,38 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
 
 	// Is workflow, should not generate retention task
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).Times(1)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
 	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
+}
 
-	// Now make the mutable state non-workflow.
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).Times(2) // One time for each CloseTransactionAsMutation call
+func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWorkflow() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	// Switch to a mock CHASM tree
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+
+	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	)
 	s.NoError(err)
-	mutation, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Len(mutation.Tasks[tasks.CategoryTimer], 1)
 	s.Equal(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, mutation.Tasks[tasks.CategoryTimer][0].GetType())

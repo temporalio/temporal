@@ -11,6 +11,7 @@ import (
 
 type (
 	// SyncState represents sync state error.
+	// nolint:staticcheck
 	SyncState struct {
 		Message             string
 		NamespaceId         string
@@ -24,6 +25,7 @@ type (
 )
 
 // NewSyncState returns new SyncState error.
+// nolint:staticcheck
 func NewSyncState(
 	message string,
 	namespaceId string,

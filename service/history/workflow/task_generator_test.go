@@ -228,6 +228,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				namespaceEntry.ID().String(), tests.WorkflowID, tests.RunID,
 			)).AnyTimes()
 			mutableState.EXPECT().GetCurrentBranchToken().Return(nil, nil).AnyTimes()
+			mutableState.EXPECT().ChasmTree().Return(NoopChasmTree).AnyTimes()
 			retentionTimerDelay := time.Second
 			cfg := &configs.Config{
 				RetentionTimerJitterDuration: func() time.Duration {
@@ -803,6 +804,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				State: tc.workflowState,
 			}).AnyTimes()
 			mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(tc.transitionHistoryEnabled).AnyTimes()
+			mockMutableState.EXPECT().ChasmTree().Return(NoopChasmTree).AnyTimes()
 			mockShard := shard.NewTestContext(
 				controller,
 				&persistencespb.ShardInfo{

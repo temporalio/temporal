@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -39,6 +40,7 @@ import (
 
 type activitiesSuite struct {
 	suite.Suite
+	*require.Assertions
 	protoassert.ProtoAssertions
 	testsuite.WorkflowTestSuite
 
@@ -103,6 +105,7 @@ func TestActivitiesSuite(t *testing.T) {
 }
 
 func (s *activitiesSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protoassert.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskManager = persistence.NewMockTaskManager(s.controller)
@@ -343,7 +346,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
 	s.Equal(0, lastHeartBeat.NextIndex)
-	s.Equal(execution1, lastHeartBeat.LastNotVerifiedWorkflowExecution)
+	s.ProtoEqual(execution1, lastHeartBeat.LastNotVerifiedWorkflowExecution)
 }
 
 func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {

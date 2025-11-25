@@ -655,7 +655,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	// If workflow is not on any versionedTransition (in an unknown state from state-based replication perspective),
 	// we can't convert this raw task to a replication task, instead we need to rely on its task equivalents.
 	if len(executionInfo.TransitionHistory) == 0 {
-		isWorkflow := !mutableState.IsWorkflow()
+		isWorkflow := mutableState.IsWorkflow()
 		releaseFunc(nil)
 		if !isWorkflow {
 			return nil, serviceerror.NewInternalf("chasm execution not on any versioned transition, is state-based replication enabled? execution key: %v", taskInfo.WorkflowKey)

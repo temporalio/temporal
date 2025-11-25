@@ -46,7 +46,6 @@ import (
 )
 
 type (
-	// TODO: rename to ExecutionStateReplicator
 	WorkflowStateReplicator interface {
 		SyncWorkflowState(
 			ctx context.Context,
@@ -191,7 +190,20 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 	skipCloseTransferTask := request.GetIsForceReplication() && request.GetIsCloseTransferTaskAcked()
-	return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, wid, rid, wfCtx, releaseFn, request.GetWorkflowState(), request.RemoteCluster, nil, false, skipCloseTransferTask)
+	return r.applySnapshotWhenWorkflowNotExist(
+		ctx,
+		namespaceID,
+		wid,
+		rid,
+		chasm.WorkflowArchetypeID,
+		wfCtx,
+		releaseFn,
+		request.GetWorkflowState(),
+		request.RemoteCluster,
+		nil,
+		false,
+		skipCloseTransferTask,
+	)
 }
 
 //nolint:revive // cognitive complexity 37 (> max enabled 25)
@@ -433,6 +445,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			ctx,
 			namespace.ID(executionInfo.NamespaceId),
 			executionInfo.WorkflowId,
+			archetypeID,
 			versionedTransition.NewRunInfo,
 			localMutableState,
 			true,
@@ -449,6 +462,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 
 	return r.transactionMgr.CreateWorkflow(
 		ctx,
+		archetypeID,
 		NewWorkflow(
 			r.clusterMetadata,
 			wfCtx,
@@ -568,6 +582,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	return r.transactionMgr.UpdateWorkflow(
 		ctx,
 		false,
+		archetypeID,
 		targetWorkflow,
 		newRunWorkflow,
 	)
@@ -603,9 +618,35 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	}
 	snapshot := attribute.State
 	if localMutableState == nil {
-		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true, versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication)
+		return r.applySnapshotWhenWorkflowNotExist(
+			ctx,
+			namespaceID,
+			workflowID,
+			runID,
+			archetypeID,
+			wfCtx,
+			releaseFn,
+			snapshot,
+			sourceClusterName,
+			versionedTransition.NewRunInfo,
+			true,
+			versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication,
+		)
 	}
-	return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, workflowID, runID, archetypeID, wfCtx, releaseFn, localMutableState, snapshot, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName)
+	return r.applySnapshotWhenWorkflowExist(
+		ctx,
+		namespaceID,
+		workflowID,
+		runID,
+		archetypeID,
+		wfCtx,
+		releaseFn,
+		localMutableState,
+		snapshot,
+		versionedTransition.EventBatches,
+		versionedTransition.NewRunInfo,
+		sourceClusterName,
+	)
 }
 
 func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
@@ -720,6 +761,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	return r.transactionMgr.UpdateWorkflow(
 		ctx,
 		isBranchSwitched,
+		archetypeID,
 		targetWorkflow,
 		newRunWorkflow,
 	)
@@ -1172,6 +1214,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
+	archtypeID chasm.ArchetypeID,
 	wfCtx historyi.WorkflowContext,
 	releaseFn historyi.ReleaseWorkflowContextFunc,
 	sourceMutableState *persistencespb.WorkflowMutableState,
@@ -1231,6 +1274,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 			ctx,
 			namespaceID,
 			workflowID,
+			archtypeID,
 			newRunInfo,
 			mutableState,
 			isStateBased,
@@ -1247,6 +1291,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	}
 	return r.transactionMgr.CreateWorkflow(
 		ctx,
+		archtypeID,
 		NewWorkflow(
 			r.clusterMetadata,
 			wfCtx,
@@ -1260,6 +1305,7 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
+	archetypeID chasm.ArchetypeID,
 	newRunInfo *replicationspb.NewRunInfo,
 	originalMutableState historyi.MutableState,
 	isStateBased bool,
@@ -1305,6 +1351,7 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 		}
 		return r.transactionMgr.CreateWorkflow(
 			ctx,
+			archetypeID,
 			NewWorkflow(
 				r.clusterMetadata,
 				newRunWfContext,

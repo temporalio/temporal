@@ -50,8 +50,8 @@ func (a *DeleteExecutionTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
 }
 
-func (t *DeleteExecutionTask) GetArchetypeID() uint32 {
-	return t.ArchetypeID
+func (a *DeleteExecutionTask) GetArchetypeID() uint32 {
+	return a.ArchetypeID
 }
 
 func (a *DeleteExecutionTask) String() string {

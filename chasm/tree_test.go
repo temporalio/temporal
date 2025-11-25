@@ -2159,6 +2159,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		Path:                                   rootPath,
 		TypeId:                                 testSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
+		ArchetypeId:                            testComponentTypeID,
 	}, chasmTask.Info)
 
 	s.Len(rootAttr.PureTasks, 1) // Only one valid side effect task.
@@ -2195,6 +2196,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		Path:                                   []string{"SubComponent2"},
 		TypeId:                                 testOutboundSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
+		ArchetypeId:                            testComponentTypeID,
 	}, chasmTask.Info)
 }
 

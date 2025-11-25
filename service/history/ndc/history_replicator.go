@@ -546,6 +546,7 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 
 	err = r.transactionMgr.CreateWorkflow(
 		ctx,
+		chasm.WorkflowArchetypeID,
 		NewWorkflow(
 			r.clusterMetadata,
 			wfContext,
@@ -611,6 +612,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	err = r.transactionMgr.UpdateWorkflow(
 		ctx,
 		isRebuilt,
+		chasm.WorkflowArchetypeID,
 		targetWorkflow,
 		newWorkflow,
 	)
@@ -843,6 +845,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 
 	err = r.transactionMgr.CreateWorkflow(
 		ctx,
+		chasm.WorkflowArchetypeID,
 		targetWorkflow,
 	)
 	if err != nil {

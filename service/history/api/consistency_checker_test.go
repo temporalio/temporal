@@ -93,7 +93,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		}),
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState, nil)
