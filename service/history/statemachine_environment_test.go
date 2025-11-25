@@ -524,6 +524,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				ShardID:     mockShard.GetShardID(),
 				NamespaceID: namespaceID.String(),
 				WorkflowID:  workflowID,
+				ArchetypeID: chasm.WorkflowArchetypeID,
 			}).Return(&persistence.GetCurrentExecutionResponse{
 				RunID: currentRunID,
 			}, nil).Times(1)
@@ -537,6 +538,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 					ShardID:     mockShard.GetShardID(),
 					NamespaceID: namespaceID.String(),
 					WorkflowID:  workflowID,
+					ArchetypeID: chasm.WorkflowArchetypeID,
 				}).Return(&persistence.GetCurrentExecutionResponse{
 					RunID: currentRunID,
 				}, nil).Times(1)

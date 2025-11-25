@@ -28,32 +28,32 @@ func taskWorkflowKey(task tasks.Task) definition.WorkflowKey {
 	return definition.NewWorkflowKey(task.GetNamespaceID(), task.GetWorkflowID(), task.GetRunID())
 }
 
+func getTaskArchetypeID(task tasks.Task) chasm.ArchetypeID {
+	archetypeID := chasm.WorkflowArchetypeID
+	if hasArchetypeID, ok := task.(tasks.HasArchetypeID); ok {
+		archetypeID = hasArchetypeID.GetArchetypeID()
+
+		// For backward compatibility, old tasks for workflow may not have archetypeID set.
+		if archetypeID == chasm.UnspecifiedArchetypeID {
+			archetypeID = chasm.WorkflowArchetypeID
+		}
+	}
+
+	return archetypeID
+}
+
 func getWorkflowExecutionContextForTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	task tasks.Task,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
-	archetypeID := chasm.WorkflowArchetypeID
-	if hasArchetypeID, ok := task.(tasks.HasArchetypeID); ok {
-		archetypeID = hasArchetypeID.GetArchetypeID()
-		if archetypeID == chasm.UnspecifiedArchetypeID {
-			archetypeID = chasm.WorkflowArchetypeID
-		}
-	}
-
-	// For backward compatibility, old tasks for workflow may not have archetypeID set.
-	// TODO: move this logic to task serializer after reversing the dependency between persistence and chasm package.
-	if archetypeID == 0 {
-		archetypeID = chasm.WorkflowArchetypeID
-	}
-
 	return getWorkflowExecutionContext(
 		ctx,
 		shardContext,
 		workflowCache,
 		taskWorkflowKey(task),
-		archetypeID,
+		getTaskArchetypeID(task),
 		locks.PriorityLow,
 	)
 }

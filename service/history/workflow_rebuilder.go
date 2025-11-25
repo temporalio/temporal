@@ -130,6 +130,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 			NamespaceID: workflowKey.NamespaceID,
 			WorkflowID:  workflowKey.WorkflowID,
 			RunID:       workflowKey.RunID,
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		},
 	)
 	if err != nil && resp == nil {

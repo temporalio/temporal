@@ -629,6 +629,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -643,6 +644,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -657,6 +659,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -670,6 +673,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
@@ -678,6 +682,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
@@ -686,6 +691,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp2.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 
@@ -698,6 +704,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -713,6 +720,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -728,6 +736,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -753,6 +762,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -777,6 +787,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -801,6 +812,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -891,6 +903,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.Require().NoError(err, "Failed to describe mutable state")
 	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")

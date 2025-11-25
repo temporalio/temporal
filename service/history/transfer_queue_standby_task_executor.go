@@ -144,8 +144,7 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 			task,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
-			// TODO - replace this with a method for CHASM components
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -376,7 +375,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -409,7 +408,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -497,7 +496,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -619,7 +618,7 @@ func (e *verificationErr) Unwrap() error {
 	return e.err
 }
 
-func (t *transferQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBeforeDiscard(
+func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistOnSourceBeforeDiscard(
 	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
@@ -628,7 +627,16 @@ func (t *transferQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBefore
 	if postActionInfo == nil {
 		return nil
 	}
-	if !isWorkflowExistOnSource(ctx, taskWorkflowKey(taskInfo), logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+	if !isExecutionExistOnSource(
+		ctx,
+		taskWorkflowKey(taskInfo),
+		getTaskArchetypeID(taskInfo),
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
+		t.shardContext.ChasmRegistry(),
+	) {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
@@ -648,7 +656,16 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
 	}
 
-	if !isWorkflowExistOnSource(ctx, *pushActivityInfo.parentWorkflowKey, logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+	if !isExecutionExistOnSource(
+		ctx,
+		*pushActivityInfo.parentWorkflowKey,
+		getTaskArchetypeID(taskInfo),
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
+		t.shardContext.ChasmRegistry(),
+	) {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)

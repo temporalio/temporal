@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
@@ -347,6 +348,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 			NamespaceID: nsID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
 	}

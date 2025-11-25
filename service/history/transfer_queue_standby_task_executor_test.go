@@ -801,6 +801,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		Namespace:       tests.ParentNamespace.String(),
 		Execution:       parentExecution,
 		SkipForceReload: true,
+		Archetype:       chasm.WorkflowArchetype,
 	})).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())

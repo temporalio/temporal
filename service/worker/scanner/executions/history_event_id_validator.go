@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -68,6 +69,7 @@ func (v *historyEventIDValidator) Validate(
 			NamespaceID: mutableState.GetExecutionInfo().NamespaceId,
 			WorkflowID:  mutableState.GetExecutionInfo().WorkflowId,
 			RunID:       mutableState.GetExecutionState().RunId,
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		switch err.(type) {
 		case nil:

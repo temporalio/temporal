@@ -235,6 +235,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(histroySize, nil)
@@ -317,6 +318,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
@@ -405,6 +407,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Close
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, []*persistence.WorkflowEvents{workflowEvents})
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
@@ -464,6 +467,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil)
 	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, []*persistence.WorkflowEvents{workflowEvents})
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
@@ -522,6 +526,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() 
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil)
 	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, []*persistence.WorkflowEvents{workflowEvents})
 	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)

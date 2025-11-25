@@ -118,7 +118,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 		s.shardContext,
 		namespace.ID(s.namespaceID),
 		s.workflowID,
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
@@ -127,6 +127,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 			ShardID:     s.shardContext.GetShardID(),
 			NamespaceID: s.namespaceID,
 			WorkflowID:  s.workflowID,
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		},
 	).Return(&persistence.GetCurrentExecutionResponse{RunID: s.currentRunID}, nil)
 
@@ -147,7 +148,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 		s.shardContext,
 		namespace.ID(s.namespaceID),
 		s.workflowID,
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
@@ -156,6 +157,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 			ShardID:     s.shardContext.GetShardID(),
 			NamespaceID: s.namespaceID,
 			WorkflowID:  s.workflowID,
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		},
 	).Return(nil, serviceerror.NewUnavailable(""))
 

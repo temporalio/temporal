@@ -50,7 +50,7 @@ func NewTaskQueueRecorder(delegate persistence.ExecutionManager, logger log.Logg
 // AddHistoryTasks records the task write and then delegates to the underlying manager
 func (r *TaskQueueRecorder) AddHistoryTasks(
 	ctx context.Context,
-	request *persistence.AddHistoryTasksRequest, // TODO: check caller
+	request *persistence.AddHistoryTasksRequest,
 ) error {
 	// Call the delegate first
 	err := r.delegate.AddHistoryTasks(ctx, request)

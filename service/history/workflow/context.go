@@ -245,9 +245,10 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		ShardID: shardContext.GetShardID(),
 		// workflow create mode & prev run ID & version
 		Mode:                     createMode,
-		ArchetypeID:              c.archetypeID,
 		PreviousRunID:            prevRunID,
 		PreviousLastWriteVersion: prevLastWriteVersion,
+
+		ArchetypeID: c.archetypeID,
 
 		NewWorkflowSnapshot: *newWorkflow,
 		NewWorkflowEvents:   newWorkflowEvents,

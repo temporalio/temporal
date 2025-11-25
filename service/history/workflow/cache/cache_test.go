@@ -831,6 +831,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		StartRequestID: uuid.New(),
 		RunID:          currentRunID,
@@ -865,6 +866,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, serviceerror.NewNotFound("current worflow not found")).Times(1)
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(

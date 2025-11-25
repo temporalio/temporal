@@ -1814,6 +1814,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Fire() 
 			ShardID:     s.mockShard.GetShardID(),
 			NamespaceID: s.namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		}).Return(&persistence.GetCurrentExecutionResponse{
 			StartRequestID: persistenceExecutionState.CreateRequestId,
 			RunID:          persistenceExecutionState.RunId,
@@ -1877,6 +1878,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Noop() 
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: s.namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		StartRequestID: persistenceExecutionState.CreateRequestId,
 		RunID:          persistenceExecutionState.RunId,
