@@ -318,7 +318,7 @@ func TestTransitionTimedout(t *testing.T) {
 				require.NotNil(t, outcome.GetFailed().GetFailure())
 				// do something
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-				// Timeout failure is recorded in both attempt state and outcome. TransitionTimedOut should only be called when there
+				// Timeout failure is recorded in attempt state. TransitionTimedOut should only be called when there
 				// are no more retries. Retries go through TransitionRescheduled.
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetFailure())
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())

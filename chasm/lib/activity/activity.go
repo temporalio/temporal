@@ -43,9 +43,9 @@ type Activity struct {
 	Visibility    chasm.Field[*chasm.Visibility]
 	Attempt       chasm.Field[*activitypb.ActivityAttemptState]
 	LastHeartbeat chasm.Field[*activitypb.ActivityHeartbeatState]
-	Outcome       chasm.Field[*activitypb.ActivityOutcome]
 	// Standalone only
 	RequestData chasm.Field[*activitypb.ActivityRequestData]
+	Outcome     chasm.Field[*activitypb.ActivityOutcome]
 	// Pointer to an implementation of the "store". for a workflow activity this would be a parent pointer back to
 	// the workflow. For a standalone activity this would be nil.
 	// TODO: revisit a standalone activity pointing to itself once we handle storing it more efficiently.
@@ -583,16 +583,15 @@ func (a *Activity) buildPollActivityExecutionResponse(
 		if err != nil {
 			return nil, err
 		}
-		if activityOutcome != nil {
-			switch v := activityOutcome.GetVariant().(type) {
-			case *activitypb.ActivityOutcome_Failed_:
-				response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
-					Failure: v.Failed.GetFailure(),
-				}
-			case *activitypb.ActivityOutcome_Successful_:
-				response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
-					Result: v.Successful.GetOutput(),
-				}
+		// There are two places where a failure might be stored but only one place where a
+		// successful outcome is stored.
+		if successful := activityOutcome.GetSuccessful(); successful != nil {
+			response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
+				Result: successful.GetOutput(),
+			}
+		} else if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
+			response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
+				Failure: failure,
 			}
 		} else {
 			shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||

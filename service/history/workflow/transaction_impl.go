@@ -188,10 +188,11 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		},
 		isWorkflow,
 	)
-
 	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+
+		// TODO(dan): there is no test coverage for on-delete or on-create CHASM notifications.
 
 		// Notify for current workflow if it has CHASM updates
 		if len(currentWorkflowMutation.UpsertChasmNodes) > 0 ||

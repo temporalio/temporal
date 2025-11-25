@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -43,8 +42,7 @@ var (
 
 type standaloneActivityTestSuite struct {
 	testcore.FunctionalTestBase
-	tv          *testvars.TestVars
-	chasmEngine chasm.Engine
+	tv *testvars.TestVars
 }
 
 func TestStandaloneActivityTestSuite(t *testing.T) {
@@ -58,10 +56,6 @@ func (s *standaloneActivityTestSuite) SetupSuite() {
 		dynamicconfig.EnableChasm,
 		true,
 	)
-	var err error
-	s.chasmEngine, err = s.FunctionalTestBase.GetTestCluster().Host().ChasmEngine()
-	s.Require().NoError(err)
-	s.Require().NotNil(s.chasmEngine)
 }
 
 func (s *standaloneActivityTestSuite) SetupTest() {
@@ -848,7 +842,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		RequestId: "test-request-id",
 	})
 	require.NoError(t, err)
-	t.Logf("Started activity %s with 1s start-to-close timeout", activityID)
 
 	// First poll: activity has not started yet
 	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
@@ -1147,6 +1140,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 	}
 }
 
+// TODO(dan): add tests that PollActivityExecution can wait for deletion, termination, cancellation etc
+
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_DeadlineExceeded() {
 	t := s.T()
 	originalCtx := testcore.NewContext()
@@ -1235,10 +1230,14 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 	require.NotEmpty(t, existingRunID)
 	existingNamespace := s.Namespace().String()
 
+	var notFoundErr *serviceerror.NotFound
+	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+
 	testCases := []struct {
-		name        string
-		request     *workflowservice.PollActivityExecutionRequest
-		expectedErr string
+		name           string
+		request        *workflowservice.PollActivityExecutionRequest
+		expectedErr    error
+		expectedErrMsg string
 	}{
 		{
 			name: "NonExistentNamespace",
@@ -1247,7 +1246,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				ActivityId: existingActivityID,
 				RunId:      existingRunID,
 			},
-			expectedErr: "Namespace non-existent-namespace is not found.",
+			expectedErr:    namespaceNotFoundErr,
+			expectedErrMsg: "Namespace non-existent-namespace is not found.",
 		},
 		{
 			name: "NonExistentActivityID",
@@ -1256,7 +1256,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				ActivityId: "non-existent-activity",
 				RunId:      existingRunID,
 			},
-			expectedErr: "execution not found",
+			expectedErr:    notFoundErr,
+			expectedErrMsg: "activity execution not found",
 		},
 		{
 			name: "NonExistentRunID",
@@ -1265,18 +1266,16 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				ActivityId: existingActivityID,
 				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
-			expectedErr: "execution not found",
+			expectedErr:    notFoundErr,
+			expectedErrMsg: "activity execution not found",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
-			require.Error(t, err)
-			statusErr := serviceerror.ToStatus(err)
-			require.NotNil(t, statusErr)
-			require.Equal(t, codes.NotFound, statusErr.Code())
-			require.Equal(t, tc.expectedErr, statusErr.Message())
+			require.ErrorAs(t, err, &tc.expectedErr)
+			require.Equal(t, tc.expectedErrMsg, tc.expectedErr.Error())
 		})
 	}
 
@@ -1305,11 +1304,9 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				},
 			},
 		})
-		require.Error(t, err)
-		statusErr := serviceerror.ToStatus(err)
-		require.NotNil(t, statusErr)
-		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Equal(t, "execution not found", statusErr.Message())
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, "activity execution not found", notFoundErr.Message)
 	})
 }
 
@@ -1398,13 +1395,52 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
-			require.Error(t, err)
-			statusErr := serviceerror.ToStatus(err)
-			require.NotNil(t, statusErr)
-			require.Equal(t, codes.InvalidArgument, statusErr.Code())
-			require.Contains(t, statusErr.Message(), tc.expectedErr)
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Contains(t, invalidArgErr.Message, tc.expectedErr)
 		})
 	}
+
+	t.Run("LongPollTokenFromWrongExecution", func(t *testing.T) {
+
+		validPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: existingActivityID,
+			RunId:      existingRunID,
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					LongPollToken: nil,
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, validPollResp.StateChangeLongPollToken)
+
+		activityID2 := testcore.RandomizeStr(t.Name())
+		startResp2, err := s.startActivity(ctx, activityID2, tq)
+		require.NoError(t, err)
+		require.NotEmpty(t, startResp2.GetRunId())
+
+		_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: activityID2,
+			RunId:      startResp2.GetRunId(),
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					LongPollToken: validPollResp.StateChangeLongPollToken,
+				},
+			},
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
+	})
+
+	// TODO(dan): add test for long poll token from non-existent execution
 }
 
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
