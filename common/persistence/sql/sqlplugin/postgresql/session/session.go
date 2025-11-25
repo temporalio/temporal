@@ -91,23 +91,7 @@ func buildDSN(
 }
 
 func buildDSNAttr(cfg *config.SQL) url.Values {
-	parameters := url.Values{}
-	if cfg.TLS != nil && cfg.TLS.Enabled {
-		if !cfg.TLS.EnableHostVerification {
-			parameters.Set(sslMode, sslModeRequire)
-		} else {
-			parameters.Set(sslMode, sslModeFull)
-		}
-
-		if cfg.TLS.CaFile != "" {
-			parameters.Set(sslCA, cfg.TLS.CaFile)
-		}
-		if cfg.TLS.KeyFile != "" && cfg.TLS.CertFile != "" {
-			parameters.Set(sslKey, cfg.TLS.KeyFile)
-			parameters.Set(sslCert, cfg.TLS.CertFile)
-		}
-	}
-
+	parameters := make(url.Values, len(cfg.ConnectAttributes))
 	for k, v := range cfg.ConnectAttributes {
 		key := strings.TrimSpace(k)
 		value := strings.TrimSpace(v)
@@ -121,7 +105,23 @@ func buildDSNAttr(cfg *config.SQL) url.Values {
 		parameters.Set(key, value)
 	}
 
-	if parameters.Get(sslMode) == "" {
+	if cfg.TLS != nil && cfg.TLS.Enabled {
+		if parameters.Get(sslMode) == "" {
+			if cfg.TLS.EnableHostVerification {
+				parameters.Set(sslMode, sslModeFull)
+			} else {
+				parameters.Set(sslMode, sslModeRequire)
+			}
+		}
+
+		if parameters.Get(sslCA) == "" && cfg.TLS.CaFile != "" {
+			parameters.Set(sslCA, cfg.TLS.CaFile)
+		}
+		if parameters.Get(sslKey) == "" && cfg.TLS.KeyFile != "" && parameters.Get(sslCert) == "" && cfg.TLS.CertFile != "" {
+			parameters.Set(sslKey, cfg.TLS.KeyFile)
+			parameters.Set(sslCert, cfg.TLS.CertFile)
+		}
+	} else if parameters.Get(sslMode) == "" {
 		parameters.Set(sslMode, sslModeNoop)
 	}
 

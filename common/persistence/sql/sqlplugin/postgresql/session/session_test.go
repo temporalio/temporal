@@ -4,57 +4,40 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 )
 
-type (
-	sessionTestSuite struct {
-		suite.Suite
-	}
-)
-
-func TestSessionTestSuite(t *testing.T) {
-	s := new(sessionTestSuite)
-	suite.Run(t, s)
-}
-
-func (s *sessionTestSuite) TestBuildDSNAttr_NoTLS_NoConnectAttributes() {
+func TestBuildDSNAttr_NoTLS_NoConnectAttributes(t *testing.T) {
 	cfg := &config.SQL{}
-
 	result := buildDSNAttr(cfg)
-
-	s.Equal("disable", result.Get(sslMode), "should default to sslmode=disable when no TLS and no connect attributes")
+	require.Equal(t, "disable", result.Get(sslMode), "should default to sslmode=disable when no TLS and no connect attributes")
 }
 
-func (s *sessionTestSuite) TestBuildDSNAttr_TLSEnabled_NoHostVerification() {
+func TestBuildDSNAttr_TLSEnabled_NoHostVerification(t *testing.T) {
 	cfg := &config.SQL{
 		TLS: &auth.TLS{
 			Enabled:                true,
 			EnableHostVerification: false,
 		},
 	}
-
 	result := buildDSNAttr(cfg)
-
-	s.Equal("require", result.Get(sslMode), "should set sslmode=require when TLS enabled without host verification")
+	require.Equal(t, "require", result.Get(sslMode), "should set sslmode=require when TLS enabled without host verification")
 }
 
-func (s *sessionTestSuite) TestBuildDSNAttr_TLSEnabled_WithHostVerification() {
+func TestBuildDSNAttr_TLSEnabled_WithHostVerification(t *testing.T) {
 	cfg := &config.SQL{
 		TLS: &auth.TLS{
 			Enabled:                true,
 			EnableHostVerification: true,
 		},
 	}
-
 	result := buildDSNAttr(cfg)
-
-	s.Equal("verify-full", result.Get(sslMode), "should set sslmode=verify-full when TLS enabled with host verification")
+	require.Equal(t, "verify-full", result.Get(sslMode), "should set sslmode=verify-full when TLS enabled with host verification")
 }
 
-func (s *sessionTestSuite) TestBuildDSNAttr_TLSEnabled_WithCertificates() {
+func TestBuildDSNAttr_TLSEnabled_WithCertificates(t *testing.T) {
 	cfg := &config.SQL{
 		TLS: &auth.TLS{
 			Enabled:                true,
@@ -64,94 +47,77 @@ func (s *sessionTestSuite) TestBuildDSNAttr_TLSEnabled_WithCertificates() {
 			KeyFile:                "/path/to/client.key",
 		},
 	}
-
 	result := buildDSNAttr(cfg)
-
-	s.Equal("verify-full", result.Get(sslMode))
-	s.Equal("/path/to/ca.crt", result.Get(sslCA))
-	s.Equal("/path/to/client.crt", result.Get(sslCert))
-	s.Equal("/path/to/client.key", result.Get(sslKey))
+	require.Equal(t, "verify-full", result.Get(sslMode))
+	require.Equal(t, "/path/to/ca.crt", result.Get(sslCA))
+	require.Equal(t, "/path/to/client.crt", result.Get(sslCert))
+	require.Equal(t, "/path/to/client.key", result.Get(sslKey))
 }
 
-func (s *sessionTestSuite) TestBuildDSNAttr_CustomSSLMode_PreferredOverDisable() {
+func TestBuildDSNAttr_CustomSSLMode_PreferredOverDisable(t *testing.T) {
 	cfg := &config.SQL{
 		ConnectAttributes: map[string]string{
 			"sslmode": "verify-ca",
 		},
 	}
-
 	result := buildDSNAttr(cfg)
-
-	s.Equal("verify-ca", result.Get(sslMode), "should use custom sslmode instead of default disable")
+	require.Equal(t, "verify-ca", result.Get(sslMode), "should use custom sslmode instead of default disable")
 }
 
-func (s *sessionTestSuite) TestBuildDSNAttr_TLSEnabledButCustomSSLModeInAttributes_Panics() {
-	// Tests that setting sslmode in ConnectAttributes when TLS is configured causes a panic
-	// because TLS already sets the sslmode
+func TestBuildDSNAttr_TLSEnabledButCustomSSLModeInAttributes_PreferredOverDisable(t *testing.T) {
 	cfg := &config.SQL{
 		TLS: &auth.TLS{
 			Enabled:                true,
 			EnableHostVerification: true,
 		},
 		ConnectAttributes: map[string]string{
-			"sslmode": "require",
+			"sslmode": "verify-ca",
 		},
 	}
-
-	// The current implementation panics when ConnectAttributes tries to set a parameter
-	// that was already set by TLS configuration
-	s.Panics(func() {
-		buildDSNAttr(cfg)
-	}, "Should panic when ConnectAttributes tries to set sslmode that was already set by TLS")
+	result := buildDSNAttr(cfg)
+	require.Equal(t, "verify-ca", result.Get(sslMode), "should use custom sslmode instead of default disable")
 }
 
-func (s *sessionTestSuite) TestBuildDSNAttr_ConnectAttributes() {
+func TestBuildDSNAttr_ConnectAttributes(t *testing.T) {
 	cfg := &config.SQL{
 		ConnectAttributes: map[string]string{
-			"connect_timeout": "10",
+			"connect_timeout":  "10",
 			"application_name": "temporal",
 		},
 	}
-
 	result := buildDSNAttr(cfg)
-
-	s.Equal("10", result.Get("connect_timeout"))
-	s.Equal("temporal", result.Get("application_name"))
-	s.Equal("disable", result.Get(sslMode), "should still set default sslmode")
+	require.Equal(t, "10", result.Get("connect_timeout"))
+	require.Equal(t, "temporal", result.Get("application_name"))
+	require.Equal(t, "disable", result.Get(sslMode), "should still set default sslmode")
 }
 
-func (s *sessionTestSuite) TestBuildDSNAttr_ConnectAttributesWithSpaces() {
+func TestBuildDSNAttr_ConnectAttributesWithSpaces(t *testing.T) {
 	cfg := &config.SQL{
 		ConnectAttributes: map[string]string{
 			"  application_name  ": "  temporal  ",
 		},
 	}
-
 	result := buildDSNAttr(cfg)
-
-	s.Equal("temporal", result.Get("application_name"), "should trim spaces from key and value")
+	require.Equal(t, "temporal", result.Get("application_name"), "should trim spaces from key and value")
 }
 
-func (s *sessionTestSuite) TestBuildDSNAttr_DuplicateConnectAttribute_Panics() {
+func TestBuildDSNAttr_DuplicateConnectAttribute_Panics(t *testing.T) {
 	cfg := &config.SQL{
 		TLS: &auth.TLS{
 			Enabled:                true,
 			EnableHostVerification: true,
 		},
 		ConnectAttributes: map[string]string{
-			"sslmode": "require",
-			"sslMode": "verify-full", // Different case but same after trimming
+			"sslmode":  "require",
+			"sslmode ": "verify-full",
 		},
 	}
-
-	// The current implementation checks for duplicates and panics
-	// TLS sets sslmode first, then ConnectAttributes tries to set it again
-	s.Panics(func() {
+	require.Panics(t, func() {
 		buildDSNAttr(cfg)
 	}, "Should panic when duplicate keys are detected")
 }
 
-func (s *sessionTestSuite) TestBuildDSN() {
+func TestBuildDSN(t *testing.T) {
 	cfg := &config.SQL{
 		User:         "testuser",
 		Password:     "testpass",
@@ -161,44 +127,33 @@ func (s *sessionTestSuite) TestBuildDSN() {
 			"connect_timeout": "10",
 		},
 	}
-
-	mockResolver := &mockServiceResolver{
-		addr: "localhost:5432",
-	}
-
+	mockResolver := &mockServiceResolver{addr: "localhost:5432"}
 	result := buildDSN(cfg, mockResolver)
-
-	// Parse the DSN to validate its structure
-	s.Contains(result, "postgres://")
-	s.Contains(result, "testuser:testpass@")
-	s.Contains(result, "localhost:5432")
-	s.Contains(result, "/testdb")
-	s.Contains(result, "connect_timeout=10")
-	s.Contains(result, "sslmode=disable")
+	u, err := url.Parse(result)
+	require.NoError(t, err)
+	require.Equal(t, "postgres", u.Scheme)
+	require.Equal(t, "testuser:testpass", u.User.String())
+	require.Equal(t, "localhost:5432", u.Host)
+	require.Equal(t, "/testdb", u.Path)
+	require.Equal(t, "10", u.Query().Get("connect_timeout"))
+	require.Equal(t, "disable", u.Query().Get("sslmode"))
 }
 
-func (s *sessionTestSuite) TestBuildDSN_PasswordEscaping() {
+func TestBuildDSN_PasswordEscaping(t *testing.T) {
 	cfg := &config.SQL{
 		User:         "testuser",
 		Password:     "p@ss:w/rd&special",
 		ConnectAddr:  "localhost:5432",
 		DatabaseName: "testdb",
 	}
-
-	mockResolver := &mockServiceResolver{
-		addr: "localhost:5432",
-	}
-
+	mockResolver := &mockServiceResolver{addr: "localhost:5432"}
 	result := buildDSN(cfg, mockResolver)
-
-	// The password should be URL-escaped
 	parsed, err := url.Parse(result)
-	s.NoError(err)
+	require.NoError(t, err)
 	password, _ := parsed.User.Password()
-	s.Equal("p@ss:w/rd&special", password, "password should be properly escaped and parsed")
+	require.Equal(t, "p@ss:w/rd&special", password, "password should be properly escaped and parsed")
 }
 
-// Mock service resolver for testing
 type mockServiceResolver struct {
 	addr string
 }
