@@ -418,11 +418,11 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 	return SearchAttributesMap{values: values}
 }
 
-// GetSearchAttributeValue returns the value for a given SearchAttribute with compile-time type safety.
+// GetValue returns the value for a given SearchAttribute with compile-time type safety.
 // The return type T is inferred from the SearchAttribute's type parameter.
 // For example, SearchAttributeBool will return a bool value.
 // If the value is not found or the type does not match, the zero value for the type T is returned and the second return value is false.
-func GetSearchAttributeValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
+func GetValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
 	var zero T
 	if len(m.values) == 0 {
 		return zero, false
