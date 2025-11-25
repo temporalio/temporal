@@ -17,15 +17,15 @@ BAKE_ENV := SERVER_VERSION=$(SERVER_VERSION) \
 	TEMPORAL_SHA=$(TEMPORAL_SHA) \
 	TAG_LATEST=$(TAG_LATEST)
 
-.PHONY: build
-build:
+.PHONY: build-tools
+build-admin-tools:
 	./download-binaries.sh $(SERVER_VERSION) $(CLI_VERSION) $(TCTL_VERSION) amd64
 	./download-binaries.sh $(SERVER_VERSION) $(CLI_VERSION) $(TCTL_VERSION) arm64
 	./copy-schema.sh
 	$(BAKE_ENV) docker buildx bake admin-tools
 
-.PHONY: build-legacy
-build-legacy:
+.PHONY: build-admin-tools-legacy
+build-admin-tools-legacy:
 	./download-binaries.sh $(SERVER_VERSION) $(CLI_VERSION) $(TCTL_VERSION) amd64
 	./download-binaries.sh $(SERVER_VERSION) $(CLI_VERSION) $(TCTL_VERSION) arm64
 	./copy-schema.sh
@@ -37,8 +37,8 @@ build-server:
 	./download-binaries.sh $(SERVER_VERSION) $(CLI_VERSION) $(TCTL_VERSION) arm64
 	$(BAKE_ENV) docker buildx bake server
 
-.PHONY: build-legacy-server
-build-legacy-server:
+.PHONY: build-server-legacy
+build-server-legacy:
 	./download-binaries.sh $(SERVER_VERSION) $(CLI_VERSION) $(TCTL_VERSION) amd64
 	./download-binaries.sh $(SERVER_VERSION) $(CLI_VERSION) $(TCTL_VERSION) arm64
 	$(BAKE_ENV) docker buildx bake legacy-server

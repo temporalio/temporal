@@ -1,6 +1,10 @@
 variable "SERVER_VERSION" {
   default = "1.29.1"
 }
+variable "ALPINE_IMAGE" {
+  default = "alpine:3.22@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412"
+}
+
 
 variable "CLI_VERSION" {
   default = "1.5.0"
@@ -44,9 +48,7 @@ target "admin-tools" {
   ])
   platforms = ["linux/amd64", "linux/arm64"]
   args = {
-    TEMPORAL_VERSION = "${SERVER_VERSION}"
-    TEMPORAL_SHA = "${TEMPORAL_SHA}"
-    CLI_VERSION = "${CLI_VERSION}"
+    ALPINE_IMAGE = "${ALPINE_IMAGE}"
   }
   labels = {
     "org.opencontainers.image.title" = "admin-tools"
@@ -72,10 +74,7 @@ target "legacy-admin-tools" {
   ])
   platforms = ["linux/amd64", "linux/arm64"]
   args = {
-    TEMPORAL_VERSION = "${SERVER_VERSION}"
-    TEMPORAL_SHA = "${TEMPORAL_SHA}"
-    CLI_VERSION = "${CLI_VERSION}"
-    TCTL_VERSION = "${TCTL_VERSION}"
+    ALPINE_IMAGE = "${ALPINE_IMAGE}"
   }
   labels = {
     "org.opencontainers.image.title" = "admin-tools"
@@ -101,8 +100,7 @@ target "server" {
   ])
   platforms = ["linux/amd64", "linux/arm64"]
   args = {
-    TEMPORAL_VERSION = "${SERVER_VERSION}"
-    TEMPORAL_SHA = "${TEMPORAL_SHA}"
+    ALPINE_IMAGE = "${ALPINE_IMAGE}"
   }
   labels = {
     "org.opencontainers.image.title" = "server"
@@ -126,6 +124,7 @@ target "legacy-server" {
   ])
   platforms = ["linux/amd64", "linux/arm64"]
   args = {
+    ALPINE_IMAGE = "${ALPINE_IMAGE}"
     TEMPORAL_VERSION = "${SERVER_VERSION}"
     TEMPORAL_SHA = "${TEMPORAL_SHA}"
   }

@@ -1,6 +1,6 @@
-ARG ALPINE_IMAGE=alpine:3.22@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
+ARG ALPINE_IMAGE
 
-FROM ${BASE_IMAGE} AS builder
+FROM ${ALPINE_IMAGE} AS builder
 
 # These are necessary to install cqlsh
 RUN apk add --update --no-cache \
@@ -12,7 +12,7 @@ RUN apk add --update --no-cache \
 
 RUN pipx install --global cqlsh
 
-FROM ${BASE_IMAGE} AS base-admin-tools
+FROM ${ALPINE_IMAGE}
 
 RUN apk upgrade --no-cache
 RUN apk add --no-cache \
@@ -35,15 +35,9 @@ RUN ln -s /opt/pipx/venvs/cqlsh/bin/cqlsh /usr/local/bin/cqlsh
 # validate cqlsh installation
 RUN cqlsh --version
 
-SHELL ["/bin/bash", "-c"]
+SHELL ["", "-c"]
 
-##### Temporal admin tools #####
-FROM base-admin-tools as temporal-admin-tools
 ARG TARGETARCH
-ARG TEMPORAL_VERSION
-ARG TEMPORAL_SHA
-ARG CLI_VERSION
-ARG TCTL_VERSION
 
 COPY ./build/${TARGETARCH}/tctl /usr/local/bin
 COPY ./build/${TARGETARCH}/tctl-authorization-plugin /usr/local/bin
@@ -56,10 +50,11 @@ COPY ./build/temporal/schema /etc/temporal/schema
 # Alpine has a /etc/bash/bashrc that sources all files named /etc/bash/*.sh for
 # interactive shells, so we can add completion logic in /etc/bash/temporal-completion.sh
 # Completion for temporal depends on the bash-completion package.
+
 RUN apk add bash-completion && \
-    temporal completion bash > /etc/bash/temporal-completion.sh && \
-    addgroup -g 1000 temporal && \
-    adduser -u 1000 -G temporal -D temporal
+    temporal completion bash > /etc/bash/temporal-completion.sh
+
+RUN addgroup -g 1000 temporal && adduser -u 1000 -G temporal -D temporal
 USER temporal
 WORKDIR /etc/temporal
 
