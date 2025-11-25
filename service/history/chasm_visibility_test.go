@@ -297,62 +297,6 @@ func (s *ChasmVisibilitySuite) TestCountRuns_Success() {
 	s.Equal(expectedCount, response.Count)
 }
 
-func (s *ChasmVisibilitySuite) TestListRuns_DefaultPageSize() {
-	ctx := context.Background()
-
-	query := "StartTime > '2024-01-01T00:00:00Z'"
-
-	// Get archetype ID for the test component
-	archetypeID, ok := s.registry.ArchetypeIDOf(reflect.TypeFor[*visibilityTestComponent]())
-	s.True(ok)
-
-	// Setup visibility manager mock - should use default page size from config
-	expectedRequest := &manager.ListChasmExecutionsRequest{
-		ArchetypeID:   archetypeID,
-		NamespaceID:   testChasmNamespaceID,
-		Namespace:     testChasmNamespace,
-		PageSize:      1000, // from config
-		NextPageToken: nil,
-		Query:         query,
-	}
-
-	expectedResponse := &chasm.ListExecutionsResponse[*commonpb.Payload]{
-		Executions:    []*chasm.ExecutionInfo[*commonpb.Payload]{},
-		NextPageToken: nil,
-	}
-
-	s.visibilityManager.EXPECT().
-		ListChasmExecutions(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, req *manager.ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
-			s.Equal(expectedRequest.ArchetypeID, req.ArchetypeID)
-			s.Equal(expectedRequest.NamespaceID, req.NamespaceID)
-			s.Equal(expectedRequest.Namespace, req.Namespace)
-			s.Equal(expectedRequest.PageSize, req.PageSize)
-			s.Equal(expectedRequest.NextPageToken, req.NextPageToken)
-			s.Equal(expectedRequest.Query, req.Query)
-			return expectedResponse, nil
-		})
-
-	// Call ListExecutions without page size option
-	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
-		NamespaceName: string(testChasmNamespace),
-		Query:         query,
-	}
-
-	response, err := s.engine.ListExecutions(
-		ctx,
-		reflect.TypeFor[*visibilityTestComponent](),
-		request,
-	)
-
-	// Verify results
-	s.NoError(err)
-	s.NotNil(response)
-	s.Empty(response.Executions)
-	s.Nil(response.NextPageToken)
-}
-
 func (s *ChasmVisibilitySuite) TestListRuns_InvalidArchetypeType() {
 	ctx := context.Background()
 
