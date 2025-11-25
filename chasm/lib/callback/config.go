@@ -36,7 +36,7 @@ type Config struct {
 	RetryPolicy    func() backoff.RetryPolicy
 }
 
-func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		RequestTimeout: RequestTimeout.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {

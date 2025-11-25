@@ -631,13 +631,55 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 	return ms.chasmTree
 }
 
-// chasmEnabled returns true is the mutable state has a real chasm tree.
+// ChasmEnabled returns true if the mutable state has a real chasm tree.
 // The chasmTree is initialized with a noopChasmTree which is then overwritten with an actual chasm tree if chasm is
 // enabled when the mutable state is created. Once the EnableChasm dynamic config is removed and the tree is always
 // initialized, this helper can be removed.
-func (ms *MutableStateImpl) chasmEnabled() bool {
+func (ms *MutableStateImpl) ChasmEnabled() bool {
 	_, isNoop := ms.chasmTree.(*noopChasmTree)
 	return !isNoop
+}
+
+// chasmCallbacksEnabled returns true if CHASM callbacks are enabled for this workflow.
+func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
+	if !ms.ChasmEnabled() {
+		return false
+	}
+
+	// Check the callback library's EnableCallbacks config via history config
+	return ms.shard.GetConfig().EnableCHASMCallbacks(ms.GetNamespaceEntry().Name().String())
+}
+
+// ChasmWorkflowComponent gets the root workflow component from the CHASM tree.
+// Returns the workflow component (which is *chasmworkflow.Workflow) and the CHASM mutable context.
+// This method is for write operations. Callers can type assert to *chasmworkflow.Workflow if needed.
+func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error) {
+	chasmCtx := chasm.NewMutableContext(ctx, ms.chasmTree.(*chasm.Node))
+	rootComponent, err := ms.chasmTree.ComponentByPath(chasmCtx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
+	}
+	return wf, chasmCtx, nil
+}
+
+// ChasmWorkflowComponentReadOnly gets the root workflow component from the CHASM tree.
+// Returns both the workflow component and a read-only CHASM context.
+// This method is for read-only operations.
+func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error) {
+	chasmCtx := chasm.NewContext(ctx, ms.chasmTree.(*chasm.Node))
+	rootComponent, err := ms.chasmTree.ComponentByPath(chasmCtx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
+	}
+	return wf, chasmCtx, nil
 }
 
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
@@ -2340,6 +2382,7 @@ func (ms *MutableStateImpl) HasRequestID(
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
+	ctx context.Context,
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution *commonpb.WorkflowExecution,
 	previousExecutionState historyi.MutableState,
@@ -2380,7 +2423,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// for other fields as well.
 	runTimeout := command.GetWorkflowRunTimeout()
 
-	completionCallbacks, err := getCompletionCallbacksAsProtoSlice(previousExecutionState)
+	completionCallbacks, err := getCompletionCallbacksAsProtoSlice(ctx, previousExecutionState)
 	if err != nil {
 		return nil, err
 	}
@@ -2622,7 +2665,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionState.RunId, execution.GetRunId())
 	}
 
-	if ms.chasmEnabled() {
+	if ms.ChasmEnabled() {
 		// Initialize chasm tree once for new workflows.
 		// Using context.Background() because this is done outside an actual request context and the
 		// chasmworkflow.NewWorkflow does not actually use it currently.
@@ -2880,7 +2923,80 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 	return nil
 }
 
+func (ms *MutableStateImpl) AddWorkflowExecutionUnpausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) (*historypb.HistoryEvent, error) {
+	opTag := tag.WorkflowActionWorkflowUnpaused
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionUnpausedEvent(identity, reason, requestID)
+	if err := ms.ApplyWorkflowExecutionUnpausedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+// ApplyWorkflowExecutionUnpausedEvent applies the unpaused event to the mutable state. It updates the workflow execution status to running and clears the pause info.
+func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb.HistoryEvent) error {
+	// Update workflow status.
+	if _, err := ms.UpdateWorkflowStateStatus(ms.executionState.GetState(), enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING); err != nil {
+		return err
+	}
+
+	// save pauseInfoSize before clearing so that we can adjust approximate size later before returning success
+	pauseInfoSize := 0
+	if ms.executionInfo.PauseInfo != nil {
+		pauseInfoSize = ms.GetExecutionInfo().GetPauseInfo().Size()
+		// Clear pause info in mutable state.
+		ms.executionInfo.PauseInfo = nil
+	}
+
+	// Reschedule any pending activities
+	// Note: workflow task is scheduled in the unpause API. So no need to schedule it here.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		// Bump activity stamp to force replication so that the passive cluster can recreate the activity task.
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+			activityInfo.Stamp = activityInfo.Stamp + 1
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// Check activity scheduled time and generate activity retry task if scheduled time is in the future.
+		if ai.GetScheduledTime().AsTime().After(ms.timeSource.Now().UTC()) {
+			if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
+				return err
+			}
+		} else {
+			// Generate activity task to resend the activity to matching immediately.
+			if err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Update approximate size of the mutable state.
+	ms.approximateSize -= pauseInfoSize
+	return nil
+}
+
 func (ms *MutableStateImpl) addCompletionCallbacks(
+	event *historypb.HistoryEvent,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+) error {
+	if ms.chasmCallbacksEnabled() {
+		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
+	}
+
+	return ms.addCompletionCallbacksHsm(event, requestID, completionCallbacks)
+}
+
+// addCompletionCallbacksHsm creates completion callbacks using the HSM implementation.
+func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 	event *historypb.HistoryEvent,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
@@ -2888,7 +3004,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
-		return serviceerror.NewInvalidArgumentf(
+		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
 			coll.Size(),
@@ -2906,11 +3022,8 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 					Header: variant.Nexus.GetHeader(),
 				},
 			}
-		case *commonpb.Callback_Internal_:
-			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
-			if err != nil {
-				return err
-			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unknown callback variant: %T", cb.Variant)
 		}
 		machine := callbacks.NewCallback(requestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
 		id := ""
@@ -2928,6 +3041,21 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 		}
 	}
 	return nil
+}
+
+// addCompletionCallbacksChasm creates completion callbacks using the CHASM implementation.
+func (ms *MutableStateImpl) addCompletionCallbacksChasm(
+	event *historypb.HistoryEvent,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+) error {
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+
+	maxCallbacksPerWorkflow := ms.config.MaxCHASMCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
@@ -3157,7 +3285,7 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
 
 	// Re-scheduling pending workflow and activity tasks.
-	err = ms.reschedulePendingWorkflowTask(false)
+	err = ms.reschedulePendingWorkflowTask()
 	if err != nil {
 		return err
 	}
@@ -3171,6 +3299,16 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 			// TODO: skip task generation also when activity is in backoff period
 			continue
 		}
+
+		// need to update stamp so the passive side regenerate the task
+		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
+			info.Stamp++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
 		// we only need to resend the activities to matching, no need to update timer tasks.
 		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
 		if err != nil {
@@ -5060,7 +5198,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 
 	// Finally, reschedule the pending workflow task if so requested.
 	if requestReschedulePendingWorkflowTask {
-		return ms.reschedulePendingWorkflowTask(true)
+		return ms.reschedulePendingWorkflowTask()
 	}
 	return nil
 }
@@ -5068,6 +5206,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 func (ms *MutableStateImpl) updateVersioningOverride(
 	override *workflowpb.VersioningOverride,
 ) (bool, error) {
+	previousEffectiveDeployment := ms.GetEffectiveDeployment()
+	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	var requestReschedulePendingWorkflowTask bool
 
 	if override != nil {
@@ -5131,8 +5271,6 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		ms.GetExecutionInfo().WorkerDeploymentName = ""
 	}
 
-	previousEffectiveDeployment := ms.GetEffectiveDeployment()
-	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
@@ -5328,6 +5466,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
+		ctx,
 		parentInfo,
 		&newExecution,
 		ms,
@@ -6174,6 +6313,22 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 		return nil
 	}
 
+	// Process CHASM callbacks if CHASM is enabled. Note that we check ChasmEnabled() rather than
+	// chasmCallbacksEnabled() to ensure that callbacks created when both HSM and CHASM callbacks
+	// were enabled can still be triggered even if the EnableCHASMCallbacks dynamic config is later
+	// turned off. Once created in CHASM, callbacks should always be processed as long as CHASM is enabled.
+	if ms.ChasmEnabled() {
+		if err := ms.processCloseCallbacksChasm(); err != nil {
+			return err
+		}
+	}
+
+	// Always process HSM callbacks as well (a workflow can have both)
+	return ms.processCloseCallbacksHsm()
+}
+
+// processCloseCallbacksHsm triggers "WorkflowClosed" callbacks using the HSM implementation.
+func (ms *MutableStateImpl) processCloseCallbacksHsm() error {
 	coll := callbacks.MachineCollection(ms.HSM())
 	for _, node := range coll.List() {
 		cb, err := coll.Data(node.Key.ID)
@@ -6194,8 +6349,15 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 	return nil
 }
 
-// TODO mutable state should generate corresponding transfer / timer tasks according to
-//  updates accumulated, while currently all transfer / timer tasks are managed manually
+// processCloseCallbacksChasm triggers "WorkflowClosed" callbacks using the CHASM implementation.
+func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+
+	return wf.ProcessCloseCallbacks(ctx)
+}
 
 func (ms *MutableStateImpl) AddTasks(
 	newTasks ...tasks.Task,
@@ -8518,7 +8680,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// - reschedule the pending WFT so the old one is invalided
 	ms.ClearStickyTaskQueue()
 
-	err := ms.reschedulePendingWorkflowTask(false)
+	err := ms.reschedulePendingWorkflowTask()
 	if err != nil {
 		return err
 	}
@@ -8554,8 +8716,17 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 			// activity already started
 			continue
 		}
+
+		// need to update stamp so the passive side regenerate the task
+		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
+			info.Stamp++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
-		err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
 		if err != nil {
 			return err
 		}
@@ -8566,7 +8737,7 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 
 // reschedulePendingWorkflowTask reschedules the pending WFT if it is not started yet.
 // The currently scheduled WFT will be rejected when attempting to start because its stamp changed.
-func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks bool) error {
+func (ms *MutableStateImpl) reschedulePendingWorkflowTask() error {
 	// If the WFT is started but not finished, we let it run its course
 	// - once it's completed, failed or timed out a new one will be scheduled.
 	if !ms.HasPendingWorkflowTask() || ms.HasStartedWorkflowTask() {
@@ -8581,15 +8752,13 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks
 		ms.logInfo("start transition did not reschedule pending speculative task")
 		return nil
 	}
+	// Reset the attempt; forcing a non-transient workflow task to be scheduled.
+	ms.executionInfo.WorkflowTaskAttempt = 1
 
-	if invalidatePendingTasks {
-		// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
-		// We don't invalidate speculative WFTs because they are very latency sensitive.
-		ms.executionInfo.WorkflowTaskStamp += 1
-
-		// Reset the attempt; forcing a non-transient workflow task to be scheduled.
-		ms.executionInfo.Attempt = 1
-	}
+	// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
+	// We don't invalidate speculative WFTs because they are very latency sensitive.
+	ms.executionInfo.WorkflowTaskStamp += 1
+	ms.workflowTaskUpdated = true
 
 	return ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(pendingTask.ScheduledEventID)
 }
