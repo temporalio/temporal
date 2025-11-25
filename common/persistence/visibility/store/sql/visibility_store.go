@@ -73,7 +73,7 @@ func (s *VisibilityStore) GetName() string {
 	return s.sqlStore.GetName()
 }
 
-func convertSQLError(operation string, err error) error {
+func convertSQLError(message string, err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("%s: %w", operation, err)
 	}
