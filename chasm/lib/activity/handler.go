@@ -93,6 +93,9 @@ func (h *handler) PollActivityExecution(
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
 			_, changed, err := chasm.ExecutionStateChanged(a, ctx, token)
 			if err != nil {
+				if errors.Is(err, chasm.ErrInvalidComponentRefBytes) {
+					return nil, false, serviceerror.NewInvalidArgument("invalid long poll token")
+				}
 				return nil, false, err
 			}
 			if changed {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -278,21 +277,18 @@ func (e *ChasmEngine) PollComponent(
 
 	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
 	if err != nil {
-		// E.g. requestRef VT inconsistent with shard VT ('stale reference')
+		// E.g. requestRef VT inconsistent with execution VT ('stale reference')
 		return nil, err
 	}
-
-	// hold lock until return or subscription established
-	// TODO(dan): this will probably be called when its already been release; ok?
 	defer executionLease.GetReleaseFn()(nil)
 
-	// At this point it's possible that shard VT < requestRef VT (getExecutionLease does not
-	// guarantee that returned shard state is non-stale w.r.t. requestRef).
-	satisfiedRef, err := e.predicateSatisfied(ctx, requestRef, executionLease, monotonicPredicate)
+	// At this point it's possible that execution VT < requestRef VT (getExecutionLease does not
+	// guarantee that returned execution state is non-stale w.r.t. requestRef).
+	satisfiedRef, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
 	if err != nil {
 		return nil, err
 	}
-	// shard VT >= requestRef VT (enforced by checkPredicate)
+	// execution VT >= requestRef VT (enforced by checkPredicate)
 
 	if satisfiedRef != nil {
 		// wait condition was satisfied
@@ -308,35 +304,22 @@ func (e *ChasmEngine) PollComponent(
 		return nil, err
 	}
 
-	if parentDeadline, ok := ctx.Deadline(); ok {
-		fmt.Println("⏰ parent timeout:", time.Until(parentDeadline))
-	} else {
-		fmt.Println("⏰ parent has no timeout")
-	}
-
 	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
 	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
 	defer cancel()
 
-	fmt.Println("⏰ after applying timeout:", internalLongPollTimeout)
-	if childDeadline, ok := ctx.Deadline(); ok {
-		fmt.Println("⏰ child timeout:", time.Until(childDeadline))
-	} else {
-		fmt.Println("⏰ child has no timeout")
-	}
-
-	// For now, PollComponent subscribes to execution-level notifications. Suppose that an
-	// execution consists of one component A, and A has subcomponent B. Subscribers interested
-	// only in component B may be woken up unnecessarily due to changes in parts of A that do
-	// not also belong to B, but they will not miss notifications.
+	// PollComponent subscribes to execution-level notifications. Suppose that an execution consists
+	// of one component A, and A has subcomponent B. Subscribers interested only in component B may
+	// be woken up unnecessarily (and thus evaluate the predicate unnecessarily) due to changes in
+	// parts of A that do not also belong to B.
 	ch := e.notifier.Subscribe(requestRef.EntityKey)
 	executionLease.GetReleaseFn()(nil)
 
 	for {
 		select {
 		// It is possible that multiple state transitions (multiple notifications) occur between
-		// predicate checks. Therefore the predicate must be monotonic: if it returns true at
-		// execution state transition s it must return true at all transitions t > s.
+		// predicate checks, therefore the predicate must be monotonic: if it returns true at
+		// execution state transition s then it must return true at all transitions t > s.
 		case <-ch:
 			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 			if err != nil {
@@ -344,7 +327,7 @@ func (e *ChasmEngine) PollComponent(
 			}
 			func() {
 				defer executionLease.GetReleaseFn()(nil)
-				satisfiedRef, err = e.predicateSatisfied(ctx, requestRef, executionLease, monotonicPredicate)
+				satisfiedRef, err = e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
 				if err == nil && satisfiedRef == nil {
 					ch = e.notifier.Subscribe(requestRef.EntityKey)
 				}
@@ -362,15 +345,13 @@ func (e *ChasmEngine) PollComponent(
 }
 
 // predicateSatisfied is a helper function for PollComponent. It returns (ref, err) where ref is non-nil
-// iff there's no error and predicateFn evaluates to true.
+// iff there's no error and predicate evaluates to true.
 func (e *ChasmEngine) predicateSatisfied(
 	ctx context.Context,
+	predicate func(chasm.Context, chasm.Component) (bool, error),
 	ref chasm.ComponentRef,
 	executionLease api.WorkflowLease,
-	predicateFn func(chasm.Context, chasm.Component) (bool, error),
 ) ([]byte, error) {
-	fmt.Println("🔎 checkPredicate")
-
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
 	if !ok {
 		return nil, serviceerror.NewInternalf(
@@ -380,9 +361,9 @@ func (e *ChasmEngine) predicateSatisfied(
 		)
 	}
 
-	// It is not acceptable to declare the predicate to be satisfied against shard state that is
+	// It is not acceptable to declare the predicate to be satisfied against execution state that is
 	// behind the requested reference. However, getExecutionLease does not currently guarantee that
-	// shard VT >= ref VT, therefore we call IsStale() again here and return any error (which at
+	// execution VT >= ref VT, therefore we call IsStale() again here and return any error (which at
 	// this point must be ErrStaleState; ErrStaleReference has already been eliminated).
 	err := chasmTree.IsStale(ref)
 	if err != nil {
@@ -390,29 +371,21 @@ func (e *ChasmEngine) predicateSatisfied(
 		// TODO(dan): this should be retryable if it is the failover version that is stale
 		return nil, err
 	}
-	// We know now that shard VT >= ref VT
+	// We know now that execution VT >= ref VT
 
 	chasmContext := chasm.NewContext(ctx, chasmTree)
-
 	component, err := chasmTree.Component(chasmContext, ref)
 	if err != nil {
 		return nil, err
 	}
-	satisfied, err := predicateFn(chasmContext, component)
+	satisfied, err := predicate(chasmContext, component)
 	if err != nil {
 		return nil, err
 	}
 	if !satisfied {
-		fmt.Println("    🟠 checkPredicate: predicate not satisfied")
 		return nil, nil
 	}
-
-	newRef, err := chasmContext.Ref(component)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("    🟢 checkPredicate: predicate satisfied")
-	return newRef, nil
+	return chasmContext.Ref(component)
 }
 
 func (e *ChasmEngine) constructTransitionOptions(

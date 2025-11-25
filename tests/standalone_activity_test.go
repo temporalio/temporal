@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -197,13 +196,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.NotNil(t, pollResp)
 	require.NotNil(t, pollResp.GetInfo())
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
-	// failure := pollResp.GetInfo().GetLastFailure()
-	// require.NotNil(t, failure)
-	// timeoutFailure := failure.GetTimeoutFailureInfo()
-	// require.NotNil(t, timeoutFailure)
-	// require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutFailure.GetTimeoutType())
-	// require.Nil(t, pollResp.GetOutcome())
-	// require.Nil(t, pollResp.GetFailure())
 }
 
 func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout() {
@@ -451,11 +443,14 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_DeadlineExceede
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 	t := s.T()
 	ctx := testcore.NewContext()
-	activityID := "test-activity-" + t.Name()
-	taskQueue := "test-task-queue-" + t.Name()
-	startResp, err := s.startActivity(ctx, activityID, taskQueue)
+
+	existingActivityID := testcore.RandomizeStr(t.Name())
+	tq := testcore.RandomizeStr(t.Name())
+	startResp, err := s.startActivity(ctx, existingActivityID, tq)
 	require.NoError(t, err)
-	require.NotEmpty(t, startResp.RunId)
+	existingRunID := startResp.RunId
+	require.NotEmpty(t, existingRunID)
+	existingNamespace := s.Namespace().String()
 
 	testCases := []struct {
 		name        string
@@ -466,25 +461,25 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 			name: "NonExistentNamespace",
 			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  "non-existent-namespace",
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
+				ActivityId: existingActivityID,
+				RunId:      existingRunID,
 			},
 			expectedErr: "Namespace non-existent-namespace is not found.",
 		},
 		{
 			name: "NonExistentActivityID",
 			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
+				Namespace:  existingNamespace,
 				ActivityId: "non-existent-activity",
-				RunId:      startResp.RunId,
+				RunId:      existingRunID,
 			},
 			expectedErr: "execution not found",
 		},
 		{
 			name: "NonExistentRunID",
 			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
+				Namespace:  existingNamespace,
+				ActivityId: existingActivityID,
 				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
 			expectedErr: "execution not found",
@@ -505,9 +500,9 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 	t.Run("LongPollNonExistentActivity", func(t *testing.T) {
 		// Poll to get a token
 		validPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
+			Namespace:  existingNamespace,
+			ActivityId: existingActivityID,
+			RunId:      existingRunID,
 			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
 				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
 					LongPollToken: nil,
@@ -518,9 +513,9 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 
 		// Use the token with a non-existent activity
 		_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
+			Namespace:  existingNamespace,
 			ActivityId: "non-existent-activity",
-			RunId:      startResp.RunId,
+			RunId:      existingRunID,
 			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
 				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
 					LongPollToken: validPollResp.StateChangeLongPollToken,
@@ -535,30 +530,21 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArguments() {
+func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument() {
+
 	t := s.T()
 	ctx := testcore.NewContext()
 
-	// Start a valid activity first to have something to poll
-	activityID := "test-activity-" + t.Name()
-	taskQueue := "test-task-queue-" + t.Name()
-	startResp, err := s.startActivity(ctx, activityID, taskQueue)
+	existingActivityID := testcore.RandomizeStr(t.Name())
+	tq := testcore.RandomizeStr(t.Name())
+	startResp, err := s.startActivity(ctx, existingActivityID, tq)
 	require.NoError(t, err)
-	require.NotEmpty(t, startResp.RunId)
+	existingRunID := startResp.RunId
+	require.NotEmpty(t, existingRunID)
+	existingNamespace := s.Namespace().String()
 
-	// Get a valid long-poll token for testing malformed token scenarios
-	validPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      startResp.RunId,
-		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-				LongPollToken: nil, // First poll
-			},
-		},
-	})
-	require.NoError(t, err)
-	validToken := validPollResp.StateChangeLongPollToken
+	validActivityID := "activity-id"
+	validRunID := "11111111-2222-3333-4444-555555555555"
 
 	testCases := []struct {
 		name        string
@@ -566,180 +552,108 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument
 		expectedErr string
 	}{
 		{
-			name: "InvalidNamespace",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  "invalid-namespace-!@#$%", // Invalid characters
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
-			},
-			// Note: This returns NotFound because the namespace registry doesn't validate characters,
-			// it just tries to look it up and doesn't find it. This is acceptable.
-			expectedErr: "",
-		},
-		{
 			name: "EmptyNamespace",
 			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  "",
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
+				ActivityId: validActivityID,
+				RunId:      validRunID,
 			},
-			expectedErr: "namespace is empty",
+			expectedErr: "Namespace is empty",
 		},
 		{
 			name: "EmptyActivityID",
 			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: "", // Empty activity ID
-				RunId:      startResp.RunId,
+				Namespace:  existingNamespace,
+				ActivityId: "",
+				RunId:      validRunID,
 			},
-			expectedErr: "activity id is required",
+			expectedErr: "activity ID is required",
 		},
 		{
 			name: "ActivityIDTooLong",
 			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: string(make([]byte, 2000)), // Way too long (limit is typically 1000)
-				RunId:      startResp.RunId,
+				Namespace:  existingNamespace,
+				ActivityId: string(make([]byte, 2000)),
+				RunId:      validRunID,
 			},
-			expectedErr: "activity id exceeds length limit",
+			expectedErr: "activity ID exceeds length limit",
 		},
 		{
 			name: "InvalidRunID",
 			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      "not-a-uuid", // Invalid UUID format
+				Namespace:  existingNamespace,
+				ActivityId: validActivityID,
+				RunId:      "invalid-uuid",
 			},
 			expectedErr: "invalid run id",
 		},
 		{
-			name: "EmptyRunID",
+			name: "RunIdNotRequiredWhenWaitPolicyAbsent",
 			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      "", // Empty run ID when polling specific execution
+				Namespace:  existingNamespace,
+				ActivityId: existingActivityID,
+				RunId:      "",
+			},
+			expectedErr: "",
+		},
+		{
+			name: "RunIdNotRequiredWhenLongPollTokenAbsent",
+			request: &workflowservice.PollActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: existingActivityID,
+				RunId:      "",
+				WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+					WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+						LongPollToken: nil,
+					},
+				},
+			},
+			expectedErr: "",
+		},
+		{
+			name: "RunIdRequiredWhenLongPollTokenPresent",
+			request: &workflowservice.PollActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: validActivityID,
+				RunId:      "",
+				WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+					WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+						LongPollToken: []byte("valid-token"),
+					},
+				},
 			},
 			expectedErr: "run id is required",
 		},
 		{
 			name: "MalformedLongPollToken",
 			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
+				Namespace:  existingNamespace,
+				ActivityId: existingActivityID,
+				RunId:      existingRunID,
 				WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
 					WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-						LongPollToken: []byte("not-a-valid-protobuf-token"), // Invalid protobuf
+						LongPollToken: []byte("invalid-token"),
 					},
 				},
 			},
 			expectedErr: "invalid long poll token",
-		},
-		{
-			name: "TruncatedLongPollToken",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
-				WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-					WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-						LongPollToken: validToken[:len(validToken)/2], // Truncated token
-					},
-				},
-			},
-			expectedErr: "invalid long poll token",
-		},
-		{
-			name: "InvalidWaitPolicyType",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
-				WaitPolicy: nil, // This would need a custom invalid type in real implementation
-			},
-			// Note: This test case might need adjustment based on how proto validation works
-			// In practice, protobuf oneof fields prevent truly invalid types
-			expectedErr: "",
-		},
-		{
-			name: "ActivityIDWithInvalidCharacters",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: "activity\x00with\nnull\tand\rspecial", // Contains null and control characters
-				RunId:      startResp.RunId,
-			},
-			expectedErr: "activity id contains invalid characters",
-		},
-		{
-			name: "NonExistentNamespace",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  "non-existent-but-valid-namespace",
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
-			},
-			// This should return NOT_FOUND, not INVALID_ARGUMENT, so we skip it here
-			expectedErr: "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
 			if tc.expectedErr == "" {
-				t.Skip("Test case not applicable or would return different error type")
+				require.NoError(t, err)
 				return
 			}
-
-			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
-			require.Error(t, err, "Expected error for test case: %s", tc.name)
-
-			// Check that it's an invalid argument error
-			// The actual implementation may not have all these validations yet,
-			// so these assertions will likely fail and show what needs to be implemented
+			require.Error(t, err)
 			statusErr := serviceerror.ToStatus(err)
-			require.NotNil(t, statusErr, "Expected error to be convertible to status for test case: %s", tc.name)
-			require.Equal(t, codes.InvalidArgument, statusErr.Code(),
-				"Expected InvalidArgument error code for test case: %s, got: %v with message: %s",
-				tc.name, statusErr.Code(), statusErr.Message())
-
-			// Check that the error message contains expected text
-			// This is a loose check since exact messages may vary
-			if tc.expectedErr != "" {
-				require.Contains(t, strings.ToLower(statusErr.Message()), strings.ToLower(tc.expectedErr),
-					"Expected error message to contain '%s' for test case: %s, got: %s",
-					tc.expectedErr, tc.name, statusErr.Message())
-			}
+			require.NotNil(t, statusErr)
+			require.Equal(t, codes.InvalidArgument, statusErr.Code())
+			require.Contains(t, statusErr.Message(), tc.expectedErr)
 		})
 	}
-
-	// Additional test: Verify that combining multiple invalid fields returns appropriate error
-	t.Run("MultipleInvalidFields", func(t *testing.T) {
-		_, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-			Namespace:  "",                 // Invalid: empty
-			ActivityId: "",                 // Invalid: empty
-			RunId:      "not-a-valid-uuid", // Invalid: not UUID
-			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-					LongPollToken: []byte("garbage"), // Invalid: malformed
-				},
-			},
-		})
-		require.Error(t, err)
-
-		statusErr := serviceerror.ToStatus(err)
-		require.NotNil(t, statusErr, "Expected error to be convertible to status")
-		require.Equal(t, codes.InvalidArgument, statusErr.Code(),
-			"Expected InvalidArgument error code, got: %v with message: %s",
-			statusErr.Code(), statusErr.Message())
-
-		// The error should mention at least one of the invalid fields
-		errMsg := strings.ToLower(statusErr.Message())
-		hasRelevantError := strings.Contains(errMsg, "namespace") ||
-			strings.Contains(errMsg, "activity") ||
-			strings.Contains(errMsg, "run") ||
-			strings.Contains(errMsg, "token")
-		require.True(t, hasRelevantError,
-			"Expected error message to mention at least one invalid field, got: %s", statusErr.Message())
-	})
 }
 
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(

@@ -8,7 +8,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -274,62 +273,24 @@ func ValidatePollActivityExecutionRequest(
 	req *workflowservice.PollActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
-	// Namespace validation is handled by namespace registry
-	// Here we check for empty to provide a better error message
-	if req.GetNamespace() == "" {
-		return serviceerror.NewInvalidArgument("namespace is required")
-	}
-
-	// Validate namespace format (no control characters, special chars)
-	for _, ch := range req.GetNamespace() {
-		if ch < 32 || ch == 127 { // Control characters
-			return serviceerror.NewInvalidArgument("invalid namespace: contains control characters")
-		}
-		// Check for invalid special characters often not allowed in namespace names
-		if ch == '!' || ch == '@' || ch == '#' || ch == '$' || ch == '%' {
-			return serviceerror.NewInvalidArgument("invalid namespace: contains invalid special characters")
-		}
-	}
-
-	// Validate activity ID
 	if req.GetActivityId() == "" {
-		return serviceerror.NewInvalidArgument("activity id is required")
+		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
-
 	if len(req.GetActivityId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("activity id exceeds length limit. Length=%d Limit=%d",
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
+	hasRunID := req.GetRunId() != ""
+	hasLongPollToken := len(req.GetWaitAnyStateChange().GetLongPollToken()) > 0
 
-	// Check for control characters in activity ID
-	for _, ch := range req.GetActivityId() {
-		if ch < 32 || ch == 127 { // Control characters including null, newline, tab, etc.
-			return serviceerror.NewInvalidArgument("activity id contains invalid characters")
+	if hasLongPollToken && !hasRunID {
+		return serviceerror.NewInvalidArgument("run id is required when long poll token is provided")
+	}
+	if hasRunID {
+		_, err := uuid.Parse(req.GetRunId())
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
 		}
 	}
-
-	// Validate run ID
-	if req.GetRunId() == "" {
-		return serviceerror.NewInvalidArgument("run id is required")
-	}
-
-	// Validate run ID is a valid UUID
-	if _, err := uuid.Parse(req.GetRunId()); err != nil {
-		return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
-	}
-
-	// Validate long-poll token if provided
-	if req.GetWaitAnyStateChange() != nil {
-		token := req.GetWaitAnyStateChange().GetLongPollToken()
-		if len(token) > 0 {
-			// The long poll token should be a serialized ChasmComponentRef
-			var componentRef persistencespb.ChasmComponentRef
-			err := componentRef.Unmarshal(token)
-			if err != nil {
-				return serviceerror.NewInvalidArgument("invalid long poll token: malformed or corrupted")
-			}
-		}
-	}
-
 	return nil
 }

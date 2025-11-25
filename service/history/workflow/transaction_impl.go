@@ -193,28 +193,23 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 
-		if persistence.OperationPossiblySucceeded(err) {
-			NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
-			NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+		// Notify for current workflow if it has CHASM updates
+		if len(currentWorkflowMutation.UpsertChasmNodes) > 0 ||
+			len(currentWorkflowMutation.DeleteChasmNodes) > 0 {
+			engine.NotifyChasmExecution(chasm.EntityKey{
+				NamespaceID: currentWorkflowMutation.ExecutionInfo.NamespaceId,
+				BusinessID:  currentWorkflowMutation.ExecutionInfo.WorkflowId,
+				EntityID:    currentWorkflowMutation.ExecutionState.RunId,
+			}, nil)
+		}
 
-			// Notify for current workflow if it has CHASM updates
-			if len(currentWorkflowMutation.UpsertChasmNodes) > 0 ||
-				len(currentWorkflowMutation.DeleteChasmNodes) > 0 {
-				engine.NotifyChasmExecution(chasm.EntityKey{
-					NamespaceID: currentWorkflowMutation.ExecutionInfo.NamespaceId,
-					BusinessID:  currentWorkflowMutation.ExecutionInfo.WorkflowId,
-					EntityID:    currentWorkflowMutation.ExecutionState.RunId,
-				}, nil)
-			}
-
-			// Notify for new workflow if it has CHASM nodes
-			if newWorkflowSnapshot != nil && len(newWorkflowSnapshot.ChasmNodes) > 0 {
-				engine.NotifyChasmExecution(chasm.EntityKey{
-					NamespaceID: newWorkflowSnapshot.ExecutionInfo.NamespaceId,
-					BusinessID:  newWorkflowSnapshot.ExecutionInfo.WorkflowId,
-					EntityID:    newWorkflowSnapshot.ExecutionState.RunId,
-				}, nil)
-			}
+		// Notify for new workflow if it has CHASM nodes
+		if newWorkflowSnapshot != nil && len(newWorkflowSnapshot.ChasmNodes) > 0 {
+			engine.NotifyChasmExecution(chasm.EntityKey{
+				NamespaceID: newWorkflowSnapshot.ExecutionInfo.NamespaceId,
+				BusinessID:  newWorkflowSnapshot.ExecutionInfo.WorkflowId,
+				EntityID:    newWorkflowSnapshot.ExecutionState.RunId,
+			}, nil)
 		}
 	}
 	if err != nil {

@@ -6,19 +6,21 @@ import (
 	"go.temporal.io/server/service/history/consts"
 )
 
+// ErrInvalidComponentRefBytes is returned when the provided component ref cannot be deserialized.
+var ErrInvalidComponentRefBytes = serviceerror.NewInternal("invalid component ref bytes")
+
 // ExecutionStateChanged returns a ref for the component if execution state has advanced beyond the state
-// encoded in ref.
+// encoded in refBytes.
 func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) ([]byte, bool, error) {
+	ref, err := DeserializeComponentRef(refBytes)
+	if err != nil {
+		return nil, false, ErrInvalidComponentRefBytes
+	}
 	currentRefBytes, err := ctx.Ref(c)
 	if err != nil {
 		return nil, false, err
 	}
 	currentRef, err := DeserializeComponentRef(currentRefBytes)
-	if err != nil {
-		return nil, false, err
-	}
-
-	ref, err := DeserializeComponentRef(refBytes)
 	if err != nil {
 		return nil, false, err
 	}
