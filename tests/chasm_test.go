@@ -338,5 +338,3 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 }
 
 // TODO: More tests here...
-
-// TODO: add a test to make sure workflow can run successfully when chasm is enabled.
