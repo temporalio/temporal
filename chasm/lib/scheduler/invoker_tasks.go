@@ -16,13 +16,15 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
+	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -35,6 +37,7 @@ type (
 		Config         *Config
 		MetricsHandler metrics.Handler
 		BaseLogger     log.Logger
+		SpecProcessor  SpecProcessor
 
 		HistoryClient resource.HistoryClient
 
@@ -87,7 +90,7 @@ const (
 )
 
 var (
-	errRetryLimitExceeded       = errors.New("retry limit exceeded")
+	errRetryLimitExceeded       = queueerrors.NewUnprocessableTaskError("retry limit exceeded")
 	_                     error = &rateLimitedError{}
 )
 
@@ -160,7 +163,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 			lastCompletionState = common.CloneProto(lcs)
 
 			// Set up the completion callback to handle workflow results.
-			cb, err := chasmnexus.GetCallback(ctx, s)
+			cb, err := chasm.GenerateNexusCallback(ctx, s)
 			if err != nil {
 				return struct{}{}, err
 			}
@@ -193,13 +196,13 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		invokerRef,
-		func(i *Invoker, ctx chasm.MutableContext, _ any) (struct{}, error) {
+		func(i *Invoker, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			s := i.Scheduler.Get(ctx)
 
 			i.recordExecuteResult(ctx, &result)
 			s.recordActionResult(&schedulerActionResult{starts: startResults})
 
-			return struct{}{}, nil
+			return nil, nil
 		},
 		nil,
 	)
@@ -383,7 +386,7 @@ func (e *InvokerProcessBufferTaskExecutor) Execute(
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
 	if executionInfo == nil {
-		return serviceerror.NewInvalidArgument("schedules must have an Action set")
+		return queueerrors.NewUnprocessableTaskError("schedules must have an Action set")
 	}
 
 	// Compute actions to take from the current buffer.
@@ -513,6 +516,26 @@ func (e *InvokerProcessBufferTaskExecutor) startWorkflowDeadline(
 	return start.ActualTime.AsTime().Add(timeout)
 }
 
+// startWorkflowSearchAttributes returns the search attributes to be applied to
+// workflows kicked off. Includes custom search attributes and Temporal-managed.
+func startWorkflowSearchAttributes(
+	scheduler *Scheduler,
+	nominal time.Time,
+) *commonpb.SearchAttributes {
+	attributes := scheduler.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
+
+	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
+	if p, err := payload.Encode(nominal); err == nil {
+		fields[sadefs.TemporalScheduledStartTime] = p
+	}
+	if p, err := payload.Encode(scheduler.ScheduleId); err == nil {
+		fields[sadefs.TemporalScheduledById] = p
+	}
+	return &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
+}
+
 func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	ctx context.Context,
 	scheduler *Scheduler,
@@ -542,7 +565,6 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
-	// TODO - set search attributes
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		CompletionCallbacks:      []*commonpb.Callback{callback},
 		Header:                   requestSpec.Header,
@@ -552,7 +574,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		Namespace:                scheduler.Namespace,
 		RequestId:                start.RequestId,
 		RetryPolicy:              requestSpec.RetryPolicy,
-		SearchAttributes:         nil,
+		SearchAttributes:         startWorkflowSearchAttributes(scheduler, start.NominalTime.AsTime()),
 		TaskQueue:                requestSpec.TaskQueue,
 		UserMetadata:             requestSpec.UserMetadata,
 		WorkflowExecutionTimeout: requestSpec.WorkflowExecutionTimeout,
@@ -561,6 +583,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		WorkflowRunTimeout:       requestSpec.WorkflowRunTimeout,
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
+		Priority:                 requestSpec.Priority,
 	}
 
 	// Set last completion result payload.

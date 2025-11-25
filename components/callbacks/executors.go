@@ -6,20 +6,20 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/chasm"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/queues"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
-type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
+type HTTPCallerProvider func(queuescommon.NamespaceIDAndDestination) HTTPCaller
 
 func RegisterExecutor(
 	registry *hsm.Registry,
@@ -142,7 +142,7 @@ func (e taskExecutor) loadInvocationArgs(
 
 		variant := callback.GetCallback().GetNexus()
 		if variant == nil {
-			return queues.NewUnprocessableTaskError(
+			return queueserrors.NewUnprocessableTaskError(
 				fmt.Sprintf("unprocessable callback variant: %v", variant),
 			)
 		}
@@ -158,7 +158,7 @@ func (e taskExecutor) loadInvocationArgs(
 
 		// CHASM internal callbacks make use of Nexus as their callback delivery
 		// mechanism, but with the internal delivery URL.
-		if variant.Url == chasmnexus.CompletionHandlerURL {
+		if variant.Url == chasm.NexusCompletionHandlerURL {
 			invokable = chasmInvocation{
 				nexus:      variant,
 				attempt:    callback.Attempt,
@@ -204,7 +204,7 @@ func (e taskExecutor) saveResult(
 					Err:  result.error(),
 				})
 			default:
-				return hsm.TransitionOutput{}, queues.NewUnprocessableTaskError(fmt.Sprintf("unrecognized callback result %v", result))
+				return hsm.TransitionOutput{}, queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unrecognized callback result %v", result))
 			}
 		})
 	})
