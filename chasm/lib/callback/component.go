@@ -8,15 +8,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/timestamppb"
-)
-
-const (
-	Archetype chasm.Archetype = "Callback"
 )
 
 type CompletionSource interface {
@@ -90,7 +85,7 @@ func (c *Callback) loadInvocationArgs(
 		)
 	}
 
-	if variant.Url == chasmnexus.CompletionHandlerURL {
+	if variant.Url == chasm.NexusCompletionHandlerURL {
 		return chasmInvocation{
 			nexus:      variant,
 			attempt:    c.Attempt,

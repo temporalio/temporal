@@ -17,7 +17,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -485,9 +485,9 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			)
 			historyClient := tc.setupHistoryClient(t, ctrl)
 
-			headers := make(map[string]string)
+			headers := nexus.Header{}
 			if tc.headerValue != "" {
-				headers[commonnexus.CallbackTokenHeader] = tc.headerValue
+				headers.Set(commonnexus.CallbackTokenHeader, tc.headerValue)
 			}
 
 			// Create mutable state with the test completion
@@ -507,7 +507,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					Callback: &persistencespb.Callback{
 						Variant: &persistencespb.Callback_Nexus_{
 							Nexus: &persistencespb.Callback_Nexus{
-								Url:    chasmnexus.CompletionHandlerURL,
+								Url:    chasm.NexusCompletionHandlerURL,
 								Header: headers,
 							},
 						},
@@ -554,8 +554,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			)
 
 			if tc.expectsInternalError {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "internal error, reference-id:")
+				require.ErrorContains(t, err, "internal error, reference-id:")
 			} else {
 				require.NoError(t, err)
 			}
