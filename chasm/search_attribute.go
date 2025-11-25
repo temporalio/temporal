@@ -3,7 +3,6 @@ package chasm
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -92,7 +91,6 @@ type (
 	typedSearchAttribute[T any] interface {
 		SearchAttribute
 		typeMarker(T)
-		markedVisibilityType() reflect.Type
 	}
 
 	searchAttributeDefinition struct {
@@ -225,10 +223,6 @@ func (s SearchAttributeBool) Value(value bool) SearchAttributeKeyValue {
 
 func (s SearchAttributeBool) typeMarker(_ bool) {}
 
-func (s SearchAttributeBool) markedVisibilityType() reflect.Type {
-	return reflect.TypeFor[VisibilityValueBool]()
-}
-
 // SearchAttributeDateTime is a search attribute for a datetime value.
 type SearchAttributeDateTime struct {
 	searchAttributeDefinition
@@ -265,10 +259,6 @@ func (s SearchAttributeDateTime) Value(value time.Time) SearchAttributeKeyValue 
 }
 
 func (s SearchAttributeDateTime) typeMarker(_ time.Time) {}
-
-func (s SearchAttributeDateTime) markedVisibilityType() reflect.Type {
-	return reflect.TypeFor[VisibilityValueTime]()
-}
 
 // SearchAttributeInt is a search attribute for an integer value.
 type SearchAttributeInt struct {
@@ -307,10 +297,6 @@ func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 
 func (s SearchAttributeInt) typeMarker(_ int64) {}
 
-func (s SearchAttributeInt) markedVisibilityType() reflect.Type {
-	return reflect.TypeFor[VisibilityValueInt64]()
-}
-
 // SearchAttributeDouble is a search attribute for a double value.
 type SearchAttributeDouble struct {
 	searchAttributeDefinition
@@ -347,10 +333,6 @@ func (s SearchAttributeDouble) Value(value float64) SearchAttributeKeyValue {
 }
 
 func (s SearchAttributeDouble) typeMarker(_ float64) {}
-
-func (s SearchAttributeDouble) markedVisibilityType() reflect.Type {
-	return reflect.TypeFor[VisibilityValueFloat64]()
-}
 
 // SearchAttributeKeyword is a search attribute for a keyword value.
 type SearchAttributeKeyword struct {
@@ -389,10 +371,6 @@ func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 
 func (s SearchAttributeKeyword) typeMarker(_ string) {}
 
-func (s SearchAttributeKeyword) markedVisibilityType() reflect.Type {
-	return reflect.TypeFor[VisibilityValueString]()
-}
-
 // SearchAttributeKeywordList is a search attribute for a keyword list value.
 type SearchAttributeKeywordList struct {
 	searchAttributeDefinition
@@ -430,10 +408,6 @@ func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValu
 
 func (s SearchAttributeKeywordList) typeMarker(_ []string) {}
 
-func (s SearchAttributeKeywordList) markedVisibilityType() reflect.Type {
-	return reflect.TypeFor[VisibilityValueStringSlice]()
-}
-
 // SearchAttributesMap wraps search attribute values with type-safe access.
 type SearchAttributesMap struct {
 	values map[string]VisibilityValue
@@ -446,10 +420,8 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 
 // GetSearchAttributeValue returns the value for a given SearchAttribute with compile-time type safety.
 // The return type T is inferred from the SearchAttribute's type parameter.
-// For example, SearchAttriteBool will return a bool value.
-// If the value is not found, the zero value for the type T is returned and the second return value is false.
-// Before casting the VisibilityValue to the target type, the value is checked to ensure it is of the correct type.
-// If the value is found but the type does not match, the zero value for the type T is returned and the second return value is false.
+// For example, SearchAttributeBool will return a bool value.
+// If the value is not found or the type does not match, the zero value for the type T is returned and the second return value is false.
 func GetSearchAttributeValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
 	var zero T
 	if len(m.values) == 0 {
@@ -462,23 +434,11 @@ func GetSearchAttributeValue[T any](m SearchAttributesMap, sa typedSearchAttribu
 		return zero, false
 	}
 
-	if reflect.TypeOf(visibilityValue) != sa.markedVisibilityType() {
-		return zero, false
-	}
-
-	reflectVal := reflect.ValueOf(visibilityValue)
-	targetType := reflect.TypeFor[T]()
-
-	if !reflectVal.Type().ConvertibleTo(targetType) {
-		return zero, false
-	}
-
-	result, ok := reflectVal.Convert(targetType).Interface().(T)
+	finalVal, ok := visibilityValue.(T)
 	if !ok {
 		return zero, false
 	}
-
-	return result, true
+	return finalVal, true
 }
 
 // convertToVisibilityValue converts a value to VisibilityValue based on its runtime type.

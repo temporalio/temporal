@@ -388,7 +388,8 @@ func ListExecutions[C Component, M proto.Message](
 		if !ok {
 			return nil, serviceerror.NewInternalf("failed to cast chasm memo to type %s", reflect.TypeFor[M]().String())
 		}
-		if err := proto.Unmarshal(execution.ChasmMemo.Data, chasmMemo); err == nil {
+		err := proto.Unmarshal(execution.ChasmMemo.Data, chasmMemo)
+		if err == nil {
 			executions[i] = &ExecutionInfo[M]{
 				BusinessID:             execution.BusinessID,
 				RunID:                  execution.RunID,
@@ -402,6 +403,8 @@ func ListExecutions[C Component, M proto.Message](
 				Memo:                   execution.Memo,
 				ChasmMemo:              chasmMemo,
 			}
+		} else {
+			return nil, serviceerror.NewInternalf("failed to unmarshal chasm memo: %v", err)
 		}
 	}
 

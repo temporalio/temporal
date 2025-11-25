@@ -88,7 +88,7 @@ func (v *VisibilitySearchAttributesMapper) ValueType(fieldName string) (enumspb.
 	}
 	typ, ok := v.saTypeMap[fieldName]
 	if !ok {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %q", fieldName))
+		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, serviceerror.NewInvalidArgumentf("visibility search attributes mapper has no registered field %q", fieldName)
 	}
 	return typ, nil
 }

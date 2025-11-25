@@ -162,19 +162,8 @@ func (p *visibilityManagerImpl) ListChasmExecutions(
 		var userMemo *commonpb.Memo
 		var chasmMemoPayload *commonpb.Payload
 
-		// Check if archetype exists to decide how to split memo, assume any number indicates an archetype id.
-		archetypeExists := false
-		if archetypePayload, ok := exec.SearchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
-			var archetypeIDStr string
-			if err := payload.Decode(archetypePayload, &archetypeIDStr); err == nil {
-				if _, err := strconv.Atoi(archetypeIDStr); err == nil {
-					archetypeExists = true
-				}
-			}
-		}
-
-		if archetypeExists && combinedMemo != nil {
-			// Archetype matches - split memo into user and chasm parts
+		if isChasmExecution(exec.SearchAttributes) && combinedMemo != nil {
+			// Archetype exists - split memo into user and chasm parts
 			userPayload := combinedMemo.Fields[chasm.UserMemoKey]
 			if err := payload.Decode(userPayload, &userMemo); err != nil {
 				p.logger.Error("failed to decode user memo", tag.Error(err))
@@ -423,4 +412,16 @@ func serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
 		Data:         data,
 		EncodingType: MemoEncoding,
 	}, nil
+}
+
+func isChasmExecution(searchAttributes *commonpb.SearchAttributes) bool {
+	if archetypePayload, ok := searchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
+		var archetypeIDStr string
+		if err := payload.Decode(archetypePayload, &archetypeIDStr); err == nil {
+			if _, err := strconv.Atoi(archetypeIDStr); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }

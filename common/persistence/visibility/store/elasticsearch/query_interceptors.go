@@ -2,6 +2,7 @@ package elasticsearch
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"time"
 
@@ -98,16 +99,14 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 	var fieldType enumspb.IndexedValueType
 	var err error
 
-	if sadefs.IsChasmSearchAttribute(fieldName) {
-		fieldType, err = vi.chasmMapper.ValueType(fieldName)
-		if err != nil {
-			return nil, query.NewConverterError("invalid search attribute: %s", name)
-		}
-	} else {
-		fieldType, err = vi.searchAttributesTypeMap.GetType(fieldName)
-		if err != nil {
-			return nil, query.NewConverterError("invalid search attribute: %s", name)
-		}
+	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
+	maps.Copy(combinedTypeMap, vi.searchAttributesTypeMap.Custom())
+	maps.Copy(combinedTypeMap, vi.chasmMapper.SATypeMap())
+	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+
+	fieldType, err = finalTypeMap.GetType(fieldName)
+	if err != nil {
+		return nil, query.NewConverterError("invalid search attribute: %s", name)
 	}
 
 	var result []interface{}

@@ -801,7 +801,7 @@ func (s *VisibilityStore) convertQueryLegacy(
 	// "must not exist" (i.e. "is null") query for it.
 	if !nameInterceptor.seenNamespaceDivision {
 		if archetypeID != chasm.UnspecifiedArchetypeID {
-			namespaceFilterQuery.Must(elastic.NewTermQuery(sadefs.TemporalNamespaceDivision, strconv.Itoa(int(archetypeID))))
+			namespaceFilterQuery.Filter(elastic.NewTermQuery(sadefs.TemporalNamespaceDivision, strconv.Itoa(int(archetypeID))))
 		} else {
 			namespaceFilterQuery.MustNot(elastic.NewExistsQuery(sadefs.TemporalNamespaceDivision))
 		}
