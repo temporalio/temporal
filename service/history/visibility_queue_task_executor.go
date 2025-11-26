@@ -410,9 +410,9 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	for alias, value := range aliasedSearchAttributes {
 		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
-			// INFO: To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
-			// or the upserted search attribute is incorrectly mapped, indicating possible bug in application code.
-			t.logger.Error("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
+			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
+			// or there are delays in propagating search attribute mappings to History.
+			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
 			continue
 		}
 		searchattributes[fieldName] = value
