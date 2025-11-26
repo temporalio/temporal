@@ -223,6 +223,8 @@ func (s SearchAttributeBool) Value(value bool) SearchAttributeKeyValue {
 
 func (s SearchAttributeBool) typeMarker(_ bool) {}
 
+func (s SearchAttributeBool) visibilityValueMarker(v VisibilityValueBool) {}
+
 // SearchAttributeDateTime is a search attribute for a datetime value.
 type SearchAttributeDateTime struct {
 	searchAttributeDefinition
@@ -259,6 +261,8 @@ func (s SearchAttributeDateTime) Value(value time.Time) SearchAttributeKeyValue 
 }
 
 func (s SearchAttributeDateTime) typeMarker(_ time.Time) {}
+
+func (s SearchAttributeDateTime) visibilityValueMarker(v VisibilityValueTime) {}
 
 // SearchAttributeInt is a search attribute for an integer value.
 type SearchAttributeInt struct {
@@ -297,6 +301,8 @@ func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 
 func (s SearchAttributeInt) typeMarker(_ int64) {}
 
+func (s SearchAttributeInt) visibilityValueMarker(v VisibilityValueInt64) {}
+
 // SearchAttributeDouble is a search attribute for a double value.
 type SearchAttributeDouble struct {
 	searchAttributeDefinition
@@ -333,6 +339,8 @@ func (s SearchAttributeDouble) Value(value float64) SearchAttributeKeyValue {
 }
 
 func (s SearchAttributeDouble) typeMarker(_ float64) {}
+
+func (s SearchAttributeDouble) visibilityValueMarker(v VisibilityValueFloat64) {}
 
 // SearchAttributeKeyword is a search attribute for a keyword value.
 type SearchAttributeKeyword struct {
@@ -371,6 +379,8 @@ func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 
 func (s SearchAttributeKeyword) typeMarker(_ string) {}
 
+func (s SearchAttributeKeyword) visibilityValueMarker(v VisibilityValueString) {}
+
 // SearchAttributeKeywordList is a search attribute for a keyword list value.
 type SearchAttributeKeywordList struct {
 	searchAttributeDefinition
@@ -408,6 +418,8 @@ func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValu
 
 func (s SearchAttributeKeywordList) typeMarker(_ []string) {}
 
+func (s SearchAttributeKeywordList) visibilityValueMarker(v VisibilityValueStringSlice) {}
+
 // SearchAttributesMap wraps search attribute values with type-safe access.
 type SearchAttributesMap struct {
 	values map[string]VisibilityValue
@@ -434,7 +446,7 @@ func GetValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, 
 		return zero, false
 	}
 
-	finalVal, ok := visibilityValue.(T)
+	finalVal, ok := visibilityValue.Value().(T)
 	if !ok {
 		return zero, false
 	}
