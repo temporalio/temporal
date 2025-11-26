@@ -5259,7 +5259,6 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-// New interface for deployment options
 type buildAndVersioningMode interface {
 	GetBuildId() string
 	GetWorkerVersioningMode() enumspb.WorkerVersioningMode
