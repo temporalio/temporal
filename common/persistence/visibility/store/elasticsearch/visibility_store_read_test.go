@@ -863,14 +863,15 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 	s.NoError(err)
 	s.NotNil(info)
 
+	// Visibility store returns DB column names (not aliased). Aliasing is done at visibility manager layer.
 	s.Len(info.SearchAttributes.GetIndexedFields(), 7)
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalChangeVersion")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomKeywordField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomTextField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomDatetimeField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomDoubleField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomBoolField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomIntField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomKeywordField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomTextField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomDatetimeField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomDoubleField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomBoolField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomIntField")
 	s.NotContains(info.SearchAttributes.GetIndexedFields(), "UnknownField")
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
 }
@@ -2219,11 +2220,12 @@ func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes_NoMapper() {
 	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
 	s.NoError(err)
 	s.NotNil(info)
-	// Search attributes are now combined in encoded form
-	s.NotNil(info.SearchAttributes)
-	// Verify CHASM search attributes are present
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalBool01")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalKeyword01")
+	// Without a chasmMapper, CHASM attributes (TemporalBool01, TemporalKeyword01) are not registered
+	// in the type map, so they are ignored as unknown fields. Only system fields are parsed.
+	// Search attributes should be nil or empty since there are no custom search attributes in this doc.
+	if info.SearchAttributes != nil {
+		s.Empty(info.SearchAttributes.GetIndexedFields())
+	}
 }
 
 func (s *ESVisibilitySuite) TestNameInterceptor_ChasmMapper() {
