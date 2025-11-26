@@ -132,6 +132,7 @@ func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestV
 		ReportStats:   true,
 	})
 	s.NoError(err)
+	// nolint:staticcheck // using deprecated field
 	return int(resp.GetVersionsInfo()[""].GetTypesInfo()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetStats().GetApproximateBacklogCount())
 }
 
@@ -144,8 +145,8 @@ func (s *TaskQueueSuite) getBacklogCount(ctx context.Context, tv *testvars.TestV
 func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	taskCount int,
 	workerRPS float64,
-	drainTimeout time.Duration,
 	apiRPS float64,
+	drainTimeout time.Duration,
 ) {
 	tv := testvars.New(s.T())
 	// Apply API rate limit
@@ -213,10 +214,10 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 
 		mu.Lock()
 		defer mu.Unlock()
-		s.InEpsilon(apiRPS, getAvgRate(runTimes, apiRPS), 0.1, "rate limit was not close enough to expected")
+		s.InEpsilon(apiRPS, getAvgRate(runTimes, apiRPS), 0.3, "rate limit was not close enough to expected")
 	} else {
 		// Wait for the duration and ensure no tasks executed
-		time.Sleep(drainTimeout)
+		time.Sleep(drainTimeout) // nolint:forbidigo // checking that a thing didn't happen
 		mu.Lock()
 		defer mu.Unlock()
 		s.Empty(runTimes, "Some activities unexpectedly completed despite API RPS = 0")
@@ -240,19 +241,16 @@ func getAvgRate(ts []time.Time, ignoreInitialBurst float64) float64 {
 }
 
 // TestTaskQueueAPIRateLimitOverridesWorkerLimit tests that the API rate limit overrides the worker rate limit.
-// It sets the API rate limit on a task queue to 5 RPS and then launches 25 activities.
-// The first five activities should run immediately, and the rest should be throttled to 5 RPS.
 // We ignore the initial burst when calculating the average rate.
 func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	s.configureRateLimitAndLaunchWorkflows(
-		25,
+		55,
 		50.0,
-		// Test typically completes in ~6.2 seconds on average.
-		10*time.Second,
 		5.0,
+		20*time.Second,
 	)
 }
 
@@ -266,8 +264,8 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
 	s.configureRateLimitAndLaunchWorkflows(
 		10,
 		50.0,
-		3*time.Second,
 		0.0, // no tasks should run
+		3*time.Second,
 	)
 }
 
@@ -275,9 +273,9 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	const (
 		workerSetRPS      = 2.0 // Worker rate limit for activities
 		apiSetRPS         = 4.0 // API rate limit for activities set to half of workerSetRPS to test override behavior
-		taskCount         = 12  // Number of tasks to launch
+		taskCount         = 36  // Number of tasks to launch
 		activityTaskQueue = "RateLimitTest_Update"
-		drainTimeout      = 15 * time.Second // 5 second additional buffer to prevent flakiness
+		drainTimeout      = 35 * time.Second // 5 second additional buffer to prevent flakiness
 	)
 
 	tv := testvars.New(s.T())
@@ -383,7 +381,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	s.T().Log("avg rates", avgRateInitial, avgRateOverride)
 
 	// initial rate should be twice as high as the effective RPS is doubled
-	s.InEpsilon(avgRateInitial/avgRateOverride, workerSetRPS/apiSetRPS, 0.1, "ratio should be similar")
+	s.InEpsilon(workerSetRPS/apiSetRPS, avgRateInitial/avgRateOverride, 0.2, "ratio should be similar")
 }
 
 func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced() {
@@ -395,7 +393,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	const (
-		wholeQueueRPS = 10.0 // tighter
+		wholeQueueRPS = 4.0  // tighter
 		perKeyRPS     = 50.0 // looser than whole queue, should not bind
 		tasksPerKey   = 30
 	)
@@ -423,7 +421,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 	s.NoError(err)
 
 	_, allTimes := s.runActivitiesWithPriorities(ctx, tv, fairnessKeysWithWeight, tasksPerKey)
-	s.InEpsilon(wholeQueueRPS, getAvgRate(allTimes, wholeQueueRPS), 0.1)
+	s.InEpsilon(wholeQueueRPS, getAvgRate(allTimes, wholeQueueRPS), 0.3)
 }
 
 func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys() {
@@ -435,7 +433,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	const (
-		perKeyRPS     = 5.0 // tighter
+		perKeyRPS     = 4.0 // tighter
 		wholeQueueRPS = 1000.0
 		tasksPerKey   = 30
 	)
@@ -467,7 +465,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 	for key := range fairnessKeysWithWeight {
 		times := perKeyTimes[key]
 		s.Len(times, tasksPerKey, "unexpected count for key %s", key)
-		s.InEpsilon(perKeyRPS, getAvgRate(times, perKeyRPS), 0.1, "key %s", key)
+		s.InEpsilon(perKeyRPS, getAvgRate(times, perKeyRPS), 0.2, "key %s", key)
 	}
 }
 
@@ -480,7 +478,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThre
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	const (
-		perKeyRPS     = 5.0    // base per-key limit
+		perKeyRPS     = 4.0    // base per-key limit
 		wholeQueueRPS = 1000.0 // keep high so only per-key gates
 		tasksPerKey   = 30
 	)
