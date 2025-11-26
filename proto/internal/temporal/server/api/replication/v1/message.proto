@@ -258,8 +258,10 @@ message VersionedTransitionArtifact {
 }
 
 message MigrationExecutionInfo {
-    // Should be called business_id, but to maintain backward compatibility
-    // with old type definition used in migration workflows.
+    // The proto json name of this field needs to be "workflowId",
+    // to be backward compatibility with commonpb.WorkflowExecution,
+    // which is what used to be used in migration workflow's activity
+    // input/output.
     string business_id = 1 [json_name = "workflowId"];
     string run_id = 2;
     // (-- api-linter: core::0141::forbidden-types=disabled --)

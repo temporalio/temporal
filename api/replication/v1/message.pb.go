@@ -2048,8 +2048,10 @@ func (*VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes) isVersio
 
 type MigrationExecutionInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Should be called business_id, but to maintain backward compatibility
-	// with old type definition used in migration workflows.
+	// The proto json name of this field needs to be "workflowId",
+	// to be backward compatibility with commonpb.WorkflowExecution,
+	// which is what used to be used in migration workflow's activity
+	// input/output.
 	BusinessId string `protobuf:"bytes,1,opt,name=business_id,json=workflowId,proto3" json:"business_id,omitempty"`
 	RunId      string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// (-- api-linter: core::0141::forbidden-types=disabled --)
