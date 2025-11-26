@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -124,7 +124,7 @@ func (s *transactionMgrSuite) TestUpdateWorkflow() {
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open() {
 	ctx := context.Background()
 	releaseCalled := false
-	runID := uuid.New()
+	runID := uuid.NewString()
 
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := historyi.NewMockWorkflowContext(s.controller)

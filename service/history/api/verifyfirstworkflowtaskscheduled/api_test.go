@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -134,7 +134,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	_, err := ms.AddTimeoutWorkflowEvent(
 		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.New(),
+		uuid.NewString(),
 	)
 	s.NoError(err)
 
@@ -232,7 +232,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		wt.ScheduledEventID,
 		tests.RunID,
 		&taskqueuepb.TaskQueue{Name: "testTaskQueue"},
-		uuid.New(),
+		uuid.NewString(),
 		nil,
 		nil,
 		nil,

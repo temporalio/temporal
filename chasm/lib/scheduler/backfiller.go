@@ -3,7 +3,7 @@ package scheduler
 import (
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -33,7 +33,7 @@ func newBackfiller(
 	ctx chasm.MutableContext,
 	scheduler *Scheduler,
 ) *Backfiller {
-	id := uuid.New()
+	id := uuid.NewString()
 	backfiller := &Backfiller{
 		BackfillerState: &schedulerpb.BackfillerState{
 			BackfillId:        id,

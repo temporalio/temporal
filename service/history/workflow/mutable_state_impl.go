@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -2447,7 +2447,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.New(),
+		RequestId:                uuid.NewString(),
 		Namespace:                ms.namespaceEntry.Name().String(),
 		WorkflowId:               execution.WorkflowId,
 		TaskQueue:                tq,
@@ -5392,7 +5392,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	var err error
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      newRunID,

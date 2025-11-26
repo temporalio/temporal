@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -431,7 +431,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
-		RequestId:    uuid.New(),
+		RequestId:    uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
 			{
 				Variant: &commonpb.Callback_Nexus_{

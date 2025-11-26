@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -287,7 +287,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
 	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
 		clusterInfo.ShardCount = clusterConfig.HistoryConfig.NumHistoryShards
-		clusterInfo.ClusterID = uuid.New()
+		clusterInfo.ClusterID = uuid.NewString()
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: &persistencespb.ClusterMetadata{

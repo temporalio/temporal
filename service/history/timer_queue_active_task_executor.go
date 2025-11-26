@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -672,7 +672,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 
 	var newRunID string
 	if initiator != enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
-		newRunID = uuid.New()
+		newRunID = uuid.NewString()
 	}
 
 	// First add timeout workflow event, no matter what we're doing next.

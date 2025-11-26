@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -143,7 +143,7 @@ func (s *contextSuite) TestMergeReplicationTasks_SingleReplicationTask() {
 		},
 	}
 
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -209,7 +209,7 @@ func (s *contextSuite) TestMergeReplicationTasks_SyncVersionedTransitionTask_Sho
 		},
 	}
 
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -273,7 +273,7 @@ func (s *contextSuite) TestMergeReplicationTasks_MultipleReplicationTasks() {
 		},
 	}
 
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,

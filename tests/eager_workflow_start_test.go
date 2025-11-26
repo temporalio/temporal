@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -61,7 +61,7 @@ func (s *EagerWorkflowTestSuite) startEagerWorkflow(baseOptions *workflowservice
 		options.TaskQueue = s.defaultTaskQueue()
 	}
 	if options.RequestId == "" {
-		options.RequestId = uuid.New()
+		options.RequestId = uuid.NewString()
 	}
 
 	response, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), options)
@@ -173,7 +173,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout()
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
 		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 	}
 	response := s.startEagerWorkflow(request)
 	task := response.GetEagerWorkflowTask()
@@ -193,7 +193,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout()
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartImmediately() {
-	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.New()}
+	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.NewString()}
 	response := s.startEagerWorkflow(request)
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
@@ -230,7 +230,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
 	// Add a search attribute to verify that per namespace search attribute mapping is properly applied in the
 	// response.
 	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{
-		RequestId: uuid.New(),
+		RequestId: uuid.NewString(),
 		SearchAttributes: &commonpb.SearchAttributes{
 			IndexedFields: map[string]*commonpb.Payload{
 				"CustomKeywordField": {

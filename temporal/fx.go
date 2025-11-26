@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -712,11 +712,11 @@ func initCurrentClusterMetadataRecord(
 	var clusterId string
 	currentClusterName := svc.ClusterMetadata.CurrentClusterName
 	currentClusterInfo := svc.ClusterMetadata.ClusterInformation[currentClusterName]
-	if uuid.Parse(currentClusterInfo.ClusterID) == nil {
+	if uuid.Validate(currentClusterInfo.ClusterID) != nil {
 		if currentClusterInfo.ClusterID != "" {
 			logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id")
 		}
-		clusterId = uuid.New()
+		clusterId = uuid.NewString()
 	} else {
 		clusterId = currentClusterInfo.ClusterID
 	}

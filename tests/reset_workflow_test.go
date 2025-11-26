@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -53,7 +53,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -176,7 +176,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 		},
 		Reason:                    "reset execution from test",
 		WorkflowTaskFinishEventId: lastWorkflowTask.GetEventId(),
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -241,7 +241,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 	tv.WorkerIdentity()
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.New(),
+		RequestId:                uuid.NewString(),
 		Namespace:                s.Namespace().String(),
 		WorkflowId:               tv.WorkflowID(),
 		WorkflowType:             tv.WorkflowType(),
@@ -312,7 +312,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 			RunId:      we.RunId,
 		},
 		Reason:                    "reset execution from test",
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 		WorkflowTaskFinishEventId: 3,
 	})
 	s.NoError(err)
@@ -415,7 +415,7 @@ type resetTest struct {
 //nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
 func (t *resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
 	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 		Namespace:         t.Namespace().String(),
 		WorkflowExecution: t.tv.WorkflowExecution(),
 		SignalName:        t.tv.HandlerName(),
@@ -518,7 +518,7 @@ func (t *resetTest) reset(eventId int64) string {
 		WorkflowExecution:         t.tv.WorkflowExecution(),
 		Reason:                    "reset execution from test",
 		WorkflowTaskFinishEventId: eventId,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 		ResetReapplyType:          t.reapplyType,
 		ResetReapplyExcludeTypes:  t.reapplyExcludeTypes,
 	})
@@ -852,7 +852,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowRangeScheduleToStart(
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
@@ -932,7 +932,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowRangeScheduleToStart(
 		},
 		Reason:                    "reset execution from test",
 		WorkflowTaskFinishEventId: resetToEventID,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -986,7 +986,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         wfExec,
 		WorkflowTaskFinishEventId: lastWorkflowTask.GetEventId(),
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 }
