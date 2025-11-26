@@ -6,7 +6,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -136,14 +135,9 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(
 		return nil, serviceerror.NewInternal("page token is corrupted.")
 	}
 
-	hostIDEqualsBytes, err := request.HostIDEquals.MarshalBinary()
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("unable to marshal HostIDEquals: %v", err)
-	}
-
 	now := time.Now().UTC()
 	filter := &sqlplugin.ClusterMembershipFilter{
-		HostIDEquals:        hostIDEqualsBytes,
+		HostIDEquals:        request.HostIDEquals,
 		RoleEquals:          request.RoleEquals,
 		RecordExpiryAfter:   now,
 		SessionStartedAfter: request.SessionStartedAfter,
@@ -170,13 +164,8 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(
 
 	convertedRows := make([]*p.ClusterMember, 0, len(rows))
 	for _, row := range rows {
-		hostIDUuid, err := uuid.ParseBytes(row.HostID)
-		if err != nil {
-			return nil, serviceerror.NewInternalf("unable to parse HostID: %v", err)
-		}
-
 		convertedRows = append(convertedRows, &p.ClusterMember{
-			HostID:        hostIDUuid,
+			HostID:        row.HostID,
 			Role:          row.Role,
 			RPCAddress:    net.ParseIP(row.RPCAddress),
 			RPCPort:       row.RPCPort,
@@ -201,14 +190,9 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(
 ) error {
 	now := time.Now().UTC()
 	recordExpiry := now.Add(request.RecordExpiry)
-	hostIDBytes, err := request.HostID.MarshalBinary()
-	if err != nil {
-		return serviceerror.NewInvalidArgumentf("unable to marshal HostID: %v", err)
-	}
-
-	_, err = s.DB.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
+	_, err := s.DB.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
 		Role:          request.Role,
-		HostID:        hostIDBytes,
+		HostID:        request.HostID,
 		RPCAddress:    request.RPCAddress.String(),
 		RPCPort:       request.RPCPort,
 		SessionStart:  request.SessionStart,

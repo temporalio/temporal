@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -995,7 +994,7 @@ type (
 	GetClusterMembersRequest struct {
 		LastHeartbeatWithin time.Duration
 		RPCAddressEquals    net.IP
-		HostIDEquals        uuid.UUID
+		HostIDEquals        []byte
 		RoleEquals          ServiceType
 		SessionStartedAfter time.Time
 		NextPageToken       []byte
@@ -1011,7 +1010,7 @@ type (
 	// ClusterMember is used as a response to GetClusterMembers
 	ClusterMember struct {
 		Role          ServiceType
-		HostID        uuid.UUID
+		HostID        []byte
 		RPCAddress    net.IP
 		RPCPort       uint16
 		SessionStart  time.Time
@@ -1022,7 +1021,7 @@ type (
 	// UpsertClusterMembershipRequest is the request to UpsertClusterMembership
 	UpsertClusterMembershipRequest struct {
 		Role         ServiceType
-		HostID       uuid.UUID
+		HostID       []byte
 		RPCAddress   net.IP
 		RPCPort      uint16
 		SessionStart time.Time

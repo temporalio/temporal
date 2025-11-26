@@ -1134,11 +1134,15 @@ func (adh *AdminHandler) ListClusterMembers(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
 	}
+	hostIDEqualBytes, err := hostIDEqual.MarshalBinary()
+	if err != nil {
+		return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
 		LastHeartbeatWithin: heartbit,
 		RPCAddressEquals:    net.ParseIP(request.GetRpcAddress()),
-		HostIDEquals:        hostIDEqual,
+		HostIDEquals:        hostIDEqualBytes,
 		RoleEquals:          persistence.ServiceType(request.GetRole()),
 		SessionStartedAfter: startedTime,
 		PageSize:            int(request.GetPageSize()),
@@ -1150,9 +1154,13 @@ func (adh *AdminHandler) ListClusterMembers(
 
 	var activeMembers []*clusterspb.ClusterMember
 	for _, member := range resp.ActiveMembers {
+		u, err := uuid.FromBytes(member.HostID)
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to parse host ID bytes to UUID: %v", err)
+		}
 		activeMembers = append(activeMembers, &clusterspb.ClusterMember{
 			Role:             enumsspb.ClusterMemberRole(member.Role),
-			HostId:           member.HostID.String(),
+			HostId:           u.String(),
 			RpcAddress:       member.RPCAddress.String(),
 			RpcPort:          int32(member.RPCPort),
 			SessionStartTime: timestamppb.New(member.SessionStart),
