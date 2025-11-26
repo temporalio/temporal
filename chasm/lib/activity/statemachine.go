@@ -155,6 +155,7 @@ var TransitionStarted = chasm.NewTransition(
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) error {
@@ -197,6 +198,7 @@ var TransitionCompleted = chasm.NewTransition(
 var TransitionFailed = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
@@ -237,6 +239,7 @@ var TransitionTerminated = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) error {
@@ -280,11 +283,75 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 )
 
+// TransitionCancelRequested affects a transition to CancelRequested status
+var TransitionCancelRequested = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, // Allow idempotent transition
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+	func(a *Activity, ctx chasm.MutableContext, req *activitypb.CancelActivityExecutionRequest) error {
+		frontendReq := req.GetFrontendRequest()
+
+		a.CancelState = &activitypb.ActivityCancelState{
+			Identity:    frontendReq.GetIdentity(),
+			RequestId:   req.GetFrontendRequest().GetRequestId(),
+			Reason:      frontendReq.GetReason(),
+			RequestTime: timestamppb.New(ctx.Now(a)),
+		}
+
+		return nil
+	},
+)
+
+// TransitionCanceled affects a transition to Canceled status
+var TransitionCanceled = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskCanceledRequest) error {
+		store, err := a.Store.Get(ctx)
+		if err != nil {
+			return err
+		}
+
+		if store == nil {
+			store = a
+		}
+
+		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			outcome, err := a.Outcome.Get(ctx)
+			if err != nil {
+				return err
+			}
+
+			failure := &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+						Details: req.GetCancelRequest().GetDetails(),
+					},
+				},
+			}
+
+			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
+				Failed: &activitypb.ActivityOutcome_Failed{
+					Failure: failure,
+				},
+			}
+
+			return nil
+		})
+	},
+)
+
 // TransitionTimedOut affects a transition to TimedOut status
 var TransitionTimedOut = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {

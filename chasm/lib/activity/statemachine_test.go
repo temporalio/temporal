@@ -455,3 +455,73 @@ func TestTransitionTerminated(t *testing.T) {
 	}
 	protorequire.ProtoEqual(t, expectedFailure, outcome.GetFailed().GetFailure())
 }
+
+func TestTransitionCancelRequested(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		Attempt: chasm.NewDataField(ctx, attemptState),
+	}
+
+	err := TransitionCancelRequested.Apply(activity, ctx, &activitypb.CancelActivityExecutionRequest{
+		FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
+			RequestId: "cancel-request",
+			Reason:    "Test Cancel Requested",
+			Identity:  "worker",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, activity.Status)
+
+	cancelState := activity.CancelState
+
+	require.Equal(t, "cancel-request", cancelState.GetRequestId())
+	require.Equal(t, "worker", cancelState.GetIdentity())
+	require.Equal(t, "Test Cancel Requested", cancelState.GetReason())
+	require.NotNil(t, cancelState.GetRequestTime())
+}
+
+func TestTransitionCanceled(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	outcome := &activitypb.ActivityOutcome{}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		},
+		Attempt: chasm.NewDataField(ctx, attemptState),
+		Outcome: chasm.NewDataField(ctx, outcome),
+	}
+
+	err := TransitionCanceled.Apply(activity, ctx, &historyservice.RespondActivityTaskCanceledRequest{
+		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
+			Details: payloads.EncodeString("Details"),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
+
+	expectedFailure := &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+			CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+				Details: payloads.EncodeString("Details"),
+			},
+		},
+	}
+	protorequire.ProtoEqual(t, expectedFailure, outcome.GetFailed().GetFailure())
+}

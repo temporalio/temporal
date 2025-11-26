@@ -132,6 +132,33 @@ func (h *frontendHandler) TerminateActivityExecution(
 	return &workflowservice.TerminateActivityExecutionResponse{}, nil
 }
 
+func (h *frontendHandler) RequestCancelActivityExecution(
+	ctx context.Context,
+	req *workflowservice.RequestCancelActivityExecutionRequest,
+) (*workflowservice.RequestCancelActivityExecutionResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
+	req = common.CloneProto(req)
+	err = validateAndNormalizeRequestID(&req.RequestId, dynamicconfig.MaxIDLengthLimit.Get(h.dc)())
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.CancelActivityExecution(ctx, &activitypb.CancelActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.RequestCancelActivityExecutionResponse{}, nil
+}
+
 func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,

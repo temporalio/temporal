@@ -180,7 +180,7 @@ func ValidateStandaloneActivity(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
-	if err := validateRequestID(requestID, maxIDLengthLimit); err != nil {
+	if err := validateAndNormalizeRequestID(requestID, maxIDLengthLimit); err != nil {
 		return err
 	}
 
@@ -208,7 +208,7 @@ func ValidateStandaloneActivity(
 	return nil
 }
 
-func validateRequestID(requestID *string, maxIDLengthLimit int) error {
+func validateAndNormalizeRequestID(requestID *string, maxIDLengthLimit int) error {
 	if *requestID == "" {
 		// For easy direct API use, we default the request ID here but expect all SDKs and other auto-retrying clients to set it
 		*requestID = uuid.New().String()

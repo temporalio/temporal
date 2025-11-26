@@ -259,6 +259,25 @@ func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.Re
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
 
+// HandleCanceled updates the activity on activity canceled.
+func (a *Activity) HandleCanceled(ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCanceledRequest) (
+	*historyservice.RespondActivityTaskCanceledResponse, error) {
+	if err := TransitionCanceled.Apply(a, ctx, request); err != nil {
+		return nil, err
+	}
+
+	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
+}
+
+func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) (
+	*activitypb.TerminateActivityExecutionResponse, error) {
+	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
+		return nil, err
+	}
+
+	return &activitypb.TerminateActivityExecutionResponse{}, nil
+}
+
 // getLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
 // to avoid unnecessary writes when heartbeats are not used.
 func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.ActivityHeartbeatState, error) {
@@ -275,13 +294,26 @@ func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.Activ
 	return heartbeat, nil
 }
 
-func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) (
-	*activitypb.TerminateActivityExecutionResponse, error) {
-	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
+func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *activitypb.CancelActivityExecutionRequest) (
+	*activitypb.CancelActivityExecutionResponse, error) {
+	newReqID := req.GetFrontendRequest().GetRequestId()
+	existingReqID := a.GetCancelState().GetRequestId()
+
+	// If already in cancel requested state, fail if request ID is different, else no-op
+	if a.ActivityState.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		if existingReqID != newReqID {
+			return nil, serviceerror.NewFailedPrecondition(
+				fmt.Sprintf("cancellation already requested with request ID %s", existingReqID))
+		}
+
+		return &activitypb.CancelActivityExecutionResponse{}, nil
+	}
+
+	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
 
-	return &activitypb.TerminateActivityExecutionResponse{}, nil
+	return &activitypb.CancelActivityExecutionResponse{}, nil
 }
 
 func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Failure) (bool, time.Duration, error) {
@@ -370,6 +402,10 @@ func (a *Activity) recordFailedAttempt(
 }
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration, error) {
+	if !TransitionRescheduled.Possible(a) {
+		return false, 0, nil
+	}
+
 	attempt, err := a.Attempt.Get(ctx)
 	if err != nil {
 		return false, 0, err
@@ -484,6 +520,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		ActivityId:              key.BusinessID,
 		ActivityType:            a.GetActivityType(),
 		Attempt:                 attempt.GetCount(),
+		CanceledReason:          a.CancelState.GetReason(),
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
