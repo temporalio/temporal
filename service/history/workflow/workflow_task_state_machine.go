@@ -94,6 +94,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 		Type:                  workflowTaskType,
 		SuggestContinueAsNew:  false, // reset, will be recomputed on workflow task started
 		HistorySizeBytes:      0,     // reset, will be recomputed on workflow task started
+		Stamp:                 0,     // This code should only be called for new events so stamp should be 0.
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
@@ -151,6 +152,8 @@ func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*histo
 		Type:                 enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		SuggestContinueAsNew: false, // reset, will be recomputed on workflow task started
 		HistorySizeBytes:     0,     // reset, will be recomputed on workflow task started
+		// TODO (Yichao): double check if setting to zero is safe. Current thinking is that this code will only be triggered for a new wft.
+		Stamp: 0,
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
@@ -207,6 +210,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		SuggestContinueAsNew:   suggestContinueAsNew,
 		HistorySizeBytes:       historySizeBytes,
 		BuildIdRedirectCounter: redirectCounter,
+		Stamp:                  workflowTask.Stamp,
 	}
 
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
@@ -589,6 +593,7 @@ func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 		// TODO: maybe add a separate field in MS for flagging transient WFT instead of relying on attempt so that we
 		// can put total attempt count (across all build IDs) here?
 		newWorkflowTask.Attempt = 1
+		newWorkflowTask.Stamp++
 		m.UpdateWorkflowTask(newWorkflowTask)
 		return newWorkflowTask, true, redirectCounter, nil
 	}
@@ -936,6 +941,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		HistorySizeBytes:      0,
 		// need to retain Build ID of failed WF task to compare it with the build ID of next attempt
 		BuildId: m.ms.executionInfo.WorkflowTaskBuildId,
+		Stamp:   0,
 	}
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
@@ -982,6 +988,7 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 		SuggestContinueAsNew:  false,
 		HistorySizeBytes:      0,
+		Stamp:                 0,
 	}
 	m.UpdateWorkflowTask(resetWorkflowTaskInfo)
 }
@@ -1013,6 +1020,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskRequestId = workflowTask.RequestID
 	m.ms.executionInfo.WorkflowTaskTimeout = durationpb.New(workflowTask.WorkflowTaskTimeout)
 	m.ms.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
+	m.ms.executionInfo.WorkflowTaskStamp = workflowTask.Stamp
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
 	}
