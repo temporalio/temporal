@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -37,8 +36,7 @@ var (
 
 type standaloneActivityTestSuite struct {
 	testcore.FunctionalTestBase
-	tv          *testvars.TestVars
-	chasmEngine chasm.Engine
+	tv *testvars.TestVars
 }
 
 func TestStandaloneActivityTestSuite(t *testing.T) {
@@ -53,10 +51,6 @@ func (s *standaloneActivityTestSuite) SetupSuite() {
 		dynamicconfig.EnableChasm,
 		true,
 	)
-	var err error
-	s.chasmEngine, err = s.FunctionalTestBase.GetTestCluster().Host().ChasmEngine()
-	s.Require().NoError(err)
-	s.Require().NotNil(s.chasmEngine)
 }
 
 func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
