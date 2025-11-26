@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -397,20 +396,19 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	searchattributesMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
-	searchAttributesMapper, err := searchattributesMapperProvider.GetMapper(namespaceEntry.Name())
+	customSaMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
+	customSaMapper, err := customSaMapperProvider.GetMapper(namespaceEntry.Name())
 	if err != nil {
 		return err
 	}
 
 	searchattributes := make(map[string]*commonpb.Payload)
 
-	aliasedSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
-	for alias, value := range aliasedSearchAttributes {
-		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
+	aliasedCustomSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
+	for alias, value := range aliasedCustomSearchAttributes {
+		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
-			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
-			continue
+			return err
 		}
 		searchattributes[fieldName] = value
 	}
@@ -419,9 +417,9 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	if err != nil {
 		return err
 	}
-	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
-		for _, sa := range saProvider.SearchAttributes(visTaskContext) {
-			searchattributes[sa.Field] = sa.Value.MustEncode()
+	if chasmSaProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
+		for _, chasmSa := range chasmSaProvider.SearchAttributes(visTaskContext) {
+			searchattributes[chasmSa.Field] = chasmSa.Value.MustEncode()
 		}
 	}
 
