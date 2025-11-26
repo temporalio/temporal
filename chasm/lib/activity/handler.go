@@ -67,6 +67,16 @@ func (h *handler) PollActivityExecution(
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		EntityID:    req.GetFrontendRequest().GetRunId(),
 	})
+	defer func() {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			// TODO(dan): include execution key in error message; we may do this at the CHASM
+			// framework level.
+			// cf. "workflow execution not found for workflow ID XXX and run ID YYY"
+			err = serviceerror.NewNotFound("activity execution not found")
+		}
+	}()
+
 	waitPolicy := req.GetFrontendRequest().GetWaitPolicy()
 
 	if waitPolicy == nil {

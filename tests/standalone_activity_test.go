@@ -473,7 +473,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				RunId:      existingRunID,
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "execution not found",
+			expectedErrMsg: "activity execution not found",
 		},
 		{
 			name: "NonExistentRunID",
@@ -483,7 +483,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "execution not found",
+			expectedErrMsg: "activity execution not found",
 		},
 	}
 
@@ -522,7 +522,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 		})
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, err, &notFoundErr)
-		require.Equal(t, "execution not found", notFoundErr.Message)
+		require.Equal(t, "activity execution not found", notFoundErr.Message)
 	})
 }
 
@@ -683,6 +683,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
 	})
+
+	// TODO(dan): add test for long poll token from non-existent execution
 }
 
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
