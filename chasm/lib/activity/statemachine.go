@@ -88,7 +88,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, // For retries the activity will be in started status
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-	func(a *Activity, ctx chasm.MutableContext, info rescheduleEvent) error {
+	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
 		attempt, err := a.Attempt.Get(ctx)
 		if err != nil {
 			return err
@@ -97,7 +97,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		currentTime := ctx.Now(a)
 		attempt.Count += 1
 
-		err = a.recordFailedAttempt(ctx, info.retryInterval, info.failure, false)
+		err = a.recordFailedAttempt(ctx, event.retryInterval, event.failure, false)
 		if err != nil {
 			return err
 		}
@@ -106,7 +106,7 @@ var TransitionRescheduled = chasm.NewTransition(
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout).Add(info.retryInterval),
+					ScheduledTime: currentTime.Add(timeout).Add(event.retryInterval),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Attempt: attempt.GetCount(),
@@ -116,7 +116,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
-				ScheduledTime: currentTime.Add(info.retryInterval),
+				ScheduledTime: currentTime.Add(event.retryInterval),
 			},
 			&activitypb.ActivityDispatchTask{
 				Attempt: attempt.GetCount(),
@@ -158,6 +158,7 @@ var TransitionCompleted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) error {
+		// TODO: after rebase on main, don't need error and add a helper store := a.LoadStore(ctx)
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err

@@ -106,28 +106,21 @@ func (h *handler) PollActivityExecution(
 			}
 		}, req)
 	case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
-		// TODO(dan): add functional test when RecordActivityTaskCompleted is implemented
 		response, _, err = chasm.PollComponent(childCtx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
-
-			switch a.Status {
-			case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-				activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-				activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-				activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-				activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED:
+			if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				if err != nil {
 					return nil, true, err
 				}
 
 				return response, true, nil
-			default:
-				return nil, false, nil
 			}
+
+			return nil, false, nil
 		}, req)
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("unexpected wait policy type: %T", waitPolicy)
