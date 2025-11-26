@@ -866,7 +866,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -985,6 +985,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	if err := wh.validateVersioningInfo(
 		request.Namespace,
 		request.WorkerVersionStamp,
+		request.DeploymentOptions,
 		request.StickyAttributes.GetWorkerTaskQueue(),
 	); err != nil {
 		return nil, err
@@ -1115,7 +1116,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -4908,7 +4909,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -5258,11 +5259,17 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+// New interface for deployment options
+type buildAndVersioningMode interface {
+	GetBuildId() string
+	GetWorkerVersioningMode() enumspb.WorkerVersioningMode
+}
+
+func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, buildAndVersioningMode buildAndVersioningMode, tq *taskqueuepb.TaskQueue) error {
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
 		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
-	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+	if (id.GetUseVersioning() || buildAndVersioningMode.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED) && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
 		return errUseVersioningWithoutNormalName
 	}
 	if id.GetUseVersioning() && len(id.GetBuildId()) == 0 {
