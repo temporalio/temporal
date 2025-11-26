@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -4106,4 +4107,28 @@ func (s *Versioning3Suite) TestActivityTQLags_IndependentActivityDispatchesToIts
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-// func (s *Versioning3Suite) TestRampChangeDoesNotTriggerTransition_WithRevisionNumberMechanics() {}
+func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// Simulate an old SDK polling a sticky task queue without providing normalName
+	stickyTaskQueueWithoutNormalName := &taskqueuepb.TaskQueue{
+		Name:       "sticky-" + uuid.New(),
+		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+		NormalName: "",
+	}
+
+	// Poll the sticky task queue
+	resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue:         stickyTaskQueueWithoutNormalName,
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		Namespace:         s.Namespace().String(),
+		Identity:          "test-worker",
+	})
+
+	// Expect an error because a versioned poller always requires a non-empty NormalName
+	s.Error(err)
+	s.NotNil(resp)
+}
