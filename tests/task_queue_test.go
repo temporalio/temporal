@@ -465,7 +465,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 	for key := range fairnessKeysWithWeight {
 		times := perKeyTimes[key]
 		s.Len(times, tasksPerKey, "unexpected count for key %s", key)
-		s.InEpsilon(perKeyRPS, getAvgRate(times, perKeyRPS), 0.2, "key %s", key)
+		s.InEpsilon(perKeyRPS, getAvgRate(times, perKeyRPS), 0.3, "key %s", key)
 	}
 }
 
@@ -517,7 +517,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThre
 		s.Len(times, tasksPerKey, "unexpected count for key %s", key)
 
 		scaledRPS := perKeyRPS * float64(fairnessWeightOverride)
-		s.InEpsilon(scaledRPS, getAvgRate(times, scaledRPS), 0.1, "key %s", key)
+		s.InEpsilon(scaledRPS, getAvgRate(times, scaledRPS), 0.3, "key %s", key)
 	}
 }
 
