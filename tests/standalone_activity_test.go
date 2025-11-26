@@ -654,6 +654,43 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument
 			require.Contains(t, statusErr.Message(), tc.expectedErr)
 		})
 	}
+
+	t.Run("LongPollTokenFromWrongExecution", func(t *testing.T) {
+
+		validPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: existingActivityID,
+			RunId:      existingRunID,
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					LongPollToken: nil,
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, validPollResp.StateChangeLongPollToken)
+
+		activityID2 := testcore.RandomizeStr(t.Name())
+		startResp2, err := s.startActivity(ctx, activityID2, tq)
+		require.NoError(t, err)
+		require.NotEmpty(t, startResp2.GetRunId())
+
+		_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: activityID2,
+			RunId:      startResp2.GetRunId(),
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					LongPollToken: validPollResp.StateChangeLongPollToken,
+				},
+			},
+		})
+		require.Error(t, err)
+		statusErr := serviceerror.ToStatus(err)
+		require.NotNil(t, statusErr)
+		require.Equal(t, codes.InvalidArgument, statusErr.Code())
+		require.Equal(t, "long poll token does not match execution", statusErr.Message())
+	})
 }
 
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
