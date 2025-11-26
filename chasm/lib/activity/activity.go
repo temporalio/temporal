@@ -300,7 +300,7 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *ac
 	existingReqID := a.GetCancelState().GetRequestId()
 
 	// If already in cancel requested state, fail if request ID is different, else no-op
-	if a.ActivityState.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		if existingReqID != newReqID {
 			return nil, serviceerror.NewFailedPrecondition(
 				fmt.Sprintf("cancellation already requested with request ID %s", existingReqID))
