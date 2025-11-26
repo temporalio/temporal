@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -20,7 +20,7 @@ import (
 // TODO (alex): move this to functional_test_base.go as methods.
 
 func RandomizeStr(id string) string {
-	return fmt.Sprintf("%v-%v", id, uuid.New())
+	return fmt.Sprintf("%v-%v", id, uuid.NewString())
 }
 
 func DecodeString(t require.TestingT, pls *commonpb.Payloads) string {
@@ -62,7 +62,7 @@ func EventBatchesToVersionHistory(
 func RandomizedNexusEndpoint(name string) string {
 	re := regexp.MustCompile("[/_]")
 	safeName := re.ReplaceAllString(name, "-")
-	return fmt.Sprintf("%v-%v", safeName, uuid.New())
+	return fmt.Sprintf("%v-%v", safeName, uuid.NewString())
 }
 
 // ExtractReplicationMessages extracts WorkflowReplicationMessages from a proto message.

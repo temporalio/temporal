@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -484,7 +484,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	cancel()
 
 	// send query and expect generic DeadlineExceeded error
-	task = newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task = newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			task.forwardInfo = req.GetForwardInfo()
@@ -523,7 +523,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	t.rootConfig.QueryPollerUnavailableWindow = dynamicconfig.GetDurationPropertyFn(time.Millisecond * 5)
 
 	// make the query and expect errNoRecentPoller
-	task = newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task = newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			task.forwardInfo = req.GetForwardInfo()
@@ -540,7 +540,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 }
 
 func (t *MatcherTestSuite) TestQueryNoPollerAtAll() {
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
@@ -576,7 +576,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	resp, err := t.childMatcher.OfferQuery(ctx, task)
 	cancel()
@@ -615,7 +615,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		},
 	).Return(&remotePollResp, remotePollErr).AnyTimes()
 
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.QueryWorkflowRequest
@@ -661,7 +661,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 		}
 	}()
 
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.QueryWorkflowRequest
@@ -831,9 +831,9 @@ func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 
 	return &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
-			NamespaceId:      uuid.New(),
-			WorkflowId:       uuid.New(),
-			RunId:            uuid.New(),
+			NamespaceId:      uuid.NewString(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),
@@ -848,9 +848,9 @@ func randomTaskInfoWithAge(age time.Duration) *persistencespb.AllocatedTaskInfo 
 
 	return &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
-			NamespaceId:      uuid.New(),
-			WorkflowId:       uuid.New(),
-			RunId:            uuid.New(),
+			NamespaceId:      uuid.NewString(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),

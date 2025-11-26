@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -161,7 +161,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 	s.namespaceReplicationTaskExecutors.tasks = make(chan *replicationspb.NamespaceTaskAttributes, 100)
 	s.replicationTaskExecutors.executedTasks = make(chan *replicationspb.ReplicationTask, 100)
 	s.dlqWriters.processedDLQRequests = make(chan replication.DLQWriteRequest, 100)
-	workflowIDToFail := uuid.New()
+	workflowIDToFail := uuid.NewString()
 	s.replicationTaskExecutors.workflowIDToFail.Store(&workflowIDToFail)
 	s.replicationTaskExecutors.workflowIDToObserve.Store(&workflowIDToFail)
 
