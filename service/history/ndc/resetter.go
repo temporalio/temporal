@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
@@ -104,7 +104,7 @@ func (r *resetterImpl) resetWorkflow(
 		return nil, err
 	}
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.Rebuild(
 		ctx,
 		now,

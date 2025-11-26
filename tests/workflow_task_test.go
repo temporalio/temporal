@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -27,7 +27,7 @@ func TestWorkflowTaskTestSuite(t *testing.T) {
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
-	id := uuid.New()
+	id := uuid.NewString()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
 	identity := "worker1"
@@ -38,7 +38,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -181,7 +181,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
-	id := uuid.New()
+	id := uuid.NewString()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
 	identity := "worker1"
@@ -192,7 +192,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -328,7 +328,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
-	id := uuid.New()
+	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
@@ -338,7 +338,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -367,7 +367,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
@@ -408,7 +408,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
-	id := uuid.New()
+	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
@@ -418,7 +418,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -461,7 +461,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
@@ -488,7 +488,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
-	id := uuid.New()
+	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
@@ -498,7 +498,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -543,7 +543,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
@@ -586,7 +586,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
-	id := uuid.New()
+	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
@@ -596,7 +596,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -657,7 +657,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
@@ -706,7 +706,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
-	id := uuid.New()
+	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
@@ -716,7 +716,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -792,7 +792,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
@@ -819,7 +819,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
-	id := uuid.New()
+	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
@@ -829,7 +829,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -905,7 +905,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 		SignalName:        "sig-for-integ-test",
 		Input:             payloads.EncodeString(""),
 		Identity:          "integ test",
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
 	s.EqualHistoryEvents(`
