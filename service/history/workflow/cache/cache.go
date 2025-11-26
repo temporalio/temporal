@@ -4,6 +4,7 @@ package cache
 
 import (
 	"context"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -261,6 +263,16 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	forceClearContext bool,
 	lockPriority locks.Priority,
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+
+	if !softassert.That(
+		shardContext.GetLogger(),
+		archetypeID != chasm.UnspecifiedArchetypeID,
+		"Creating execution cache key with unspecified archetype ID",
+		tag.SysStackTrace(string(debug.Stack())),
+	) {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+
 	cacheKey := Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		ArchetypeID: archetypeID,
