@@ -17,7 +17,7 @@ type Backfiller struct {
 
 	*schedulerpb.BackfillerState
 
-	Scheduler chasm.Field[*Scheduler]
+	Scheduler chasm.ParentPtr[*Scheduler]
 }
 
 type BackfillRequestType int
@@ -39,7 +39,6 @@ func newBackfiller(
 			BackfillId:        id,
 			LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
 		},
-		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
 
 	// Immediately schedule the first backfiller task.
