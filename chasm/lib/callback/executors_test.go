@@ -178,7 +178,6 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
 					return tc.caller
 				},
-				chasmEngine: mockEngine,
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
@@ -579,7 +578,6 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				metricsHandler:    metrics.NoopMetricsHandler,
 				logger:            logger,
 				historyClient:     historyClient,
-				chasmEngine:       mockEngine,
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
