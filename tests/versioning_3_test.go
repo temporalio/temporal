@@ -2669,16 +2669,7 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 	}, 60*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
-	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
-		s.Eventually(func() bool {
-			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-				Namespace:      s.Namespace().String(),
-				DeploymentName: tv.DeploymentSeries(),
-			})
-			s.NoError(err)
-			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-		}, 10*time.Second, 100*time.Millisecond)
-	}
+	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
 }
 
 func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
@@ -2699,16 +2690,7 @@ func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
 	}, 60*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
-	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
-		s.Eventually(func() bool {
-			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-				Namespace:      s.Namespace().String(),
-				DeploymentName: tv.DeploymentSeries(),
-			})
-			s.NoError(err)
-			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-		}, 10*time.Second, 100*time.Millisecond)
-	}
+	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
 }
 
 func (s *Versioning3Suite) setRampingDeployment(
@@ -2746,6 +2728,10 @@ func (s *Versioning3Suite) setRampingDeployment(
 	}, 60*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
+	s.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
+}
+
+func (s *Versioning3Suite) waitForDeploymentDataPropagationQueryWorkerDeployment(tv *testvars.TestVars) {
 	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
 		s.Eventually(func() bool {
 			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
@@ -3492,6 +3478,7 @@ func (s *Versioning3Suite) warmUpSticky(
 	)
 }
 
+// TODO (Shivam): Clean up this function once sync entity workflows have been removed.
 func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 	tv *testvars.TestVars,
 	status versionStatus,
