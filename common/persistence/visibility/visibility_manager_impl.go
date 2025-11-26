@@ -395,8 +395,6 @@ func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 	}
 
 	customSAs, _ := splitSearchAttributes(internalExecution.SearchAttributes)
-
-	// Check if CHASM execution and extract user memo only
 	userMemo, _, err := p.splitUserAndChasmMemo(internalExecution)
 	if err != nil {
 		return nil, err
@@ -515,8 +513,8 @@ func aliasChasmSearchAttributes(
 
 		aliasName, err := mapper.Alias(fieldName)
 		if err != nil {
-			// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field.
-			// CHASM search attributes must be registered with the CHASM Registry.
+			// Silently ignore serviceerror.InvalidArgument because it indicates unregistered field.
+			// INFO: Chasm search attributes must be registered with the CHASM Registry using the WithSearchAttributes() option.
 			var invalidArgumentErr *serviceerror.InvalidArgument
 			if errors.As(err, &invalidArgumentErr) {
 				continue

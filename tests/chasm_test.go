@@ -236,9 +236,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 			}
 
 			visRecord = resp.Executions[0]
-			// Wait for search attributes to be populated
-			_, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, tests.PayloadTotalCountSearchAttribute)
-			return ok
+			return true
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

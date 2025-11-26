@@ -435,47 +435,7 @@ func GetValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, 
 	rawValue := visibilityValue.Value()
 	finalVal, ok := rawValue.(T)
 	if !ok {
-		// Handle int to int64 conversion for SearchAttributeInt
-		// Some databases return int instead of int64
-		if intVal, isInt := rawValue.(int); isInt {
-			if int64Val, isInt64Target := any(int64(intVal)).(T); isInt64Target {
-				return int64Val, true
-			}
-		}
 		return zero, false
 	}
 	return finalVal, true
-}
-
-// convertToVisibilityValue converts a value to VisibilityValue based on its runtime type.
-func convertToVisibilityValue(value interface{}) VisibilityValue {
-	switch val := value.(type) {
-	case int:
-		return VisibilityValueInt64(int64(val))
-	case int32:
-		return VisibilityValueInt64(int64(val))
-	case int64:
-		return VisibilityValueInt64(val)
-	case float32:
-		return VisibilityValueFloat64(float64(val))
-	case float64:
-		return VisibilityValueFloat64(val)
-	case bool:
-		return VisibilityValueBool(val)
-	case time.Time:
-		return VisibilityValueTime(val)
-	case string:
-		// Try to parse as datetime first
-		if parsedTime, err := time.Parse(time.RFC3339, val); err == nil {
-			return VisibilityValueTime(parsedTime)
-		}
-		return VisibilityValueString(val)
-	case []byte:
-		return VisibilityValueByteSlice(val)
-	case []string:
-		return VisibilityValueStringSlice(val)
-	default:
-		// Return as string if type is unknown
-		return VisibilityValueString(fmt.Sprintf("%v", val))
-	}
 }
