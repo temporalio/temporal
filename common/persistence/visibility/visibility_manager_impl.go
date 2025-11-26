@@ -149,7 +149,7 @@ func (p *visibilityManagerImpl) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	return p.convertInternalListResponse(response)
+	return p.convertInternalListResponse(response, request.Namespace)
 }
 
 func (p *visibilityManagerImpl) ListChasmExecutions(
@@ -297,7 +297,7 @@ func (p *visibilityManagerImpl) GetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	execution, err := p.convertToWorkflowExecutionInfo(response.Execution)
+	execution, err := p.convertToWorkflowExecutionInfo(response.Execution, request.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -368,6 +368,7 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 
 func (p *visibilityManagerImpl) convertInternalListResponse(
 	internalResponse *store.InternalListExecutionsResponse,
+	namespaceName namespace.Name,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	if internalResponse == nil {
 		return nil, nil
@@ -377,7 +378,7 @@ func (p *visibilityManagerImpl) convertInternalListResponse(
 	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResponse.Executions))
 	for i, execution := range internalResponse.Executions {
 		var err error
-		resp.Executions[i], err = p.convertToWorkflowExecutionInfo(execution)
+		resp.Executions[i], err = p.convertToWorkflowExecutionInfo(execution, namespaceName)
 		if err != nil {
 			return nil, err
 		}
@@ -389,12 +390,17 @@ func (p *visibilityManagerImpl) convertInternalListResponse(
 
 func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 	internalExecution *store.InternalExecutionInfo,
+	namespaceName namespace.Name,
 ) (*workflowpb.WorkflowExecutionInfo, error) {
 	if internalExecution == nil {
 		return nil, nil
 	}
 
 	customSAs, _ := splitSearchAttributes(internalExecution.SearchAttributes)
+	aliasedCustomSAs, err := searchattribute.AliasFields(p.searchAttributesMapperProvider, customSAs, namespaceName.String())
+	if err != nil {
+		return nil, err
+	}
 	userMemo, _, err := p.splitUserAndChasmMemo(internalExecution)
 	if err != nil {
 		return nil, err
@@ -411,7 +417,7 @@ func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 		StartTime:        timestamppb.New(internalExecution.StartTime),
 		ExecutionTime:    timestamppb.New(internalExecution.ExecutionTime),
 		Memo:             userMemo,
-		SearchAttributes: customSAs,
+		SearchAttributes: aliasedCustomSAs,
 		TaskQueue:        internalExecution.TaskQueue,
 		Status:           internalExecution.Status,
 		RootExecution: &commonpb.WorkflowExecution{
