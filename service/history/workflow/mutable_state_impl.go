@@ -2426,7 +2426,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
-			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(context.Background(), ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
+			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 			if err != nil {
 				return nil, fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
@@ -2458,7 +2458,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
 			// Cross-TQ CAN: check if new TQ is in parent's deployment
 			TQInSourceDeploymentVersion, err := IsWFTaskQueueInVersionDetector(
-				context.Background(),
+				ctx,
 				ms.GetNamespaceEntry().ID().String(),
 				newTQ,
 				sourceDeploymentVersion,
@@ -2891,6 +2891,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
 	if event.GetInheritedAutoUpgradeInfo() != nil {
 		ms.SetVersioningRevisionNumber(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
+		// TODO (Shivam): Remove this once you make SetDeploymentVersion and SetVersioningBehavior methods with nil checks
 		if ms.executionInfo.VersioningInfo == nil {
 			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		}

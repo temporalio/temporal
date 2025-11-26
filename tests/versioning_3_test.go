@@ -2071,18 +2071,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	// v1 is current for both parent and child
 	s.setCurrentDeployment(tv1)
 
-	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
-	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
-		s.Eventually(func() bool {
-			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-				Namespace:      s.Namespace().String(),
-				DeploymentName: tv1.DeploymentSeries(),
-			})
-			s.NoError(err)
-			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-		}, 10*time.Second, 100*time.Millisecond)
-	}
-
 	if crossTq {
 		w2xtq := worker.New(sdkClient, tv2Child.TaskQueue().GetName(), worker.Options{
 			DeploymentOptions: worker.DeploymentOptions{
@@ -2124,17 +2112,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 
 	// make v2 current for both parent and child and unblock the wf to start the child
 	s.setCurrentDeployment(tv2)
-	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
-	if s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
-		s.Eventually(func() bool {
-			resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-				Namespace:      s.Namespace().String(),
-				DeploymentName: tv2.DeploymentSeries(),
-			})
-			s.NoError(err)
-			return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-		}, 10*time.Second, 100*time.Millisecond)
-	}
 
 	currentChanged <- struct{}{}
 
@@ -4073,7 +4050,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-// TODO (Shivam): This is technically tested already by TestChildWorkflowInheritance_UnpinnedParent. However,
+// This is technically tested already by TestChildWorkflowInheritance_UnpinnedParent. However,
 // the test is present to show that revision number mechanics work as expected even when the task-queue
 // partitions have a more updated view of the current version than the mutable state of a workflow.
 func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
@@ -4127,15 +4104,6 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
 
 	// Set v1 as the current version for the deployment
 	s.setCurrentDeployment(tvParent)
-	// Wait for propagation to complete
-	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tvParent.DeploymentSeries(),
-		})
-		s.NoError(err)
-		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-	}, 10*time.Second, 100*time.Millisecond)
 
 	// Start parent
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
@@ -4148,15 +4116,6 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
 
 	// Set v2 as the current version of the deployment
 	s.setCurrentDeployment(tv2)
-	// Wait for propagation to complete
-	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv2.DeploymentSeries(),
-		})
-		s.NoError(err)
-		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-	}, 10*time.Second, 100*time.Millisecond)
 
 	// Unblock parent to start the child
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
@@ -4227,15 +4186,6 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 
 	// Set v1 as the current version for the deployment
 	s.setCurrentDeployment(tvParent)
-	// Wait for propagation to complete
-	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tvParent.DeploymentSeries(),
-		})
-		s.NoError(err)
-		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-	}, 10*time.Second, 100*time.Millisecond)
 
 	// Start parent
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
@@ -4342,29 +4292,11 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ
 	s.NoError(wChild.Start())
 	defer wChild.Stop()
 
-	// Set tvParent as the current version for the deployment
+	// Set tvParent as the current version for the parent deployment
 	s.setCurrentDeployment(tvParent)
-	// Wait for propagation to complete
-	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tvParent.DeploymentSeries(),
-		})
-		s.NoError(err)
-		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-	}, 10*time.Second, 100*time.Millisecond)
 
-	// Set tvChild as the current version for the deployment
+	// Set tvChild as the current version for the child deployment
 	s.setCurrentDeployment(tvChild)
-	// Wait for propagation to complete
-	s.Eventually(func() bool {
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(context.Background(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tvChild.DeploymentSeries(),
-		})
-		s.NoError(err)
-		return resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState() == enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED
-	}, 10*time.Second, 100*time.Millisecond)
 
 	// Start parent
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
