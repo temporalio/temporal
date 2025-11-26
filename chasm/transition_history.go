@@ -15,10 +15,6 @@ var ErrInvalidComponentRef = serviceerror.NewInvalidArgument("invalid component 
 // ExecutionStateChanged returns true if execution state has advanced beyond the state encoded in
 // refBytes.
 func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) (bool, error) {
-	if len(refBytes) == 0 {
-		// TODO(dan): change DeserializeComponentRef to return error on empty input
-		return false, ErrMalformedComponentRef
-	}
 	ref, err := DeserializeComponentRef(refBytes)
 	if err != nil {
 		return false, ErrMalformedComponentRef
