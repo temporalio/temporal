@@ -314,7 +314,7 @@ func TestTransitionTimedout(t *testing.T) {
 				require.NotNil(t, outcome.GetFailed().GetFailure())
 				// do something
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-				// Timeout failure is recorded in both attempt state and outcome. TransitionTimedOut should only be called when there
+				// Timeout failure is recorded in attempt state. TransitionTimedOut should only be called when there
 				// are no more retries. Retries go through TransitionRescheduled.
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetFailure())
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
@@ -323,8 +323,7 @@ func TestTransitionTimedout(t *testing.T) {
 
 				failure, ok := outcome.GetVariant().(*activitypb.ActivityOutcome_Failed_)
 				require.True(t, ok, "expected variant to be of type Failed")
-				require.NotNil(t, failure.Failed, "outcome should contain failure for API responses")
-				require.NotNil(t, failure.Failed.GetFailure(), "outcome should contain the timeout failure")
+				require.Nil(t, failure.Failed)
 
 			default:
 				t.Fatalf("unexpected timeout type: %v", tc.timeoutType)
