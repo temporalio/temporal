@@ -668,7 +668,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument
 			},
 		})
 		require.NoError(t, err)
-		require.NotNil(t, validPollResp.StateChangeLongPollToken)
+		require.NotEmpty(t, validPollResp.StateChangeLongPollToken)
 
 		activityID2 := testcore.RandomizeStr(t.Name())
 		startResp2, err := s.startActivity(ctx, activityID2, tq)
