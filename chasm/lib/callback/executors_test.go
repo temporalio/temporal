@@ -288,7 +288,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger := log.NewNoopLogger()
+	logger := log.NewTestLogger()
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
 
@@ -558,7 +558,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			historyClient := tc.setupHistoryClient(t, ctrl)
 
 			// Setup logger and time source
-			logger := log.NewNoopLogger()
+			logger := log.NewTestLogger()
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
