@@ -4121,7 +4121,7 @@ func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
 	}
 
 	// Poll the sticky task queue
-	resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	wfResponse, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue:         stickyTaskQueueWithoutNormalName,
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 		Namespace:         s.Namespace().String(),
@@ -4130,5 +4130,17 @@ func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
 
 	// Expect an error because a versioned poller always requires a non-empty NormalName
 	s.Error(err)
-	s.NotNil(resp)
+	s.NotNil(wfResponse)
+
+	// Poll activity task queue with an empty normalName (not possible, but just in case)
+	activityResponse, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue:         stickyTaskQueueWithoutNormalName,
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		Namespace:         s.Namespace().String(),
+		Identity:          "test-worker",
+	})
+
+	// Expect an error because a versioned activity poller always requires a non-empty NormalName
+	s.Error(err)
+	s.NotNil(activityResponse)
 }
