@@ -666,6 +666,19 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 	return wf, chasmCtx, nil
 }
 
+func (ms *MutableStateImpl) ensureChasmWorkflowComponent(ctx context.Context) {
+	// Initialize chasm tree once for new workflows.
+	// Using context.Background() because this is done outside an actual request context and the
+	// chasmworkflow.NewWorkflow does not actually use it currently.
+	root, ok := ms.chasmTree.(*chasm.Node)
+	softassert.That(ms.logger, ok, "chasmTree cast failed")
+
+	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
+		mutableContext := chasm.NewMutableContext(ctx, root)
+		root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
+	}
+}
+
 // ChasmWorkflowComponentReadOnly gets the root workflow component from the CHASM tree.
 // Returns both the workflow component and a read-only CHASM context.
 // This method is for read-only operations.
@@ -2652,19 +2665,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionState.RunId, execution.GetRunId())
 	}
 
-	if ms.ChasmEnabled() {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		root, ok := ms.chasmTree.(*chasm.Node)
-		softassert.That(ms.logger, ok, "chasmTree cast failed")
-
-		if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
-			mutableContext := chasm.NewMutableContext(context.Background(), root)
-			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
-		}
-	}
-
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.AttachRequestID(requestID, startEvent.EventType, startEvent.EventId)
 
@@ -2976,7 +2976,14 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
 ) error {
+	if len(completionCallbacks) == 0 {
+		return nil
+	}
 	if ms.chasmCallbacksEnabled() {
+		// Initialize chasm tree once for new workflows.
+		// Using context.Background() because this is done outside an actual request context and the
+		// chasmworkflow.NewWorkflow does not actually use it currently.
+		ms.ensureChasmWorkflowComponent(context.Background())
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -5174,14 +5181,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	}
 
 	// Update completion callbacks.
-	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
-		if err := ms.addCompletionCallbacks(
-			event,
-			attributes.GetAttachedRequestId(),
-			attributes.GetAttachedCompletionCallbacks(),
-		); err != nil {
-			return err
-		}
+	if err := ms.addCompletionCallbacks(
+		event,
+		attributes.GetAttachedRequestId(),
+		attributes.GetAttachedCompletionCallbacks(),
+	); err != nil {
+		return err
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
