@@ -545,32 +545,6 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 	s.NoError(err)
 }
 
-// TestReadComponent_NotFound tests that ReadComponent does not leak the NotFound message returned
-// by the underlying mutable state read path.
-func (s *chasmEngineSuite) TestReadComponent_NotFound() {
-	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(nil, serviceerror.NewNotFound("this error message will not be returned by ReadComponent")).Times(1)
-
-	err := s.engine.ReadComponent(
-		context.Background(),
-		chasm.NewComponentRef[*testComponent](
-			chasm.EntityKey{
-				NamespaceID: string(tests.NamespaceID),
-				BusinessID:  "non-existent-workflow",
-				EntityID:    "11111111-2222-3333-4444-555555555555",
-			},
-		),
-		func(ctx chasm.Context, component chasm.Component) error {
-			s.Fail("readFn should not be called")
-			return nil
-		},
-	)
-	s.Error(err)
-	var notFound *serviceerror.NotFound
-	s.ErrorAs(err, &notFound)
-	s.Equal("execution not found", notFound.Message)
-}
-
 // TestPollComponent_Success_NoWait tests the behavior of PollComponent when the predicate is
 // satisfied at the outset.
 func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {

@@ -747,10 +747,6 @@ func (e *ChasmEngine) getExecutionLease(
 		entityLease.GetReleaseFn()(nil)
 		err = staleReferenceErr
 	}
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
-		err = serviceerror.NewNotFoundf("execution not found")
-	}
 
 	return shardContext, entityLease, err
 }
