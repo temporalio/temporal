@@ -446,10 +446,14 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 	require.NotEmpty(t, existingRunID)
 	existingNamespace := s.Namespace().String()
 
+	var notFoundErr *serviceerror.NotFound
+	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+
 	testCases := []struct {
-		name        string
-		request     *workflowservice.PollActivityExecutionRequest
-		expectedErr string
+		name           string
+		request        *workflowservice.PollActivityExecutionRequest
+		expectedErr    error
+		expectedErrMsg string
 	}{
 		{
 			name: "NonExistentNamespace",
@@ -458,7 +462,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				ActivityId: existingActivityID,
 				RunId:      existingRunID,
 			},
-			expectedErr: "Namespace non-existent-namespace is not found.",
+			expectedErr:    namespaceNotFoundErr,
+			expectedErrMsg: "Namespace non-existent-namespace is not found.",
 		},
 		{
 			name: "NonExistentActivityID",
@@ -467,7 +472,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				ActivityId: "non-existent-activity",
 				RunId:      existingRunID,
 			},
-			expectedErr: "execution not found",
+			expectedErr:    notFoundErr,
+			expectedErrMsg: "execution not found",
 		},
 		{
 			name: "NonExistentRunID",
@@ -476,19 +482,16 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				ActivityId: existingActivityID,
 				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
-			expectedErr: "execution not found",
+			expectedErr:    notFoundErr,
+			expectedErrMsg: "execution not found",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
-			// Use ToStatus since test cases include both NamespaceNotFound and NotFound error types
-			require.Error(t, err)
-			statusErr := serviceerror.ToStatus(err)
-			require.NotNil(t, statusErr)
-			require.Equal(t, codes.NotFound, statusErr.Code())
-			require.Equal(t, tc.expectedErr, statusErr.Message())
+			require.ErrorAs(t, err, &tc.expectedErr)
+			require.Equal(t, tc.expectedErrMsg, tc.expectedErr.Error())
 		})
 	}
 
