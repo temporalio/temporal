@@ -288,7 +288,7 @@ func (e *ChasmEngine) PollComponent(
 	if err != nil {
 		return nil, err
 	}
-	// execution VT >= requestRef VT (enforced by checkPredicate)
+	// execution VT >= requestRef VT (enforced by predicateSatisfied)
 
 	if satisfiedRef != nil {
 		// wait condition was satisfied
