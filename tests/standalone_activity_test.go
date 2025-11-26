@@ -483,6 +483,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
+			// Use ToStatus since test cases include both NamespaceNotFound and NotFound error types
 			require.Error(t, err)
 			statusErr := serviceerror.ToStatus(err)
 			require.NotNil(t, statusErr)
@@ -516,11 +517,9 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 				},
 			},
 		})
-		require.Error(t, err)
-		statusErr := serviceerror.ToStatus(err)
-		require.NotNil(t, statusErr)
-		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Equal(t, "execution not found", statusErr.Message())
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, "execution not found", notFoundErr.Message)
 	})
 }
 
@@ -641,11 +640,9 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument
 				require.NoError(t, err)
 				return
 			}
-			require.Error(t, err)
-			statusErr := serviceerror.ToStatus(err)
-			require.NotNil(t, statusErr)
-			require.Equal(t, codes.InvalidArgument, statusErr.Code())
-			require.Contains(t, statusErr.Message(), tc.expectedErr)
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Contains(t, invalidArgErr.Message, tc.expectedErr)
 		})
 	}
 
@@ -679,11 +676,9 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument
 				},
 			},
 		})
-		require.Error(t, err)
-		statusErr := serviceerror.ToStatus(err)
-		require.NotNil(t, statusErr)
-		require.Equal(t, codes.InvalidArgument, statusErr.Code())
-		require.Equal(t, "long poll token does not match execution", statusErr.Message())
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
 	})
 }
 
