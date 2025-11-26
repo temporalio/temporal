@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -214,13 +214,13 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeoutTask() {
 			timerTask := &tasks.WorkflowExecutionTimeoutTask{
 				NamespaceID:         tests.NamespaceID.String(),
 				WorkflowID:          tests.WorkflowID,
-				FirstRunID:          uuid.New(),
+				FirstRunID:          uuid.NewString(),
 				VisibilityTimestamp: s.testShardContext.GetTimeSource().Now(),
 				TaskID:              100,
 			}
 			mutableStateFirstRunID := timerTask.FirstRunID
 			if !tc.firstRunIDMatch {
-				mutableStateFirstRunID = uuid.New()
+				mutableStateFirstRunID = uuid.NewString()
 			}
 
 			mockMutableState := historyi.NewMockMutableState(s.controller)
@@ -244,7 +244,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeouts() {
 	timerTask := &tasks.WorkflowExecutionTimeoutTask{
 		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  tests.WorkflowID,
-		FirstRunID:  uuid.New(),
+		FirstRunID:  uuid.NewString(),
 		TaskID:      100,
 	}
 	mockMutableState := historyi.NewMockMutableState(s.controller)

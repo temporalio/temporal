@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
@@ -94,12 +94,12 @@ func (s *HistoryEventsSuite) TearDownTest() {
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_First() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -122,12 +122,12 @@ func (s *HistoryEventsSuite) TestAppendSelect_First() {
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -161,12 +161,12 @@ func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -212,12 +212,12 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -265,12 +265,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -335,12 +335,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -395,12 +395,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 }
 
 func (s *HistoryEventsSuite) TestAppendSelectTrim() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -440,12 +440,12 @@ func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -510,12 +510,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -562,12 +562,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 }
 
 func (s *HistoryEventsSuite) TestAppendBatches() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -604,12 +604,12 @@ func (s *HistoryEventsSuite) TestAppendBatches() {
 }
 
 func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	br1Token, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -673,12 +673,12 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 }
 
 func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	br1Token, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
@@ -783,11 +783,11 @@ func (s *HistoryEventsSuite) forkHistoryBranch(
 ) []byte {
 	resp, err := s.store.ForkHistoryBranch(s.Ctx, &p.ForkHistoryBranchRequest{
 		ShardID:         shardID,
-		NamespaceID:     uuid.New(),
+		NamespaceID:     uuid.NewString(),
 		ForkBranchToken: branchToken,
 		ForkNodeID:      newNodeID,
 		Info:            "",
-		NewRunID:        uuid.New(),
+		NewRunID:        uuid.NewString(),
 	})
 	s.NoError(err)
 	return resp.NewBranchToken

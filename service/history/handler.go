@@ -7,8 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1581,7 +1581,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
+	if request.GetNamespaceId() == "" || uuid.Validate(request.GetNamespaceId()) != nil {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
@@ -1589,7 +1589,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 		return nil, h.convertError(errWorkflowIDNotSet)
 	}
 
-	if request.GetRunId() == "" || uuid.Parse(request.GetRunId()) == nil {
+	if request.GetRunId() == "" || uuid.Validate(request.GetRunId()) != nil {
 		return nil, h.convertError(errRunIDNotValid)
 	}
 

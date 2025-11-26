@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -1577,7 +1577,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	identity := "testIdentity"
 
 	ns := tests.LocalNamespaceEntry.Clone(
-		namespace.WithID(uuid.New()),
+		namespace.WithID(uuid.NewString()),
 		namespace.WithBadBinary("test-bad-binary"),
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(ns.ID()).Return(ns, nil).AnyTimes()
@@ -1720,7 +1720,7 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration() *histor
 		Identity:          identity,
 		SignalName:        "test signal name",
 		Input:             payloads.EncodeString("test input"),
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	}
 	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId:   tests.NamespaceID.String(),
@@ -4916,7 +4916,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	identity := "testIdentity"
 	signalName := "my signal name 2"
 	input := payloads.EncodeString("test input 2")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -4959,7 +4959,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 	identity := "testIdentity"
 	signalName := "my signal name 2"
 	input := payloads.EncodeString("test input 2")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -5102,7 +5102,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	removeRequest = &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId:       tests.NamespaceID.String(),
 		WorkflowExecution: &execution,
@@ -5140,7 +5140,7 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 			Version:   eventVersion,
 		},
 	}
-	globalNamespaceID := uuid.New()
+	globalNamespaceID := uuid.NewString()
 	globalNamespaceName := "global-namespace-name"
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: globalNamespaceID, Name: globalNamespaceName},
@@ -5245,7 +5245,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 			Version:   eventVersion,
 		},
 	}
-	globalNamespaceID := uuid.New()
+	globalNamespaceID := uuid.NewString()
 	globalNamespaceName := "global-namespace-name"
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: globalNamespaceID, Name: globalNamespaceName},
@@ -5502,8 +5502,8 @@ func (s *engineSuite) TestGetHistory() {
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
-	newRunID := uuid.New()
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.NewString()}
+	newRunID := uuid.NewString()
 
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -5615,13 +5615,13 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 
 func (s *engineSuite) TestGetWorkflowExecutionHistoryWhenInternalRawHistoryIsEnabled() {
 	s.config.SendRawHistoryBetweenInternalServices = func() bool { return true }
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.NewString()}
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{},
 		"")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -5728,7 +5728,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryWhenInternalRawHistoryIsEna
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.NewString()}
 
 	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
 	s.NoError(err)
@@ -5817,7 +5817,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkf
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	namespaceEntry := namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Id: namespaceID.String(),
@@ -5835,7 +5835,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkf
 				NamespaceId: namespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -5853,7 +5853,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidRunID
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	namespaceEntry := namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Id: namespaceID.String(),
@@ -5889,7 +5889,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCac
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(nil, fmt.Errorf("test"))
 	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
@@ -5898,7 +5898,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCac
 				NamespaceId: namespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -5957,7 +5957,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 				NamespaceId: tests.NamespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -6011,7 +6011,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID(
 				NamespaceId: tests.NamespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      10,
 				StartEventVersion: 100,
@@ -6030,7 +6030,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidWorkflo
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	namespaceEntry := namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Id: namespaceID.String(),
@@ -6048,7 +6048,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidWorkflo
 				NamespaceId: namespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -6066,7 +6066,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidRunID()
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	namespaceEntry := namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Id: namespaceID.String(),
@@ -6102,7 +6102,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnNamespaceCache
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(nil, fmt.Errorf("test"))
 	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryRequest{
@@ -6111,7 +6111,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnNamespaceCache
 				NamespaceId: namespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -6170,7 +6170,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory() {
 				NamespaceId: tests.NamespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -6228,7 +6228,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_SameStartIDAndEndID() 
 				NamespaceId: tests.NamespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      10,
 				StartEventVersion: 100,
@@ -6251,14 +6251,14 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	endItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, endItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			},
 			StartEventId:      inputStartEventID,
 			StartEventVersion: inputStartVersion,
@@ -6288,14 +6288,14 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			},
 			StartEventId:      common.EmptyEventID,
 			StartEventVersion: common.EmptyVersion,
@@ -6325,14 +6325,14 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			},
 			StartEventId:      inputStartEventID,
 			StartEventVersion: inputStartVersion,
@@ -6367,14 +6367,14 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
 	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory2)
 	s.NoError(err)
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			},
 			StartEventId:      9,
 			StartEventVersion: 20,

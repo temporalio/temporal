@@ -7,7 +7,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
@@ -38,7 +38,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      uuid.New(),
+		DatabaseName:      uuid.NewString(),
 		ConnectAttributes: map[string]string{"mode": "memory", "cache": "private"},
 	}
 }

@@ -109,11 +109,6 @@ func (w *Workflow) AddCompletionCallbacks(
 
 		// Create and add callback
 		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
-		// Initialize the Workflow field with a pointer to the parent Workflow component
-		// Use ComponentPointerTo instead of NewComponentField to avoid infinite recursion during tree sync.
-		// We need to manually create the Field[chasm.Component] from Field[*Workflow] since Go generics
-		// don't support covariance.
-		callbackObj.CompletionSource = chasm.Field[callback.CompletionSource](chasm.ComponentPointerTo(ctx, w))
 		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil

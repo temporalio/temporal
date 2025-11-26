@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -1377,7 +1377,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
 		NamespaceId: namespaceID.String(),
@@ -1418,7 +1418,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 		return tests.CreateWorkflowExecutionResponse, nil
 	})
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
 		NamespaceId: namespaceID.String(),
@@ -1646,7 +1646,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
-	prevRunID := uuid.New()
+	prevRunID := uuid.NewString()
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
@@ -1870,7 +1870,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1917,7 +1917,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
@@ -1966,7 +1966,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -2158,7 +2158,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2198,7 +2198,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 
 	// add child init event
 	wt := addWorkflowTaskScheduledEvent(ms)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2221,7 +2221,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2283,7 +2283,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 
 			// add child init event
 			wt := addWorkflowTaskScheduledEvent(ms)
-			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
 			wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 			workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2314,7 +2314,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEvent() {
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2349,7 +2349,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 
 	// add child init event
 	wt := addWorkflowTaskScheduledEvent(ms)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2371,7 +2371,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEvent_ChildFirstRunId() {
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2426,7 +2426,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 
 			// add child init event
 			wt := addWorkflowTaskScheduledEvent(ms)
-			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
 			wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 			workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2536,7 +2536,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	_, err := ms.AddTimeoutWorkflowEvent(
 		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.New(),
+		uuid.NewString(),
 	)
 	s.NoError(err)
 	ms.GetExecutionInfo().VersionHistories = &historyspb.VersionHistories{
@@ -2583,7 +2583,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed
 	_, err := ms.AddTimeoutWorkflowEvent(
 		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.New(),
+		uuid.NewString(),
 	)
 	s.NoError(err)
 
@@ -2680,7 +2680,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	taskQueueName := "testTaskQueue"
 
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2690,7 +2690,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 		RunId:      tests.RunID,
 	}, "wType", taskQueueName, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	wt := addWorkflowTaskScheduledEvent(ms)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskQueueName, uuid.New())
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
@@ -2762,7 +2762,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	timeoutEvent, err := ms.AddTimeoutWorkflowEvent(
 		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.New(),
+		uuid.NewString(),
 	)
 	s.NoError(err)
 

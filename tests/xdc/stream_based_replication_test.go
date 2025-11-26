@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -213,8 +213,8 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 	}
 	var runID string
 	for _, version := range versions {
-		workflowID := "xdc-stream-replication-test-" + uuid.New()
-		runID = uuid.New()
+		workflowID := "xdc-stream-replication-test-" + uuid.NewString()
+		runID = uuid.NewString()
 
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(namespaceName, namespaceId, version)
@@ -414,7 +414,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -460,7 +460,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -552,7 +552,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -598,7 +598,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 4,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -613,7 +613,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 7,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -835,10 +835,10 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	}
 	s.T().Log("Cleared replication stream recorders on all clusters")
 
-	workflowID := "test-replication-" + uuid.New()
+	workflowID := "test-replication-" + uuid.NewString()
 	sourceClient := s.clusters[0].FrontendClient()
 	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
@@ -1057,7 +1057,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	s.Require().NotNil(recorder0)
 	s.Require().NotNil(recorder1)
 
-	workflowID := "task-recorder-test-" + uuid.New()
+	workflowID := "task-recorder-test-" + uuid.NewString()
 	taskQueue := "task-recorder-tq"
 
 	// Get namespace ID for task filtering
@@ -1253,7 +1253,7 @@ func (s *streamBasedReplicationTestSuite) TestWorkflowTaskFailureStampReplicatio
 	s.Require().NotNil(recorder0)
 	s.Require().NotNil(recorder1)
 
-	workflowID := "workflow-task-failure-test-" + uuid.New()
+	workflowID := "workflow-task-failure-test-" + uuid.NewString()
 	taskQueue := "workflow-task-failure-tq"
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{

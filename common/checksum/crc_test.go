@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -21,8 +21,8 @@ func TestCRC32OverProto(t *testing.T) {
 	// different set of serialized bytes
 	obj := &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: uuid.New(),
-			RunId:      uuid.New(),
+			WorkflowId: uuid.NewString(),
+			RunId:      uuid.NewString(),
 		},
 		StartTime:     timestamppb.New(time.Now().UTC()),
 		HistoryLength: 550,

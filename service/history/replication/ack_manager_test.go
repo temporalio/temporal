@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -504,7 +504,7 @@ func (s *ackManagerSuite) getHistoryTasksResponse(size int) *persistence.GetHist
 			WorkflowKey: definition.WorkflowKey{
 				NamespaceID: tests.NamespaceID.String(),
 				WorkflowID:  tests.WorkflowID + strconv.Itoa(i),
-				RunID:       uuid.New(),
+				RunID:       uuid.NewString(),
 			},
 			TaskID:       int64(i),
 			FirstEventID: 1,

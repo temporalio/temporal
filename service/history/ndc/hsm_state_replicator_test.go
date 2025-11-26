@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -124,7 +124,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_WorkflowNotFound() {
 	nonExistKey := definition.NewWorkflowKey(
 		s.namespaceEntry.ID().String(),
 		"non-exist workflowID",
-		uuid.New(),
+		uuid.NewString(),
 	)
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{

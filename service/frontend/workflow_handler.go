@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -898,7 +898,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 	}
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 
@@ -1128,7 +1128,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return &workflowservice.PollActivityTaskQueueResponse{}, nil
 	}
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 	matchingResponse, err := wh.matchingClient.PollActivityTaskQueue(childCtx, &matchingservice.PollActivityTaskQueueRequest{
@@ -3575,7 +3575,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
-	identity := uuid.New()
+	identity := uuid.NewString()
 	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
@@ -3701,7 +3701,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 					WorkflowExecution: execution,
 					SignalName:        scheduler.SignalNameRefresh,
 					Identity:          "internal refresh from describe request",
-					RequestId:         uuid.New(),
+					RequestId:         uuid.NewString(),
 				},
 			})
 		}()
@@ -4185,7 +4185,7 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 	}
 
 	if request.GetRequest().GetMeta().GetUpdateId() == "" {
-		request.GetRequest().GetMeta().UpdateId = uuid.New()
+		request.GetRequest().GetMeta().UpdateId = uuid.NewString()
 	}
 
 	if request.GetRequest().GetInput() == nil {
@@ -4592,7 +4592,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayload,
 		Identity:                 identity,
-		RequestId:                uuid.New(),
+		RequestId:                uuid.NewString(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		Memo:                     memo,
@@ -4916,7 +4916,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		return &workflowservice.PollNexusTaskQueueResponse{}, nil
 	}
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 	matchingResponse, err := wh.matchingClient.PollNexusTaskQueue(childCtx, &matchingservice.PollNexusTaskQueueRequest{
@@ -5490,7 +5490,7 @@ func validateRequestId(requestID *string, lenLimit int) error {
 	if *requestID == "" {
 		// For easy direct API use, we default the request ID here but expect all
 		// SDKs and other auto-retrying clients to set it
-		*requestID = uuid.New()
+		*requestID = uuid.NewString()
 	}
 
 	if len(*requestID) > lenLimit {

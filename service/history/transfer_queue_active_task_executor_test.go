@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -240,7 +240,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -265,7 +265,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -373,7 +373,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplication() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -395,7 +395,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -433,7 +433,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Paused() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -455,7 +455,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Paused() 
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -491,7 +491,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Paused() 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstWorkflowTask() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -542,7 +542,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstWork
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstWorkflowTask() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -567,7 +567,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstW
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	s.NotNil(event)
@@ -600,7 +600,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstW
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_NonFirstWorkflowTask() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -624,7 +624,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	s.NotNil(event)
@@ -661,7 +661,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_No
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowTaskNotSticky_MutableStateSticky() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -688,7 +688,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	s.NotNil(event)
@@ -725,7 +725,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowT
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Duplication() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -748,7 +748,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Duplicati
 
 	taskID := s.mustGenerateTaskID()
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -775,7 +775,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Duplicati
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_StampMismatch() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -827,7 +827,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_StampMism
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasParent() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -838,7 +838,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	parentNamespace := "some random parent namespace Name"
 	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	parentClock := vclock.NewVectorClock(rand.Int63(), rand.Int31(), rand.Int63())
 
@@ -867,7 +867,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -905,7 +905,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -927,7 +927,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -955,7 +955,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasFewChildren() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -981,7 +981,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 
 	commandType := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
@@ -1110,7 +1110,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyChildren() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -1132,7 +1132,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 
 	commandType := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
@@ -1202,7 +1202,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentWasReset_HasManyChildren() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -1223,13 +1223,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	)
 	s.NoError(err)
 
-	mutableState.GetExecutionInfo().ResetRunId = uuid.New() // indicate that the execution was reset.
+	mutableState.GetExecutionInfo().ResetRunId = uuid.NewString() // indicate that the execution was reset.
 	s.mockShard.GetConfig().AllowResetWithPendingChildren = func(namespace string) bool {
 		return true // force the dynamic config to allow reset with pending children.
 	}
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 
 	commandType := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
@@ -1297,7 +1297,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -1319,7 +1319,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 
 	commandType := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
@@ -1384,7 +1384,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_ChildInDeletedNamespace() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -1408,7 +1408,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -1511,7 +1511,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteAfterClose() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -1533,7 +1533,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -1568,14 +1568,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Success() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	targetExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
@@ -1595,12 +1595,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := s.mustGenerateTaskID()
-	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), s.targetNamespace, s.targetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
+	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.NewString(), s.targetNamespace, s.targetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
 	attributes := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
 	transferTask := &tasks.CancelExecutionTask{
@@ -1627,14 +1627,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failure() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	targetExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
@@ -1654,12 +1654,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := s.mustGenerateTaskID()
-	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), s.targetNamespace, s.targetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
+	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.NewString(), s.targetNamespace, s.targetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
 	attributes := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
 	transferTask := &tasks.CancelExecutionTask{
@@ -1686,14 +1686,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failure_TargetNamespaceNotFound() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	targetExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
@@ -1713,12 +1713,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := s.mustGenerateTaskID()
-	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.MissedNamespace, tests.MissedNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
+	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.NewString(), tests.MissedNamespace, tests.MissedNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
 
 	transferTask := &tasks.CancelExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1743,14 +1743,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplication() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	targetExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
@@ -1770,12 +1770,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := s.mustGenerateTaskID()
-	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), s.targetNamespace, s.targetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
+	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.NewString(), s.targetNamespace, s.targetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true)
 
 	transferTask := &tasks.CancelExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1974,14 +1974,14 @@ func (s *transferQueueActiveTaskExecutorSuite) setupSignalExternalWorkflowInitia
 ) {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	targetExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random target workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	signalName := "some random signal name"
 	signalInput := payloads.EncodeString("some random signal input")
@@ -2007,11 +2007,11 @@ func (s *transferQueueActiveTaskExecutorSuite) setupSignalExternalWorkflowInitia
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	event, signalInfo := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
+	event, signalInfo := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.NewString(),
 		targetNamespace, targetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), true, signalName, signalInput,
 		signalControl, signalHeader)
 
@@ -2043,13 +2043,13 @@ func (s *transferQueueActiveTaskExecutorSuite) validateUpdateExecutionRequestWit
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 	userMetadata := &sdkpb.UserMetadata{
@@ -2081,7 +2081,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2169,13 +2169,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 	workflowID := "TEST_WORKFLOW_ID"
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "TEST_WORKFLOW_TYPE"
 	taskQueueName := "TEST_TASK_QUEUE"
 
 	childWorkflowID := "TEST_CHILD_WORKFLOW_ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "TEST_CHILD_WORKFLOW_TYPE"
 	childTaskQueueName := "TEST_CHILD_TASK_QUEUE"
 
@@ -2286,7 +2286,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -2314,7 +2314,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2374,7 +2374,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure_TargetNamespaceNotFound() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -2401,7 +2401,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2446,13 +2446,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success_Dup() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2473,7 +2473,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2545,14 +2545,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	childExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random child workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
@@ -2574,7 +2574,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2626,14 +2626,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_ChildStarted_ParentClosed() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	childExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random child workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
@@ -2655,7 +2655,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 	s.NoError(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2794,7 +2794,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			if c.CloseTransferTaskIdSet {
 				closeTransferTaskId = 10
 			}
-			workflowKey := definition.NewWorkflowKey(uuid.New(), uuid.New(), uuid.New())
+			workflowKey := definition.NewWorkflowKey(uuid.NewString(), uuid.NewString(), uuid.NewString())
 			mockMutableState.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				NamespaceId:         workflowKey.NamespaceID,

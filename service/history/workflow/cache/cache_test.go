@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -83,7 +83,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -110,7 +110,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 
 	execution2 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
@@ -130,7 +130,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(true).AnyTimes()
@@ -171,7 +171,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
@@ -185,7 +185,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 
 	we2 := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	// Cache is full because context is pinned, should get an error now
@@ -230,7 +230,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
@@ -293,7 +293,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 
 	namespaceID := namespace.ID("test_namespace_id")
 	workflowId := "wf-cache-test-pinning"
-	runID := uuid.New()
+	runID := uuid.NewString()
 
 	testFn := func() {
 		defer stopGroup.Done()
@@ -365,7 +365,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 	runIDs := make([]string, runIDCount)
 	runIDRefCounter := make([]int32, runIDCount)
 	for i := 0; i < runIDCount; i++ {
-		runIDs[i] = uuid.New()
+		runIDs[i] = uuid.NewString()
 		runIDRefCounter[i] = 0
 	}
 
@@ -535,12 +535,12 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 			namespaceID := namespace.ID("test_namespace_id")
 			execution := commonpb.WorkflowExecution{
 				WorkflowId: "some random workflow id",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			}
 			cacheKey := Key{
 				WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 				ArchetypeID: chasm.WorkflowArchetypeID,
-				ShardUUID:   uuid.New(),
+				ShardUUID:   uuid.NewString(),
 			}
 			workflowCtx := workflow.NewContext(
 				s.mockShard.GetConfig(),
@@ -584,7 +584,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -615,7 +615,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 	// Try to insert another entry before releasing previous.
 	execution2 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	_, _, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
@@ -649,7 +649,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -680,7 +680,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	// Insert another 400byte entry.
 	execution2 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mockMS2 := historyi.NewMockMutableState(s.controller)
 	mockMS2.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -708,7 +708,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	// Insert another entry. This should fail as cache has ~800bytes pinned.
 	execution3 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mockMS3 := historyi.NewMockMutableState(s.controller)
 	mockMS3.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -787,7 +787,7 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -824,7 +824,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
 		RunId:      "",
 	}
 
-	currentRunID := uuid.New()
+	currentRunID := uuid.NewString()
 
 	mockExecutionManager := s.mockShard.Resource.ExecutionMgr
 	mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
@@ -833,7 +833,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
 		WorkflowID:  execution.GetWorkflowId(),
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
-		StartRequestID: uuid.New(),
+		StartRequestID: uuid.NewString(),
 		RunID:          currentRunID,
 		State:          enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		Status:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,

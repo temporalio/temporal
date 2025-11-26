@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -51,29 +51,29 @@ func (s *metadataSuite) SetupTest() {
 
 	s.isGlobalNamespaceEnabled = true
 	s.failoverVersionIncrement = 100
-	s.clusterName = uuid.New()
-	s.secondClusterName = uuid.New()
-	s.thirdClusterName = uuid.New()
+	s.clusterName = uuid.NewString()
+	s.secondClusterName = uuid.NewString()
+	s.thirdClusterName = uuid.NewString()
 
 	clusterInfo := map[string]ClusterInformation{
 		s.clusterName: {
 			Enabled:                true,
 			InitialFailoverVersion: int64(1),
-			RPCAddress:             uuid.New(),
+			RPCAddress:             uuid.NewString(),
 			ShardCount:             1,
 			version:                1,
 		},
 		s.secondClusterName: {
 			Enabled:                true,
 			InitialFailoverVersion: int64(4),
-			RPCAddress:             uuid.New(),
+			RPCAddress:             uuid.NewString(),
 			ShardCount:             2,
 			version:                1,
 		},
 		s.thirdClusterName: {
 			Enabled:                true,
 			InitialFailoverVersion: int64(5),
-			RPCAddress:             uuid.New(),
+			RPCAddress:             uuid.NewString(),
 			ShardCount:             1,
 			version:                1,
 		},
@@ -135,7 +135,7 @@ func (s *metadataSuite) Test_RegisterMetadataChangeCallback() {
 }
 
 func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
-	id := uuid.New()
+	id := uuid.NewString()
 	s.metadata.clusterChangeCallback[id] = func(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation) {
 		oldMetadata, ok := oldClusterMetadata[id]
 		s.True(ok)
@@ -169,8 +169,8 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
 						HistoryShardCount:      1,
-						ClusterAddress:         uuid.New(),
-						HttpAddress:            uuid.New(),
+						ClusterAddress:         uuid.NewString(),
+						HttpAddress:            uuid.NewString(),
 					},
 					Version: 1,
 				},
@@ -181,8 +181,8 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
 						HistoryShardCount:      1,
-						ClusterAddress:         uuid.New(),
-						HttpAddress:            uuid.New(),
+						ClusterAddress:         uuid.NewString(),
+						HttpAddress:            uuid.NewString(),
 						Tags:                   map[string]string{"test": "test"},
 					},
 					Version: 2,
@@ -194,8 +194,8 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 2,
 						HistoryShardCount:      2,
-						ClusterAddress:         uuid.New(),
-						HttpAddress:            uuid.New(),
+						ClusterAddress:         uuid.NewString(),
+						HttpAddress:            uuid.NewString(),
 						Tags:                   map[string]string{"test": "test"},
 					},
 					Version: 2,
@@ -211,7 +211,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 
 func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 	nextPageSizeToken := []byte{1}
-	newClusterName := uuid.New()
+	newClusterName := uuid.NewString()
 	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(gomock.Any(), &persistence.ListClusterMetadataRequest{
 		PageSize:      defaultClusterMetadataPageSize,
 		NextPageToken: nil,
@@ -224,8 +224,8 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
 						HistoryShardCount:      1,
-						ClusterAddress:         uuid.New(),
-						HttpAddress:            uuid.New(),
+						ClusterAddress:         uuid.NewString(),
+						HttpAddress:            uuid.NewString(),
 					},
 					Version: 1,
 				},
@@ -244,8 +244,8 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 2,
 						HistoryShardCount:      2,
-						ClusterAddress:         uuid.New(),
-						HttpAddress:            uuid.New(),
+						ClusterAddress:         uuid.NewString(),
+						HttpAddress:            uuid.NewString(),
 					},
 					Version: 2,
 				},

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -82,7 +82,7 @@ func (s *resendHandlerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
-	s.namespaceID = namespace.ID(uuid.New())
+	s.namespaceID = namespace.ID(uuid.NewString())
 	s.namespace = "some random namespace name"
 	s.config = tests.NewDynamicConfig()
 	s.historyFetcher = NewMockHistoryPaginatedFetcher(s.controller)
@@ -158,7 +158,7 @@ func NewHistoryEventMatrixMatcher(expected [][]*historypb.HistoryEvent) gomock.M
 
 func (s *resendHandlerSuite) TestResendHistoryEvents_NoRemoteEvents() {
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	endEventID := int64(12)
 	endEventVersion := int64(123)
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
@@ -206,7 +206,7 @@ func (s *resendHandlerSuite) TestResendHistoryEvents_NoRemoteEvents() {
 
 func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	endEventID := int64(13)
 	endEventVersion := int64(123)
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
@@ -332,7 +332,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 
 func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_LocalAndRemoteEvents() {
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	endEventID := int64(9)
 	endEventVersion := int64(124)
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
@@ -440,7 +440,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_LocalAndRemoteEvents(
 
 func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_MixedVersionHistory_RemoteEventsOnly() {
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	endEventID := int64(9)
 	endEventVersion := int64(124)
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(2)
@@ -508,7 +508,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_MixedVersionHistory_R
 
 func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_BatchTest() {
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	endEventID := int64(13)
 	endEventVersion := int64(123)
 	s.config.ReplicationResendMaxBatchCount = dynamicconfig.GetIntPropertyFn(10)

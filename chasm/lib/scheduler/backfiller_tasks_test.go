@@ -215,8 +215,10 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 }
 
 func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
-	sched := s.scheduler
 	ctx := s.newMutableContext()
+	schedComponent, err := s.node.Component(ctx, chasm.ComponentRef{})
+	s.NoError(err)
+	sched := schedComponent.(*scheduler.Scheduler)
 	invoker := sched.Invoker.Get(ctx)
 
 	// Exactly one type of request can be set per Backfiller.
@@ -232,7 +234,7 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	}
 
 	// Either type of request will spawn a Backfiller and schedule an immediate pure task.
-	_, err := s.node.CloseTransaction()
+	_, err = s.node.CloseTransaction()
 	s.NoError(err)
 
 	// Run a backfill task.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -81,7 +81,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
@@ -107,7 +107,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	unpauseResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.NoError(err)
@@ -152,10 +152,10 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 		Identity:   strings.Repeat("x", 2000),
 		Reason:     s.pauseReason,
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	resp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
@@ -169,10 +169,10 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	pauseRequest = &workflowservice.PauseWorkflowExecutionRequest{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     strings.Repeat("x", 2000),
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	resp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
@@ -185,7 +185,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	pauseRequest = &workflowservice.PauseWorkflowExecutionRequest{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  strings.Repeat("x", 2000),
@@ -202,10 +202,10 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 	pauseRequest = &workflowservice.PauseWorkflowExecutionRequest{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	resp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
@@ -230,10 +230,10 @@ func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidat
 	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 		Identity:   strings.Repeat("x", 2000),
 		Reason:     s.pauseReason,
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	resp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.Error(err)
@@ -247,10 +247,10 @@ func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidat
 	unpauseRequest = &workflowservice.UnpauseWorkflowExecutionRequest{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     strings.Repeat("x", 2000),
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	resp, err = s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
 	s.Error(err)
@@ -263,7 +263,7 @@ func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidat
 	unpauseRequest = &workflowservice.UnpauseWorkflowExecutionRequest{
 		Namespace:  namespaceName,
 		WorkflowId: "test-workflow-id",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
 		RequestId:  strings.Repeat("x", 2000),
@@ -307,7 +307,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.NoError(err)
@@ -326,7 +326,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// 2nd pause request should fail with failed precondition error.
-	pauseRequest.RequestId = uuid.New()
+	pauseRequest.RequestId = uuid.NewString()
 	pauseResp, err = s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.Error(err)
 	s.Nil(pauseResp)

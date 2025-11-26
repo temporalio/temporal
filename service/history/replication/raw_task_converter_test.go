@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -136,14 +136,14 @@ func (s *rawTaskConverterSuite) SetupTest() {
 	namespaceRegistry := s.shardContext.Resource.NamespaceCache
 	namespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
-	s.workflowID = uuid.New()
+	s.workflowID = uuid.NewString()
 
-	s.runID = uuid.New()
+	s.runID = uuid.NewString()
 	s.workflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mutableState = historyi.NewMockMutableState(s.controller)
 	s.releaseFn = func(error) { s.lockReleased = true }
 
-	s.newRunID = uuid.New()
+	s.newRunID = uuid.NewString()
 	s.newWorkflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.newMutableState = historyi.NewMockMutableState(s.controller)
 	s.newReleaseFn = func(error) { s.lockReleased = true }
@@ -300,7 +300,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
 	baseWorkflowInfo := &workflowspb.BaseExecutionInfo{
-		RunId:                            uuid.New(),
+		RunId:                            uuid.NewString(),
 		LowestCommonAncestorEventId:      rand.Int63(),
 		LowestCommonAncestorEventVersion: rand.Int63(),
 	}
@@ -412,7 +412,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
 	baseWorkflowInfo := &workflowspb.BaseExecutionInfo{
-		RunId:                            uuid.New(),
+		RunId:                            uuid.NewString(),
 		LowestCommonAncestorEventId:      rand.Int63(),
 		LowestCommonAncestorEventVersion: rand.Int63(),
 	}
@@ -650,7 +650,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		NewRunID:            s.newRunID,
 	}
 	baseWorkflowInfo := &workflowspb.BaseExecutionInfo{
-		RunId:                            uuid.New(),
+		RunId:                            uuid.NewString(),
 		LowestCommonAncestorEventId:      rand.Int63(),
 		LowestCommonAncestorEventVersion: rand.Int63(),
 	}
@@ -823,7 +823,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 		},
 	}
 	baseWorkflowInfo := &workflowspb.BaseExecutionInfo{
-		RunId:                            uuid.New(),
+		RunId:                            uuid.NewString(),
 		LowestCommonAncestorEventId:      rand.Int63(),
 		LowestCommonAncestorEventVersion: rand.Int63(),
 	}

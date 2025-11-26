@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -64,7 +64,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 4}, nil)
@@ -243,7 +243,7 @@ func (s *ForceReplicationWorkflowTestSuite) testRunForceReplicationForContinueAs
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	var a *activities
 	if input.TotalForceReplicateWorkflowCount == 0 {
@@ -296,7 +296,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestInvalidInput() {
 		},
 		{
 			// Empty TargetClusterEndpoint
-			Namespace:          uuid.New(),
+			Namespace:          uuid.NewString(),
 			EnableVerification: true,
 		},
 	} {
@@ -316,7 +316,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestListWorkflowsError() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
@@ -347,7 +347,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskRetryable
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
@@ -396,7 +396,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestGenerateReplicationTaskNonRetrya
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
@@ -452,7 +452,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
@@ -509,7 +509,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestTaskQueueReplicationFailure() {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	var a *activities
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 10}, nil)
@@ -554,7 +554,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 
 	var a *activities
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	env.OnActivity(a.CountWorkflow, mock.Anything, mock.Anything).Return(&countWorkflowResponse{WorkflowCount: 3}, nil)
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 1, NamespaceID: namespaceID}, nil)
 
@@ -634,7 +634,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	ctrl := gomock.NewController(t)
 	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)

@@ -19,7 +19,7 @@ const (
 //
 // ParentPtr is only initialized and available for use **after** the transition that
 // creates the component using ParentPtr is completed.
-type ParentPtr[T Component] struct {
+type ParentPtr[T any] struct {
 	// Exporting this field as this generic struct needs to be created via reflection,
 	// and reflection can't set private fields.
 	Internal parentPtrInternal

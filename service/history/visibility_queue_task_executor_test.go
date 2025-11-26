@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -195,7 +195,7 @@ func (s *visibilityQueueTaskExecutorSuite) TearDownTest() {
 func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -206,11 +206,11 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	parentNamespace := "some random parent namespace Name"
 	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	rootExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random root workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
@@ -237,7 +237,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	s.Nil(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -281,7 +281,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -292,11 +292,11 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 	parentNamespace := "some random parent namespace Name"
 	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	rootExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random root workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
@@ -323,7 +323,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 	s.Nil(err)
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -366,7 +366,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -420,7 +420,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -468,7 +468,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
@@ -585,7 +585,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_InvalidTask() {
 	key := definition.NewWorkflowKey(
 		s.namespaceID.String(),
 		"some random ID",
-		uuid.New(),
+		uuid.NewString(),
 	)
 	mutableState := s.buildChasmMutableState(key, 5)
 
@@ -613,7 +613,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_RunningExecution
 	key := definition.NewWorkflowKey(
 		s.namespaceID.String(),
 		"some random ID",
-		uuid.New(),
+		uuid.NewString(),
 	)
 	mutableState := s.buildChasmMutableState(key, 5)
 
@@ -657,7 +657,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 	key := definition.NewWorkflowKey(
 		s.namespaceID.String(),
 		"some random ID",
-		uuid.New(),
+		uuid.NewString(),
 	)
 	mutableState := s.buildChasmMutableState(key, 5)
 

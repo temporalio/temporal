@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -98,7 +98,7 @@ func (s *workflowReplicatorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	s.workflowID = "some random workflow ID"
-	s.runID = uuid.New()
+	s.runID = uuid.NewString()
 	s.now = time.Now().UTC()
 	s.workflowStateReplicator = NewWorkflowStateReplicator(
 		s.mockShard,
@@ -115,11 +115,11 @@ func (s *workflowReplicatorSuite) TearDownTest() {
 }
 
 func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	namespaceName := "namespaceName"
 	branchInfo := &persistencespb.HistoryBranch{
 		TreeId:    s.runID,
-		BranchId:  uuid.New(),
+		BranchId:  uuid.NewString(),
 		Ancestors: nil,
 	}
 	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
@@ -211,19 +211,19 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 }
 
 func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	namespaceName := "namespaceName"
 	branchInfo := &persistencespb.HistoryBranch{
-		TreeId:   uuid.New(),
-		BranchId: uuid.New(),
+		TreeId:   uuid.NewString(),
+		BranchId: uuid.NewString(),
 		Ancestors: []*persistencespb.HistoryBranchRange{
 			{
-				BranchId:    uuid.New(),
+				BranchId:    uuid.NewString(),
 				BeginNodeId: 1,
 				EndNodeId:   3,
 			},
 			{
-				BranchId:    uuid.New(),
+				BranchId:    uuid.NewString(),
 				BeginNodeId: 3,
 				EndNodeId:   4,
 			},
@@ -408,10 +408,10 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_NoClosedWorkflow_Error
 }
 
 func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend() {
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	branchInfo := &persistencespb.HistoryBranch{
-		TreeId:    uuid.New(),
-		BranchId:  uuid.New(),
+		TreeId:    uuid.NewString(),
+		BranchId:  uuid.NewString(),
 		Ancestors: nil,
 	}
 	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
@@ -488,10 +488,10 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 }
 
 func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM() {
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	branchInfo := &persistencespb.HistoryBranch{
-		TreeId:    uuid.New(),
-		BranchId:  uuid.New(),
+		TreeId:    uuid.NewString(),
+		BranchId:  uuid.NewString(),
 		Ancestors: nil,
 	}
 	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
@@ -603,7 +603,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
 	workflowStateReplicator.transactionMgr = mockTransactionManager
 	workflowStateReplicator.taskRefresher = mockTaskRefresher
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	s.workflowStateReplicator.transactionMgr = NewMockTransactionManager(s.controller)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -694,7 +694,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
 	workflowStateReplicator.transactionMgr = mockTransactionManager
 	workflowStateReplicator.taskRefresher = mockTaskRefresher
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	s.workflowStateReplicator.transactionMgr = NewMockTransactionManager(s.controller)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -779,7 +779,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
 	workflowStateReplicator.transactionMgr = mockTransactionManager
 	workflowStateReplicator.taskRefresher = mockTaskRefresher
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	s.workflowStateReplicator.transactionMgr = NewMockTransactionManager(s.controller)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -873,7 +873,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
 	workflowStateReplicator.transactionMgr = mockTransactionManager
 	workflowStateReplicator.taskRefresher = mockTaskRefresher
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	s.workflowStateReplicator.transactionMgr = NewMockTransactionManager(s.controller)
 	versionHistories := versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
 	transitionHistory := []*persistencespb.VersionedTransition{
@@ -953,7 +953,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
 	workflowStateReplicator.transactionMgr = mockTransactionManager
 	workflowStateReplicator.taskRefresher = mockTaskRefresher
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	s.workflowStateReplicator.transactionMgr = NewMockTransactionManager(s.controller)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -1039,7 +1039,7 @@ func (m *historyEventMatcher) String() string {
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_WithGapAndTailEvents() {
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
@@ -1213,7 +1213,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_WithGapAndTailEvents_NewMutableState() {
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
@@ -1360,7 +1360,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_WithGapAndTailEvents_NotConsecutive() {
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
@@ -1521,7 +1521,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_CreateNewBranch() {
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{

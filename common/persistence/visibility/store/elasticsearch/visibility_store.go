@@ -440,7 +440,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 		termsAgg,
 	)
 	if err != nil {
-		return nil, err
+		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err)
 	}
 	return s.parseCountGroupByResponse(esResponse, groupByFields)
 }
@@ -1154,14 +1154,19 @@ func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interfac
 
 func ConvertElasticsearchClientError(message string, err error) error {
 	errMessage := fmt.Sprintf("%s: %s", message, detailedErrorMessage(err))
-	switch e := err.(type) {
-	case *elastic.Error:
-		switch e.Status {
+	var elasticErr *elastic.Error
+	switch {
+	case errors.As(err, &elasticErr):
+		switch elasticErr.Status {
 		case 400: // BadRequest
 			// Returning InvalidArgument error will prevent retry on a caller side.
 			return serviceerror.NewInvalidArgument(errMessage)
 		}
+		return serviceerror.NewUnavailable(errMessage)
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return fmt.Errorf("%s: %w", message, err)
 	}
+
 	return serviceerror.NewUnavailable(errMessage)
 }
 

@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -2096,7 +2095,7 @@ func newContext(
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
-		owner:                   fmt.Sprintf("%s-%v-%v", hostIdentity, sequenceID, uuid.New()),
+		owner:                   fmt.Sprintf("%s-%v-%v", hostIdentity, sequenceID, uuid.NewString()),
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
@@ -2287,7 +2286,6 @@ func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 
 // newShardClosedErrorWithShardID when shard is closed and a req cannot be processed
 func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnershipLostError {
-	softassert.Sometimes(s.contextTaggedLogger).Debug("ShardOwnershipLostError: Shard closed")
 	return &persistence.ShardOwnershipLostError{
 		ShardID: s.shardID, // immutable
 		Msg:     "shard closed",

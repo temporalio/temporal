@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -414,7 +414,7 @@ func (c *cacheImpl) validateWorkflowExecutionInfo(
 		}
 
 		execution.RunId = runID
-	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
+	} else if uuid.Validate(execution.GetRunId()) != nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
 	return nil

@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -75,7 +75,7 @@ func (s *HistoryV2PersistenceSuite) TearDownTest() {
 	s.cancel()
 }
 
-// TestGenUUIDs testing  uuid.New() can generate unique UUID
+// TestGenUUIDs testing  uuid.NewString() can generate unique UUID
 func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 	wg := sync.WaitGroup{}
 	m := sync.Map{}
@@ -84,7 +84,7 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			u := uuid.New()
+			u := uuid.NewString()
 			m.Store(u, true)
 		}()
 	}
@@ -110,7 +110,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	pgSize := 100
 
 	for i := 0; i < totalTrees; i++ {
-		treeID := uuid.NewRandom().String()
+		treeID := uuid.NewString()
 		bi, err := s.newHistoryBranch(treeID)
 		s.Nil(err)
 
@@ -151,7 +151,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 
 // TestReadBranchByPagination test
 func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
-	treeID := uuid.NewRandom().String()
+	treeID := uuid.NewString()
 	bi, err := s.newHistoryBranch(treeID)
 	s.Nil(err)
 
@@ -340,7 +340,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 
 // TestConcurrentlyCreateAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
-	treeID := uuid.NewRandom().String()
+	treeID := uuid.NewString()
 	wg := sync.WaitGroup{}
 	concurrency := 1
 	m := &sync.Map{}
@@ -462,7 +462,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 // TestConcurrentlyForkAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
-	treeID := uuid.NewRandom().String()
+	treeID := uuid.NewString()
 	wg := sync.WaitGroup{}
 	concurrency := 10
 	masterBr, err := s.newHistoryBranch(treeID)
@@ -682,9 +682,9 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 // persistence helper
 func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
 	return s.ExecutionManager.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		chasm.WorkflowArchetypeID,
 		treeID,
 		nil,
@@ -830,8 +830,8 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 			ForkNodeID:      forkNodeID,
 			Info:            testForkRunID,
 			ShardID:         s.ShardInfo.GetShardId(),
-			NamespaceID:     uuid.New(),
-			NewRunID:        uuid.New(),
+			NamespaceID:     uuid.NewString(),
+			NewRunID:        uuid.NewString(),
 		})
 		if resp != nil {
 			bi = resp.NewBranchToken

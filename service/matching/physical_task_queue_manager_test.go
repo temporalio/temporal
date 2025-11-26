@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -214,9 +214,9 @@ func randomTaskInfoWithAgeTaskID(age time.Duration, TaskID int64) *persistencesp
 
 	return &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
-			NamespaceId:      uuid.New(),
-			WorkflowId:       uuid.New(),
-			RunId:            uuid.New(),
+			NamespaceId:      uuid.NewString(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),
@@ -451,7 +451,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFa
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingNonRootPartition() {
 	// Non-root partitions only get to emit decisions on high backlog
-	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 	s.tqMgr.partitionMgr.partition = partition
