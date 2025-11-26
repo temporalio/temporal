@@ -131,6 +131,9 @@ func newVisibilityManager(
 	visibilityPluginNameTag metrics.Tag,
 	visibilityIndexNameTag metrics.Tag,
 	logger log.Logger,
+	searchAttributesProvider searchattribute.Provider,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
+	chasmRegistry *chasm.Registry,
 ) manager.VisibilityManager {
 	if visStore == nil {
 		return nil
@@ -140,7 +143,12 @@ func newVisibilityManager(
 		tag.NewStringTag(visibilityPluginNameTag.Key, visibilityPluginNameTag.Value),
 		tag.NewStringTag(visibilityIndexNameTag.Key, visibilityIndexNameTag.Value),
 	)
-	var visManager manager.VisibilityManager = newVisibilityManagerImpl(visStore, logger)
+	var visManager manager.VisibilityManager = newVisibilityManagerImpl(
+		visStore,
+		logger,
+		searchAttributesMapperProvider,
+		chasmRegistry,
+	)
 
 	// wrap with rate limiter
 	visManager = NewVisibilityManagerRateLimited(
@@ -215,6 +223,9 @@ func newVisibilityManagerFromDataStoreConfig(
 		metrics.VisibilityPluginNameTag(visStore.GetName()),
 		metrics.VisibilityIndexNameTag(visStore.GetIndexName()),
 		logger,
+		searchAttributesProvider,
+		searchAttributesMapperProvider,
+		chasmRegistry,
 	), nil
 }
 

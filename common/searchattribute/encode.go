@@ -59,6 +59,7 @@ func Decode(
 		if typeMap != nil {
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
+			// TODO: Evaluate if we should get the chasm search attribute mapper when upserting search attributes.
 			if err != nil && !sadefs.IsChasmSearchAttribute(saName) {
 				lastErr = err
 			}

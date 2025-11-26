@@ -155,10 +155,10 @@ func (mr *MockVisibilityStoreMockRecorder) GetWorkflowExecution(ctx, request any
 }
 
 // ListChasmExecutions mocks base method.
-func (m *MockVisibilityStore) ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListChasmExecutions", ctx, request)
-	ret0, _ := ret[0].(*InternalListWorkflowExecutionsResponse)
+	ret0, _ := ret[0].(*InternalListExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -170,10 +170,10 @@ func (mr *MockVisibilityStoreMockRecorder) ListChasmExecutions(ctx, request any)
 }
 
 // ListWorkflowExecutions mocks base method.
-func (m *MockVisibilityStore) ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListWorkflowExecutions", ctx, request)
-	ret0, _ := ret[0].(*InternalListWorkflowExecutionsResponse)
+	ret0, _ := ret[0].(*InternalListExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

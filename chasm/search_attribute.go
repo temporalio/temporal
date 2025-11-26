@@ -1,12 +1,10 @@
 package chasm
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
@@ -434,8 +432,16 @@ func GetValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, 
 		return zero, false
 	}
 
-	finalVal, ok := visibilityValue.Value().(T)
+	rawValue := visibilityValue.Value()
+	finalVal, ok := rawValue.(T)
 	if !ok {
+		// Handle int to int64 conversion for SearchAttributeInt
+		// Some databases return int instead of int64
+		if intVal, isInt := rawValue.(int); isInt {
+			if int64Val, isInt64Target := any(int64(intVal)).(T); isInt64Target {
+				return int64Val, true
+			}
+		}
 		return zero, false
 	}
 	return finalVal, true
@@ -472,34 +478,4 @@ func convertToVisibilityValue(value interface{}) VisibilityValue {
 		// Return as string if type is unknown
 		return VisibilityValueString(fmt.Sprintf("%v", val))
 	}
-}
-
-// AliasChasmSearchAttributes converts search attribute values to VisibilityValue and aliases field names.
-// It takes a map of field names to interface{} values, converts them to VisibilityValue based on their runtime type,
-// and then aliases the field names using the mapper.
-func AliasChasmSearchAttributes(
-	chasmSearchAttributes map[string]interface{},
-	mapper *VisibilitySearchAttributesMapper,
-) (map[string]VisibilityValue, error) {
-	if len(chasmSearchAttributes) == 0 {
-		return nil, nil
-	}
-
-	chasmSAs := make(map[string]VisibilityValue, len(chasmSearchAttributes))
-	for fieldName, value := range chasmSearchAttributes {
-		visibilityValue := convertToVisibilityValue(value)
-		aliasName, err := mapper.Alias(fieldName)
-		if err != nil {
-			// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field, search attribute is not registered.
-			// IMPORTANT: Chasm search attributes must be registered with the CHASM Registry using the WithSearchAttributes() option.
-			var invalidArgumentErr *serviceerror.InvalidArgument
-			if errors.As(err, &invalidArgumentErr) {
-				continue
-			}
-			return nil, err
-		}
-		chasmSAs[aliasName] = visibilityValue
-	}
-
-	return chasmSAs, nil
 }

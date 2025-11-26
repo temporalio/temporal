@@ -9,6 +9,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/payload"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -388,9 +389,9 @@ func ListExecutions[C Component, M proto.Message](
 		if !ok {
 			return nil, serviceerror.NewInternalf("failed to cast chasm memo to type %s", reflect.TypeFor[M]().String())
 		}
-		err := proto.Unmarshal(execution.ChasmMemo.Data, chasmMemo)
+		err := payload.Decode(execution.ChasmMemo, chasmMemo)
 		if err != nil {
-			return nil, serviceerror.NewInternalf("failed to unmarshal chasm memo: %v", err)
+			return nil, serviceerror.NewInternalf("failed to decode chasm memo: %v", err)
 		}
 		executions[i] = &ExecutionInfo[M]{
 			BusinessID:             execution.BusinessID,

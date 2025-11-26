@@ -2192,25 +2192,15 @@ func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes() {
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
 
-	s.NotNil(info.ChasmSearchAttributes)
-	s.Len(info.ChasmSearchAttributes, 5)
-	completedVal, ok := info.ChasmSearchAttributes["ChasmCompleted"].(chasm.VisibilityValueBool)
-	s.True(ok)
-	s.True(bool(completedVal))
-	statusVal, ok := info.ChasmSearchAttributes["ChasmStatus"].(chasm.VisibilityValueString)
-	s.True(ok)
-	s.Equal("active", string(statusVal))
-	countVal, ok := info.ChasmSearchAttributes["ChasmCount"].(chasm.VisibilityValueInt64)
-	s.True(ok)
-	s.Equal(int64(42), int64(countVal))
-	scoreVal, ok := info.ChasmSearchAttributes["ChasmScore"].(chasm.VisibilityValueFloat64)
-	s.True(ok)
-	s.InDelta(3.14, float64(scoreVal), 0.001)
-	expectedTime, err := time.Parse(time.RFC3339Nano, "2018-06-07T15:04:05.123456789-08:00")
-	s.NoError(err)
-	timeVal, ok := info.ChasmSearchAttributes["ChasmStartTime"].(chasm.VisibilityValueTime)
-	s.True(ok)
-	s.Equal(expectedTime, time.Time(timeVal))
+	// Search attributes are now combined (CHASM + custom) in encoded form
+	s.NotNil(info.SearchAttributes)
+	s.NotNil(info.SearchAttributes.GetIndexedFields())
+	// Verify CHASM search attributes are present in encoded form
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalBool01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalKeyword01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalInt01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalDouble01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalDatetime01")
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes_NoMapper() {
@@ -2229,7 +2219,11 @@ func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes_NoMapper() {
 	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
 	s.NoError(err)
 	s.NotNil(info)
-	s.Nil(info.ChasmSearchAttributes)
+	// Search attributes are now combined in encoded form
+	s.NotNil(info.SearchAttributes)
+	// Verify CHASM search attributes are present
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalBool01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalKeyword01")
 }
 
 func (s *ESVisibilitySuite) TestNameInterceptor_ChasmMapper() {

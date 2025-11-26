@@ -371,7 +371,7 @@ func (s *VisibilityStore) checkProcessor() {
 func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+) (*store.InternalListExecutionsResponse, error) {
 	p, err := s.BuildSearchParametersV2(request, s.GetListFieldSorter)
 	if err != nil {
 		return nil, err
@@ -388,7 +388,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 func (s *VisibilityStore) ListChasmExecutions(
 	ctx context.Context,
 	request *manager.ListChasmExecutionsRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+) (*store.InternalListExecutionsResponse, error) {
 	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeID)
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeID))
@@ -832,9 +832,9 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	namespace namespace.Name,
 	pageSize int,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+) (*store.InternalListExecutionsResponse, error) {
 	if searchResult.Hits == nil || len(searchResult.Hits.Hits) == 0 {
-		return &store.InternalListWorkflowExecutionsResponse{}, nil
+		return &store.InternalListExecutionsResponse{}, nil
 	}
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
@@ -842,8 +842,8 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
 
-	response := &store.InternalListWorkflowExecutionsResponse{
-		Executions: make([]*store.InternalWorkflowExecutionInfo, 0, len(searchResult.Hits.Hits)),
+	response := &store.InternalListExecutionsResponse{
+		Executions: make([]*store.InternalExecutionInfo, 0, len(searchResult.Hits.Hits)),
 	}
 	var lastHitSort []interface{}
 	for _, hit := range searchResult.Hits.Hits {
@@ -981,7 +981,7 @@ func (s *VisibilityStore) ParseESDoc(
 	saTypeMap searchattribute.NameTypeMap,
 	namespaceName namespace.Name,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
-) (*store.InternalWorkflowExecutionInfo, error) {
+) (*store.InternalExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 		return serviceerror.NewInternalf("unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err)
@@ -1002,13 +1002,12 @@ func (s *VisibilityStore) ParseESDoc(
 	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
 
 	var (
-		isValidType            bool
-		memo                   []byte
-		memoEncoding           string
-		customSearchAttributes map[string]interface{}
-		chasmSearchAttributes  map[string]interface{}
+		isValidType         bool
+		memo                []byte
+		memoEncoding        string
+		allSearchAttributes map[string]interface{}
 	)
-	record := &store.InternalWorkflowExecutionInfo{}
+	record := &store.InternalExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
 		switch fieldName {
 		case sadefs.NamespaceID,
@@ -1085,43 +1084,22 @@ func (s *VisibilityStore) ParseESDoc(
 		case sadefs.RootRunID:
 			record.RootRunID = fieldValueParsed.(string)
 		default:
-			if sadefs.IsChasmSearchAttribute(fieldName) {
-				if chasmSearchAttributes == nil {
-					chasmSearchAttributes = map[string]interface{}{}
-				}
-				chasmSearchAttributes[fieldName] = fieldValueParsed
-			} else {
-				if customSearchAttributes == nil {
-					customSearchAttributes = map[string]interface{}{}
-				}
-				customSearchAttributes[fieldName] = fieldValueParsed
+			if allSearchAttributes == nil {
+				allSearchAttributes = map[string]interface{}{}
 			}
+			allSearchAttributes[fieldName] = fieldValueParsed
 		}
 	}
 
 	var err error
-	record.ChasmSearchAttributes, err = chasm.AliasChasmSearchAttributes(chasmSearchAttributes, chasmMapper)
-	if err != nil {
-		return nil, err
-	}
-
-	record.SearchAttributes, err = searchattribute.Encode(customSearchAttributes, &saTypeMap)
+	record.SearchAttributes, err = searchattribute.Encode(allSearchAttributes, &finalTypeMap)
 	if err != nil {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf(
-			"Unable to encode custom search attributes of Elasticsearch document(%s): %v",
+			"Unable to encode search attributes of Elasticsearch document(%s): %v",
 			docID,
 			err,
 		)
-	}
-
-	record.SearchAttributes, err = searchattribute.AliasFields(
-		s.searchAttributesMapperProvider,
-		record.SearchAttributes,
-		namespaceName.String(),
-	)
-	if err != nil {
-		return nil, err
 	}
 
 	if memoEncoding != "" {

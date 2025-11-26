@@ -9,7 +9,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
@@ -33,8 +32,8 @@ type (
 		DeleteWorkflowExecution(ctx context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error
 
 		// Read APIs.
-		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
-		ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListExecutionsResponse, error)
+		ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
 		CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*manager.CountChasmExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
@@ -47,32 +46,31 @@ type (
 		AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error
 	}
 
-	// InternalWorkflowExecutionInfo is internal visibility info for workflow execution
-	InternalWorkflowExecutionInfo struct {
-		WorkflowID            string
-		RunID                 string
-		TypeName              string
-		StartTime             time.Time
-		ExecutionTime         time.Time
-		CloseTime             time.Time
-		ExecutionDuration     time.Duration
-		Status                enumspb.WorkflowExecutionStatus
-		HistoryLength         int64
-		HistorySizeBytes      int64
-		StateTransitionCount  int64
-		Memo                  *commonpb.DataBlob
-		TaskQueue             string
-		ChasmSearchAttributes map[string]chasm.VisibilityValue
-		SearchAttributes      *commonpb.SearchAttributes
-		ParentWorkflowID      string
-		ParentRunID           string
-		RootWorkflowID        string
-		RootRunID             string
+	// InternalExecutionInfo is internal visibility info for workflow execution
+	InternalExecutionInfo struct {
+		WorkflowID           string
+		RunID                string
+		TypeName             string
+		StartTime            time.Time
+		ExecutionTime        time.Time
+		CloseTime            time.Time
+		ExecutionDuration    time.Duration
+		Status               enumspb.WorkflowExecutionStatus
+		HistoryLength        int64
+		HistorySizeBytes     int64
+		StateTransitionCount int64
+		Memo                 *commonpb.DataBlob
+		TaskQueue            string
+		SearchAttributes     *commonpb.SearchAttributes
+		ParentWorkflowID     string
+		ParentRunID          string
+		RootWorkflowID       string
+		RootRunID            string
 	}
 
-	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions and ListChasmExecutions
-	InternalListWorkflowExecutionsResponse struct {
-		Executions []*InternalWorkflowExecutionInfo
+	// InternalListExecutionsResponse is response from ListWorkflowExecutions and ListChasmExecutions
+	InternalListExecutionsResponse struct {
+		Executions []*InternalExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
@@ -80,7 +78,7 @@ type (
 
 	// InternalGetWorkflowExecutionResponse is response from GetWorkflowExecution
 	InternalGetWorkflowExecutionResponse struct {
-		Execution *InternalWorkflowExecutionInfo
+		Execution *InternalExecutionInfo
 	}
 
 	// InternalVisibilityRequestBase is a base request to visibility APIs.
