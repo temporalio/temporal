@@ -25,9 +25,9 @@ type (
 	}
 
 	valuesInterceptor struct {
-		namespace               namespace.Name
-		searchAttributesTypeMap searchattribute.NameTypeMap
-		chasmMapper             *chasm.VisibilitySearchAttributesMapper
+		namespace    namespace.Name
+		finalTypeMap searchattribute.NameTypeMap
+		chasmMapper  *chasm.VisibilitySearchAttributesMapper
 	}
 )
 
@@ -51,10 +51,14 @@ func NewValuesInterceptor(
 	saTypeMap searchattribute.NameTypeMap,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *valuesInterceptor {
+	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
+	maps.Copy(combinedTypeMap, saTypeMap.Custom())
+	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
+	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
 	return &valuesInterceptor{
-		namespace:               namespaceName,
-		searchAttributesTypeMap: saTypeMap,
-		chasmMapper:             chasmMapper,
+		namespace:    namespaceName,
+		finalTypeMap: finalTypeMap,
+		chasmMapper:  chasmMapper,
 	}
 }
 
@@ -99,12 +103,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 	var fieldType enumspb.IndexedValueType
 	var err error
 
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, vi.searchAttributesTypeMap.Custom())
-	maps.Copy(combinedTypeMap, vi.chasmMapper.SATypeMap())
-	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
-
-	fieldType, err = finalTypeMap.GetType(fieldName)
+	fieldType, err = vi.finalTypeMap.GetType(fieldName)
 	if err != nil {
 		return nil, query.NewConverterError("invalid search attribute: %s", name)
 	}
