@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1033,7 +1033,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
-	taskID := uuid.New()
+	taskID := uuid.NewString()
 	queryResultCh := make(chan *queryResult, 1)
 	e.queryResults.Set(taskID, queryResultCh)
 	defer e.queryResults.Delete(taskID)
@@ -2341,7 +2341,7 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return nil, err
 	}
 
-	taskID := uuid.New()
+	taskID := uuid.NewString()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -2988,7 +2988,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		WorkflowExecution:   task.workflowExecution(),
 		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
 		Clock:               task.event.Data.GetClock(),
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
@@ -3047,7 +3047,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		WorkflowExecution:   task.workflowExecution(),
 		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
 		Clock:               task.event.Data.GetClock(),
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),

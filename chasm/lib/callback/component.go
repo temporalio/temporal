@@ -8,15 +8,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/timestamppb"
-)
-
-const (
-	Archetype chasm.Archetype = "Callback"
 )
 
 type CompletionSource interface {
@@ -34,7 +29,7 @@ type Callback struct {
 	*callbackspb.CallbackState
 
 	// Interface to retrieve Nexus operation completion data
-	CompletionSource chasm.Field[CompletionSource]
+	CompletionSource chasm.ParentPtr[CompletionSource]
 }
 
 func NewCallback(
@@ -54,8 +49,14 @@ func NewCallback(
 }
 
 func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
-	// TODO (seankane): implement lifecycle state
-	return chasm.LifecycleStateRunning
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return chasm.LifecycleStateCompleted
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		return chasm.LifecycleStateFailed
+	default:
+		return chasm.LifecycleStateRunning
+	}
 }
 
 func (c *Callback) StateMachineState() callbackspb.CallbackStatus {
@@ -90,7 +91,7 @@ func (c *Callback) loadInvocationArgs(
 		)
 	}
 
-	if variant.Url == chasmnexus.CompletionHandlerURL {
+	if variant.Url == chasm.NexusCompletionHandlerURL {
 		return chasmInvocation{
 			nexus:      variant,
 			attempt:    c.Attempt,

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -256,7 +256,7 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_Inco
 func (s *activityReplicatorStateSuite) TestVersionHistory_LocalIsSuperSet() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -304,7 +304,7 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_LocalIsSuperSet() {
 func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_NoResend() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -352,7 +352,7 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_NoR
 func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_Resend() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -409,7 +409,7 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_Res
 func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_LocalLarger() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -465,7 +465,7 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_LocalLarger() 
 func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_IncomingLarger() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -531,7 +531,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	version := int64(100)
 
 	request := &historyservice.SyncActivityRequest{
@@ -568,7 +568,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	version := int64(100)
 
 	request := &historyservice.SyncActivitiesRequest{
@@ -605,7 +605,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -686,7 +686,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -771,7 +771,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -853,7 +853,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -939,7 +939,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -1042,7 +1042,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -1148,7 +1148,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -1250,7 +1250,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version

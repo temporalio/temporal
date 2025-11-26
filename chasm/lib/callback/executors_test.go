@@ -5,10 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
-	"reflect"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
@@ -18,7 +16,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -35,38 +32,41 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// mockNexusCompletionGetter implements CanGetNexusCompletion for testing
-type mockNexusCompletionGetter struct {
+type mockNexusCompletionGetterComponent struct {
+	chasm.UnimplementedComponent
+
+	Empty *emptypb.Empty
+
 	completion nexusrpc.OperationCompletion
 	err        error
+
+	Callback chasm.Field[*Callback]
 }
 
-func (m *mockNexusCompletionGetter) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.OperationCompletion, error) {
 	return m.completion, m.err
 }
 
-// setFieldValue is a test helper that uses reflection to set the internal value of a chasm.Field.
-// This is necessary for testing because:
-// 1. The Field API (NewComponentField, NewDataField) only supports chasm.Component and proto.Message types
-// 2. CanGetNexusCompletion is a plain interface, not a Component
-// 3. The fieldInternal struct and its fields are unexported
-//
-// In production, Fields are typically initialized through proper CHASM lifecycle methods or
-// by using NewComponentField/NewDataField with appropriate types.
-// TODO (seankane): Move this helper to the chasm/chasmtest package
-func setFieldValue[T any](field *chasm.Field[T], value T) {
-	// Get the Internal field (which is exported)
-	internalField := reflect.ValueOf(field).Elem().FieldByName("Internal")
+func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
 
-	// Get the unexported 'v' field using unsafe pointer manipulation
-	vField := internalField.FieldByName("v")
-	vField = reflect.NewAt(vField.Type(), unsafe.Pointer(vField.UnsafeAddr())).Elem()
+type mockNexusCompletionGetterLibrary struct {
+	chasm.UnimplementedLibrary
+}
 
-	// Set the value
-	vField.Set(reflect.ValueOf(value))
+func (l *mockNexusCompletionGetterLibrary) Name() string {
+	return "mock"
+}
+
+func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent]("nexusCompletionGetter"),
+	}
 }
 
 // Test the full executeInvocationTask flow with direct executor calls
@@ -154,16 +154,43 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				metrics.DestinationTag("http://localhost"),
 				metrics.OutcomeTag(tc.expectedMetricOutcome))
 
-			// Create completion
-			completion, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
-			require.NoError(t, err)
-
 			// Setup logger and time source
-			logger := log.NewNoopLogger()
+			logger := log.NewTestLogger()
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
-			// Create callback in SCHEDULED state
+			// Create task executor with mock namespace registry
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
+
+			// Create mock engine
+			mockEngine := chasm.NewMockEngine(ctrl)
+			executor := &InvocationTaskExecutor{
+				config: &Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
+				},
+				namespaceRegistry: nsRegistry,
+				metricsHandler:    metricsHandler,
+				logger:            logger,
+				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
+					return tc.caller
+				},
+			}
+
+			chasmRegistry := chasm.NewRegistry(logger)
+			err := chasmRegistry.Register(&Library{
+				InvocationTaskExecutor: executor,
+			})
+			require.NoError(t, err)
+			err = chasmRegistry.Register(&mockNexusCompletionGetterLibrary{})
+			require.NoError(t, err)
+
+			nodeBackend := &chasm.MockNodeBackend{}
+			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger)
+
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
 					RequestId:        "request-id",
@@ -180,21 +207,21 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				},
 			}
 
-			// Set up the CompletionSource field to return our mock
-			completionGetter := &mockNexusCompletionGetter{
+			// Create completion
+			completion, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
+			require.NoError(t, err)
+
+			// Set up the CompletionSource field to return our mock completion
+			root.SetRootComponent(&mockNexusCompletionGetterComponent{
 				completion: completion,
-			}
-			// Set the CanGetNexusCompletion field using reflection.
-			// This is necessary because CanGetNexusCompletion is a plain interface,
-			// not a chasm.Component, so we can't use NewComponentField.
-			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
-
-			// Create task executor with mock namespace registry
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
-
-			// Create mock engine
-			mockEngine := chasm.NewMockEngine(ctrl)
+				// Create callback in SCHEDULED state
+				Callback: chasm.NewComponentField(
+					chasm.NewMutableContext(context.Background(), root),
+					callback,
+				),
+			})
+			_, err = root.CloseTransaction()
+			require.NoError(t, err)
 
 			// Setup engine expectations to directly call executor logic with MockMutableContext
 			mockEngine.EXPECT().ReadComponent(
@@ -232,22 +259,6 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return nil, err
 			})
 
-			executor := &InvocationTaskExecutor{
-				config: &Config{
-					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-					RetryPolicy: func() backoff.RetryPolicy {
-						return backoff.NewExponentialRetryPolicy(time.Second)
-					},
-				},
-				namespaceRegistry: nsRegistry,
-				metricsHandler:    metricsHandler,
-				logger:            logger,
-				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
-					return tc.caller
-				},
-				chasmEngine: mockEngine,
-			}
-
 			// Create ComponentRef
 			ref := chasm.NewComponentRef[*Callback](chasm.ExecutionKey{
 				NamespaceID: "namespace-id",
@@ -276,7 +287,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger := log.NewNoopLogger()
+	logger := log.NewTestLogger()
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
 
@@ -546,14 +557,44 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			historyClient := tc.setupHistoryClient(t, ctrl)
 
 			// Setup logger and time source
-			logger := log.NewNoopLogger()
+			logger := log.NewTestLogger()
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
+			// Create mock namespace registry
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
+
+			// Create mock engine and setup expectations
+			mockEngine := chasm.NewMockEngine(ctrl)
+			executor := &InvocationTaskExecutor{
+				config: &Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
+				},
+				namespaceRegistry: nsRegistry,
+				metricsHandler:    metrics.NoopMetricsHandler,
+				logger:            logger,
+				historyClient:     historyClient,
+			}
+
+			chasmRegistry := chasm.NewRegistry(logger)
+			err := chasmRegistry.Register(&Library{
+				InvocationTaskExecutor: executor,
+			})
+			require.NoError(t, err)
+			err = chasmRegistry.Register(&mockNexusCompletionGetterLibrary{})
+			require.NoError(t, err)
+
+			nodeBackend := &chasm.MockNodeBackend{}
+			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger)
+
 			// Create headers
-			headers := make(map[string]string)
+			headers := nexus.Header{}
 			if tc.headerValue != "" {
-				headers[commonnexus.CallbackTokenHeader] = tc.headerValue
+				headers.Set(commonnexus.CallbackTokenHeader, tc.headerValue)
 			}
 
 			// Create callback with chasm internal URL
@@ -564,7 +605,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					Callback: &callbackspb.Callback{
 						Variant: &callbackspb.Callback_Nexus_{
 							Nexus: &callbackspb.Callback_Nexus{
-								Url:    chasmnexus.CompletionHandlerURL,
+								Url:    chasm.NexusCompletionHandlerURL,
 								Header: headers,
 							},
 						},
@@ -574,18 +615,18 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				},
 			}
 
-			// Set up the CompletionSource field
-			completionGetter := &mockNexusCompletionGetter{
+			// Set up the CompletionSource field to return our mock completion
+			root.SetRootComponent(&mockNexusCompletionGetterComponent{
 				completion: tc.completion,
-			}
-			setFieldValue(&callback.CompletionSource, CompletionSource(completionGetter))
+				// Create callback in SCHEDULED state
+				Callback: chasm.NewComponentField(
+					chasm.NewMutableContext(context.Background(), root),
+					callback,
+				),
+			})
+			_, err = root.CloseTransaction()
+			require.NoError(t, err)
 
-			// Create mock namespace registry
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
-
-			// Create mock engine and setup expectations
-			mockEngine := chasm.NewMockEngine(ctrl)
 			mockEngine.EXPECT().ReadComponent(
 				gomock.Any(),
 				gomock.Any(),
@@ -633,20 +674,6 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				err := updateFn(mockCtx, callback)
 				return nil, err
 			})
-
-			executor := InvocationTaskExecutor{
-				config: &Config{
-					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-					RetryPolicy: func() backoff.RetryPolicy {
-						return backoff.NewExponentialRetryPolicy(time.Second)
-					},
-				},
-				namespaceRegistry: nsRegistry,
-				metricsHandler:    metrics.NoopMetricsHandler,
-				logger:            logger,
-				historyClient:     historyClient,
-				chasmEngine:       mockEngine,
-			}
 
 			// Create ComponentRef
 			ref := chasm.NewComponentRef[*Callback](chasm.ExecutionKey{

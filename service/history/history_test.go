@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -104,9 +104,9 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 		},
 	}
 
-	runID := uuid.New()
+	runID := uuid.NewString()
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetCurrentExecutionResponse{
-		StartRequestID: uuid.New(),
+		StartRequestID: uuid.NewString(),
 		RunID:          runID,
 		State:          enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		Status:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -138,7 +138,7 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 func (s *historyAPISuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "workflowID",
-		RunId:      uuid.New(),
+		RunId:      uuid.NewString(),
 	}
 
 	shardID := common.WorkflowIDToHistoryShard(

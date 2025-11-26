@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -116,9 +116,9 @@ func (s *dlqHandlerSuite) TearDownTest() {
 func (s *dlqHandlerSuite) TestReadMessages_OK() {
 	ctx := context.Background()
 
-	namespaceID := uuid.New()
-	workflowID := uuid.New()
-	runID := uuid.New()
+	namespaceID := uuid.NewString()
+	workflowID := uuid.NewString()
+	runID := uuid.NewString()
 	taskID := int64(12345)
 	version := int64(2333)
 	firstEventID := int64(144)
@@ -210,9 +210,9 @@ func (s *dlqHandlerSuite) TestPurgeMessages() {
 func (s *dlqHandlerSuite) TestMergeMessages() {
 	ctx := context.Background()
 
-	namespaceID := uuid.New()
-	workflowID := uuid.New()
-	runID := uuid.New()
+	namespaceID := uuid.NewString()
+	workflowID := uuid.NewString()
+	runID := uuid.NewString()
 	taskID := int64(12345)
 	version := int64(2333)
 	firstEventID := int64(144)

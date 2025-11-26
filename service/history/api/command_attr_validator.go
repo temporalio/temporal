@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -329,7 +329,7 @@ func (v *CommandAttrValidator) ValidateCancelExternalWorkflowExecutionAttributes
 	if len(workflowID) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgumentf("WorkflowId on RequestCancelExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d RunId=%s Namespace=%s", workflowID, len(workflowID), v.maxIDLengthLimit, runID, ns)
 	}
-	if runID != "" && uuid.Parse(runID) == nil {
+	if runID != "" && uuid.Validate(runID) != nil {
 		return failedCause, serviceerror.NewInvalidArgumentf("Invalid RunId set on RequestCancelExternalWorkflowExecutionCommand. WorkflowId=%s RunId=%s Namespace=%s", workflowID, runID, ns)
 	}
 	if _, ok := initiatedChildExecutionsInSession[workflowID]; ok {
@@ -374,7 +374,7 @@ func (v *CommandAttrValidator) ValidateSignalExternalWorkflowExecutionAttributes
 	if len(workflowID) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgumentf("WorkflowId on SignalExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d Namespace=%s RunId=%s SignalName=%s", workflowID, len(workflowID), v.maxIDLengthLimit, ns, targetRunID, signalName)
 	}
-	if targetRunID != "" && uuid.Parse(targetRunID) == nil {
+	if targetRunID != "" && uuid.Validate(targetRunID) != nil {
 		return failedCause, serviceerror.NewInvalidArgumentf("Invalid RunId set on SignalExternalWorkflowExecutionCommand. WorkflowId=%s Namespace=%s RunId=%s SignalName=%s", workflowID, ns, targetRunID, signalName)
 	}
 	if attributes.GetSignalName() == "" {

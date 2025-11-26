@@ -7,8 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -20,7 +20,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -1580,7 +1579,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
+	if request.GetNamespaceId() == "" || uuid.Validate(request.GetNamespaceId()) != nil {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
@@ -1588,7 +1587,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 		return nil, h.convertError(errWorkflowIDNotSet)
 	}
 
-	if request.GetRunId() == "" || uuid.Parse(request.GetRunId()) == nil {
+	if request.GetRunId() == "" || uuid.Validate(request.GetRunId()) != nil {
 		return nil, h.convertError(errRunIDNotValid)
 	}
 
@@ -2397,7 +2396,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		request.GetCompletion().GetComponentRef(),
-		func(c chasmnexus.CompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
 		completion)

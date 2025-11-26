@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1699,7 +1699,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	workflowID := task.WorkflowID
 	baseRunID := baseMutableState.GetExecutionState().GetRunId()
 
-	resetRunID := uuid.New()
+	resetRunID := uuid.NewString()
 	baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1
 	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
@@ -1734,7 +1734,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
-		uuid.New(),
+		uuid.NewString(),
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),

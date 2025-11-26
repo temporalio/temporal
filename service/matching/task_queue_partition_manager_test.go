@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	namespaceId   = "ns-id"
+	namespaceID   = "ns-id"
 	namespaceName = "ns-name"
 	taskQueueName = "my-test-tq"
 )
@@ -79,7 +79,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	engine := createTestMatchingEngine(logger, s.controller, config, matchingClientMock, registry)
 
-	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
@@ -99,7 +99,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
 	_, _, err := s.partitionMgr.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
-			NamespaceId: namespaceId,
+			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  "wf",
 		},
@@ -511,7 +511,7 @@ func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expe
 	s.userDataMgr.updateVersioningData(versioningData)
 	buildId, syncMatch, err := s.partitionMgr.AddTask(ctx, addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
-			NamespaceId:      namespaceId,
+			NamespaceId:      namespaceID,
 			RunId:            "run",
 			WorkflowId:       "wf",
 			VersionDirective: directive,
