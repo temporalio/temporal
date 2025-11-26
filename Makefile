@@ -206,7 +206,6 @@ ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
-TYPOS_VER := v1.28.4
 TYPOS := typos
 
 WORKFLOWCHECK_VER := master # TODO: pin this specific version once 0.3.0 follow-up is released
