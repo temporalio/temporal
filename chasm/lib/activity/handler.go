@@ -86,6 +86,9 @@ func (h *handler) PollActivityExecution(
 		token := req.GetFrontendRequest().
 			GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
 			WaitAnyStateChange.GetLongPollToken()
+		if len(token) == 0 {
+			return chasm.ReadComponent(ctx, ref, (*Activity).buildPollActivityExecutionResponse, req, nil)
+		}
 		response, _, err = chasm.PollComponent(childCtx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
