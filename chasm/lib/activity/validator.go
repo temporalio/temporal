@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
@@ -167,38 +168,36 @@ func normalizeAndValidateTimeouts(
 // IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
 // (i.e., when incoming request can potentially be retried), clone the params first before passing it in.
 func ValidateStandaloneActivity(
-	activityID string,
-	activityType string,
+	req *workflowservice.StartActivityExecutionRequest,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	inputSizeBytes int,
 	logger log.Logger,
 	maxIDLengthLimit int,
-	namespaceName string,
-	requestID *string,
-	searchAttributes *commonpb.SearchAttributes,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
-	if err := validateAndNormalizeRequestID(requestID, maxIDLengthLimit); err != nil {
+	if err := validateAndNormalizeRequestID(&req.RequestId, maxIDLengthLimit); err != nil {
+		return err
+	}
+
+	if err := normalizeAndValidateIDPolicy(req); err != nil {
 		return err
 	}
 
 	if err := validateInputSize(
-		activityID,
-		activityType,
+		req.GetActivityId(),
+		req.GetActivityType().GetName(),
 		blobSizeLimitError,
 		blobSizeLimitWarn,
-		inputSizeBytes,
+		req.Input.Size(),
 		logger,
-		namespaceName); err != nil {
+		req.GetNamespace()); err != nil {
 		return err
 	}
 
-	if searchAttributes != nil {
+	if req.GetSearchAttributes() != nil {
 		if err := validateAndNormalizeSearchAttributes(
-			namespaceName,
-			searchAttributes,
+			req,
 			saMapperProvider,
 			saValidator); err != nil {
 			return err
@@ -216,6 +215,28 @@ func validateAndNormalizeRequestID(requestID *string, maxIDLengthLimit int) erro
 
 	if len(*requestID) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	}
+
+	return nil
+}
+
+func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
+	if req.GetIdConflictPolicy() == enumspb.ACTIVITY_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
+		req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE {
+		return serviceerror.NewInvalidArgument("Invalid ActivityIdReusePolicy: ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE " +
+			"cannot be used together with ActivityIdConflictPolicy ACTIVITY_ID_CONFLICT_POLICY_TERMINATE_EXISTING")
+	}
+
+	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
+		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	}
+
+	if req.GetIdConflictPolicy() == enumspb.ACTIVITY_ID_CONFLICT_POLICY_UNSPECIFIED {
+		req.IdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL
+	}
+
+	if req.GetOnConflictOptions().GetAttachCompletionCallbacks() && !req.GetOnConflictOptions().GetAttachRequestId() {
+		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
 	}
 
 	return nil
@@ -249,23 +270,24 @@ func validateInputSize(
 }
 
 func validateAndNormalizeSearchAttributes(
-	namespaceName string,
-	searchAttributes *commonpb.SearchAttributes,
+	req *workflowservice.StartActivityExecutionRequest,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
-	unaliased, err := searchattribute.UnaliasFields(saMapperProvider, searchAttributes, namespaceName)
+	namespaceName := req.GetNamespace()
+
+	unaliased, err := searchattribute.UnaliasFields(saMapperProvider, req.SearchAttributes, namespaceName)
 	if err != nil {
 		return err
 	}
 
-	searchAttributes.IndexedFields = unaliased.IndexedFields
+	req.SearchAttributes.IndexedFields = unaliased.IndexedFields
 
-	if err := saValidator.Validate(searchAttributes, namespaceName); err != nil {
+	if err := saValidator.Validate(req.SearchAttributes, namespaceName); err != nil {
 		return err
 	}
 
-	return saValidator.ValidateSize(searchAttributes, namespaceName)
+	return saValidator.ValidateSize(req.SearchAttributes, namespaceName)
 }
 
 // ValidatePollActivityExecutionRequest validates the request for PollActivityExecution API.

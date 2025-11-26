@@ -165,7 +165,6 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 ) (*workflowservice.StartActivityExecutionRequest, error) {
 	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
-	activityType := req.ActivityType.GetName()
 
 	if req.Options.RetryPolicy == nil {
 		req.Options.RetryPolicy = &commonpb.RetryPolicy{}
@@ -173,7 +172,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 
 	err := ValidateAndNormalizeActivityAttributes(
 		req.ActivityId,
-		activityType,
+		req.ActivityType.GetName(),
 		dynamicconfig.DefaultActivityRetryPolicy.Get(h.dc),
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
 		namespaceID,
@@ -186,16 +185,11 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	err = ValidateStandaloneActivity(
-		req.ActivityId,
-		req.ActivityType.GetName(),
+		req,
 		dynamicconfig.BlobSizeLimitError.Get(h.dc),
 		dynamicconfig.BlobSizeLimitWarn.Get(h.dc),
-		req.Input.Size(),
 		h.logger,
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
-		req.Namespace,
-		&req.RequestId,
-		req.SearchAttributes,
 		h.saMapperProvider,
 		h.saValidator)
 	if err != nil {
