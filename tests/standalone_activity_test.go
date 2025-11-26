@@ -358,6 +358,8 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 	t.Skip("TODO(dan): implement test when RecordActivityTaskCompleted is implemented")
 }
 
+// TODO(dan): add tests that PollActivityExecution can wait for deletion, termination, cancellation etc
+
 func (s *standaloneActivityTestSuite) Test_PollActivityExecution_DeadlineExceeded() {
 	t := s.T()
 	originalCtx := testcore.NewContext()

@@ -510,7 +510,6 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newEntityParams.events,
 	)
 	if err == nil {
-		// TODO(dan): send notification on creation?
 		return currentRunInfo{}, false, nil
 	}
 
@@ -663,7 +662,6 @@ func (e *ChasmEngine) handleReusePolicy(
 	if err != nil {
 		return chasm.EntityKey{}, nil, err
 	}
-	// TODO(dan): send notification on creation?
 
 	serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
 	if err != nil {
