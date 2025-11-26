@@ -166,7 +166,7 @@ func (e *ChasmEngine) UpdateWithNewEntity(
 // UpdateComponent applies updateFn to the component identified by the supplied component reference,
 // returning the new component reference corresponding to the transition. An error is returned if
 // the state transition specified by the supplied component reference is inconsistent with execution
-// transition history.
+// transition history. opts are currently ignored.
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -221,7 +221,7 @@ func (e *ChasmEngine) UpdateComponent(
 
 // ReadComponent evaluates readFn against the current state of the component identified by the
 // supplied component reference. An error is returned if the state transition specified by the
-// component reference is inconsistent with execution transition history.
+// component reference is inconsistent with execution transition history. opts are currently ignored.
 func (e *ChasmEngine) ReadComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -263,11 +263,12 @@ func (e *ChasmEngine) ReadComponent(
 // must return true at all transitions t > s. It is an error if execution transition history is
 // (after reloading from persistence) behind the requested ref, or if the ref is inconsistent with
 // execution transition history. Thus when the predicate function is evaluated, it is guaranteed
-// that the execution VT >= requestRef VT.
+// that the execution VT >= requestRef VT. opts are currently ignored.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
+	opts ...chasm.TransitionOption,
 ) (retRef []byte, retError error) {
 	defer func() {
 		if errors.Is(retError, consts.ErrStaleState) {
