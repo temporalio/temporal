@@ -128,6 +128,9 @@ func (r *ComponentRef) Serialize(
 // DeserializeComponentRef deserializes a byte slice into a ComponentRef.
 // Provides caller the access to information including ExecutionKey, Archetype, and ShardingKey.
 func DeserializeComponentRef(data []byte) (ComponentRef, error) {
+	if len(data) == 0 {
+		return ComponentRef{}, serviceerror.NewInternal("empty chasm component ref")
+	}
 	var pRef persistencespb.ChasmComponentRef
 	if err := pRef.Unmarshal(data); err != nil {
 		return ComponentRef{}, err
