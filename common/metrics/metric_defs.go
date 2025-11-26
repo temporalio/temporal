@@ -636,6 +636,7 @@ var (
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
+	HeaderSize                               = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client."))
 	LockRequests                             = NewCounterDef("lock_requests")
 	LockLatency                              = NewTimerDef("lock_latency")
 	SemaphoreRequests                        = NewCounterDef("semaphore_requests")

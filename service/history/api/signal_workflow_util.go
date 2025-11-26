@@ -17,6 +17,7 @@ func ValidateSignal(
 	shard historyi.ShardContext,
 	mutableState historyi.MutableState,
 	signalPayloadSize int,
+	signalHeaderSize int,
 	operation string,
 ) error {
 	config := shard.GetConfig()
@@ -31,6 +32,10 @@ func ValidateSignal(
 	blobSizeLimitWarn := config.BlobSizeLimitWarn(namespaceName)
 	blobSizeLimitError := config.BlobSizeLimitError(namespaceName)
 
+	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shard.GetLogger()).WithTags(
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()),
+	)
+	metrics.HeaderSize.With(metricsHandler).Record(int64(signalHeaderSize))
 	if err := common.CheckEventBlobSizeLimit(
 		signalPayloadSize,
 		blobSizeLimitWarn,
@@ -38,9 +43,7 @@ func ValidateSignal(
 		namespaceName,
 		workflowID,
 		runID,
-		interceptor.GetMetricsHandlerFromContext(ctx, shard.GetLogger()).WithTags(
-			metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()),
-		),
+		metricsHandler,
 		shard.GetThrottledLogger(),
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {

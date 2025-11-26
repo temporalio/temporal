@@ -1959,6 +1959,9 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, err
 	}
 
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetHeader().Size()))
+
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(
@@ -1968,7 +1971,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		namespaceID.String(),
 		request.GetWorkflowExecution().GetWorkflowId(),
 		request.GetWorkflowExecution().GetRunId(),
-		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		metricsHandler,
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("SignalWorkflowExecution"),
 	); err != nil {
@@ -2777,6 +2780,9 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		return nil, err
 	}
 
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetQuery().GetHeader().Size()))
+
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 
@@ -2787,7 +2793,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		namespaceID.String(),
 		request.GetExecution().GetWorkflowId(),
 		request.GetExecution().GetRunId(),
-		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		metricsHandler,
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("QueryWorkflow")); err != nil {
 		return nil, err
