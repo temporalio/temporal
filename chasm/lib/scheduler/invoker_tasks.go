@@ -562,16 +562,10 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
 		Priority:                 requestSpec.Priority,
-	}
-
-	// Set last completion result payload.
-	switch outcome := lastCompletionState.Outcome.(type) {
-	case *schedulerpb.LastCompletionResult_Failure:
-		request.ContinuedFailure = outcome.Failure
-	case *schedulerpb.LastCompletionResult_Success:
-		request.LastCompletionResult = &commonpb.Payloads{
-			Payloads: []*commonpb.Payload{outcome.Success},
-		}
+		ContinuedFailure:         lastCompletionState.Failure,
+		LastCompletionResult: &commonpb.Payloads{
+			Payloads: []*commonpb.Payload{lastCompletionState.Success},
+		},
 	}
 
 	result, err := e.frontendClient.StartWorkflowExecution(ctx, request)

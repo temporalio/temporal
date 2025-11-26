@@ -673,10 +673,7 @@ func (s *scheduleFunctionalSuiteBase) TestLastCompletionAndError() {
 			s.Equal("this one succeeds", lcr)
 			return "", errors.New("this one fails")
 		case 3:
-			// TODO - CHASM scheduler only keeps a single one of these set at a time, not both. IMO, that's more correct than
-			// keeping one of each.
-			//
-			// s.Equal("this one succeeds", lcr)
+			s.Equal("this one succeeds", lcr)
 			s.ErrorContains(lastErr, "this one fails")
 			atomic.StoreInt32(&testComplete, 1)
 			return "done", nil
