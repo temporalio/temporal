@@ -3342,3 +3342,36 @@ func unsetRampingFromRoutingConfig(
 	rc.RampingVersionPercentageChangedTime = nil
 	rc.RampingVersionChangedTime = nil
 }
+
+func (e *matchingEngineImpl) EnablePriorityAndFairness(
+	ctx context.Context,
+	req *matchingservice.EnablePriorityAndFairnessRequest,
+) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
+	partition, err := tqid.PartitionFromProto(req.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	if partition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL {
+		return nil, serviceerror.NewUnimplemented("fairness and priority not implemented for non-normal queues")
+	}
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseAutoEnable)
+	if err != nil {
+		return nil, err
+	}
+	if pm == nil {
+		return nil, serviceerror.NewInvalidArgument("task queue provided does not exist")
+	}
+
+	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		data := common.CloneProto(old)
+		perType := data.GetPerType()[int32(pm.Partition().TaskType())]
+		perType.FairnessState = persistencespb.FAIRNESS_STATE_V2
+		return data, true, nil
+	}
+	_, err = pm.GetUserDataManager().UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.EnablePriorityAndFairnessResponse{}, nil
+}

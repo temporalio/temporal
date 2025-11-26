@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -23,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tqid"
@@ -61,13 +61,14 @@ type (
 		matchingClient      matchingservice.MatchingServiceClient
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// TODO(stephanos): move cache out of partition manager
-		cache      cache.Cache // non-nil for root-partition
-		autoEnable bool
+		cache cache.Cache // non-nil for root-partition
 
-		fairnessState      persistencespb.TaskQueueTypeUserData_FairnessState // Set once on initialization and read only after
-		defaultQueueFuture *future.FutureImpl[physicalTaskQueueManager]
-		initCtx            context.Context
-		initCancel         func()
+		autoEnable            bool
+		autoEnableRateLimiter quotas.RateLimiter
+		fairnessState         persistencespb.FairnessState // Set once on initialization and read only after
+		defaultQueueFuture    *future.FutureImpl[physicalTaskQueueManager]
+		initCtx               context.Context
+		initCancel            func()
 
 		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
@@ -102,18 +103,19 @@ func newTaskQueuePartitionManager(
 		tqConfig,
 		partition.TaskQueue().TaskType())
 	pm := &taskQueuePartitionManagerImpl{
-		engine:             e,
-		partition:          partition,
-		ns:                 ns,
-		config:             tqConfig,
-		logger:             logger,
-		throttledLogger:    throttledLogger,
-		matchingClient:     e.matchingRawClient,
-		metricsHandler:     metricsHandler,
-		versionedQueues:    make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
-		userDataManager:    userDataManager,
-		rateLimitManager:   rateLimitManager,
-		defaultQueueFuture: future.NewFuture[physicalTaskQueueManager](),
+		engine:                e,
+		partition:             partition,
+		ns:                    ns,
+		config:                tqConfig,
+		logger:                logger,
+		throttledLogger:       throttledLogger,
+		matchingClient:        e.matchingRawClient,
+		metricsHandler:        metricsHandler,
+		versionedQueues:       make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		userDataManager:       userDataManager,
+		rateLimitManager:      rateLimitManager,
+		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
+		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -147,7 +149,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() {
 	pm.autoEnable = pm.config.AutoEnable()
 	pm.fairnessState = data.GetFairnessState()
 	switch {
-	case !pm.autoEnable || pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
+	case !pm.autoEnable || pm.fairnessState == persistencespb.FAIRNESS_STATE_UNSPECIFIED:
 		var fairness bool
 		fairness, pm.cancelFairnessSub = pm.config.EnableFairnessSub(unload)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
@@ -157,10 +159,13 @@ func (pm *taskQueuePartitionManagerImpl) initialize() {
 		} else {
 			pm.config.NewMatcher, pm.cancelNewMatcherSub = pm.config.NewMatcherSub(unload)
 		}
-	case pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V1:
+	case pm.fairnessState == persistencespb.FAIRNESS_STATE_V0:
+		pm.config.NewMatcher = false
+		pm.config.EnableFairness = false
+	case pm.fairnessState == persistencespb.FAIRNESS_STATE_V1:
 		pm.config.NewMatcher = true
 		pm.config.EnableFairness = false
-	case pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V2:
+	case pm.fairnessState == persistencespb.FAIRNESS_STATE_V2:
 		pm.config.NewMatcher = true
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			pm.config.EnableFairness = false
@@ -252,6 +257,32 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 	return queue.WaitUntilInitialized(ctx)
 }
 
+func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
+	if !pm.autoEnable || !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		return
+	}
+	if pm.fairnessState != persistencespb.FAIRNESS_STATE_UNSPECIFIED {
+		return
+	}
+	if params.taskInfo.Priority.GetFairnessKey() == "" && params.taskInfo.Priority.GetPriorityKey() == int32(0) {
+		return
+	}
+	if !pm.autoEnableRateLimiter.Allow() {
+		return
+	}
+	req := &matchingservice.EnablePriorityAndFairnessRequest{
+		NamespaceId: pm.Namespace().ID().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Kind: pm.Partition().Kind(),
+			Name: pm.Partition().RpcName(),
+		},
+	}
+	_, err := pm.matchingClient.EnablePriorityAndFairness(ctx, req)
+	if err != nil {
+		pm.logger.Error("could not update userdata for autoenable", tag.Error(err))
+	}
+}
+
 func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
@@ -259,20 +290,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	directive := params.taskInfo.GetVersionDirective()
 
-	if pm.Partition().IsRoot() && pm.autoEnable && pm.fairnessState == persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED {
-		if params.taskInfo.Priority.GetFairnessKey() != "" || params.taskInfo.Priority.GetPriorityKey() != int32(0) {
-			updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-				data := common.CloneProto(old)
-				perType := data.GetPerType()[int32(pm.Partition().TaskType())]
-				perType.FairnessState = persistencespb.TaskQueueTypeUserData_FAIRNESS_STATE_V2
-				return data, true, nil
-			}
-			_, err := pm.userDataManager.UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
-			if err != nil {
-				pm.logger.Error("could not update userdata for autoenable", tag.Error(err))
-			}
-		}
-	}
+	pm.autoEnableIfNeeded(ctx, params)
 	// spoolQueue will be nil iff task is forwarded.
 reredirectTask:
 	spoolQueue, syncMatchQueue, _, taskDispatchRevisionNumber, err := pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId(), false)

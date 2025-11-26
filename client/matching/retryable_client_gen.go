@@ -191,6 +191,21 @@ func (c *retryableClient) DispatchNexusTask(
 	return resp, err
 }
 
+func (c *retryableClient) EnablePriorityAndFairness(
+	ctx context.Context,
+	request *matchingservice.EnablePriorityAndFairnessRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
+	var resp *matchingservice.EnablePriorityAndFairnessResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.EnablePriorityAndFairness(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,

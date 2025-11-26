@@ -641,3 +641,11 @@ message DescribeWorkerRequest {
 message DescribeWorkerResponse {
     temporal.api.worker.v1.WorkerInfo worker_info = 1;
 }
+
+message EnablePriorityAndFairnessRequest {
+    string namespace_id = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+}
+
+message EnablePriorityAndFairnessResponse {
+}

@@ -2,6 +2,8 @@
 package persistence
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -373,4 +375,24 @@ func (this *VersionedTaskQueueUserData) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+var (
+	FairnessState_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"V0":          1,
+		"V1":          2,
+		"V2":          3,
+	}
+)
+
+// FairnessStateFromString parses a FairnessState value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to FairnessState
+func FairnessStateFromString(s string) (FairnessState, error) {
+	if v, ok := FairnessState_value[s]; ok {
+		return FairnessState(v), nil
+	} else if v, ok := FairnessState_shorthandValue[s]; ok {
+		return FairnessState(v), nil
+	}
+	return FairnessState(0), fmt.Errorf("%s is not a valid FairnessState", s)
 }

@@ -2742,3 +2742,77 @@ func (this *DescribeWorkerResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type EnablePriorityAndFairnessRequest to the protobuf v3 wire format
+func (val *EnablePriorityAndFairnessRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type EnablePriorityAndFairnessRequest from the protobuf v3 wire format
+func (val *EnablePriorityAndFairnessRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *EnablePriorityAndFairnessRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two EnablePriorityAndFairnessRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *EnablePriorityAndFairnessRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *EnablePriorityAndFairnessRequest
+	switch t := that.(type) {
+	case *EnablePriorityAndFairnessRequest:
+		that1 = t
+	case EnablePriorityAndFairnessRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type EnablePriorityAndFairnessResponse to the protobuf v3 wire format
+func (val *EnablePriorityAndFairnessResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type EnablePriorityAndFairnessResponse from the protobuf v3 wire format
+func (val *EnablePriorityAndFairnessResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *EnablePriorityAndFairnessResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two EnablePriorityAndFairnessResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *EnablePriorityAndFairnessResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *EnablePriorityAndFairnessResponse
+	switch t := that.(type) {
+	case *EnablePriorityAndFairnessResponse:
+		that1 = t
+	case EnablePriorityAndFairnessResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

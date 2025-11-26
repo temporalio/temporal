@@ -89,11 +89,12 @@ var (
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
 
 		// these need to pick a partition. too complicated.
-		"client.matching.AddActivityTask":       true,
-		"client.matching.AddWorkflowTask":       true,
-		"client.matching.PollActivityTaskQueue": true,
-		"client.matching.PollWorkflowTaskQueue": true,
-		"client.matching.QueryWorkflow":         true,
+		"client.matching.AddActivityTask":           true,
+		"client.matching.AddWorkflowTask":           true,
+		"client.matching.PollActivityTaskQueue":     true,
+		"client.matching.PollWorkflowTaskQueue":     true,
+		"client.matching.QueryWorkflow":             true,
+		"client.matching.EnablePriorityAndFairness": true,
 		// these do forwarding stats. too complicated.
 		"metricsClient.matching.AddActivityTask":       true,
 		"metricsClient.matching.AddWorkflowTask":       true,

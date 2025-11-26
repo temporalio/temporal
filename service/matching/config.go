@@ -223,6 +223,7 @@ const (
 	loadCauseOtherRead  // any other read-only rpc
 	loadCauseOtherWrite // any other mutating rpc
 	loadCauseForce      // root partition loaded, force load to ensure matching with back logged partitions
+	loadCauseAutoEnable
 )
 
 const (

@@ -149,6 +149,20 @@ func (c *metricClient) DispatchNexusTask(
 	return c.client.DispatchNexusTask(ctx, request, opts...)
 }
 
+func (c *metricClient) EnablePriorityAndFairness(
+	ctx context.Context,
+	request *matchingservice.EnablePriorityAndFairnessRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.EnablePriorityAndFairnessResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientEnablePriorityAndFairness")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.EnablePriorityAndFairness(ctx, request, opts...)
+}
+
 func (c *metricClient) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,

@@ -579,6 +579,12 @@ func (h *Handler) ListWorkers(
 	}, nil
 }
 
+func (h *Handler) EnablePriorityAndFairness(
+	ctx context.Context, request *matchingservice.EnablePriorityAndFairnessRequest,
+) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
+	return h.engine.EnablePriorityAndFairness(ctx, request)
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {

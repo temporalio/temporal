@@ -27,6 +27,70 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type FairnessState int32
+
+const (
+	FAIRNESS_STATE_UNSPECIFIED FairnessState = 0
+	FAIRNESS_STATE_V0          FairnessState = 1
+	FAIRNESS_STATE_V1          FairnessState = 2
+	FAIRNESS_STATE_V2          FairnessState = 3
+)
+
+// Enum value maps for FairnessState.
+var (
+	FairnessState_name = map[int32]string{
+		0: "FAIRNESS_STATE_UNSPECIFIED",
+		1: "FAIRNESS_STATE_V0",
+		2: "FAIRNESS_STATE_V1",
+		3: "FAIRNESS_STATE_V2",
+	}
+	FairnessState_value = map[string]int32{
+		"FAIRNESS_STATE_UNSPECIFIED": 0,
+		"FAIRNESS_STATE_V0":          1,
+		"FAIRNESS_STATE_V1":          2,
+		"FAIRNESS_STATE_V2":          3,
+	}
+)
+
+func (x FairnessState) Enum() *FairnessState {
+	p := new(FairnessState)
+	*p = x
+	return p
+}
+
+func (x FairnessState) String() string {
+	switch x {
+	case FAIRNESS_STATE_UNSPECIFIED:
+		return "Unspecified"
+	case FAIRNESS_STATE_V0:
+		return "V0"
+	case FAIRNESS_STATE_V1:
+		return "V1"
+	case FAIRNESS_STATE_V2:
+		return "V2"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (FairnessState) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[0].Descriptor()
+}
+
+func (FairnessState) Type() protoreflect.EnumType {
+	return &file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[0]
+}
+
+func (x FairnessState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FairnessState.Descriptor instead.
+func (FairnessState) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{0}
+}
+
 type BuildId_State int32
 
 const (
@@ -70,11 +134,11 @@ func (x BuildId_State) String() string {
 }
 
 func (BuildId_State) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[0].Descriptor()
+	return file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[1].Descriptor()
 }
 
 func (BuildId_State) Type() protoreflect.EnumType {
-	return &file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[0]
+	return &file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[1]
 }
 
 func (x BuildId_State) Number() protoreflect.EnumNumber {
@@ -84,65 +148,6 @@ func (x BuildId_State) Number() protoreflect.EnumNumber {
 // Deprecated: Use BuildId_State.Descriptor instead.
 func (BuildId_State) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{0, 0}
-}
-
-type TaskQueueTypeUserData_FairnessState int32
-
-const (
-	TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED TaskQueueTypeUserData_FairnessState = 0
-	TaskQueueTypeUserData_FAIRNESS_STATE_V1          TaskQueueTypeUserData_FairnessState = 1
-	TaskQueueTypeUserData_FAIRNESS_STATE_V2          TaskQueueTypeUserData_FairnessState = 2
-)
-
-// Enum value maps for TaskQueueTypeUserData_FairnessState.
-var (
-	TaskQueueTypeUserData_FairnessState_name = map[int32]string{
-		0: "FAIRNESS_STATE_UNSPECIFIED",
-		1: "FAIRNESS_STATE_V1",
-		2: "FAIRNESS_STATE_V2",
-	}
-	TaskQueueTypeUserData_FairnessState_value = map[string]int32{
-		"FAIRNESS_STATE_UNSPECIFIED": 0,
-		"FAIRNESS_STATE_V1":          1,
-		"FAIRNESS_STATE_V2":          2,
-	}
-)
-
-func (x TaskQueueTypeUserData_FairnessState) Enum() *TaskQueueTypeUserData_FairnessState {
-	p := new(TaskQueueTypeUserData_FairnessState)
-	*p = x
-	return p
-}
-
-func (x TaskQueueTypeUserData_FairnessState) String() string {
-	switch x {
-	case TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED:
-		return "TaskQueueTypeUserDataFairnessStateUnspecified"
-	case TaskQueueTypeUserData_FAIRNESS_STATE_V1:
-		return "TaskQueueTypeUserDataFairnessStateV1"
-	case TaskQueueTypeUserData_FAIRNESS_STATE_V2:
-		return "TaskQueueTypeUserDataFairnessStateV2"
-	default:
-		return strconv.Itoa(int(x))
-	}
-
-}
-
-func (TaskQueueTypeUserData_FairnessState) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[1].Descriptor()
-}
-
-func (TaskQueueTypeUserData_FairnessState) Type() protoreflect.EnumType {
-	return &file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes[1]
-}
-
-func (x TaskQueueTypeUserData_FairnessState) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use TaskQueueTypeUserData_FairnessState.Descriptor instead.
-func (TaskQueueTypeUserData_FairnessState) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP(), []int{7, 0}
 }
 
 // BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
@@ -656,10 +661,10 @@ func (x *WorkerDeploymentData) GetVersions() map[string]*v12.WorkerDeploymentVer
 
 // Container for all persistent user data that varies per task queue type within a family.
 type TaskQueueTypeUserData struct {
-	state          protoimpl.MessageState              `protogen:"open.v1"`
-	DeploymentData *DeploymentData                     `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
-	Config         *v11.TaskQueueConfig                `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
-	FairnessState  TaskQueueTypeUserData_FairnessState `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.persistence.v1.TaskQueueTypeUserData_FairnessState" json:"fairness_state,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentData *DeploymentData        `protobuf:"bytes,1,opt,name=deployment_data,json=deploymentData,proto3" json:"deployment_data,omitempty"`
+	Config         *v11.TaskQueueConfig   `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	FairnessState  FairnessState          `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.persistence.v1.FairnessState" json:"fairness_state,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -708,11 +713,11 @@ func (x *TaskQueueTypeUserData) GetConfig() *v11.TaskQueueConfig {
 	return nil
 }
 
-func (x *TaskQueueTypeUserData) GetFairnessState() TaskQueueTypeUserData_FairnessState {
+func (x *TaskQueueTypeUserData) GetFairnessState() FairnessState {
 	if x != nil {
 		return x.FairnessState
 	}
-	return TaskQueueTypeUserData_FAIRNESS_STATE_UNSPECIFIED
+	return FAIRNESS_STATE_UNSPECIFIED
 }
 
 // Container for all persistent user provided data for a task queue family.
@@ -939,15 +944,11 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\bversions\x18\x02 \x03(\v2F.temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntryR\bversions\x1a{\n" +
 	"\rVersionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12T\n" +
-	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01\"\x87\x03\n" +
+	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01\"\x92\x02\n" +
 	"\x15TaskQueueTypeUserData\x12[\n" +
 	"\x0fdeployment_data\x18\x01 \x01(\v22.temporal.server.api.persistence.v1.DeploymentDataR\x0edeploymentData\x12B\n" +
-	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\x12n\n" +
-	"\x0efairness_state\x18\x03 \x01(\x0e2G.temporal.server.api.persistence.v1.TaskQueueTypeUserData.FairnessStateR\rfairnessState\"]\n" +
-	"\rFairnessState\x12\x1e\n" +
-	"\x1aFAIRNESS_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11FAIRNESS_STATE_V1\x10\x01\x12\x15\n" +
-	"\x11FAIRNESS_STATE_V2\x10\x02\"\x8e\x03\n" +
+	"\x06config\x18\x02 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x06config\x12X\n" +
+	"\x0efairness_state\x18\x03 \x01(\x0e21.temporal.server.api.persistence.v1.FairnessStateR\rfairnessState\"\x8e\x03\n" +
 	"\x11TaskQueueUserData\x12F\n" +
 	"\x05clock\x18\x01 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x12[\n" +
 	"\x0fversioning_data\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.VersioningDataR\x0eversioningData\x12]\n" +
@@ -957,7 +958,12 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\x05value:\x028\x01\"\x81\x01\n" +
 	"\x1aVersionedTaskQueueUserData\x12I\n" +
 	"\x04data\x18\x01 \x01(\v25.temporal.server.api.persistence.v1.TaskQueueUserDataR\x04data\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversionB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
+	"\aversion\x18\x02 \x01(\x03R\aversion*t\n" +
+	"\rFairnessState\x12\x1e\n" +
+	"\x1aFAIRNESS_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11FAIRNESS_STATE_V0\x10\x01\x12\x15\n" +
+	"\x11FAIRNESS_STATE_V1\x10\x02\x12\x15\n" +
+	"\x11FAIRNESS_STATE_V2\x10\x03B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
 	file_temporal_server_api_persistence_v1_task_queues_proto_rawDescOnce sync.Once
@@ -974,8 +980,8 @@ func file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP() []b
 var file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
-	(BuildId_State)(0),                        // 0: temporal.server.api.persistence.v1.BuildId.State
-	(TaskQueueTypeUserData_FairnessState)(0),  // 1: temporal.server.api.persistence.v1.TaskQueueTypeUserData.FairnessState
+	(FairnessState)(0),                        // 0: temporal.server.api.persistence.v1.FairnessState
+	(BuildId_State)(0),                        // 1: temporal.server.api.persistence.v1.BuildId.State
 	(*BuildId)(nil),                           // 2: temporal.server.api.persistence.v1.BuildId
 	(*CompatibleVersionSet)(nil),              // 3: temporal.server.api.persistence.v1.CompatibleVersionSet
 	(*AssignmentRule)(nil),                    // 4: temporal.server.api.persistence.v1.AssignmentRule
@@ -1001,7 +1007,7 @@ var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
 	(*v12.WorkerDeploymentVersionData)(nil),   // 24: temporal.server.api.deployment.v1.WorkerDeploymentVersionData
 }
 var file_temporal_server_api_persistence_v1_task_queues_proto_depIdxs = []int32{
-	0,  // 0: temporal.server.api.persistence.v1.BuildId.state:type_name -> temporal.server.api.persistence.v1.BuildId.State
+	1,  // 0: temporal.server.api.persistence.v1.BuildId.state:type_name -> temporal.server.api.persistence.v1.BuildId.State
 	16, // 1: temporal.server.api.persistence.v1.BuildId.state_update_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	16, // 2: temporal.server.api.persistence.v1.BuildId.became_default_timestamp:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	2,  // 3: temporal.server.api.persistence.v1.CompatibleVersionSet.build_ids:type_name -> temporal.server.api.persistence.v1.BuildId
@@ -1023,7 +1029,7 @@ var file_temporal_server_api_persistence_v1_task_queues_proto_depIdxs = []int32{
 	14, // 19: temporal.server.api.persistence.v1.WorkerDeploymentData.versions:type_name -> temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
 	7,  // 20: temporal.server.api.persistence.v1.TaskQueueTypeUserData.deployment_data:type_name -> temporal.server.api.persistence.v1.DeploymentData
 	21, // 21: temporal.server.api.persistence.v1.TaskQueueTypeUserData.config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
-	1,  // 22: temporal.server.api.persistence.v1.TaskQueueTypeUserData.fairness_state:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData.FairnessState
+	0,  // 22: temporal.server.api.persistence.v1.TaskQueueTypeUserData.fairness_state:type_name -> temporal.server.api.persistence.v1.FairnessState
 	16, // 23: temporal.server.api.persistence.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	6,  // 24: temporal.server.api.persistence.v1.TaskQueueUserData.versioning_data:type_name -> temporal.server.api.persistence.v1.VersioningData
 	15, // 25: temporal.server.api.persistence.v1.TaskQueueUserData.per_type:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry

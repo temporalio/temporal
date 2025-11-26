@@ -135,11 +135,6 @@ message TaskQueueTypeUserData {
 
     temporal.api.taskqueue.v1.TaskQueueConfig config = 2;
 
-    enum FairnessState {
-        FAIRNESS_STATE_UNSPECIFIED = 0;
-        FAIRNESS_STATE_V1 = 1;
-        FAIRNESS_STATE_V2 = 2;
-    };
     FairnessState fairness_state = 3;
 }
 
@@ -167,3 +162,10 @@ message VersionedTaskQueueUserData {
     TaskQueueUserData data = 1;
     int64 version = 2;
 }
+
+enum FairnessState {
+    FAIRNESS_STATE_UNSPECIFIED = 0;
+    FAIRNESS_STATE_V0 = 1;
+    FAIRNESS_STATE_V1 = 2;
+    FAIRNESS_STATE_V2 = 3;
+};
