@@ -111,6 +111,27 @@ func (h *frontendHandler) PollActivityExecution(
 	return resp.GetFrontendResponse(), err
 }
 
+// TerminateActivityExecution terminates a standalone activity execution
+func (h *frontendHandler) TerminateActivityExecution(
+	ctx context.Context,
+	req *workflowservice.TerminateActivityExecutionRequest,
+) (*workflowservice.TerminateActivityExecutionResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.TerminateActivityExecution(ctx, &activitypb.TerminateActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.TerminateActivityExecutionResponse{}, nil
+}
+
 func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,

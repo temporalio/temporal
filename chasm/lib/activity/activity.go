@@ -275,6 +275,15 @@ func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.Activ
 	return heartbeat, nil
 }
 
+func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) (
+	*activitypb.TerminateActivityExecutionResponse, error) {
+	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
+		return nil, err
+	}
+
+	return &activitypb.TerminateActivityExecutionResponse{}, nil
+}
+
 func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Failure) (bool, time.Duration, error) {
 	var isRetryable bool
 

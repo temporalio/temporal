@@ -190,6 +190,86 @@ func (s *standaloneActivityTestSuite) TestActivityFailedByID() {
 	s.validateFailure(ctx, t, activityID, runID, nil, s.tv.WorkerIdentity())
 }
 
+func (s *standaloneActivityTestSuite) TestActivityTerminated() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+		Reason:     "Test Termination",
+		Identity:   "worker",
+	})
+	require.NoError(t, err)
+
+	activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          runID,
+		IncludeInfo:    true,
+		IncludeInput:   true,
+		IncludeOutcome: true,
+	})
+
+	info := activityResp.GetInfo()
+
+	require.NoError(t, err)
+	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.EqualValues(t, 1, info.GetAttempt())
+	require.Equal(t, "worker", info.GetLastWorkerIdentity())
+	require.NotNil(t, info.GetLastStartedTime())
+	require.Nil(t, info.GetLastFailure())
+
+	expectedFailure := &failurepb.Failure{
+		Message:     "Test Termination",
+		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+	}
+	protorequire.ProtoEqual(t, expectedFailure, activityResp.GetFailure())
+}
+
+func (s *standaloneActivityTestSuite) TestCompletedActivity_CannotTerminate() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Result:    defaultResult,
+		Identity:  "new-worker",
+	})
+	require.NoError(t, err)
+
+	_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+		Reason:     "Test Termination",
+		Identity:   "worker",
+	})
+	require.Error(t, err)
+}
+
 // TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is started.
 func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	t := s.T()
