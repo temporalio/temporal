@@ -944,22 +944,28 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	// If the parent has AutoUpgrade behavior, we populate the inherited auto upgrade info based on whether the child TQ is in the same deployment version as the parent TQ.
 	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
-	if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-		inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-			SourceDeploymentVersion:        worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment()),
-			SourceDeploymentRevisionNumber: mutableState.GetVersioningRevisionNumber(),
-		}
+	sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+	sourceDeploymentRevisionNumber := mutableState.GetVersioningRevisionNumber()
 
-		newTQ := attributes.GetTaskQueue().GetName()
-		if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
-			inheritedAutoUpgradeInfo = nil
-		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-			TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
-			if err != nil {
-				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
+	// Only set inherited auto upgrade info if source deployment version and revision number are not nil
+	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+		if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+				SourceDeploymentVersion:        sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
 			}
-			if !TQInSourceDeploymentVersion {
+
+			newTQ := attributes.GetTaskQueue().GetName()
+			if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
 				inheritedAutoUpgradeInfo = nil
+			} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
+				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
+				if err != nil {
+					return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
+				}
+				if !TQInSourceDeploymentVersion {
+					inheritedAutoUpgradeInfo = nil
+				}
 			}
 		}
 	}
