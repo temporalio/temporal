@@ -146,6 +146,13 @@ var (
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
 	)
+
+	ChasmLibraryOptions = fx.Options(
+		chasm.Module,
+		chasmworkflow.Module,
+		chasmscheduler.Module,
+		chasmcallback.Module,
+	)
 )
 
 func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (*ServerFx, error) {
@@ -435,10 +442,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
-		chasm.Module,
-		chasmscheduler.Module,
-		chasmcallback.Module,
-		chasmworkflow.Module,
+		ChasmLibraryOptions,
 	)
 }
 
