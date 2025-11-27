@@ -2223,7 +2223,6 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 
 		SuggestContinueAsNew: false,
 		HistorySizeBytes:     0,
-		Stamp:                0,
 	}
 	ms.workflowTaskManager.UpdateWorkflowTask(emptyWorkflowTaskInfo)
 	return nil
@@ -2904,9 +2903,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 	// Invalidate pending workflow task by incrementing the persisted stamp.
 	// This ensures subsequent task dispatch detects the change.
 	if ms.HasPendingWorkflowTask() {
-		wft := ms.GetPendingWorkflowTask()
-		wft.Stamp += 1
-		ms.workflowTaskManager.UpdateWorkflowTask(wft)
+		ms.executionInfo.WorkflowTaskStamp += 1
+		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
 	}
 	return nil
 }

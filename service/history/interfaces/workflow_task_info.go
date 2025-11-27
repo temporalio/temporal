@@ -55,10 +55,9 @@ type WorkflowTaskInfo struct {
 	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
-	// Stamp represents the "version" of the workflow task, where the workflow task is keyed by ScheduledEventID.
-	// Everytime we want to invalidate the existing transfer/matching task we should increment the Stamp.
-	// When the wft is reset (i.e. a new wft with a new ScheduledEventID is created), Stamp should be reset to 0.
+	// Incrementing Stamp will invalidate the existing transfer/matching workflow task.
 	// Incrementing Stamp will ensure that the standby clusters reschedule the transfer tasks properly.
+	// Stamp is NOT scoped withing a single wft, and it should never be decremented in the lifetime of the whole execution.
 	Stamp int32
 }
 
