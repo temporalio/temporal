@@ -347,7 +347,7 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, r
 	// create version v1 and make it current
 	idlePollerDone := make(chan struct{})
 	go func() {
-		s.idlePollWorkflow(nil, tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		s.idlePollWorkflow(context.Background(), tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
 		close(idlePollerDone)
 	}()
 	s.setCurrentDeployment(tv)
@@ -3655,19 +3655,9 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 }
 
 func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() {
-	// if !s.useRevisionNumbers {
-	// 	s.T().Skip("This test is only supported on revision number mechanics")
-	// }
-	/*
-
-		Test plan:
-		- Use only one read and write partition.
-		- Set v1 to be the current version.
-		- Start a workflow on v1 and then make it block on a signal.
-		- While blocked, rollback the userData to v0.
-		- Unblock the workflow and verify that it completes on v1.
-
-	*/
+	if !s.useRevisionNumbers {
+		s.T().Skip("This test is only supported on revision number mechanics")
+	}
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
@@ -3680,7 +3670,7 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 		return "v1", nil
 	}
 
-	// Define the v1 workers
+	// v1 workers
 	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{Version: tv1.SDKDeploymentVersion(), UseVersioning: true, DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade},
 	})
@@ -3691,7 +3681,7 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	// Set v1 to be the current version
 	s.setCurrentDeployment(tv1)
 
-	// Start a workflow on v1.
+	// Start a workflow on v1
 	run, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 		ID:        tv1.WorkflowID(),
 		TaskQueue: tv1.TaskQueue().GetName(),
