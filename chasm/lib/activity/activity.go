@@ -418,6 +418,11 @@ func (a *Activity) buildPollActivityExecutionResponse(
 		if err != nil {
 			return nil, err
 		}
+		// TODO(dan) this looks wrong: in later branches we are setting activityOutcome to an empty
+		// failure struct on handling RecordActivityTaskFailed when retries are exhausted:
+		// https://github.com/temporalio/temporal/blob/saa-id-policy/chasm/lib/activity/activity.go#L395.
+		// The result will be that we fail to obtain the failure from the attempt last failure
+		// details. Fix in a subsequent PR.
 		if activityOutcome != nil {
 			switch v := activityOutcome.GetVariant().(type) {
 			case *activitypb.ActivityOutcome_Failed_:
