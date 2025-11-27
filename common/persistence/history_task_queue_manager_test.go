@@ -84,7 +84,7 @@ func TestHistoryTaskQueueManager_ErrSerializeTaskToEnqueue(t *testing.T) {
 
 	task := tasks.NewFakeTask(definition.WorkflowKey{}, tasks.Category{}, time.Time{})
 	serializer := serialization.NewSerializer()
-	m := persistence.NewHistoryTaskQueueManager(nil, serializer, serialization.NewTaskSerializer(serializer))
+	m := persistence.NewHistoryTaskQueueManager(nil, serializer)
 	_, err := m.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
 		Task:          task,
 		SourceShardID: 1,
@@ -98,7 +98,7 @@ func TestHistoryTaskQueueManager_InvalidShardID(t *testing.T) {
 
 	task := &tasks.WorkflowTask{}
 	serializer := serialization.NewSerializer()
-	m := persistence.NewHistoryTaskQueueManager(nil, serializer, serialization.NewTaskSerializer(serializer))
+	m := persistence.NewHistoryTaskQueueManager(nil, serializer)
 	_, err := m.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
 		Task:          task,
 		SourceShardID: 0,
@@ -132,7 +132,7 @@ func TestHistoryTaskQueueManager_ReadTasks_ErrDeserializeRawHistoryTask(t *testi
 	t.Parallel()
 
 	serializer := serialization.NewSerializer()
-	m := persistence.NewHistoryTaskQueueManager(corruptQueue{}, serializer, serialization.NewTaskSerializer(serializer))
+	m := persistence.NewHistoryTaskQueueManager(corruptQueue{}, serializer)
 	_, err := m.ReadTasks(context.Background(), &persistence.ReadTasksRequest{
 		QueueKey: persistence.QueueKey{
 			Category: tasks.CategoryTransfer,
@@ -148,7 +148,7 @@ func TestHistoryTaskQueueManager_ReadTasks_NonPositivePageSize(t *testing.T) {
 	t.Parallel()
 
 	serializer := serialization.NewSerializer()
-	m := persistence.NewHistoryTaskQueueManager(corruptQueue{}, serializer, serialization.NewTaskSerializer(serializer))
+	m := persistence.NewHistoryTaskQueueManager(corruptQueue{}, serializer)
 	for _, pageSize := range []int{0, -1} {
 		_, err := m.ReadTasks(context.Background(), &persistence.ReadTasksRequest{
 			QueueKey: persistence.QueueKey{

@@ -39,7 +39,7 @@ func TestParseDLQMessages(t *testing.T) {
 		},
 		TaskID: 13,
 	}
-	taskSerializer := serialization.NewTaskSerializer(serialization.NewSerializer())
+	taskSerializer := serialization.NewSerializer()
 	blob, err := taskSerializer.SerializeTask(task)
 	require.NoError(t, err)
 	client := &testClient{
