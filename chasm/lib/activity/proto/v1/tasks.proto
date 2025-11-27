@@ -4,26 +4,28 @@ package temporal.server.chasm.lib.activity.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
+// ActivityDispatchTask is a side-effect task that calls AddActivityTask in the matching service.
 message ActivityDispatchTask {
-    // The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-    // need to guard against any concurrent operations where the originally intended task may be outdated.
+    // The current attempt number for this activity execution. Used for task validation.
     int32 attempt = 1;
 }
 
+// ScheduleToStartTimeoutTask is a pure task that enforces a timeout on the time spent waiting for
+// the activity to start.
 message ScheduleToStartTimeoutTask {
-  // The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-  // need to guard against any concurrent operations where the originally intended task may be outdated.
+  // The current attempt number for this activity execution. Used for task validation.
   int32 attempt = 1;
 }
 
+// ScheduleToCloseTimeoutTask is a pure task that enforces a timeout across the sequence of activity
+// attempts.
 message ScheduleToCloseTimeoutTask {
-  // The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-  // need to guard against any concurrent operations where the originally intended task may be outdated.
+  // The current attempt number for this activity execution. Used for task validation.
   int32 attempt = 1;
 }
 
+// StartToCloseTimeoutTask is a pure task that enforces a timeout on a single activity attempt.
 message StartToCloseTimeoutTask {
-  // The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-  // need to guard against any concurrent operations where the originally intended task may be outdated.
+  // The current attempt number for this activity execution. Used for task validation.
   int32 attempt = 1;
 }

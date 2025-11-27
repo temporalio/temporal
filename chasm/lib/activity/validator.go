@@ -98,7 +98,7 @@ func normalizeAndValidateTimeouts(
 	runTimeout *durationpb.Duration,
 	options *activitypb.ActivityOptions,
 ) error {
-	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
+	// Only attempt to deduce and fill in unspecified timeouts when all timeouts are non-negative.
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToCloseTimeout()); err != nil {
 		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToCloseTimeout: %v ActivityId=%s ActivityType=%s",
 			err, activityID, activityType)
@@ -132,7 +132,6 @@ func normalizeAndValidateTimeouts(
 			options.StartToCloseTimeout = options.ScheduleToCloseTimeout
 		}
 	} else if startToCloseSet {
-		// We are in !validScheduleToClose due to the first if above
 		options.ScheduleToCloseTimeout = runTimeout
 		if !scheduleToStartSet {
 			options.ScheduleToStartTimeout = runTimeout
@@ -142,7 +141,7 @@ func normalizeAndValidateTimeouts(
 		return serviceerror.NewInvalidArgumentf("A valid StartToClose or ScheduleToCloseTimeout is not set on ScheduleActivityTaskCommand. ActivityId=%s ActivityType=%s",
 			activityID, activityType)
 	}
-	// ensure activity timeout never larger than workflow timeout
+	// Cap timeouts at run timeout.
 	if runTimeout.AsDuration() > 0 {
 		runTimeoutDur := runTimeout.AsDuration()
 		if options.ScheduleToCloseTimeout.AsDuration() > runTimeoutDur {

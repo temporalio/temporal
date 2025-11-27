@@ -45,6 +45,9 @@ func (e *activityDispatchTaskExecutor) Validate(
 	return true, nil
 }
 
+// ActivityDispatchTask is a side-effect task that calls AddActivityTask in the matching service.
+// This either delivers the activity task to a waiting poller or writes it to matching task queue
+// persistence.
 func (e *activityDispatchTaskExecutor) Execute(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
@@ -66,6 +69,8 @@ func (e *activityDispatchTaskExecutor) Execute(
 	return err
 }
 
+// ScheduleToStartTimeoutTask is a pure task that enforces a timeout on the time spent waiting for
+// the activity to start. It transitions the activity to TIMED_OUT status.
 type scheduleToStartTimeoutTaskExecutor struct{}
 
 func newScheduleToStartTimeoutTaskExecutor() *scheduleToStartTimeoutTaskExecutor {
@@ -96,6 +101,8 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
 }
 
+// ScheduleToCloseTimeoutTask is a pure task that enforces a timeout across the sequence of activity
+// attempts. It transitions the activity to TIMED_OUT status.
 type scheduleToCloseTimeoutTaskExecutor struct{}
 
 func newScheduleToCloseTimeoutTaskExecutor() *scheduleToCloseTimeoutTaskExecutor {
@@ -126,6 +133,8 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
 }
 
+// StartToCloseTimeoutTask is a pure task that enforces a timeout on a single activity attempt. It
+// either retries or transitions the activity to TIMED_OUT status.
 type startToCloseTimeoutTaskExecutor struct{}
 
 func newStartToCloseTimeoutTaskExecutor() *startToCloseTimeoutTaskExecutor {
