@@ -86,7 +86,7 @@ func (q faultyQueue) ListQueues(
 // particular database. This test suite should be re-used to test all queue implementations.
 func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2) {
 	serializer := serialization.NewSerializer()
-	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue, serializer, serialization.NewTaskSerializer(serializer))
+	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue, serializer)
 	t.Run("ListQueues", func(t *testing.T) {
 		listqueuestest.TestInvoke(t, historyTaskQueueManager)
 	})
@@ -134,7 +134,7 @@ func testHistoryTaskQueueManagerCreateQueueErr(t *testing.T, queue persistence.Q
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:           queue,
 		createQueueErr: retErr,
-	}, serializer, serialization.NewTaskSerializer(serializer))
+	}, serializer)
 	_, err := manager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
 		QueueKey: persistencetest.GetQueueKey(t),
 	})
@@ -196,7 +196,7 @@ func testHistoryTaskQueueManagerEnqueueTasksErr(t *testing.T, queue persistence.
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:       queue,
 		enqueueErr: retErr,
-	}, serializer, serialization.NewTaskSerializer(serializer))
+	}, serializer)
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
@@ -307,7 +307,7 @@ func testHistoryTaskQueueManagerDeleteTasksErr(t *testing.T, queue persistence.Q
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:                   queue,
 		rangeDeleteMessagesErr: retErr,
-	}, serializer, serialization.NewTaskSerializer(serializer))
+	}, serializer)
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,

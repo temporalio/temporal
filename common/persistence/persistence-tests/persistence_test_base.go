@@ -209,7 +209,6 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		quotas.NoopRequestRateLimiter,
 		quotas.NoopRequestRateLimiter,
 		serializer,
-		serialization.NewTaskSerializer(serializer),
 		nil,
 		clusterName,
 		metrics.NoopMetricsHandler,

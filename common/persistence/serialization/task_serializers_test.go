@@ -52,7 +52,7 @@ func (s *taskSerializerSuite) SetupTest() {
 		"random workflow ID",
 		"random run ID",
 	)
-	s.taskSerializer = NewTaskSerializer(NewSerializer())
+	s.taskSerializer = NewSerializer()
 }
 
 func (s *taskSerializerSuite) TearDownTest() {

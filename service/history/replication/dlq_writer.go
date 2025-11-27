@@ -5,7 +5,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
@@ -42,7 +41,7 @@ type (
 	// DLQWriterAdapter is a [DLQWriter] that uses the QueueV2 [queues.DLQWriter] object.
 	DLQWriterAdapter struct {
 		dlqWriter                 *queues.DLQWriter
-		replicationTaskSerializer serialization.ReplicationTaskSerializer
+		replicationTaskSerializer TaskSerializer
 		currentClusterName        string
 	}
 	dlqWriterToggleParams struct {
@@ -66,7 +65,7 @@ func NewExecutionManagerDLQWriter(executionManager ExecutionManager) *executionM
 // NewDLQWriterAdapter creates a new DLQWriter from a QueueV2 [queues.DLQWriter].
 func NewDLQWriterAdapter(
 	dlqWriter *queues.DLQWriter,
-	replicationTaskSerializer serialization.ReplicationTaskSerializer,
+	replicationTaskSerializer TaskSerializer,
 	currentClusterName string,
 ) *DLQWriterAdapter {
 	return &DLQWriterAdapter{

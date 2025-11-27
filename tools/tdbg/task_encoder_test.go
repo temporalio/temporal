@@ -95,7 +95,7 @@ func TestPredefinedTasks(t *testing.T) {
 		&tasks.ArchiveExecutionTask{},
 		&tasks.StateMachineOutboundTask{},
 	}
-	taskSerializer := serialization.NewTaskSerializer(serialization.NewSerializer())
+	taskSerializer := serialization.NewSerializer()
 	expectedTaskTypes := make([]string, len(historyTasks))
 	for i, task := range historyTasks {
 		expectedTaskTypes[i] = enumsspb.TaskType_name[int32(task.GetType())]

@@ -166,7 +166,6 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 				namespaceRequestRateLimiter,
 				shardRequestRateLimiter,
 				serializer,
-				serialization.NewTaskSerializer(serializer),
 				nil,
 				"",
 				metrics.NoopMetricsHandler,

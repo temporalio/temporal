@@ -38,7 +38,7 @@ type (
 		historyEngine             historyi.Engine
 		namespaceCache            namespace.Registry
 		serializer                serialization.Serializer
-		replicationTaskSerializer serialization.ReplicationTaskSerializer
+		replicationTaskSerializer TaskSerializer
 		config                    *configs.Config
 	}
 	SourceTaskConverter interface {
@@ -67,7 +67,7 @@ func NewSourceTaskConverter(
 	historyEngine historyi.Engine,
 	namespaceCache namespace.Registry,
 	serializer serialization.Serializer,
-	replicationTaskSerializer serialization.ReplicationTaskSerializer,
+	replicationTaskSerializer TaskSerializer,
 	config *configs.Config,
 ) *SourceTaskConverterImpl {
 	return &SourceTaskConverterImpl{
@@ -106,7 +106,7 @@ func (c *SourceTaskConverterImpl) Convert(
 		return nil, err
 	}
 	if replicationTask != nil {
-		rawTaskInfo, err := c.replicationTaskSerializer.SeralizeReplicationTask(task)
+		rawTaskInfo, err := c.replicationTaskSerializer.SerializeReplicationTask(task)
 		if err != nil {
 			return nil, err
 		}

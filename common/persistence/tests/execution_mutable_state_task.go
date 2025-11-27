@@ -44,7 +44,8 @@ type (
 		Cancel context.CancelFunc
 	}
 
-	testTaskSerializer struct {
+	// testSerializer wraps a serializer to add support for fake tasks used in tests
+	testSerializer struct {
 		serialization.Serializer
 	}
 )
@@ -61,17 +62,16 @@ func NewExecutionMutableStateTaskSuite(
 	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateTaskSuite {
-	taskSerializer := newTestTaskSerializer(serializer)
+	testSer := &testSerializer{Serializer: serializer}
 	return &ExecutionMutableStateTaskSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
-			serializer,
+			testSer,
 		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
-			serializer,
-			taskSerializer,
+			testSer,
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
@@ -654,15 +654,7 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	s.Empty(historyTasks)
 }
 
-func newTestTaskSerializer(
-	serializer serialization.Serializer,
-) serialization.TaskSerializer {
-	return &testTaskSerializer{
-		Serializer: serializer,
-	}
-}
-
-func (s *testTaskSerializer) SerializeTask(
+func (s *testSerializer) SerializeTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
 	if fakeTask, ok := task.(*tasks.FakeTask); ok {
@@ -683,18 +675,17 @@ func (s *testTaskSerializer) SerializeTask(
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}, nil
 	}
-	return serialization.NewTaskSerializer(s.Serializer).SerializeTask(task)
+	return s.Serializer.SerializeTask(task)
 }
 
-func (s *testTaskSerializer) DeserializeTask(
+func (s *testSerializer) DeserializeTask(
 	category tasks.Category,
 	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	categoryID := category.ID()
 	if categoryID != fakeImmediateTaskCategory.ID() &&
 		categoryID != fakeScheduledTaskCategory.ID() {
-		taskSerializer := serialization.NewTaskSerializer(s.Serializer)
-		return taskSerializer.DeserializeTask(category, blob)
+		return s.Serializer.DeserializeTask(category, blob)
 	}
 
 	taskInfo := &persistencespb.TransferTaskInfo{}
@@ -714,12 +705,4 @@ func (s *testTaskSerializer) DeserializeTask(
 	fakeTask.SetTaskID(taskInfo.TaskId)
 
 	return fakeTask, nil
-}
-
-func (s *testTaskSerializer) SeralizeReplicationTask(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error) {
-	panic("not implemented")
-}
-
-func (s *testTaskSerializer) DeserializeReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error) {
-	panic("not implemented")
 }

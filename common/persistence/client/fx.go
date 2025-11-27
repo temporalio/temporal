@@ -58,7 +58,6 @@ type (
 		EnableDataLossMetrics                       EnableDataLossMetrics
 		EnableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate
 		Serializer                                  serialization.Serializer
-		TaskSerializer                              serialization.TaskSerializer
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -151,7 +150,6 @@ func FactoryProvider(
 		namespaceRequestRateLimiter,
 		shardRequestRateLimiter,
 		params.Serializer,
-		params.TaskSerializer,
 		params.EventBlobCache,
 		string(params.ClusterName),
 		params.MetricsHandler,

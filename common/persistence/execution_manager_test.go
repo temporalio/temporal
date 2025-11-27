@@ -66,7 +66,6 @@ func TestExecutionManager_DeletesTasksWhenEnabled(t *testing.T) {
 	em := p.NewExecutionManager(
 		store,
 		serializer,
-		serialization.NewTaskSerializer(serializer),
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
@@ -92,7 +91,6 @@ func TestExecutionManager_DoesNotDeleteTasksWhenDisabled(t *testing.T) {
 	em := p.NewExecutionManager(
 		store,
 		serializer,
-		serialization.NewTaskSerializer(serializer),
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
@@ -129,7 +127,6 @@ func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
 	em := p.NewExecutionManager(
 		store,
 		serializer,
-		serialization.NewTaskSerializer(serializer),
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
