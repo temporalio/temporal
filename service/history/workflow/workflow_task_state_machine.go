@@ -94,6 +94,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 		Type:                  workflowTaskType,
 		SuggestContinueAsNew:  false, // reset, will be recomputed on workflow task started
 		HistorySizeBytes:      0,     // reset, will be recomputed on workflow task started
+		Stamp:                 m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
@@ -151,6 +152,7 @@ func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*histo
 		Type:                 enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		SuggestContinueAsNew: false, // reset, will be recomputed on workflow task started
 		HistorySizeBytes:     0,     // reset, will be recomputed on workflow task started
+		Stamp:                m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
@@ -207,6 +209,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		SuggestContinueAsNew:   suggestContinueAsNew,
 		HistorySizeBytes:       historySizeBytes,
 		BuildIdRedirectCounter: redirectCounter,
+		Stamp:                  m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
