@@ -926,7 +926,6 @@ func (ms *MutableStateImpl) SetHistoryTree(
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
 		workflowKey.RunID,
-		archetypeID,
 		treeID,
 		nil,
 		[]*persistencespb.HistoryBranchRange{},

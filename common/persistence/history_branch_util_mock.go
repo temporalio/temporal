@@ -14,7 +14,6 @@ import (
 	time "time"
 
 	persistence "go.temporal.io/server/api/persistence/v1"
-	chasm "go.temporal.io/server/chasm"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -43,18 +42,18 @@ func (m *MockHistoryBranchUtil) EXPECT() *MockHistoryBranchUtilMockRecorder {
 }
 
 // NewHistoryBranch mocks base method.
-func (m *MockHistoryBranchUtil) NewHistoryBranch(namespaceID, workflowID, runID string, archetypeID chasm.ArchetypeID, treeID string, branchID *string, ancestors []*persistence.HistoryBranchRange, runTimeout, executionTimeout, retentionDuration time.Duration) ([]byte, error) {
+func (m *MockHistoryBranchUtil) NewHistoryBranch(namespaceID, workflowID, runID, treeID string, branchID *string, ancestors []*persistence.HistoryBranchRange, runTimeout, executionTimeout, retentionDuration time.Duration) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewHistoryBranch", namespaceID, workflowID, runID, archetypeID, treeID, branchID, ancestors, runTimeout, executionTimeout, retentionDuration)
+	ret := m.ctrl.Call(m, "NewHistoryBranch", namespaceID, workflowID, runID, treeID, branchID, ancestors, runTimeout, executionTimeout, retentionDuration)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // NewHistoryBranch indicates an expected call of NewHistoryBranch.
-func (mr *MockHistoryBranchUtilMockRecorder) NewHistoryBranch(namespaceID, workflowID, runID, archetypeID, treeID, branchID, ancestors, runTimeout, executionTimeout, retentionDuration any) *gomock.Call {
+func (mr *MockHistoryBranchUtilMockRecorder) NewHistoryBranch(namespaceID, workflowID, runID, treeID, branchID, ancestors, runTimeout, executionTimeout, retentionDuration any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewHistoryBranch", reflect.TypeOf((*MockHistoryBranchUtil)(nil).NewHistoryBranch), namespaceID, workflowID, runID, archetypeID, treeID, branchID, ancestors, runTimeout, executionTimeout, retentionDuration)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewHistoryBranch", reflect.TypeOf((*MockHistoryBranchUtil)(nil).NewHistoryBranch), namespaceID, workflowID, runID, treeID, branchID, ancestors, runTimeout, executionTimeout, retentionDuration)
 }
 
 // ParseHistoryBranchInfo mocks base method.

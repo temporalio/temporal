@@ -1413,7 +1413,6 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		namespaceID.String(),
 		workflowID,
 		runID,
-		archetypeID,
 		branchInfo.GetTreeId(),
 		&branchInfo.BranchId,
 		branchInfo.Ancestors,
