@@ -43,9 +43,9 @@ type Activity struct {
 	Visibility    chasm.Field[*chasm.Visibility]
 	Attempt       chasm.Field[*activitypb.ActivityAttemptState]
 	LastHeartbeat chasm.Field[*activitypb.ActivityHeartbeatState]
-	Outcome       chasm.Field[*activitypb.ActivityOutcome]
 	// Standalone only
 	RequestData chasm.Field[*activitypb.ActivityRequestData]
+	Outcome     chasm.Field[*activitypb.ActivityOutcome]
 	// Pointer to an implementation of the "store". for a workflow activity this would be a parent pointer back to
 	// the workflow. For a standalone activity this would be nil.
 	// TODO: revisit a standalone activity pointing to itself once we handle storing it more efficiently.
