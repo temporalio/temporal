@@ -2452,9 +2452,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
-			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(context.Background(), ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
+			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 			if err != nil {
-				return nil, errors.New(fmt.Sprintf("error determining child task queue presence in inherited version: %s", err.Error()))
+				return nil, fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
 			if !newTQInPinnedVersion {
 				inheritedPinnedVersion = nil
@@ -2469,6 +2469,33 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
 			pinnedOverride = nil
+		}
+	}
+
+	// New run initiated by ContinueAsNew of an AUTO_UPGRADE workflow execution will inherit the previous run's
+	// deployment version and revision number iff the new run's Task Queue belongs to source deployment version.
+	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
+	var sourceDeploymentRevisionNumber int64
+	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
+		sourceDeploymentRevisionNumber = previousExecutionState.GetVersioningRevisionNumber()
+
+		newTQ := command.GetTaskQueue().GetName()
+		if newTQ != previousExecutionInfo.GetTaskQueue() {
+			// Cross-TQ CAN: check if new TQ is in parent's deployment
+			TQInSourceDeploymentVersion, err := IsWFTaskQueueInVersionDetector(
+				ctx,
+				ms.GetNamespaceEntry().ID().String(),
+				newTQ,
+				sourceDeploymentVersion,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("error determining CAN task queue presence in auto upgrade deployment: %w", err)
+			}
+			if !TQInSourceDeploymentVersion {
+				sourceDeploymentVersion = nil
+				sourceDeploymentRevisionNumber = 0
+			}
 		}
 	}
 
@@ -2534,6 +2561,14 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionState.GetExecutionInfo().WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
 		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
+	}
+
+	// Add InheritedAutoUpgradeInfo if InheritedPinnedVersion is not set and source deployment version and revision number are set.
+	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 && inheritedPinnedVersion == nil {
+		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+			SourceDeploymentVersion:        sourceDeploymentVersion,
+			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+		}
 	}
 
 	event, err := ms.AddWorkflowExecutionStartedEventWithOptions(
@@ -2865,6 +2900,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.approximateSize += ms.executionInfo.Size()
 	ms.approximateSize += ms.executionState.Size()
+
+	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
+	if event.GetInheritedAutoUpgradeInfo() != nil {
+		ms.SetVersioningRevisionNumber(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
+		// TODO (Shivam): Remove this once you make SetDeploymentVersion and SetVersioningBehavior methods with nil checks
+		if ms.executionInfo.VersioningInfo == nil {
+			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		}
+		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
+		// Assume AutoUpgrade behavior for the first workflow task.
+		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	}
 
 	ms.writeEventToCache(startEvent)
 	return nil
@@ -8708,6 +8755,9 @@ func (ms *MutableStateImpl) GetVersioningRevisionNumber() int64 {
 }
 
 func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
+	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
+		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+	}
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
 }
 

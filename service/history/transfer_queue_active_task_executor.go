@@ -943,6 +943,34 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 	}
 
+	// If the parent has AutoUpgrade behavior, we populate the inherited auto upgrade info based on whether the child TQ is in the same deployment version as the parent TQ.
+	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
+	sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+	sourceDeploymentRevisionNumber := mutableState.GetVersioningRevisionNumber()
+
+	// Only set inherited auto upgrade info if source deployment version and revision number are not nil
+	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+		if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+				SourceDeploymentVersion:        sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+			}
+
+			newTQ := attributes.GetTaskQueue().GetName()
+			if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
+				inheritedAutoUpgradeInfo = nil
+			} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
+				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
+				if err != nil {
+					return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
+				}
+				if !TQInSourceDeploymentVersion {
+					inheritedAutoUpgradeInfo = nil
+				}
+			}
+		}
+	}
+
 	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
 	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
 	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
@@ -1013,6 +1041,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedPinnedOverride,
 		inheritedPinnedVersion,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
+		inheritedAutoUpgradeInfo,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1586,6 +1615,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedPinnedOverride *workflowpb.VersioningOverride,
 	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	priority *commonpb.Priority,
+	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                targetNamespace.String(),
@@ -1631,6 +1661,11 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
+
+	// Only set the AutoUpgrade info if the Pinned version is not set.
+	if request.InheritedPinnedVersion == nil {
+		request.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
+	}
 
 	if shouldTerminateAndStartChild {
 		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
