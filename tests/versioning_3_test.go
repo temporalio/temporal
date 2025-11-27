@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -348,7 +347,7 @@ func (s *Versioning3Suite) testPinnedQuery_DrainedVersion(pollersPresent bool, r
 	// create version v1 and make it current
 	idlePollerDone := make(chan struct{})
 	go func() {
-		s.idlePollWorkflow(context.Background(), tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		s.idlePollWorkflow(nil, tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
 		close(idlePollerDone)
 	}()
 	s.setCurrentDeployment(tv)
@@ -3655,7 +3654,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
-func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions_v2() {
+func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() {
 	// if !s.useRevisionNumbers {
 	// 	s.T().Skip("This test is only supported on revision number mechanics")
 	// }
@@ -4073,10 +4072,9 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 	s.rollbackTaskQueueToVersion(tv0Child)
 
 	//nolint:testifylint
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		s.idlePollWorkflow(context.Background(), tv0Child, true, 10*time.Second, "workflow should not go to the old deployment")
-	})
+	idlePollerCtx, idlePollerCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer idlePollerCancel()
+	go s.idlePollWorkflow(idlePollerCtx, tv0Child, true, 10*time.Second, "workflow should not go to the old deployment")
 
 	// Unblock parent to start the child
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "startChild", nil))
@@ -4105,7 +4103,6 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("v1", result)
 
-	wg.Wait()
 }
 
 // TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ demonstrates that a child workflow of an AutoUpgrade parent, not sharing
@@ -4251,10 +4248,9 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 	tv0 := tv1.WithBuildIDNumber(0)
 	s.rollbackTaskQueueToVersion(tv0)
 
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		s.idlePollWorkflow(context.Background(), tv0, true, 10*time.Second, "workflow should not go to the old deployment")
-	})
+	idlePollerCtx, idlePollerCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer idlePollerCancel()
+	go s.idlePollWorkflow(idlePollerCtx, tv0, true, 10*time.Second, "workflow should not go to the old deployment")
 
 	// Signal the workflow to trigger CAN
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "triggerCAN", nil))
@@ -4289,7 +4285,6 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("v1", result)
 
-	wg.Wait()
 }
 
 // Verifies that a retry run starts on the same version the first run executed on,
@@ -4487,10 +4482,9 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 	s.rollbackTaskQueueToVersion(tv0)
 
 	// Start v0 pollers and ensure they don't receive a task
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		s.idlePollWorkflow(context.Background(), tv0, true, 10*time.Second, "v0 poller should not receive a task")
-	})
+	idlePollerCtx, idlePollerCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer idlePollerCancel()
+	go s.idlePollWorkflow(idlePollerCtx, tv0, true, 10*time.Second, "v0 poller should not receive a task")
 
 	// Verify that the rollback propagated to all partitions
 	s.Eventually(func() bool {
@@ -4533,7 +4527,6 @@ func (s *Versioning3Suite) testRetryNoBounceBack(testContinueAsNew bool, testChi
 		return false
 	}, 10*time.Second, 100*time.Millisecond)
 
-	wg.Wait()
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_NoBounceBack() {
