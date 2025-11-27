@@ -12,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/log"
@@ -103,6 +104,7 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 	_, err := s.transaction.CreateWorkflowExecution(
 		context.Background(),
 		persistence.CreateWorkflowModeBrandNew,
+		chasm.WorkflowArchetypeID,
 		0,
 		&persistence.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -130,6 +132,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 	_, _, err := s.transaction.UpdateWorkflowExecution(
 		context.Background(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
+		chasm.WorkflowArchetypeID,
 		0,
 		&persistence.WorkflowMutation{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -189,6 +192,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 			_, _, err := s.transaction.UpdateWorkflowExecution(
 				context.Background(),
 				tc.updateMode,
+				chasm.WorkflowArchetypeID,
 				0,
 				&persistence.WorkflowMutation{
 					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -237,6 +241,7 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 	_, _, _, err := s.transaction.ConflictResolveWorkflowExecution(
 		context.Background(),
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+		chasm.WorkflowArchetypeID,
 		0,
 		&persistence.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{

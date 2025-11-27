@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -597,6 +598,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 					newWorkflowExecutionInfo.WorkflowId,
 					newWorkflowExecutionState.RunId,
 				),
+				chasm.WorkflowArchetypeID,
 				handler.logger,
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),

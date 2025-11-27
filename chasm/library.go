@@ -2,7 +2,9 @@
 
 package chasm
 
-import "google.golang.org/grpc"
+import (
+	"google.golang.org/grpc"
+)
 
 type (
 	Library interface {

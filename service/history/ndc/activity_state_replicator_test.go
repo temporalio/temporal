@@ -544,6 +544,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
@@ -581,6 +582,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
@@ -634,6 +636,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -642,7 +645,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	weContext.EXPECT().Clear().AnyTimes()
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -715,6 +717,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -723,7 +726,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	weContext.EXPECT().Clear().AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -800,6 +802,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -808,7 +811,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	weContext.EXPECT().Clear().AnyTimes()
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -882,6 +884,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -889,7 +892,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 	weContext.EXPECT().Clear().AnyTimes()
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
@@ -968,6 +970,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -975,7 +978,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1071,6 +1073,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -1078,7 +1081,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1177,6 +1179,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -1184,7 +1187,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1279,6 +1281,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -1286,7 +1289,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)

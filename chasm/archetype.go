@@ -7,10 +7,6 @@ type Archetype = string
 type ArchetypeID = uint32
 
 const (
-	// ArchetypeAny is a special value that matches any archetype.
-	// TODO: deprecate this constant and always specify the actual archetypeID of the execution.
-	ArchetypeAny Archetype = "__any__"
-
 	// UnspecifiedArchetypeID is a reserved special ArchetypeID value indicating that the
 	// ArchetypeID is not specified.
 	// This typically happens when:

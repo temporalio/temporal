@@ -85,6 +85,11 @@ func Archetype(archetype string) ZapTag {
 	return NewStringTag("archetype", archetype)
 }
 
+// ArchetypeID returns tag for Archetype
+func ArchetypeID(archetype uint32) ZapTag {
+	return NewUInt32("archetype-id", archetype)
+}
+
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
 func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) ZapTag {
 	return NewStringerTag("wf-timeout-type", timeoutType)

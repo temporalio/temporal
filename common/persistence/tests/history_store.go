@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -99,6 +100,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_First() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -126,6 +128,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -164,6 +167,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -214,6 +218,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -266,6 +271,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -335,6 +341,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -394,6 +401,7 @@ func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -438,6 +446,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -507,6 +516,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -558,6 +568,7 @@ func (s *HistoryEventsSuite) TestAppendBatches() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -599,6 +610,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -667,6 +679,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},

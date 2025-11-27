@@ -91,11 +91,13 @@ type (
 	TransactionManager interface {
 		CreateWorkflow(
 			ctx context.Context,
+			archetypeID chasm.ArchetypeID,
 			targetWorkflow Workflow,
 		) error
 		UpdateWorkflow(
 			ctx context.Context,
 			isWorkflowRebuilt bool,
+			archetypeID chasm.ArchetypeID,
 			targetWorkflow Workflow,
 			newWorkflow Workflow,
 		) error
@@ -110,18 +112,20 @@ type (
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
+			archetypeID chasm.ArchetypeID,
 		) (bool, error)
 		GetCurrentWorkflowRunID(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
+			archetypeID chasm.ArchetypeID,
 		) (string, error)
 		LoadWorkflow(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
-			archetype chasm.Archetype,
+			archetypeID chasm.ArchetypeID,
 		) (Workflow, error)
 	}
 
@@ -178,11 +182,13 @@ func NewTransactionManager(
 
 func (r *transactionMgrImpl) CreateWorkflow(
 	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 ) error {
 
 	return r.createMgr.dispatchForNewWorkflow(
 		ctx,
+		archetypeID,
 		targetWorkflow,
 	)
 }
@@ -190,6 +196,7 @@ func (r *transactionMgrImpl) CreateWorkflow(
 func (r *transactionMgrImpl) UpdateWorkflow(
 	ctx context.Context,
 	isWorkflowRebuilt bool,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
 ) error {
@@ -197,6 +204,7 @@ func (r *transactionMgrImpl) UpdateWorkflow(
 	return r.updateMgr.dispatchForExistingWorkflow(
 		ctx,
 		isWorkflowRebuilt,
+		archetypeID,
 		targetWorkflow,
 		newWorkflow,
 	)
@@ -253,7 +261,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
 ) (persistence.UpdateWorkflowMode, historyi.TransactionPolicy, error) {
 
-	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, targetWorkflow)
+	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	if err != nil {
 		return 0, historyi.TransactionPolicyActive, err
 	}
@@ -366,6 +374,7 @@ func (r *transactionMgrImpl) CheckWorkflowExists(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
+	archetypeID chasm.ArchetypeID,
 ) (bool, error) {
 
 	_, err := r.shardContext.GetWorkflowExecution(
@@ -375,6 +384,7 @@ func (r *transactionMgrImpl) CheckWorkflowExists(
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  workflowID,
 			RunID:       runID,
+			ArchetypeID: archetypeID,
 		},
 	)
 
@@ -392,6 +402,7 @@ func (r *transactionMgrImpl) GetCurrentWorkflowRunID(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
+	archetypeID chasm.ArchetypeID,
 ) (string, error) {
 
 	resp, err := r.shardContext.GetCurrentExecution(
@@ -400,6 +411,7 @@ func (r *transactionMgrImpl) GetCurrentWorkflowRunID(
 			ShardID:     r.shardContext.GetShardID(),
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  workflowID,
+			ArchetypeID: archetypeID,
 		},
 	)
 
@@ -418,7 +430,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	archetype chasm.Archetype,
+	archetypeID chasm.ArchetypeID,
 ) (Workflow, error) {
 
 	weContext, release, err := r.workflowCache.GetOrCreateChasmExecution(
@@ -429,7 +441,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		archetype,
+		archetypeID,
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -447,6 +459,7 @@ func (r *transactionMgrImpl) LoadWorkflow(
 
 func (r *transactionMgrImpl) isWorkflowCurrent(
 	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 ) (bool, error) {
 
@@ -467,6 +480,7 @@ func (r *transactionMgrImpl) isWorkflowCurrent(
 		ctx,
 		namespaceID,
 		workflowID,
+		archetypeID,
 	)
 	if err != nil {
 		return false, err

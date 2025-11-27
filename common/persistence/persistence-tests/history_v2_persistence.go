@@ -12,6 +12,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
@@ -684,6 +685,7 @@ func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, err
 		uuid.NewString(),
 		uuid.NewString(),
 		uuid.NewString(),
+		chasm.WorkflowArchetypeID,
 		treeID,
 		nil,
 		[]*persistencespb.HistoryBranchRange{},
