@@ -1814,6 +1814,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Fire() 
 			ShardID:     s.mockShard.GetShardID(),
 			NamespaceID: s.namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		}).Return(&persistence.GetCurrentExecutionResponse{
 			StartRequestID: persistenceExecutionState.CreateRequestId,
 			RunID:          persistenceExecutionState.RunId,
@@ -1877,6 +1878,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Noop() 
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: s.namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		StartRequestID: persistenceExecutionState.CreateRequestId,
 		RunID:          persistenceExecutionState.RunId,
@@ -2006,6 +2008,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 			Data: &commonpb.DataBlob{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			},
+			ArchetypeId: tests.ArchetypeID,
 		},
 	}
 
@@ -2014,7 +2017,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask_
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateChasmExecution(
-		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, locks.PriorityLow,
+		gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	//nolint:revive // unchecked-type-assertion
@@ -2073,6 +2076,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		),
 		VisibilityTimestamp: s.now,
 		TaskID:              s.mustGenerateTaskID(),
+		ArchetypeID:         tests.ArchetypeID,
 	}
 
 	wfCtx := historyi.NewMockWorkflowContext(s.controller)
@@ -2081,7 +2085,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateChasmExecution(
-		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, locks.PriorityLow,
+		gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	//nolint:revive // unchecked-type-assertion
@@ -2190,7 +2194,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateChasmExecution(
-		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetype, locks.PriorityLow,
+		gomock.Any(), s.mockShard, tests.NamespaceID, we, chasm.WorkflowArchetypeID, locks.PriorityLow,
 	).Return(wfCtx, wcache.NoopReleaseFn, nil)
 
 	task := &tasks.StateMachineTimerTask{
@@ -2240,6 +2244,7 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 ) historyi.MutableState {
 	key := wcache.Key{
 		WorkflowKey: workflowKey,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	return wcache.GetMutableState(s.workflowCache, key)
@@ -2250,6 +2255,7 @@ func (s *timerQueueActiveTaskExecutorSuite) clearMutableStateFromCache(
 ) {
 	wcache.ClearMutableState(s.workflowCache, wcache.Key{
 		WorkflowKey: workflowKey,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	})
 }

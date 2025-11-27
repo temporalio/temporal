@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
@@ -258,6 +259,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 			NamespaceID: s.NamespaceID().String(),
 			WorkflowID:  cancelerWorkflowId,
 			RunID:       run.GetRunID(),
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
 		numCancelRequests := len(workflowExecution.State.RequestCancelInfos)
@@ -429,6 +431,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: future.GetID(),
 			},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		s.NoError(err)
 		stickyQueue = ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
@@ -463,6 +466,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: future.GetID(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.NotEmpty(ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
@@ -843,6 +847,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 				WorkflowId: id,
 				RunId:      workflowRun.GetRunID(),
 			},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		s.Assert().NoError(err)
 	}()

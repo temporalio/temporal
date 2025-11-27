@@ -13,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
@@ -464,6 +465,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTimer: timerTasks,
 		},
@@ -505,6 +507,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			fakeScheduledTaskCategory: scheduledTasks,
 		},
@@ -562,6 +565,7 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			category: randomTasks,
 		},

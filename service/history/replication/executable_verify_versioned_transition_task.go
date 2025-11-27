@@ -50,6 +50,9 @@ func NewExecutableVerifyVersionedTransitionTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableVerifyVersionedTransitionTask {
 	task := replicationTask.GetVerifyVersionedTransitionTaskAttributes()
+	if task.ArchetypeId == chasm.UnspecifiedArchetypeID {
+		task.ArchetypeId = chasm.WorkflowArchetypeID
+	}
 	return &ExecutableVerifyVersionedTransitionTask{
 		ProcessToolBox: processToolBox,
 
@@ -111,6 +114,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 				e.NamespaceID,
 				e.WorkflowID,
 				e.RunID,
+				e.taskAttr.GetArchetypeId(),
 				nil,
 				nil,
 			)
@@ -126,6 +130,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.NamespaceID,
 			e.WorkflowID,
 			e.RunID,
+			e.taskAttr.GetArchetypeId(),
 			nil,
 			ms.GetExecutionInfo().VersionHistories,
 		)
@@ -149,6 +154,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.NamespaceID,
 			e.WorkflowID,
 			e.RunID,
+			e.taskAttr.GetArchetypeId(),
 			transitionhistory.LastVersionedTransition(transitionHistory),
 			ms.GetExecutionInfo().VersionHistories,
 		)
@@ -229,7 +235,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 			WorkflowId: e.WorkflowID,
 			RunId:      runId,
 		},
-		chasm.ArchetypeAny,
+		e.taskAttr.GetArchetypeId(),
 		locks.PriorityHigh,
 	)
 	if err != nil {

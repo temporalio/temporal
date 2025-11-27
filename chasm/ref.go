@@ -68,7 +68,7 @@ func NewComponentRef[C Component](
 func (r *ComponentRef) ArchetypeID(
 	registry *Registry,
 ) (ArchetypeID, error) {
-	if r.archetypeID != 0 {
+	if r.archetypeID != UnspecifiedArchetypeID {
 		return r.archetypeID, nil
 	}
 

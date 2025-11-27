@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -100,6 +101,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) getWFTFailure(admin admin
 			WorkflowId: wfid,
 			RunId:      runid,
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	require.NoError(s.T(), err)
 	require.NotNil(s.T(), resp)

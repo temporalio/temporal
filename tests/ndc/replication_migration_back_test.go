@@ -21,6 +21,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -187,6 +188,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 			WorkflowId: workflowId,
 			RunId:      runID1,
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 
@@ -196,6 +198,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 			WorkflowId: workflowId,
 			RunId:      runID2,
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 
 	s.NoError(err)
@@ -242,6 +245,7 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 
@@ -313,6 +317,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 			WorkflowId: workflowId,
 			RunId:      runID,
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 

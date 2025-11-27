@@ -261,6 +261,8 @@ func NewEmptyTree(
 	// If serializedNodes is empty, it means that this new tree.
 	// Initialize empty serializedNode.
 	root.initSerializedNode(fieldTypeComponent)
+	// Default to Workflow archetype as empty tree is created for workflow as well.
+	root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
 	// Although both value and serializedNode.Data are nil, they are considered NOT synced
 	// because value has no type and serializedNode does.
 	// deserialize method should set value when called.
@@ -1600,6 +1602,8 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	taskOffset := int64(1)
 	validateContext := NewContext(context.Background(), n)
 
+	archetypeID := n.ArchetypeID()
+
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstPureTaskNode *Node
 
@@ -1645,6 +1649,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			node.closeTransactionGeneratePhysicalSideEffectTask(
 				sideEffectTask,
 				nodePath,
+				archetypeID,
 			)
 		}
 
@@ -1671,6 +1676,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	return n.closeTransactionGeneratePhysicalPureTask(
 		firstPureTask,
 		firstPureTaskNode,
+		archetypeID,
 	)
 }
 
@@ -1840,6 +1846,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 	sideEffectTask *persistencespb.ChasmComponentAttributes_Task,
 	nodePath []string,
+	archetypeID ArchetypeID,
 ) {
 	n.backend.AddTasks(&tasks.ChasmTask{
 		WorkflowKey:         n.backend.GetWorkflowKey(),
@@ -1852,6 +1859,7 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 			Path:                                   nodePath,
 			TypeId:                                 sideEffectTask.TypeId,
 			Data:                                   sideEffectTask.Data,
+			ArchetypeId:                            archetypeID,
 		},
 	})
 	sideEffectTask.PhysicalTaskStatus = physicalTaskStatusCreated
@@ -1860,6 +1868,7 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	firstPureTask *persistencespb.ChasmComponentAttributes_Task,
 	firstTaskNode *Node,
+	archetypeID ArchetypeID,
 ) error {
 	if firstPureTask == nil {
 		n.backend.DeleteCHASMPureTasks(tasks.MaximumKey.FireTime)
@@ -1876,7 +1885,7 @@ func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	n.backend.AddTasks(&tasks.ChasmTaskPure{
 		WorkflowKey:         n.backend.GetWorkflowKey(),
 		VisibilityTimestamp: firstPureTaskScheduledTime,
-		Category:            tasks.CategoryTimer,
+		ArchetypeID:         archetypeID,
 	})
 
 	// We need to persist the task status change as well, so add the node
