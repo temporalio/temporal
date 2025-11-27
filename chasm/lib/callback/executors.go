@@ -29,7 +29,6 @@ func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTa
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
-		chasmEngine:        opts.ChasmEngine,
 	}
 }
 
@@ -43,7 +42,6 @@ type InvocationTaskExecutorOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
-	ChasmEngine        chasm.Engine
 }
 
 type InvocationTaskExecutor struct {
@@ -54,7 +52,6 @@ type InvocationTaskExecutor struct {
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
-	chasmEngine        chasm.Engine
 }
 
 func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
