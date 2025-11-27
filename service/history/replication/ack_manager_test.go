@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -257,6 +258,7 @@ func (s *ackManagerSuite) TestGetTasks_FirstPersistenceErrorReturnsErrorAndEmpty
 		NamespaceID: tasksResponse.Tasks[0].GetNamespaceID(),
 		WorkflowID:  tasksResponse.Tasks[0].GetWorkflowID(),
 		RunID:       tasksResponse.Tasks[0].GetRunID(),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, gweErr)
 
 	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID)

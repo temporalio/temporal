@@ -470,6 +470,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		err = t.deleteExecution(
 			ctx,
 			task,
+			chasm.WorkflowArchetypeID,
 			false,
 			&task.DeleteProcessStage,
 		)
@@ -1150,7 +1151,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 		t.shardContext,
 		t.cache,
 		wfKey,
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -1206,6 +1207,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			ShardID:     t.shardContext.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		if err != nil {
 			return err
@@ -1266,7 +1268,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
-			chasm.WorkflowArchetype,
+			chasm.WorkflowArchetypeID,
 			locks.PriorityLow,
 		)
 		if err != nil {
