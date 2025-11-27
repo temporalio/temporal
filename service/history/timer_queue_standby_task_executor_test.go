@@ -978,7 +978,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Atte
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_StampMismatch() {
