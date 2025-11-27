@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/dgryski/go-farm"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -24,12 +25,17 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
 
 type (
 	ClusterChannelKey struct {
 		ClusterName string
+	}
+	TaskSerializer interface {
+		SerializeReplicationTask(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error)
+		DeserializeReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
 	}
 )
 
@@ -41,8 +47,8 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
-	func(serializer serialization.Serializer) serialization.ReplicationTaskSerializer {
-		return serialization.NewTaskSerializer(serializer)
+	func(serializer serialization.Serializer) TaskSerializer {
+		return serializer
 	},
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
@@ -91,7 +97,7 @@ func eagerNamespaceRefresherProvider(
 
 func replicationTaskConverterFactoryProvider(
 	config *configs.Config,
-	replicationTaskSerializer serialization.ReplicationTaskSerializer,
+	replicationTaskSerializer TaskSerializer,
 ) SourceTaskConverterProvider {
 	return func(
 		historyEngine historyi.Engine,
@@ -368,7 +374,7 @@ func eventImporterProvider(
 
 func dlqWriterAdapterProvider(
 	dlqWriter *queues.DLQWriter,
-	replicationTaskSerializer serialization.ReplicationTaskSerializer,
+	replicationTaskSerializer TaskSerializer,
 	clusterMetadata cluster.Metadata,
 ) *DLQWriterAdapter {
 	return NewDLQWriterAdapter(dlqWriter, replicationTaskSerializer, clusterMetadata.GetCurrentClusterName())

@@ -51,7 +51,6 @@ type (
 		dataStoreFactory                            persistence.DataStoreFactory
 		config                                      *config.Persistence
 		serializer                                  serialization.Serializer
-		taskSerializer                              serialization.TaskSerializer
 		eventBlobCache                              persistence.XDCCache
 		metricsHandler                              metrics.Handler
 		logger                                      log.Logger
@@ -79,7 +78,6 @@ func NewFactory(
 	namespaceRateLimiter quotas.RequestRateLimiter,
 	shardRateLimiter quotas.RequestRateLimiter,
 	serializer serialization.Serializer,
-	taskSerializer serialization.TaskSerializer,
 	eventBlobCache persistence.XDCCache,
 	clusterName string,
 	metricsHandler metrics.Handler,
@@ -92,7 +90,6 @@ func NewFactory(
 		dataStoreFactory:      dataStoreFactory,
 		config:                cfg,
 		serializer:            serializer,
-		taskSerializer:        taskSerializer,
 		eventBlobCache:        eventBlobCache,
 		metricsHandler:        metricsHandler,
 		logger:                logger,
@@ -206,7 +203,9 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 	result := persistence.NewExecutionManager(
 		store,
 		f.serializer,
-		f.taskSerializer, f.eventBlobCache, f.logger, f.config.TransactionSizeLimit,
+		f.eventBlobCache,
+		f.logger,
+		f.config.TransactionSizeLimit,
 		f.enableBestEffortDeleteTasksOnWorkflowUpdate,
 	)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
@@ -240,7 +239,7 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (persistence.HistoryTaskQueue
 	if err != nil {
 		return nil, err
 	}
-	return persistence.NewHistoryTaskQueueManager(q, f.serializer, f.taskSerializer), nil
+	return persistence.NewHistoryTaskQueueManager(q, f.serializer), nil
 }
 
 func (f *factoryImpl) NewNexusEndpointManager() (persistence.NexusEndpointManager, error) {
