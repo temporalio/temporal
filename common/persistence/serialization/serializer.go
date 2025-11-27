@@ -7,12 +7,14 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -56,6 +58,8 @@ type (
 		ArchivalTaskInfoToBlob(info *persistencespb.ArchivalTaskInfo) (*commonpb.DataBlob, error)
 		OutboundTaskInfoToBlob(info *persistencespb.OutboundTaskInfo) (*commonpb.DataBlob, error)
 		QueueStateToBlob(info *persistencespb.QueueState) (*commonpb.DataBlob, error)
+		SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
+		SerializeReplicationTask(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error)
 	}
 
 	// Decoder is used to decode DataBlobs to objects.
@@ -91,6 +95,8 @@ type (
 		ArchivalTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ArchivalTaskInfo, error)
 		OutboundTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.OutboundTaskInfo, error)
 		QueueStateFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueState, error)
+		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
+		DeserializeReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
 	}
 
 	// Serializer is used to serialize and deserialize DataBlobs.
@@ -128,6 +134,50 @@ type (
 
 func NewSerializer() Serializer {
 	return &serializerImpl{encodingType: enumspb.ENCODING_TYPE_PROTO3}
+}
+
+func (t *serializerImpl) SerializeTask(
+	task tasks.Task,
+) (*commonpb.DataBlob, error) {
+	category := task.GetCategory()
+	switch category.ID() {
+	case tasks.CategoryIDTransfer:
+		return serializeTransferTask(t, task)
+	case tasks.CategoryIDTimer:
+		return serializeTimerTask(t, task)
+	case tasks.CategoryIDVisibility:
+		return serializeVisibilityTask(t, task)
+	case tasks.CategoryIDReplication:
+		return serializeReplicationTask(t, task)
+	case tasks.CategoryIDArchival:
+		return serializeArchivalTask(t, task)
+	case tasks.CategoryIDOutbound:
+		return serializeOutboundTask(t, task)
+	default:
+		return nil, serviceerror.NewInternalf("Unknown task category: %v", category)
+	}
+}
+
+func (t *serializerImpl) DeserializeTask(
+	category tasks.Category,
+	blob *commonpb.DataBlob,
+) (tasks.Task, error) {
+	switch category.ID() {
+	case tasks.CategoryIDTransfer:
+		return deserializeTransferTask(t, blob)
+	case tasks.CategoryIDTimer:
+		return deserializeTimerTask(t, blob)
+	case tasks.CategoryIDVisibility:
+		return deserializeVisibilityTask(t, blob)
+	case tasks.CategoryIDReplication:
+		return deserializeReplicationTask(t, blob)
+	case tasks.CategoryIDArchival:
+		return deserializeArchivalTask(t, blob)
+	case tasks.CategoryIDOutbound:
+		return deserializeOutboundTask(t, blob)
+	default:
+		return nil, serviceerror.NewInternalf("Unknown task category: %v", category)
+	}
 }
 
 func (t *serializerImpl) SerializeEvents(events []*historypb.HistoryEvent) (*commonpb.DataBlob, error) {
