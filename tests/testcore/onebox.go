@@ -172,7 +172,6 @@ type (
 		// ServiceFxOptions is populated by WithFxOptionsForService.
 		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
-		ChasmRegistry            *chasm.Registry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
@@ -182,6 +181,11 @@ type (
 )
 
 const NamespaceCacheRefreshInterval = time.Second
+
+var chasmFxOptions = fx.Options(
+	temporal.ChasmLibraryOptions,
+	chasmtests.Module,
+)
 
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
@@ -214,7 +218,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		testHooks:                 testhooks.NewTestHooksImpl(),
 		serviceFxOptions:          params.ServiceFxOptions,
 		taskCategoryRegistry:      params.TaskCategoryRegistry,
-		chasmRegistry:             params.ChasmRegistry,
 		hostsByProtocolByService:  params.HostsByProtocolByService,
 		grpcClientInterceptor:     grpcinject.NewInterceptor(),
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
@@ -399,13 +402,13 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
+			chasmFxOptions,
 		)
 		err := app.Err()
 		if err != nil {
@@ -455,10 +458,10 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			fx.Provide(c.GetGrpcClientInterceptor),
-			fx.Decorate(func(base persistence.ExecutionManager) persistence.ExecutionManager {
+			fx.Decorate(func(base persistence.ExecutionManager, logger log.Logger) persistence.ExecutionManager {
 				// Wrap ExecutionManager with recorder to capture task writes
 				// This wraps the FINAL ExecutionManager after all FX processing (metrics, retries, etc.)
-				c.taskQueueRecorder = NewTaskQueueRecorder(base)
+				c.taskQueueRecorder = NewTaskQueueRecorder(base, logger)
 				return c.taskQueueRecorder
 			}),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
@@ -494,7 +497,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			history.QueueModule,
@@ -502,9 +504,10 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
+			chasmFxOptions,
 			fx.Populate(&namespaceRegistry),
 			fx.Populate(&c.chasmEngine),
-			chasmtests.Module,
+			fx.Populate(&c.chasmRegistry),
 		)
 		err := app.Err()
 		if err != nil {
@@ -555,12 +558,12 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
+			chasmFxOptions,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
@@ -622,12 +625,12 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Provide(c.GetCHASMRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
+			chasmFxOptions,
 			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()

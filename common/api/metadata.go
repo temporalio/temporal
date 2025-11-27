@@ -162,6 +162,8 @@ var (
 		"UpdateTaskQueueConfig":                 {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"FetchWorkerConfig":                     {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"UpdateWorkerConfig":                    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"PauseWorkflowExecution":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"UnpauseWorkflowExecution":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},

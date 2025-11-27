@@ -20,6 +20,7 @@ import (
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	workflow "go.temporal.io/server/api/workflow/v1"
+	chasm "go.temporal.io/server/chasm"
 	collection "go.temporal.io/server/common/collection"
 	definition "go.temporal.io/server/common/definition"
 	metrics "go.temporal.io/server/common/metrics"
@@ -452,6 +453,21 @@ func (mr *MockEngineMockRecorder) PauseActivity(ctx, request any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockEngine)(nil).PauseActivity), ctx, request)
 }
 
+// PauseWorkflowExecution mocks base method.
+func (m *MockEngine) PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (*historyservice.PauseWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(*historyservice.PauseWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseWorkflowExecution indicates an expected call of PauseWorkflowExecution.
+func (mr *MockEngineMockRecorder) PauseWorkflowExecution(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).PauseWorkflowExecution), ctx, request)
+}
+
 // PollMutableState mocks base method.
 func (m *MockEngine) PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (*historyservice.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -601,17 +617,17 @@ func (mr *MockEngineMockRecorder) RecordWorkflowTaskStarted(ctx, request any) *g
 }
 
 // RefreshWorkflowTasks mocks base method.
-func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution) error {
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution *common.WorkflowExecution, archetypeID chasm.ArchetypeID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution)
+	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution, archetypeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RefreshWorkflowTasks indicates an expected call of RefreshWorkflowTasks.
-func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execution any) *gomock.Call {
+func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execution, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockEngine)(nil).RefreshWorkflowTasks), ctx, namespaceUUID, execution)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockEngine)(nil).RefreshWorkflowTasks), ctx, namespaceUUID, execution, archetypeID)
 }
 
 // RemoveSignalMutableState mocks base method.
@@ -658,17 +674,17 @@ func (mr *MockEngineMockRecorder) ReplicateHistoryEvents(ctx, workflowKey, baseE
 }
 
 // ReplicateVersionedTransition mocks base method.
-func (m *MockEngine) ReplicateVersionedTransition(ctx context.Context, artifact *repication.VersionedTransitionArtifact, sourceClusterName string) error {
+func (m *MockEngine) ReplicateVersionedTransition(ctx context.Context, archetypeID chasm.ArchetypeID, artifact *repication.VersionedTransitionArtifact, sourceClusterName string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, artifact, sourceClusterName)
+	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, archetypeID, artifact, sourceClusterName)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReplicateVersionedTransition indicates an expected call of ReplicateVersionedTransition.
-func (mr *MockEngineMockRecorder) ReplicateVersionedTransition(ctx, artifact, sourceClusterName any) *gomock.Call {
+func (mr *MockEngineMockRecorder) ReplicateVersionedTransition(ctx, archetypeID, artifact, sourceClusterName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockEngine)(nil).ReplicateVersionedTransition), ctx, artifact, sourceClusterName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockEngine)(nil).ReplicateVersionedTransition), ctx, archetypeID, artifact, sourceClusterName)
 }
 
 // ReplicateWorkflowState mocks base method.
@@ -1030,6 +1046,21 @@ func (m *MockEngine) UnpauseActivity(ctx context.Context, request *historyservic
 func (mr *MockEngineMockRecorder) UnpauseActivity(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseActivity", reflect.TypeOf((*MockEngine)(nil).UnpauseActivity), ctx, request)
+}
+
+// UnpauseWorkflowExecution mocks base method.
+func (m *MockEngine) UnpauseWorkflowExecution(ctx context.Context, request *historyservice.UnpauseWorkflowExecutionRequest) (*historyservice.UnpauseWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpauseWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(*historyservice.UnpauseWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpauseWorkflowExecution indicates an expected call of UnpauseWorkflowExecution.
+func (mr *MockEngineMockRecorder) UnpauseWorkflowExecution(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).UnpauseWorkflowExecution), ctx, request)
 }
 
 // UnsubscribeReplicationNotification mocks base method.

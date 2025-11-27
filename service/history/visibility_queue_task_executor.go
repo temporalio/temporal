@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -17,7 +18,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -403,10 +404,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 
 	searchattributes := make(map[string]*commonpb.Payload)
 
-	aliasedSearchAttributes, err := visComponent.GetSearchAttributes(visTaskContext)
-	if err != nil {
-		return err
-	}
+	aliasedSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
 
 	for alias, value := range aliasedSearchAttributes {
 		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
@@ -416,10 +414,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		searchattributes[fieldName] = value
 	}
 
-	memo, err := visComponent.GetMemo(visTaskContext)
-	if err != nil {
-		return err
-	}
+	memo := visComponent.GetMemo(visTaskContext)
 	if memo == nil {
 		memo = make(map[string]*commonpb.Payload)
 	}
@@ -446,7 +441,9 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		memo,
 		searchattributes,
 	)
-	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(tree.Archetype().String())
+
+	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
+	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)

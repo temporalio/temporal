@@ -3,7 +3,7 @@ package testvars
 import (
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/common/definition"
@@ -41,8 +41,20 @@ func (a Any) Int() int {
 	return randInt(a.testHash, 3, 3, 3)
 }
 
+func (a Any) Int32() int32 {
+	return int32(a.Int())
+}
+
+func (a Any) UInt32() uint32 {
+	return uint32(a.Int())
+}
+
 func (a Any) Int64() int64 {
 	return int64(a.Int())
+}
+
+func (a Any) UInt64() uint64 {
+	return uint64(a.Int())
 }
 
 func (a Any) EventID() int64 {
@@ -65,7 +77,7 @@ func (a Any) InfiniteTimeout() *durationpb.Duration {
 }
 
 func (a Any) RunID() string {
-	return uuid.New()
+	return uuid.NewString()
 }
 
 func (a Any) WorkflowKey() definition.WorkflowKey {

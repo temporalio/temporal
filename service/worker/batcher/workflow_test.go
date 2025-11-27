@@ -3,7 +3,7 @@ package batcher
 import (
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -62,7 +62,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
-			JobId: uuid.New(),
+			JobId: uuid.NewString(),
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 				TerminationOperation: &batchpb.BatchOperationTermination{},
 			},
@@ -94,14 +94,14 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
-			JobId: uuid.New(),
+			JobId: uuid.NewString(),
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 				TerminationOperation: &batchpb.BatchOperationTermination{},
 			},
 			Executions: []*commonpb.WorkflowExecution{
 				{
-					WorkflowId: uuid.New(),
-					RunId:      uuid.New(),
+					WorkflowId: uuid.NewString(),
+					RunId:      uuid.NewString(),
 				},
 			},
 			Reason:    "test-reason",

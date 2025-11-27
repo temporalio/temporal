@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 const (
@@ -20,7 +21,7 @@ func TestFieldNameAggInterceptor(t *testing.T) {
 	s := require.New(t)
 	fnInterceptor := newFieldNameAggInterceptor(
 		testNamespace,
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestEsNameTypeMap(),
 		searchattribute.NewTestMapperProvider(nil),
 	)
 
@@ -54,8 +55,8 @@ func TestFieldSaAggInterceptor(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	startTimeCol := query.NewSAColumn(
-		searchattribute.StartTime,
-		searchattribute.StartTime,
+		sadefs.StartTime,
+		sadefs.StartTime,
 		enumspb.INDEXED_VALUE_TYPE_DATETIME,
 	)
 
@@ -89,7 +90,7 @@ func TestFieldSaAggInterceptor(t *testing.T) {
 		map[string]struct{}{
 			"AliasForCustomIntField":     struct{}{},
 			"AliasForCustomKeywordField": struct{}{},
-			searchattribute.StartTime:    struct{}{},
+			sadefs.StartTime:             struct{}{},
 		},
 		saInterceptor.names,
 	)
@@ -165,7 +166,7 @@ func TestGetQueryFieldsLegacy(t *testing.T) {
 				s := require.New(t)
 				fields, err := getQueryFieldsLegacy(
 					testNamespace,
-					searchattribute.TestNameTypeMap,
+					searchattribute.TestEsNameTypeMap(),
 					searchattribute.NewTestMapperProvider(nil),
 					tc.input,
 				)
@@ -200,14 +201,14 @@ func TestGetQueryFields(t *testing.T) {
 		},
 		{
 			name:           "filter custom search attribute",
-			input:          "CustomKeywordField = 'foo'",
-			expectedFields: []string{"CustomKeywordField"},
+			input:          "AliasForKeyword01 = 'foo'",
+			expectedFields: []string{"AliasForKeyword01"},
 			expectedErrMsg: "",
 		},
 		{
 			name:           "filter multiple custom search attribute",
-			input:          "(CustomKeywordField = 'foo' AND CustomIntField = 123) OR CustomKeywordField = 'bar'",
-			expectedFields: []string{"CustomKeywordField", "CustomIntField"},
+			input:          "(AliasForKeyword01 = 'foo' AND AliasForInt01 = 123) OR AliasForKeyword01 = 'bar'",
+			expectedFields: []string{"AliasForKeyword01", "AliasForInt01"},
 			expectedErrMsg: "",
 		},
 		{
@@ -224,8 +225,8 @@ func TestGetQueryFields(t *testing.T) {
 		},
 		{
 			name:           "filter TemporalSchedulePaused and custom search attribute",
-			input:          "TemporalSchedulePaused = true AND CustomKeywordField = 'foo'",
-			expectedFields: []string{"TemporalSchedulePaused", "CustomKeywordField"},
+			input:          "TemporalSchedulePaused = true AND AliasForKeyword01 = 'foo'",
+			expectedFields: []string{"TemporalSchedulePaused", "AliasForKeyword01"},
 			expectedErrMsg: "",
 		},
 		{
@@ -236,7 +237,7 @@ func TestGetQueryFields(t *testing.T) {
 		},
 		{
 			name:           "invalid query filter",
-			input:          "CustomKeywordField = foo",
+			input:          "AliasForKeyword01 = foo",
 			expectedFields: nil,
 			expectedErrMsg: "invalid query",
 		},
@@ -255,8 +256,8 @@ func TestGetQueryFields(t *testing.T) {
 				s := require.New(t)
 				fields, err := getQueryFields(
 					testNamespace,
-					searchattribute.TestNameTypeMap,
-					searchattribute.NewTestMapperProvider(nil),
+					searchattribute.TestNameTypeMap(),
+					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
 					tc.input,
 				)
 				if tc.expectedErrMsg == "" {
@@ -288,12 +289,12 @@ func TestValidateVisibilityQuery(t *testing.T) {
 		},
 		{
 			name:           "filter custom search attribute",
-			input:          "CustomKeywordField = 'foo'",
+			input:          "AliasForKeyword01 = 'foo'",
 			expectedErrMsg: "",
 		},
 		{
 			name:           "filter multiple custom search attribute",
-			input:          "(CustomKeywordField = 'foo' AND CustomIntField = 123) OR CustomKeywordField = 'bar'",
+			input:          "(AliasForKeyword01 = 'foo' AND AliasForInt01 = 123) OR AliasForKeyword01 = 'bar'",
 			expectedErrMsg: "",
 		},
 		{
@@ -308,7 +309,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 		},
 		{
 			name:           "filter TemporalSchedulePaused and custom search attribute",
-			input:          "TemporalSchedulePaused = true AND CustomKeywordField = 'foo'",
+			input:          "TemporalSchedulePaused = true AND AliasForKeyword01 = 'foo'",
 			expectedErrMsg: "",
 		},
 		{
@@ -318,7 +319,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 		},
 		{
 			name:           "invalid query filter",
-			input:          "CustomKeywordField = foo",
+			input:          "AliasForKeyword01 = foo",
 			expectedErrMsg: "invalid query",
 		},
 		{
@@ -335,8 +336,8 @@ func TestValidateVisibilityQuery(t *testing.T) {
 				s := require.New(t)
 				err := ValidateVisibilityQuery(
 					testNamespace,
-					searchattribute.TestNameTypeMap,
-					searchattribute.NewTestMapperProvider(nil),
+					searchattribute.TestNameTypeMap(),
+					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
 					dynamicconfig.GetBoolPropertyFn(true),
 					tc.input,
 				)

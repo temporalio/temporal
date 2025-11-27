@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	chasm "go.temporal.io/server/chasm"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,15 +42,15 @@ func (m *MocktransactionMgrForNewWorkflow) EXPECT() *MocktransactionMgrForNewWor
 }
 
 // dispatchForNewWorkflow mocks base method.
-func (m *MocktransactionMgrForNewWorkflow) dispatchForNewWorkflow(ctx context.Context, targetWorkflow Workflow) error {
+func (m *MocktransactionMgrForNewWorkflow) dispatchForNewWorkflow(ctx context.Context, archetypeID chasm.ArchetypeID, targetWorkflow Workflow) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "dispatchForNewWorkflow", ctx, targetWorkflow)
+	ret := m.ctrl.Call(m, "dispatchForNewWorkflow", ctx, archetypeID, targetWorkflow)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // dispatchForNewWorkflow indicates an expected call of dispatchForNewWorkflow.
-func (mr *MocktransactionMgrForNewWorkflowMockRecorder) dispatchForNewWorkflow(ctx, targetWorkflow any) *gomock.Call {
+func (mr *MocktransactionMgrForNewWorkflowMockRecorder) dispatchForNewWorkflow(ctx, archetypeID, targetWorkflow any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForNewWorkflow", reflect.TypeOf((*MocktransactionMgrForNewWorkflow)(nil).dispatchForNewWorkflow), ctx, targetWorkflow)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForNewWorkflow", reflect.TypeOf((*MocktransactionMgrForNewWorkflow)(nil).dispatchForNewWorkflow), ctx, archetypeID, targetWorkflow)
 }

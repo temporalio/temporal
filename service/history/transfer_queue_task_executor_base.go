@@ -203,12 +203,16 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	task *tasks.DeleteExecutionTask,
 	ensureNoPendingCloseTask bool,
 ) error {
-	return t.deleteExecution(ctx, task, ensureNoPendingCloseTask, &task.ProcessStage)
+	if task.ArchetypeID == chasm.UnspecifiedArchetypeID {
+		task.ArchetypeID = chasm.WorkflowArchetypeID
+	}
+	return t.deleteExecution(ctx, task, task.ArchetypeID, ensureNoPendingCloseTask, &task.ProcessStage)
 }
 
 func (t *transferQueueTaskExecutorBase) deleteExecution(
 	ctx context.Context,
 	task tasks.Task,
+	archetypeID chasm.ArchetypeID,
 	ensureNoPendingCloseTask bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retError error) {
@@ -220,12 +224,12 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		RunId:      task.GetRunID(),
 	}
 
-	weCtx, release, err := t.cache.GetOrCreateChasmEntity(
+	weCtx, release, err := t.cache.GetOrCreateChasmExecution(
 		ctx,
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		&workflowExecution,
-		chasm.ArchetypeAny, // deletion logic works for all Archetypes.
+		archetypeID,
 		locks.PriorityLow,
 	)
 	if err != nil {

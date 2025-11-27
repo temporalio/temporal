@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 )
@@ -71,7 +72,7 @@ var (
 	filterByNSDivision      = fmt.Sprintf("map[term:map[TemporalNamespaceDivision:%s]", testNSDivision)
 
 	namespaceDivisionIsNull = elastic.NewBoolQuery().MustNot(
-		elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision),
+		elastic.NewExistsQuery(sadefs.TemporalNamespaceDivision),
 	)
 )
 
@@ -91,9 +92,9 @@ func createTestRequestWithNSDivision() *manager.ListWorkflowExecutionsRequestV2 
 		Namespace:   testNamespace,
 		PageSize:    testPageSize,
 		Query: fmt.Sprintf("%s = '%s' AND %s = '%s'",
-			searchattribute.ExecutionStatus,
+			sadefs.ExecutionStatus,
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			searchattribute.TemporalNamespaceDivision,
+			sadefs.TemporalNamespaceDivision,
 			testNSDivision,
 		),
 	}
@@ -122,7 +123,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.visibilityStore = &VisibilityStore{
 		esClient:                       s.mockESClient,
 		index:                          testIndex,
-		searchAttributesProvider:       searchattribute.NewTestProvider(),
+		searchAttributesProvider:       searchattribute.NewTestEsProvider(),
 		searchAttributesMapperProvider: s.mockSearchAttributesMapperProvider,
 		processor:                      s.mockProcessor,
 		processorAckTimeout:            esProcessorAckTimeout,
@@ -154,7 +155,7 @@ func (s *ESVisibilitySuite) TestGetListFieldSorter() {
 	expectedSorter := make([]elastic.Sorter, len(testFieldSorts)+1)
 	expectedSorter[0] = testFieldSorts[0]
 	expectedSorter[1] = testFieldSorts[1]
-	expectedSorter[2] = elastic.NewFieldSort(searchattribute.RunID).Desc()
+	expectedSorter[2] = elastic.NewFieldSort(sadefs.RunID).Desc()
 	s.NoError(err)
 	s.Equal(expectedSorter, sorter)
 
@@ -167,14 +168,14 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		PageSize:    testPageSize,
 	}
 
-	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
-	matchNSDivision := elastic.NewTermQuery(searchattribute.TemporalNamespaceDivision, "hidden-stuff")
+	matchNamespaceQuery := elastic.NewTermQuery(sadefs.NamespaceID, request.NamespaceID.String())
+	matchNSDivision := elastic.NewTermQuery(sadefs.TemporalNamespaceDivision, "hidden-stuff")
 
 	var filterQuery elastic.Query
 
 	// test for open
 	request.Query = `WorkflowId="guid-2208"`
-	filterQuery = elastic.NewTermQuery(searchattribute.WorkflowID, "guid-2208")
+	filterQuery = elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208")
 	boolQuery := elastic.NewBoolQuery().Filter(
 		matchNamespaceQuery,
 		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
@@ -193,7 +194,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// test for open with namespace division
 	request.Query = `WorkflowId="guid-2208" and TemporalNamespaceDivision="hidden-stuff"`
 	// note namespace division appears in the filterQuery, not the boolQuery like the negative version
-	filterQuery = elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.WorkflowID, "guid-2208"), matchNSDivision)
+	filterQuery = elastic.NewBoolQuery().Filter(elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208"), matchNSDivision)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
 	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
@@ -219,8 +220,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		SearchAfter: nil,
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
-			elastic.NewFieldSort(searchattribute.WorkflowID).Asc(),
-			elastic.NewFieldSort(searchattribute.RunID).Desc(),
+			elastic.NewFieldSort(sadefs.WorkflowID).Asc(),
+			elastic.NewFieldSort(sadefs.RunID).Desc(),
 		},
 	}, p)
 	request.Query = ""
@@ -240,14 +241,14 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 		PageSize:    testPageSize,
 	}
 
-	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
+	matchNamespaceQuery := elastic.NewTermQuery(sadefs.NamespaceID, request.NamespaceID.String())
 
 	// disable ORDER BY clause
 	s.visibilityStore.disableOrderByClause = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 
 	// test valid query
 	request.Query = `WorkflowId="guid-2208"`
-	filterQuery := elastic.NewTermQuery(searchattribute.WorkflowID, "guid-2208")
+	filterQuery := elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208")
 	boolQuery := elastic.NewBoolQuery().Filter(
 		matchNamespaceQuery,
 		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
@@ -483,7 +484,7 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper_Error() {
 }
 
 func (s *ESVisibilitySuite) Test_convertQuery() {
-	namespaceIDQuery := elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())
+	namespaceIDQuery := elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String())
 
 	testCases := []struct {
 		name  string
@@ -511,7 +512,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 					namespaceIDQuery,
 					elastic.NewBoolQuery().Filter(
 						namespaceDivisionIsNull,
-						elastic.NewTermQuery(searchattribute.WorkflowID, "wid"),
+						elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
 					),
 				),
 				Sorter:  []elastic.Sorter{},
@@ -526,10 +527,10 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 					namespaceIDQuery,
 					elastic.NewBoolQuery().Filter(
 						namespaceDivisionIsNull,
-						elastic.NewTermQuery(searchattribute.WorkflowID, "wid"),
+						elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
 					),
 				),
-				Sorter:  []elastic.Sorter{elastic.NewFieldSort(searchattribute.WorkflowID)},
+				Sorter:  []elastic.Sorter{elastic.NewFieldSort(sadefs.WorkflowID)},
 				GroupBy: []string{},
 			},
 		},
@@ -541,11 +542,11 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 					namespaceIDQuery,
 					elastic.NewBoolQuery().Filter(
 						namespaceDivisionIsNull,
-						elastic.NewTermQuery(searchattribute.WorkflowID, "wid"),
+						elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
 					),
 				),
 				Sorter:  []elastic.Sorter{},
-				GroupBy: []string{searchattribute.ExecutionStatus},
+				GroupBy: []string{sadefs.ExecutionStatus},
 			},
 		},
 		{
@@ -559,7 +560,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 						elastic.NewBoolQuery().
 							Should(
 								elastic.NewBoolQuery().Filter(
-									elastic.NewTermQuery(searchattribute.WorkflowID, "wid"),
+									elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
 									elastic.NewTermQuery("CustomKeywordField", "foo"),
 								),
 								elastic.NewTermQuery("CustomIntField", int64(123)),
@@ -708,6 +709,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
+	saTypeMap := searchattribute.TestEsNameTypeMap()
 	docSource := []byte(`{"ExecutionStatus": "Running",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -718,7 +720,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
 	// test for open
-	info, err := s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -742,7 +744,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
-	info, err = s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -762,7 +764,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	// test for error case
 	docSource = []byte(`corrupted data`)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	info, err = s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.Error(err)
 	s.Nil(info)
 }
@@ -770,6 +772,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 	s.visibilityStore.searchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
 
+	saTypeMap := searchattribute.TestEsNameTypeMap()
 	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
@@ -779,10 +782,10 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
           "CustomIntField": [111,222],
           "CustomBoolField": true,
           "UnknownField": "random"}`)
-	info, err := s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
-	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap, true)
+	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &saTypeMap, true)
 	s.NoError(err)
 
 	s.Len(customSearchAttributes, 7)
@@ -812,6 +815,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
+	saTypeMap := searchattribute.TestEsNameTypeMap()
 	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
@@ -822,7 +826,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
           "CustomBoolField": true,
           "UnknownField": "random"}`)
 
-	info, err := s.visibilityStore.ParseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 
@@ -844,7 +848,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 			s.Equal(testIndex, p.Index)
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 					elastic.NewBoolQuery().Filter(
 						namespaceDivisionIsNull,
 						elastic.NewTermQuery("ExecutionStatus", "Terminated"),
@@ -934,7 +938,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 					elastic.NewBoolQuery().Filter(
 						namespaceDivisionIsNull,
 						elastic.NewTermQuery("ExecutionStatus", "Terminated"),
@@ -959,7 +963,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 					elastic.NewBoolQuery().Filter(
 						namespaceDivisionIsNull,
 						elastic.NewTermQuery("ExecutionStatus", "Terminated"),
@@ -997,16 +1001,16 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 			testIndex,
 			elastic.NewBoolQuery().
 				Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 					namespaceDivisionIsNull,
 				),
-			searchattribute.ExecutionStatus,
-			elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus),
+			sadefs.ExecutionStatus,
+			elastic.NewTermsAggregation().Field(sadefs.ExecutionStatus),
 		).
 		Return(
 			&elastic.SearchResult{
 				Aggregations: map[string]json.RawMessage{
-					searchattribute.ExecutionStatus: json.RawMessage(
+					sadefs.ExecutionStatus: json.RawMessage(
 						`{"buckets":[{"key":"Completed","doc_count":100},{"key":"Running","doc_count":10}]}`,
 					),
 				},
@@ -1082,12 +1086,12 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 	}{
 		{
 			name:    "group by one field",
-			groupBy: []string{searchattribute.ExecutionStatus},
-			aggName: searchattribute.ExecutionStatus,
-			agg:     elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus),
+			groupBy: []string{sadefs.ExecutionStatus},
+			aggName: sadefs.ExecutionStatus,
+			agg:     elastic.NewTermsAggregation().Field(sadefs.ExecutionStatus),
 			mockResponse: &elastic.SearchResult{
 				Aggregations: map[string]json.RawMessage{
-					searchattribute.ExecutionStatus: json.RawMessage(
+					sadefs.ExecutionStatus: json.RawMessage(
 						`{
 							"buckets":[
 								{
@@ -1120,15 +1124,15 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 
 		{
 			name:    "group by two fields",
-			groupBy: []string{searchattribute.ExecutionStatus, searchattribute.WorkflowType},
-			aggName: searchattribute.ExecutionStatus,
-			agg: elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus).SubAggregation(
-				searchattribute.WorkflowType,
-				elastic.NewTermsAggregation().Field(searchattribute.WorkflowType),
+			groupBy: []string{sadefs.ExecutionStatus, sadefs.WorkflowType},
+			aggName: sadefs.ExecutionStatus,
+			agg: elastic.NewTermsAggregation().Field(sadefs.ExecutionStatus).SubAggregation(
+				sadefs.WorkflowType,
+				elastic.NewTermsAggregation().Field(sadefs.WorkflowType),
 			),
 			mockResponse: &elastic.SearchResult{
 				Aggregations: map[string]json.RawMessage{
-					searchattribute.ExecutionStatus: json.RawMessage(
+					sadefs.ExecutionStatus: json.RawMessage(
 						`{
 							"buckets":[
 								{
@@ -1194,21 +1198,21 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 		{
 			name: "group by three fields",
 			groupBy: []string{
-				searchattribute.ExecutionStatus,
-				searchattribute.WorkflowType,
-				searchattribute.WorkflowID,
+				sadefs.ExecutionStatus,
+				sadefs.WorkflowType,
+				sadefs.WorkflowID,
 			},
-			aggName: searchattribute.ExecutionStatus,
-			agg: elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus).SubAggregation(
-				searchattribute.WorkflowType,
-				elastic.NewTermsAggregation().Field(searchattribute.WorkflowType).SubAggregation(
-					searchattribute.WorkflowID,
-					elastic.NewTermsAggregation().Field(searchattribute.WorkflowID),
+			aggName: sadefs.ExecutionStatus,
+			agg: elastic.NewTermsAggregation().Field(sadefs.ExecutionStatus).SubAggregation(
+				sadefs.WorkflowType,
+				elastic.NewTermsAggregation().Field(sadefs.WorkflowType).SubAggregation(
+					sadefs.WorkflowID,
+					elastic.NewTermsAggregation().Field(sadefs.WorkflowID),
 				),
 			),
 			mockResponse: &elastic.SearchResult{
 				Aggregations: map[string]json.RawMessage{
-					searchattribute.ExecutionStatus: json.RawMessage(
+					sadefs.ExecutionStatus: json.RawMessage(
 						`{
 							"buckets":[
 								{
@@ -1317,7 +1321,7 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 			searchParams := &esQueryParams{
 				Query: elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+						elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 						namespaceDivisionIsNull,
 					),
 				GroupBy: tc.groupBy,
@@ -1328,7 +1332,7 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 					testIndex,
 					elastic.NewBoolQuery().
 						Filter(
-							elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
+							elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 							namespaceDivisionIsNull,
 						),
 					tc.aggName,
@@ -1442,7 +1446,7 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 	closeTime := time.Now().UTC()
 	startTime := closeTime.Add(-1 * time.Minute)
 	baseQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespace.String()))
+		Filter(elastic.NewTermQuery(sadefs.NamespaceID, testNamespace.String()))
 
 	testCases := []struct {
 		name             string
@@ -1519,11 +1523,11 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 			resSearchAfter: nil,
 			resQuery: baseQuery.MinimumNumberShouldMatch(1).Should(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(searchattribute.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
 				),
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
-					elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+					elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
 				),
 			),
 			resError: nil,
@@ -1560,6 +1564,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 	startTime := time.Now().UTC()
 	closeTime := startTime.Add(1 * time.Minute)
 	datetimeNull := json.Number(fmt.Sprintf("%d", math.MaxInt64))
+	saTypeMap := searchattribute.TestEsNameTypeMap()
 
 	testCases := []struct {
 		name         string
@@ -1570,11 +1575,11 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 	}{
 		{
 			name:         "one field",
-			sorterFields: []fieldSort{{searchattribute.StartTime, true, true}},
+			sorterFields: []fieldSort{{sadefs.StartTime, true, true}},
 			searchAfter:  []any{json.Number(fmt.Sprintf("%d", startTime.UnixNano()))},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
 				),
 			},
 			err: nil,
@@ -1582,19 +1587,19 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 		{
 			name: "two fields one null",
 			sorterFields: []fieldSort{
-				{searchattribute.CloseTime, true, true},
-				{searchattribute.StartTime, true, true},
+				{sadefs.CloseTime, true, true},
+				{sadefs.StartTime, true, true},
 			},
 			searchAfter: []any{
 				datetimeNull,
 				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
 			},
 			res: []elastic.Query{
-				elastic.NewBoolQuery().Filter(elastic.NewExistsQuery(searchattribute.CloseTime)),
+				elastic.NewBoolQuery().Filter(elastic.NewExistsQuery(sadefs.CloseTime)),
 				elastic.NewBoolQuery().
-					MustNot(elastic.NewExistsQuery(searchattribute.CloseTime)).
+					MustNot(elastic.NewExistsQuery(sadefs.CloseTime)).
 					Filter(
-						elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
 					),
 			},
 			err: nil,
@@ -1602,8 +1607,8 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 		{
 			name: "two fields no null",
 			sorterFields: []fieldSort{
-				{searchattribute.CloseTime, true, true},
-				{searchattribute.StartTime, true, true},
+				{sadefs.CloseTime, true, true},
+				{sadefs.StartTime, true, true},
 			},
 			searchAfter: []any{
 				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
@@ -1611,12 +1616,12 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(searchattribute.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
 				),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
 					),
 			},
 			err: nil,
@@ -1624,9 +1629,9 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 		{
 			name: "three fields",
 			sorterFields: []fieldSort{
-				{searchattribute.CloseTime, true, true},
-				{searchattribute.StartTime, true, true},
-				{searchattribute.RunID, false, true},
+				{sadefs.CloseTime, true, true},
+				{sadefs.StartTime, true, true},
+				{sadefs.RunID, false, true},
 			},
 			searchAfter: []any{
 				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
@@ -1635,18 +1640,18 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(searchattribute.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
 				),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
 					),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewTermQuery(searchattribute.StartTime, startTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(searchattribute.RunID).Gt("random-run-id"),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.StartTime, startTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(sadefs.RunID).Gt("random-run-id"),
 					),
 			},
 			err: nil,
@@ -1654,9 +1659,9 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 		{
 			name: "invalid token: wrong size",
 			sorterFields: []fieldSort{
-				{searchattribute.CloseTime, true, true},
-				{searchattribute.StartTime, true, true},
-				{searchattribute.RunID, false, true},
+				{sadefs.CloseTime, true, true},
+				{sadefs.StartTime, true, true},
+				{sadefs.RunID, false, true},
 			},
 			searchAfter: []any{
 				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
@@ -1668,7 +1673,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 		{
 			name: "invalid token: last value null",
 			sorterFields: []fieldSort{
-				{searchattribute.CloseTime, true, true},
+				{sadefs.CloseTime, true, true},
 			},
 			searchAfter: []any{datetimeNull},
 			res:         nil,
@@ -1678,7 +1683,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			res, err := buildPaginationQuery(tc.sorterFields, tc.searchAfter, searchattribute.TestNameTypeMap)
+			res, err := buildPaginationQuery(tc.sorterFields, tc.searchAfter, saTypeMap)
 			s.Equal(tc.err, err)
 			s.Equal(tc.res, res)
 		})

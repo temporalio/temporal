@@ -4,6 +4,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 // Encode encodes map of search attribute values to search attributes.
@@ -28,14 +29,14 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if typeMap != nil {
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
-			if err != nil && !IsChasmSearchAttribute(saName) {
+			if err != nil && !sadefs.IsChasmSearchAttribute(saName) {
 				lastErr = err
 				continue
 			}
 			// TODO: CHASM search attributes read from visibility stores (e.g., during queries)
 			// will not have type metadata set, which may cause issues on the decode path.
 			// This is acceptable for now as CHASM query support is not yet implemented.
-			SetMetadataType(valPayload, saType)
+			sadefs.SetMetadataType(valPayload, saType)
 		}
 	}
 	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
@@ -61,7 +62,7 @@ func Decode(
 		if typeMap != nil {
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
-			if err != nil && !IsChasmSearchAttribute(saName) {
+			if err != nil && !sadefs.IsChasmSearchAttribute(saName) {
 				lastErr = err
 			}
 		}

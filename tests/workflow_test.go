@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -27,7 +27,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
@@ -47,7 +47,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 	tv := testvars.New(s.T())
 	makeRequest := func() *workflowservice.StartWorkflowExecutionRequest {
 		return &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:          uuid.New(),
+			RequestId:          uuid.NewString(),
 			Namespace:          s.Namespace().String(),
 			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 			WorkflowType:       tv.WorkflowType(),
@@ -136,7 +136,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		s.NoError(err)
 		requireStartedAndRunning(s.T(), we)
 
-		request.RequestId = uuid.New()
+		request.RequestId = uuid.NewString()
 
 		we2, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
@@ -149,7 +149,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
+		RequestId:          uuid.NewString(),
 		Namespace:          s.Namespace().String(),
 		WorkflowId:         tv.WorkflowID(),
 		WorkflowType:       tv.WorkflowType(),
@@ -177,7 +177,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 		we0.Link.GetWorkflowEvent(),
 	)
 
-	request.RequestId = uuid.New()
+	request.RequestId = uuid.NewString()
 	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err1)
@@ -267,7 +267,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 
 			tv := testvars.New(s.T())
 			request := &workflowservice.StartWorkflowExecutionRequest{
-				RequestId:           uuid.New(),
+				RequestId:           uuid.NewString(),
 				Namespace:           s.Namespace().String(),
 				WorkflowId:          tv.WorkflowID(),
 				WorkflowType:        tv.WorkflowType(),
@@ -322,13 +322,13 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 			s.Len(descResp.Callbacks, 1)
 			s.ProtoEqual(cb1, descResp.Callbacks[0].Callback)
 
-			request.RequestId = uuid.New()
+			request.RequestId = uuid.NewString()
 			request.Links = []*commonpb.Link{{
 				Variant: &commonpb.Link_WorkflowEvent_{
 					WorkflowEvent: &commonpb.Link_WorkflowEvent{
 						Namespace:  "dont-care",
 						WorkflowId: "whatever",
-						RunId:      uuid.New(),
+						RunId:      uuid.NewString(),
 					},
 				},
 			}}
@@ -471,7 +471,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 		we0.Link.GetWorkflowEvent(),
 	)
 
-	request.RequestId = uuid.New()
+	request.RequestId = uuid.NewString()
 	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 	request.OnConflictOptions = &workflowpb.OnConflictOptions{
 		AttachRequestId: true,
@@ -574,7 +574,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
+		RequestId:          uuid.NewString(),
 		Namespace:          s.Namespace().String(),
 		WorkflowId:         tv.WorkflowID(),
 		WorkflowType:       tv.WorkflowType(),
@@ -603,7 +603,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 	)
 
 	// New RequestId, but not attaching it.
-	request.RequestId = uuid.New()
+	request.RequestId = uuid.NewString()
 	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err1)
@@ -708,7 +708,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 		s.Run(tc.name, func() {
 			tv := testvars.New(s.T())
 			request := &workflowservice.StartWorkflowExecutionRequest{
-				RequestId:          uuid.New(),
+				RequestId:          uuid.NewString(),
 				Namespace:          s.Namespace().String(),
 				WorkflowId:         tv.WorkflowID(),
 				WorkflowType:       tv.WorkflowType(),
@@ -735,7 +735,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 				we0.Link.GetWorkflowEvent(),
 			)
 
-			request.RequestId = uuid.New()
+			request.RequestId = uuid.NewString()
 			request.WorkflowIdReusePolicy = tc.WorkflowIdReusePolicy
 			request.WorkflowIdConflictPolicy = tc.WorkflowIdConflictPolicy
 			we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -783,7 +783,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
 	tv := testvars.New(s.T())
 	startDelay := 3 * time.Second
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
+		RequestId:          uuid.NewString(),
 		Namespace:          s.Namespace().String(),
 		WorkflowId:         tv.WorkflowID(),
 		WorkflowType:       tv.WorkflowType(),
@@ -852,7 +852,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
 func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -964,7 +964,7 @@ GetHistoryLoop:
 StartNewExecutionLoop:
 	for i := 0; i < 10; i++ {
 		request := &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:           uuid.New(),
+			RequestId:           uuid.NewString(),
 			Namespace:           s.Namespace().String(),
 			WorkflowId:          tv.WorkflowID(),
 			WorkflowType:        tv.WorkflowType(),
@@ -994,7 +994,7 @@ StartNewExecutionLoop:
 func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -1046,7 +1046,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -1141,7 +1141,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -1206,7 +1206,7 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -1313,7 +1313,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	backoffCoefficient := 1.5
 	maximumAttempts := 5
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -1495,7 +1495,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	// Fail using attempt
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -1562,7 +1562,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	// Fail error reason
 	request = &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -1614,7 +1614,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 	tv := testvars.New(s.T())
 	makeRequest := func(saFieldName string) *workflowservice.StartWorkflowExecutionRequest {
 		return &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:          uuid.New(),
+			RequestId:          uuid.NewString(),
 			Namespace:          s.Namespace().String(),
 			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 			WorkflowType:       tv.WorkflowType(),
@@ -1630,24 +1630,24 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 		}
 	}
 
-	s.Run(searchattribute.TemporalWorkerDeploymentVersion, func() {
-		request := makeRequest(searchattribute.TemporalWorkerDeploymentVersion)
+	s.Run(sadefs.TemporalWorkerDeploymentVersion, func() {
+		request := makeRequest(sadefs.TemporalWorkerDeploymentVersion)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
 		s.ErrorAs(err, &invalidArgument)
 	})
 
-	s.Run(searchattribute.TemporalWorkerDeployment, func() {
-		request := makeRequest(searchattribute.TemporalWorkerDeployment)
+	s.Run(sadefs.TemporalWorkerDeployment, func() {
+		request := makeRequest(sadefs.TemporalWorkerDeployment)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
 		s.ErrorAs(err, &invalidArgument)
 	})
 
-	s.Run(searchattribute.TemporalWorkflowVersioningBehavior, func() {
-		request := makeRequest(searchattribute.TemporalWorkflowVersioningBehavior)
+	s.Run(sadefs.TemporalWorkflowVersioningBehavior, func() {
+		request := makeRequest(sadefs.TemporalWorkflowVersioningBehavior)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
@@ -1656,14 +1656,14 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 
 	// These are currently allowed since they are in the predefinedWhiteList. Once it's confirmed that they are not being used,
 	// we can remove them from the predefinedWhiteList.
-	s.Run(searchattribute.BatcherUser, func() {
-		request := makeRequest(searchattribute.BatcherUser)
+	s.Run(sadefs.BatcherUser, func() {
+		request := makeRequest(sadefs.BatcherUser)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	})
 
-	s.Run(searchattribute.BatcherNamespace, func() {
-		request := makeRequest(searchattribute.BatcherNamespace)
+	s.Run(sadefs.BatcherNamespace, func() {
+		request := makeRequest(sadefs.BatcherNamespace)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 	})

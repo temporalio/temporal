@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -28,6 +29,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -87,8 +89,10 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():       true,
-		dynamicconfig.EnableReplicationTaskBatching.Key(): true,
+		dynamicconfig.EnableReplicationStream.Key():                   true,
+		dynamicconfig.EnableReplicationTaskBatching.Key():             true,
+		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
+		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():       true,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
@@ -105,6 +109,9 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 }
 
 func (s *streamBasedReplicationTestSuite) TearDownSuite() {
+	// Dump recorders once at the end of all tests
+	s.dumpRecorders()
+
 	if s.generator != nil {
 		s.generator.Reset()
 	}
@@ -172,6 +179,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 		_, err := historyClient0.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
 			NamespaceId: s.namespaceID,
 			Execution:   execution,
+			ArchetypeId: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
 	}
@@ -205,8 +213,8 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 	}
 	var runID string
 	for _, version := range versions {
-		workflowID := "xdc-stream-replication-test-" + uuid.New()
-		runID = uuid.New()
+		workflowID := "xdc-stream-replication-test-" + uuid.NewString()
+		runID = uuid.NewString()
 
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(namespaceName, namespaceId, version)
@@ -406,7 +414,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -452,7 +460,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -503,6 +511,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 
@@ -543,7 +552,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -589,7 +598,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 4,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -604,7 +613,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 7,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -620,6 +629,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -634,6 +644,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -648,6 +659,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -661,6 +673,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
@@ -669,6 +682,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
@@ -677,6 +691,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp2.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 
@@ -689,6 +704,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -704,6 +720,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -719,6 +736,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -732,6 +750,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -743,6 +762,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -755,6 +775,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -766,6 +787,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -778,6 +800,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp2.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -789,6 +812,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -811,10 +835,10 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	}
 	s.T().Log("Cleared replication stream recorders on all clusters")
 
-	workflowID := "test-replication-" + uuid.New()
+	workflowID := "test-replication-" + uuid.NewString()
 	sourceClient := s.clusters[0].FrontendClient()
 	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
@@ -879,6 +903,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.Require().NoError(err, "Failed to describe mutable state")
 	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")
@@ -932,6 +957,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.Require().NoError(err, "Failed to generate last history replication tasks")
 	s.T().Log("Generated last history replication tasks to force replication of completed workflow")
@@ -1031,7 +1057,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	s.Require().NotNil(recorder0)
 	s.Require().NotNil(recorder1)
 
-	workflowID := "task-recorder-test-" + uuid.New()
+	workflowID := "task-recorder-test-" + uuid.NewString()
 	taskQueue := "task-recorder-tq"
 
 	// Get namespace ID for task filtering
@@ -1206,4 +1232,207 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 		},
 	)
 	s.Equal(2, standbyRetryTimers, "Standby cluster should have exactly 2 ActivityRetryTimer tasks for this activity (same as active)")
+}
+
+func (s *streamBasedReplicationTestSuite) TestWorkflowTaskFailureStampReplication() {
+	// This test validates stamp increments on standby cluster via replication.
+	// NOTE: This test cannot work with DisableTransitionHistory because transient workflow
+	// task failures (attempt >= 2) don't create history events, so stamp increments from
+	// transient failures never replicate to the standby cluster. The standby only sees
+	// stamp increments from non-transient failures (attempt == 1).
+	if !s.enableTransitionHistory {
+		s.T().Skip("Skipping TestWorkflowTaskFailureStampReplication: transient workflow task failures don't replicate with event based replication")
+	}
+
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+
+	recorder0 := s.getRecorder(0) // active cluster
+	recorder1 := s.getRecorder(1) // standby cluster
+	s.Require().NotNil(recorder0)
+	s.Require().NotNil(recorder1)
+
+	workflowID := "workflow-task-failure-test-" + uuid.NewString()
+	taskQueue := "workflow-task-failure-tq"
+
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: s.namespaceName,
+	})
+	s.NoError(err)
+	defer sdkClient.Close()
+
+	// Counter for workflow task attempts
+	var attemptCount atomic.Int32
+
+	// Workflow that fails 3 times then succeeds on 4th attempt
+	failingWorkflow := func(ctx workflow.Context) (string, error) {
+		attempt := attemptCount.Add(1)
+		if attempt <= 3 {
+			// Panic to cause workflow task timeout (will retry after 10 seconds)
+			panic(fmt.Sprintf("intentional workflow task failure on attempt %d", attempt))
+		}
+		// Succeed on 4th attempt
+		return "completed", nil
+	}
+
+	s.T().Logf("Starting worker...")
+	sdkWorker := worker.New(sdkClient, taskQueue, worker.Options{})
+	sdkWorker.RegisterWorkflowWithOptions(failingWorkflow, workflow.RegisterOptions{Name: "simple-workflow"})
+
+	err = sdkWorker.Start()
+	s.NoError(err)
+	defer sdkWorker.Stop()
+
+	s.T().Logf("Starting workflow that will fail 3 times...")
+	workflowRun, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                       workflowID,
+		TaskQueue:                taskQueue,
+		WorkflowRunTimeout:       60 * time.Second,
+		WorkflowTaskTimeout:      10 * time.Second,
+		WorkflowExecutionTimeout: 60 * time.Second,
+	}, "simple-workflow")
+	s.NoError(err)
+	s.T().Logf("Started workflow (RunID: %s)", workflowRun.GetRunID())
+
+	var workflowResult string
+	err = workflowRun.Get(ctx, &workflowResult)
+	s.NoError(err)
+	s.Equal("completed", workflowResult)
+	s.T().Logf("Workflow completed successfully after 3 failures: %s (RunID: %s)", workflowResult, workflowRun.GetRunID())
+
+	//nolint:forbidigo // Wait a bit for replication to complete to the standby cluster
+	time.Sleep(2 * time.Second)
+
+	// Verify stamp increments on ACTIVE cluster
+	s.T().Logf("Verifying stamp increments on active cluster...")
+	s.verifyWorkflowTaskStamps(recorder0, "active", workflowID, workflowRun.GetRunID(), s.namespaceID)
+
+	// Verify stamp increments on STANDBY cluster (passive side)
+	s.T().Logf("Verifying stamp increments on standby cluster...")
+	s.verifyWorkflowTaskStamps(recorder1, "standby", workflowID, workflowRun.GetRunID(), s.namespaceID)
+
+	s.T().Logf("✓ All stamp assertions passed! Stamps are correctly incremented on both active and standby clusters.")
+}
+
+func (s *streamBasedReplicationTestSuite) verifyWorkflowTaskStamps(
+	recorder *testcore.TaskQueueRecorder,
+	clusterName string,
+	workflowID string,
+	runID string,
+	namespaceID string,
+) {
+	s.Require().NotEmpty(namespaceID, "NamespaceID must not be empty")
+	s.Require().NotEmpty(workflowID, "WorkflowID must not be empty")
+	s.Require().NotEmpty(runID, "RunID must not be empty")
+
+	type taskWithStamp struct {
+		attempt int32
+		stamp   int32
+	}
+
+	var transferTasks []taskWithStamp
+	var timeoutTasks []taskWithStamp
+
+	filter := testcore.TaskFilter{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+
+	transferRecorded := recorder.GetRecordedTasksByCategoryFiltered(tasks.CategoryTransfer, filter)
+	for _, recorded := range transferRecorded {
+		if wfTask, ok := recorded.Task.(*tasks.WorkflowTask); ok {
+			transferTasks = append(transferTasks, taskWithStamp{
+				stamp: wfTask.Stamp,
+			})
+		}
+	}
+
+	timerRecorded := recorder.GetRecordedTasksByCategoryFiltered(tasks.CategoryTimer, filter)
+	for _, recorded := range timerRecorded {
+		if timeoutTask, ok := recorded.Task.(*tasks.WorkflowTaskTimeoutTask); ok {
+			timeoutTasks = append(timeoutTasks, taskWithStamp{
+				attempt: timeoutTask.ScheduleAttempt,
+				stamp:   timeoutTask.Stamp,
+			})
+		}
+	}
+
+	s.Require().Len(transferTasks, 4, "Expected 4 TransferWorkflowTask tasks on %s cluster", clusterName)
+	s.Require().Len(timeoutTasks, 4, "Expected 4 WorkflowTaskTimeout tasks on %s cluster", clusterName)
+
+	for i, task := range transferTasks {
+		expectedStamp := int32(i)
+		s.Equal(expectedStamp, task.stamp,
+			"TransferWorkflowTask #%d on %s cluster: expected stamp=%d, got stamp=%d",
+			i+1, clusterName, expectedStamp, task.stamp)
+	}
+	s.T().Logf("✓ %s cluster: All %d TransferWorkflowTask stamps are correct (0→1→2→3)",
+		clusterName, len(transferTasks))
+
+	for _, task := range timeoutTasks {
+		expectedStamp := task.attempt - 1
+		s.Equal(expectedStamp, task.stamp,
+			"WorkflowTaskTimeout attempt %d on %s cluster: expected stamp=%d, got stamp=%d",
+			task.attempt, clusterName, expectedStamp, task.stamp)
+	}
+	s.T().Logf("✓ %s cluster: All %d WorkflowTaskTimeout stamps are correct (attempts 1-4 → stamps 0-3)",
+		clusterName, len(timeoutTasks))
+}
+
+// dumpRecorders writes task queues and replication streams to /tmp/xdc for debugging
+func (s *streamBasedReplicationTestSuite) dumpRecorders() {
+	// Ensure output directory exists
+	outputDir := "/tmp/xdc"
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		s.T().Logf("Failed to create output directory %s: %v", outputDir, err)
+		return
+	}
+
+	recorder0 := s.getRecorder(0)
+	recorder1 := s.getRecorder(1)
+
+	// Dump task queues using built-in WriteToLog with cluster names
+	if recorder0 != nil && len(s.clusters) > 0 {
+		clusterName := s.clusters[0].ClusterName()
+		activeTaskFile := fmt.Sprintf("/tmp/xdc/task_queue_%s_active.json", clusterName)
+		if err := recorder0.WriteToLog(activeTaskFile); err != nil {
+			s.T().Logf("Failed to write active cluster tasks: %v", err)
+		} else {
+			s.T().Logf("Wrote active cluster tasks to %s", activeTaskFile)
+		}
+	}
+
+	if recorder1 != nil && len(s.clusters) > 1 {
+		clusterName := s.clusters[1].ClusterName()
+		standbyTaskFile := fmt.Sprintf("/tmp/xdc/task_queue_%s_passive.json", clusterName)
+		if err := recorder1.WriteToLog(standbyTaskFile); err != nil {
+			s.T().Logf("Failed to write standby cluster tasks: %v", err)
+		} else {
+			s.T().Logf("Wrote standby cluster tasks to %s", standbyTaskFile)
+		}
+	}
+
+	// Dump replication streams using built-in WriteToLog
+	for i, cluster := range s.clusters {
+		recorder := cluster.GetReplicationStreamRecorder()
+		if recorder == nil {
+			continue
+		}
+
+		// NOTE: This is a strong assumption on how we should have our test set replication direction
+		clusterRole := "active"
+		if i > 0 {
+			clusterRole = "passive"
+		}
+		replicationFile := fmt.Sprintf("/tmp/xdc/replication_stream_%s_%s.log", cluster.ClusterName(), clusterRole)
+		recorder.SetOutputFile(replicationFile)
+		if err := recorder.WriteToLog(); err != nil {
+			s.T().Logf("Failed to write cluster %d replication stream: %v", i, err)
+		} else {
+			s.T().Logf("Wrote cluster %d replication stream to %s", i, replicationFile)
+		}
+	}
 }

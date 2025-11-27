@@ -568,6 +568,7 @@ const (
 	TaskTypeTimerActiveTaskWorkflowBackoffTimer           = "TimerActiveTaskWorkflowBackoffTimer"
 	TaskTypeTimerActiveTaskDeleteHistoryEvent             = "TimerActiveTaskDeleteHistoryEvent"
 	TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout = "TimerActiveTaskSpeculativeWorkflowTaskTimeout"
+	TaskTypeTimerActiveTaskChasmPureTask                  = "TimerActiveTaskChasmPureTask"
 	TaskTypeTimerStandbyTaskActivityTimeout               = "TimerStandbyTaskActivityTimeout"
 	TaskTypeTimerStandbyTaskWorkflowTaskTimeout           = "TimerStandbyTaskWorkflowTaskTimeout"
 	TaskTypeTimerStandbyTaskUserTimer                     = "TimerStandbyTaskUserTimer"
@@ -576,6 +577,7 @@ const (
 	TaskTypeTimerStandbyTaskActivityRetryTimer            = "TimerStandbyTaskActivityRetryTimer"
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer          = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent            = "TimerStandbyTaskDeleteHistoryEvent"
+	TaskTypeTimerStandbyTaskChasmPureTask                 = "TimerStandbyTaskChasmPureTask"
 )
 
 // Schedule action types
@@ -1251,10 +1253,6 @@ var (
 		"schedule_action_success",
 		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
 	)
-	ScheduleActionAttempt = NewCounterDef(
-		"schedule_action_attempt",
-		WithDescription("The number of schedule actions attempts"),
-	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
 		WithDescription("The number of failed attempts from starting schedule actions"),
@@ -1270,10 +1268,6 @@ var (
 	ScheduleActionDelay = NewTimerDef(
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
-	)
-	ScheduleActionDropped = NewCounterDef(
-		"schedule_action_dropped",
-		WithDescription("The number of schedule actions that failed to start"),
 	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",

@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 )
@@ -29,11 +29,11 @@ const (
 var (
 	VisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		searchattribute.WorkflowType,
+		sadefs.WorkflowType,
 		WorkflowType,
-		searchattribute.TemporalNamespaceDivision,
+		sadefs.TemporalNamespaceDivision,
 		NamespaceDivision,
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 )
@@ -64,7 +64,7 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
-	fx.Provide(NewSpecBuilder),
+	// SpecBuilder is provided as part of chasm Scheduler module at top level.
 )
 
 func NewResult(
