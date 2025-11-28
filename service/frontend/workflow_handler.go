@@ -15,6 +15,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -5259,16 +5260,12 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-type buildAndVersioningMode interface {
-	GetBuildId() string
-	GetWorkerVersioningMode() enumspb.WorkerVersioningMode
-}
-
-func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, buildAndVersioningMode buildAndVersioningMode, tq *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, deploymentOptions *deploymentpb.WorkerDeploymentOptions, tq *taskqueuepb.TaskQueue) error {
+	// TODO: Deprecate old versioning checks
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
 		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
-	if (id.GetUseVersioning() || buildAndVersioningMode.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED) && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
 		return errUseVersioningWithoutNormalName
 	}
 	if id.GetUseVersioning() && len(id.GetBuildId()) == 0 {
@@ -5277,7 +5274,44 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 		return errBuildIdTooLong
 	}
-	return nil
+
+	// Checks for versioning v3
+	deploymentVersion := worker_versioning.DeploymentVersionFromOptions(deploymentOptions)
+	versioningMode := deploymentOptions.GetWorkerVersioningMode()
+
+	// Validate deployment version based on the versioning mode
+	err := validateDeploymentVersionMode(versioningMode, deploymentVersion, tq)
+	if err != nil {
+		return err
+	}
+
+	return worker_versioning.ValidateDeploymentVersion(deploymentVersion)
+}
+
+func validateDeploymentVersionMode(
+	versioningMode enumspb.WorkerVersioningMode,
+	deploymentVersion *deploymentspb.WorkerDeploymentVersion,
+	tq *taskqueuepb.TaskQueue,
+) error {
+	switch versioningMode {
+	case enumspb.WORKER_VERSIONING_MODE_UNVERSIONED:
+		if deploymentVersion != nil {
+			return serviceerror.NewInvalidArgument("deployment version cannot be set for unversioned worker")
+		}
+		return nil
+
+	case enumspb.WORKER_VERSIONING_MODE_VERSIONED:
+		if deploymentVersion == nil {
+			return serviceerror.NewInvalidArgument("deployment version is required for versioned worker")
+		}
+		if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+			return errUseVersioningWithoutNormalName
+		}
+		return nil
+
+	default:
+		return nil
+	}
 }
 
 //nolint:revive // cyclomatic complexity
