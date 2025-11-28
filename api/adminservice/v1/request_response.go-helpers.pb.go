@@ -3261,35 +3261,35 @@ func (this *ForceUnloadTaskQueuePartitionResponse) Equal(that interface{}) bool 
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type StartAdminBatchOperationRequest to the protobuf v3 wire format
-func (val *StartAdminBatchOperationRequest) Marshal() ([]byte, error) {
+// Marshal an object of type HostConfig to the protobuf v3 wire format
+func (val *HostConfig) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type StartAdminBatchOperationRequest from the protobuf v3 wire format
-func (val *StartAdminBatchOperationRequest) Unmarshal(buf []byte) error {
+// Unmarshal an object of type HostConfig from the protobuf v3 wire format
+func (val *HostConfig) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *StartAdminBatchOperationRequest) Size() int {
+func (val *HostConfig) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two StartAdminBatchOperationRequest values are equivalent by recursively
+// Equal returns whether two HostConfig values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *StartAdminBatchOperationRequest) Equal(that interface{}) bool {
+func (this *HostConfig) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *StartAdminBatchOperationRequest
+	var that1 *HostConfig
 	switch t := that.(type) {
-	case *StartAdminBatchOperationRequest:
+	case *HostConfig:
 		that1 = t
-	case StartAdminBatchOperationRequest:
+	case HostConfig:
 		that1 = &t
 	default:
 		return false
@@ -3298,35 +3298,35 @@ func (this *StartAdminBatchOperationRequest) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type StartAdminBatchOperationResponse to the protobuf v3 wire format
-func (val *StartAdminBatchOperationResponse) Marshal() ([]byte, error) {
+// Marshal an object of type GetDynamicConfigurationsRequest to the protobuf v3 wire format
+func (val *GetDynamicConfigurationsRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type StartAdminBatchOperationResponse from the protobuf v3 wire format
-func (val *StartAdminBatchOperationResponse) Unmarshal(buf []byte) error {
+// Unmarshal an object of type GetDynamicConfigurationsRequest from the protobuf v3 wire format
+func (val *GetDynamicConfigurationsRequest) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *StartAdminBatchOperationResponse) Size() int {
+func (val *GetDynamicConfigurationsRequest) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two StartAdminBatchOperationResponse values are equivalent by recursively
+// Equal returns whether two GetDynamicConfigurationsRequest values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *StartAdminBatchOperationResponse) Equal(that interface{}) bool {
+func (this *GetDynamicConfigurationsRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *StartAdminBatchOperationResponse
+	var that1 *GetDynamicConfigurationsRequest
 	switch t := that.(type) {
-	case *StartAdminBatchOperationResponse:
+	case *GetDynamicConfigurationsRequest:
 		that1 = t
-	case StartAdminBatchOperationResponse:
+	case GetDynamicConfigurationsRequest:
 		that1 = &t
 	default:
 		return false
@@ -3335,109 +3335,35 @@ func (this *StartAdminBatchOperationResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type BatchOperationRefreshTasks to the protobuf v3 wire format
-func (val *BatchOperationRefreshTasks) Marshal() ([]byte, error) {
+// Marshal an object of type GetDynamicConfigurationsResponse to the protobuf v3 wire format
+func (val *GetDynamicConfigurationsResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type BatchOperationRefreshTasks from the protobuf v3 wire format
-func (val *BatchOperationRefreshTasks) Unmarshal(buf []byte) error {
+// Unmarshal an object of type GetDynamicConfigurationsResponse from the protobuf v3 wire format
+func (val *GetDynamicConfigurationsResponse) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *BatchOperationRefreshTasks) Size() int {
+func (val *GetDynamicConfigurationsResponse) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two BatchOperationRefreshTasks values are equivalent by recursively
+// Equal returns whether two GetDynamicConfigurationsResponse values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *BatchOperationRefreshTasks) Equal(that interface{}) bool {
+func (this *GetDynamicConfigurationsResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *BatchOperationRefreshTasks
+	var that1 *GetDynamicConfigurationsResponse
 	switch t := that.(type) {
-	case *BatchOperationRefreshTasks:
+	case *GetDynamicConfigurationsResponse:
 		that1 = t
-	case BatchOperationRefreshTasks:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
-// Marshal an object of type MigrateScheduleRequest to the protobuf v3 wire format
-func (val *MigrateScheduleRequest) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type MigrateScheduleRequest from the protobuf v3 wire format
-func (val *MigrateScheduleRequest) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *MigrateScheduleRequest) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two MigrateScheduleRequest values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *MigrateScheduleRequest) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *MigrateScheduleRequest
-	switch t := that.(type) {
-	case *MigrateScheduleRequest:
-		that1 = t
-	case MigrateScheduleRequest:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
-// Marshal an object of type MigrateScheduleResponse to the protobuf v3 wire format
-func (val *MigrateScheduleResponse) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type MigrateScheduleResponse from the protobuf v3 wire format
-func (val *MigrateScheduleResponse) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *MigrateScheduleResponse) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two MigrateScheduleResponse values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *MigrateScheduleResponse) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *MigrateScheduleResponse
-	switch t := that.(type) {
-	case *MigrateScheduleResponse:
-		that1 = t
-	case MigrateScheduleResponse:
+	case GetDynamicConfigurationsResponse:
 		that1 = &t
 	default:
 		return false

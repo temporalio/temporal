@@ -141,15 +141,9 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
-  // RefreshWorkflowTasks refreshes all tasks of a workflow.
-  rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
-    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-  }
-
-  // StartAdminBatchOperation starts an admin batch operation. Supports internal operations like RefreshWorkflowTasks.
-  rpc StartAdminBatchOperation(StartAdminBatchOperationRequest) returns (StartAdminBatchOperationResponse) {
-    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-  }
+    // RefreshWorkflowTasks refreshes all tasks of a workflow.
+    rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
+    }
 
   // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
   rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
@@ -223,8 +217,5 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
-  // MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
-  rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
-    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
-  }
+    rpc GetDynamicConfigurations(GetDynamicConfigurationsRequest) returns (GetDynamicConfigurationsResponse) {}
 }

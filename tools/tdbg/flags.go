@@ -12,8 +12,6 @@ var (
 	FlagWorkflowIDAlias            = []string{"wid"}
 	FlagRunID                      = "run-id"
 	FlagRunIDAlias                 = []string{"rid"}
-	FlagBusinessID                 = "business-id"
-	FlagBusinessIDAlias            = []string{"bid", FlagWorkflowID, FlagWorkflowIDAlias[0]}
 	FlagArchetype                  = "archetype"
 	FlagArchetypeID                = "archetype-id"
 	FlagNumberOfShards             = "number-of-shards"
@@ -74,10 +72,5 @@ var (
 	FlagAllActive                  = "select-all-active"
 	FlagFair                       = "fair"
 	FlagMinPass                    = "min-pass"
-	FlagVisibilityQuery            = "query"
-	FlagJobID                      = "job-id"
-	FlagDecode                     = "decode"
-	FlagScheduleID                 = "schedule-id"
-	FlagScheduleIDAlias            = []string{"sid"}
-	FlagTarget                     = "target"
+	FlagKey 					   = "key"
 )

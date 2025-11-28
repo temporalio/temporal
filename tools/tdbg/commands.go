@@ -872,45 +872,28 @@ func AdminReplicateWorkflow(
 	return nil
 }
 
-// AdminMigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM).
-func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
-	ns, err := getRequiredOption(c, FlagNamespace)
-	if err != nil {
-		return err
-	}
-	scheduleID, err := getRequiredOption(c, FlagScheduleID)
-	if err != nil {
-		return err
-	}
-	targetStr, err := getRequiredOption(c, FlagTarget)
-	if err != nil {
-		return err
-	}
-	var target adminservice.MigrateScheduleRequest_SchedulerTarget
-	switch strings.ToLower(targetStr) {
-	case "chasm":
-		target = adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM
-	case "workflow":
-		target = adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW
-	default:
-		return fmt.Errorf("invalid target %q, valid values are: chasm, workflow", targetStr)
-	}
-
+func AdminGetClusterConfig(c *cli.Context, clientFactory ClientFactory) error {
 	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	_, err = adminClient.MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
-		Namespace:  ns,
-		ScheduleId: scheduleID,
-		Target:     target,
-		Identity:   getCurrentUserFromEnv(),
-		RequestId:  uuid.NewString(),
+    keys := c.StringSlice(FlagKey)
+    if len(keys) == 0 {
+        return fmt.Errorf("flag %q is required", FlagKey)
+    }
+
+    filteredKeys := make([]string, 0, len(keys))
+    for _, k := range keys {
+        if trimmed := strings.TrimSpace(k); trimmed != "" {
+            filteredKeys = append(filteredKeys, trimmed)
+        }
+    }
+	resp, err := adminClient.GetDynamicConfigurations(ctx, &adminservice.GetDynamicConfigurationsRequest{
+		DynamicConfigKeys: keys,
 	})
 	if err != nil {
-		return fmt.Errorf("unable to migrate schedule: %w", err)
+		return fmt.Errorf("error getting cluster config: %s", err)
 	}
-
-	_, _ = fmt.Fprintf(c.App.Writer, "Successfully initiated migration of schedule %q in namespace %q to %s.\n", scheduleID, ns, targetStr)
+	prettyPrintJSONObject(c, resp)
 	return nil
 }
