@@ -4157,6 +4157,7 @@ func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
 	// Expect an error because a versioned poller always requires a non-empty NormalName
 	s.Error(err)
 	s.Nil(wfResponse)
+	s.ErrorContains(err, "NormalName must be set on sticky queue if UseVersioning is true.")
 
 	// Poll activity task queue with an empty normalName (not possible, but conservative programming to safeguard against any potential bugs)
 	activityResponse, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -4169,6 +4170,7 @@ func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
 	// Expect an error because a versioned activity poller always requires a non-empty NormalName
 	s.Error(err)
 	s.Nil(activityResponse)
+	s.ErrorContains(err, "NormalName must be set on sticky queue if UseVersioning is true.")
 }
 
 func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {

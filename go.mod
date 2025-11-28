@@ -35,6 +35,7 @@ require (
 	github.com/nexus-rpc/sdk-go v0.5.1
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
+	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.21.0
 	github.com/prometheus/client_model v0.6.1
