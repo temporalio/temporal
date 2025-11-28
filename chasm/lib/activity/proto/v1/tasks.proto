@@ -20,8 +20,6 @@ message ScheduleToStartTimeoutTask {
 // ScheduleToCloseTimeoutTask is a pure task that enforces a timeout across the sequence of activity
 // attempts.
 message ScheduleToCloseTimeoutTask {
-  // The current attempt number for this activity execution. Used for task validation.
-  int32 attempt = 1;
 }
 
 // StartToCloseTimeoutTask is a pure task that enforces a timeout on a single activity attempt.

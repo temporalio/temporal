@@ -22,6 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ActivityDispatchTask is a side-effect task that calls AddActivityTask in the matching service.
 type ActivityDispatchTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The current attempt number for this activity execution. Used for task validation.
@@ -67,6 +68,8 @@ func (x *ActivityDispatchTask) GetAttempt() int32 {
 	return 0
 }
 
+// ScheduleToStartTimeoutTask is a pure task that enforces a timeout on the time spent waiting for
+// the activity to start.
 type ScheduleToStartTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The current attempt number for this activity execution. Used for task validation.
@@ -112,10 +115,10 @@ func (x *ScheduleToStartTimeoutTask) GetAttempt() int32 {
 	return 0
 }
 
+// ScheduleToCloseTimeoutTask is a pure task that enforces a timeout across the sequence of activity
+// attempts.
 type ScheduleToCloseTimeoutTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Used for task validation.
-	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -150,13 +153,7 @@ func (*ScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ScheduleToCloseTimeoutTask) GetAttempt() int32 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
-}
-
+// StartToCloseTimeoutTask is a pure task that enforces a timeout on a single activity attempt.
 type StartToCloseTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The current attempt number for this activity execution. Used for task validation.
@@ -210,9 +207,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\x14ActivityDispatchTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"6\n" +
 	"\x1aScheduleToStartTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"6\n" +
-	"\x1aScheduleToCloseTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"3\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\x1c\n" +
+	"\x1aScheduleToCloseTimeoutTask\"3\n" +
 	"\x17StartToCloseTimeoutTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattemptBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
