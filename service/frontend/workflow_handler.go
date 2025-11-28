@@ -5280,15 +5280,15 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 	versioningMode := deploymentOptions.GetWorkerVersioningMode()
 
 	// Validate deployment version based on the versioning mode
-	err := validateDeploymentVersionMode(versioningMode, deploymentVersion, tq)
+	err := wh.validateDeploymentVersionWithMode(versioningMode, deploymentVersion, tq)
 	if err != nil {
 		return err
 	}
 
-	return worker_versioning.ValidateDeploymentVersion(deploymentVersion, wh.config.MaxIDLengthLimit())
+	return nil
 }
 
-func validateDeploymentVersionMode(
+func (wh *WorkflowHandler) validateDeploymentVersionWithMode(
 	versioningMode enumspb.WorkerVersioningMode,
 	deploymentVersion *deploymentspb.WorkerDeploymentVersion,
 	tq *taskqueuepb.TaskQueue,
@@ -5299,16 +5299,11 @@ func validateDeploymentVersionMode(
 			return serviceerror.NewInvalidArgument("deployment version cannot be set for unversioned worker")
 		}
 		return nil
-
 	case enumspb.WORKER_VERSIONING_MODE_VERSIONED:
-		if deploymentVersion == nil {
-			return serviceerror.NewInvalidArgument("deployment version is required for versioned worker")
-		}
 		if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
 			return errUseVersioningWithoutNormalName
 		}
-		return nil
-
+		return worker_versioning.ValidateDeploymentVersion(deploymentVersion, wh.config.MaxIDLengthLimit())
 	default:
 		return nil
 	}
