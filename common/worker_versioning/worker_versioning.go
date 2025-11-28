@@ -46,13 +46,12 @@ const (
 	WorkerDeploymentVersionWorkflowIDEscape = "|"
 
 	// Prefixes, Delimeters and Keys that are used in the internal entity workflows backing worker-versioning
-	WorkerDeploymentWorkflowIDPrefix              = "temporal-sys-worker-deployment"
-	WorkerDeploymentVersionWorkflowIDPrefix       = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentVersionWorkflowIDDelimeter    = ":"
-	WorkerDeploymentVersionWorkflowIDInitialSize  = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter) // 39
-	WorkerDeploymentWorkerDeploymentIDInitialSize = len(WorkerDeploymentWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter)        // 32
-	WorkerDeploymentNameFieldName                 = "WorkerDeploymentName"
-	WorkerDeploymentBuildIDFieldName              = "BuildID"
+	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
+	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
+	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
+	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter) // 39
+	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
+	WorkerDeploymentBuildIDFieldName             = "BuildID"
 )
 
 // PinnedBuildIdSearchAttribute creates the pinned search attribute for the BuildIds list, used as a visibility optimization.
@@ -465,15 +464,9 @@ func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLength
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
-	// nolint:staticcheck (better to be consistent and use if conditions rather than a switch in the function itself)
-	if fieldName == WorkerDeploymentNameFieldName {
-		if len(field) > (maxIDLengthLimit-WorkerDeploymentWorkerDeploymentIDInitialSize)/2 {
-			return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
-		}
-	} else if fieldName == WorkerDeploymentBuildIDFieldName {
-		if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
-			return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
-		}
+	// Note: Using the same initial size for both the fields since they are used together to generate the version workflow's ID
+	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
+		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
 	}
 
 	// deploymentName cannot have "."

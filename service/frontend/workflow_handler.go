@@ -5279,11 +5279,10 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 	}
 
 	// Checks for versioning v3
-	deploymentVersion := worker_versioning.DeploymentVersionFromOptions(deploymentOptions)
 	versioningMode := deploymentOptions.GetWorkerVersioningMode()
 
 	// Validate deployment version based on the versioning mode
-	err := wh.validateDeploymentVersionWithMode(versioningMode, deploymentVersion, tq)
+	err := wh.validateDeploymentVersionWithMode(versioningMode, deploymentOptions, tq)
 	if err != nil {
 		return err
 	}
@@ -5293,9 +5292,18 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 
 func (wh *WorkflowHandler) validateDeploymentVersionWithMode(
 	versioningMode enumspb.WorkerVersioningMode,
-	deploymentVersion *deploymentspb.WorkerDeploymentVersion,
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
 	tq *taskqueuepb.TaskQueue,
 ) error {
+	var deploymentVersion *deploymentspb.WorkerDeploymentVersion
+	if deploymentOptions.GetDeploymentName() != "" || deploymentOptions.GetBuildId() != "" {
+		deploymentVersion = &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentOptions.GetDeploymentName(),
+			BuildId:        deploymentOptions.GetBuildId(),
+		}
+	}
+
+	// Validation checks
 	switch versioningMode {
 	case enumspb.WORKER_VERSIONING_MODE_UNVERSIONED:
 		if deploymentVersion != nil {
