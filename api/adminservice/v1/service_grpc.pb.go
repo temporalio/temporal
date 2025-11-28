@@ -46,7 +46,6 @@ const (
 	AdminService_PurgeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
 	AdminService_MergeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
 	AdminService_RefreshWorkflowTasks_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/RefreshWorkflowTasks"
-	AdminService_StartAdminBatchOperation_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/StartAdminBatchOperation"
 	AdminService_ResendReplicationTasks_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ResendReplicationTasks"
 	AdminService_GetTaskQueueTasks_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks"
 	AdminService_DeleteWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
@@ -64,7 +63,7 @@ const (
 	AdminService_GenerateLastHistoryReplicationTasks_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/GenerateLastHistoryReplicationTasks"
 	AdminService_DescribeTaskQueuePartition_FullMethodName          = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
 	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
-	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
+	AdminService_GetDynamicConfigurations_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/GetDynamicConfigurations"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -132,8 +131,6 @@ type AdminServiceClient interface {
 	MergeDLQMessages(ctx context.Context, in *MergeDLQMessagesRequest, opts ...grpc.CallOption) (*MergeDLQMessagesResponse, error)
 	// RefreshWorkflowTasks refreshes all tasks of a workflow.
 	RefreshWorkflowTasks(ctx context.Context, in *RefreshWorkflowTasksRequest, opts ...grpc.CallOption) (*RefreshWorkflowTasksResponse, error)
-	// StartAdminBatchOperation starts an admin batch operation. Supports internal operations like RefreshWorkflowTasks.
-	StartAdminBatchOperation(ctx context.Context, in *StartAdminBatchOperationRequest, opts ...grpc.CallOption) (*StartAdminBatchOperationResponse, error)
 	// ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
 	ResendReplicationTasks(ctx context.Context, in *ResendReplicationTasksRequest, opts ...grpc.CallOption) (*ResendReplicationTasksResponse, error)
 	// GetTaskQueueTasks returns tasks from task queue.
@@ -157,8 +154,7 @@ type AdminServiceClient interface {
 	GenerateLastHistoryReplicationTasks(ctx context.Context, in *GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*GenerateLastHistoryReplicationTasksResponse, error)
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
-	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
-	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
+	GetDynamicConfigurations(ctx context.Context, in *GetDynamicConfigurationsRequest, opts ...grpc.CallOption) (*GetDynamicConfigurationsResponse, error)
 }
 
 type adminServiceClient struct {
@@ -403,15 +399,6 @@ func (c *adminServiceClient) RefreshWorkflowTasks(ctx context.Context, in *Refre
 	return out, nil
 }
 
-func (c *adminServiceClient) StartAdminBatchOperation(ctx context.Context, in *StartAdminBatchOperationRequest, opts ...grpc.CallOption) (*StartAdminBatchOperationResponse, error) {
-	out := new(StartAdminBatchOperationResponse)
-	err := c.cc.Invoke(ctx, AdminService_StartAdminBatchOperation_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *adminServiceClient) ResendReplicationTasks(ctx context.Context, in *ResendReplicationTasksRequest, opts ...grpc.CallOption) (*ResendReplicationTasksResponse, error) {
 	out := new(ResendReplicationTasksResponse)
 	err := c.cc.Invoke(ctx, AdminService_ResendReplicationTasks_FullMethodName, in, out, opts...)
@@ -587,9 +574,9 @@ func (c *adminServiceClient) ForceUnloadTaskQueuePartition(ctx context.Context, 
 	return out, nil
 }
 
-func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error) {
-	out := new(MigrateScheduleResponse)
-	err := c.cc.Invoke(ctx, AdminService_MigrateSchedule_FullMethodName, in, out, opts...)
+func (c *adminServiceClient) GetDynamicConfigurations(ctx context.Context, in *GetDynamicConfigurationsRequest, opts ...grpc.CallOption) (*GetDynamicConfigurationsResponse, error) {
+	out := new(GetDynamicConfigurationsResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetDynamicConfigurations_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -661,8 +648,6 @@ type AdminServiceServer interface {
 	MergeDLQMessages(context.Context, *MergeDLQMessagesRequest) (*MergeDLQMessagesResponse, error)
 	// RefreshWorkflowTasks refreshes all tasks of a workflow.
 	RefreshWorkflowTasks(context.Context, *RefreshWorkflowTasksRequest) (*RefreshWorkflowTasksResponse, error)
-	// StartAdminBatchOperation starts an admin batch operation. Supports internal operations like RefreshWorkflowTasks.
-	StartAdminBatchOperation(context.Context, *StartAdminBatchOperationRequest) (*StartAdminBatchOperationResponse, error)
 	// ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
 	ResendReplicationTasks(context.Context, *ResendReplicationTasksRequest) (*ResendReplicationTasksResponse, error)
 	// GetTaskQueueTasks returns tasks from task queue.
@@ -686,8 +671,7 @@ type AdminServiceServer interface {
 	GenerateLastHistoryReplicationTasks(context.Context, *GenerateLastHistoryReplicationTasksRequest) (*GenerateLastHistoryReplicationTasksResponse, error)
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
-	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
-	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
+	GetDynamicConfigurations(context.Context, *GetDynamicConfigurationsRequest) (*GetDynamicConfigurationsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -773,9 +757,6 @@ func (UnimplementedAdminServiceServer) MergeDLQMessages(context.Context, *MergeD
 func (UnimplementedAdminServiceServer) RefreshWorkflowTasks(context.Context, *RefreshWorkflowTasksRequest) (*RefreshWorkflowTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RefreshWorkflowTasks not implemented")
 }
-func (UnimplementedAdminServiceServer) StartAdminBatchOperation(context.Context, *StartAdminBatchOperationRequest) (*StartAdminBatchOperationResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StartAdminBatchOperation not implemented")
-}
 func (UnimplementedAdminServiceServer) ResendReplicationTasks(context.Context, *ResendReplicationTasksRequest) (*ResendReplicationTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResendReplicationTasks not implemented")
 }
@@ -827,8 +808,8 @@ func (UnimplementedAdminServiceServer) DescribeTaskQueuePartition(context.Contex
 func (UnimplementedAdminServiceServer) ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForceUnloadTaskQueuePartition not implemented")
 }
-func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
+func (UnimplementedAdminServiceServer) GetDynamicConfigurations(context.Context, *GetDynamicConfigurationsRequest) (*GetDynamicConfigurationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDynamicConfigurations not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1311,24 +1292,6 @@ func _AdminService_RefreshWorkflowTasks_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AdminService_StartAdminBatchOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StartAdminBatchOperationRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminServiceServer).StartAdminBatchOperation(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminService_StartAdminBatchOperation_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).StartAdminBatchOperation(ctx, req.(*StartAdminBatchOperationRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _AdminService_ResendReplicationTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResendReplicationTasksRequest)
 	if err := dec(in); err != nil {
@@ -1643,20 +1606,20 @@ func _AdminService_ForceUnloadTaskQueuePartition_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MigrateScheduleRequest)
+func _AdminService_GetDynamicConfigurations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDynamicConfigurationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AdminServiceServer).MigrateSchedule(ctx, in)
+		return srv.(AdminServiceServer).GetDynamicConfigurations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AdminService_MigrateSchedule_FullMethodName,
+		FullMethod: AdminService_GetDynamicConfigurations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).MigrateSchedule(ctx, req.(*MigrateScheduleRequest))
+		return srv.(AdminServiceServer).GetDynamicConfigurations(ctx, req.(*GetDynamicConfigurationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1773,10 +1736,6 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_RefreshWorkflowTasks_Handler,
 		},
 		{
-			MethodName: "StartAdminBatchOperation",
-			Handler:    _AdminService_StartAdminBatchOperation_Handler,
-		},
-		{
 			MethodName: "ResendReplicationTasks",
 			Handler:    _AdminService_ResendReplicationTasks_Handler,
 		},
@@ -1841,8 +1800,8 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_ForceUnloadTaskQueuePartition_Handler,
 		},
 		{
-			MethodName: "MigrateSchedule",
-			Handler:    _AdminService_MigrateSchedule_Handler,
+			MethodName: "GetDynamicConfigurations",
+			Handler:    _AdminService_GetDynamicConfigurations_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

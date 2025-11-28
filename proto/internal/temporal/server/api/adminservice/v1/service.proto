@@ -118,10 +118,6 @@ service AdminService {
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
     }
 
-    // StartAdminBatchOperation starts an admin batch operation. Supports internal operations like RefreshWorkflowTasks.
-    rpc StartAdminBatchOperation(StartAdminBatchOperationRequest) returns (StartAdminBatchOperationResponse) {
-    }
-
     // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
     rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
     }
@@ -166,6 +162,5 @@ service AdminService {
 
     rpc ForceUnloadTaskQueuePartition (ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {}
 
-    // MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
-    rpc MigrateSchedule (MigrateScheduleRequest) returns (MigrateScheduleResponse) {}
+    rpc GetDynamicConfigurations(GetDynamicConfigurationsRequest) returns (GetDynamicConfigurationsResponse) {}
 }

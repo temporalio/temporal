@@ -25,7 +25,7 @@ var File_temporal_server_api_adminservice_v1_service_proto protoreflect.FileDesc
 
 const file_temporal_server_api_adminservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"1temporal/server/api/adminservice/v1/service.proto\x12#temporal.server.api.adminservice.v1\x1a:temporal/server/api/adminservice/v1/request_response.proto2\xfc6\n" +
+	"1temporal/server/api/adminservice/v1/service.proto\x12#temporal.server.api.adminservice.v1\x1a:temporal/server/api/adminservice/v1/request_response.proto2\xeb5\n" +
 	"\fAdminService\x12\x9a\x01\n" +
 	"\x13RebuildMutableState\x12?.temporal.server.api.adminservice.v1.RebuildMutableStateRequest\x1a@.temporal.server.api.adminservice.v1.RebuildMutableStateResponse\"\x00\x12\xa6\x01\n" +
 	"\x17ImportWorkflowExecution\x12C.temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest\x1aD.temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse\"\x00\x12\x9d\x01\n" +
@@ -54,8 +54,7 @@ const file_temporal_server_api_adminservice_v1_service_proto_rawDesc = "" +
 	"\x0eGetDLQMessages\x12:.temporal.server.api.adminservice.v1.GetDLQMessagesRequest\x1a;.temporal.server.api.adminservice.v1.GetDLQMessagesResponse\"\x00\x12\x91\x01\n" +
 	"\x10PurgeDLQMessages\x12<.temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest\x1a=.temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse\"\x00\x12\x91\x01\n" +
 	"\x10MergeDLQMessages\x12<.temporal.server.api.adminservice.v1.MergeDLQMessagesRequest\x1a=.temporal.server.api.adminservice.v1.MergeDLQMessagesResponse\"\x00\x12\x9d\x01\n" +
-	"\x14RefreshWorkflowTasks\x12@.temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest\x1aA.temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse\"\x00\x12\xa9\x01\n" +
-	"\x18StartAdminBatchOperation\x12D.temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest\x1aE.temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse\"\x00\x12\xa3\x01\n" +
+	"\x14RefreshWorkflowTasks\x12@.temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest\x1aA.temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse\"\x00\x12\xa3\x01\n" +
 	"\x16ResendReplicationTasks\x12B.temporal.server.api.adminservice.v1.ResendReplicationTasksRequest\x1aC.temporal.server.api.adminservice.v1.ResendReplicationTasksResponse\"\x00\x12\x94\x01\n" +
 	"\x11GetTaskQueueTasks\x12=.temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest\x1a>.temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse\"\x00\x12\xa6\x01\n" +
 	"\x17DeleteWorkflowExecution\x12C.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest\x1aD.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse\"\x00\x12\xc8\x01\n" +
@@ -73,8 +72,8 @@ const file_temporal_server_api_adminservice_v1_service_proto_rawDesc = "" +
 	"\x11SyncWorkflowState\x12=.temporal.server.api.adminservice.v1.SyncWorkflowStateRequest\x1a>.temporal.server.api.adminservice.v1.SyncWorkflowStateResponse\"\x00\x12\xca\x01\n" +
 	"#GenerateLastHistoryReplicationTasks\x12O.temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest\x1aP.temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse\"\x00\x12\xaf\x01\n" +
 	"\x1aDescribeTaskQueuePartition\x12F.temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest\x1aG.temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse\"\x00\x12\xb8\x01\n" +
-	"\x1dForceUnloadTaskQueuePartition\x12I.temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest\x1aJ.temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse\"\x00\x12\x8e\x01\n" +
-	"\x0fMigrateSchedule\x12;.temporal.server.api.adminservice.v1.MigrateScheduleRequest\x1a<.temporal.server.api.adminservice.v1.MigrateScheduleResponse\"\x00B8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
+	"\x1dForceUnloadTaskQueuePartition\x12I.temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest\x1aJ.temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse\"\x00\x12\xa9\x01\n" +
+	"\x18GetDynamicConfigurations\x12D.temporal.server.api.adminservice.v1.GetDynamicConfigurationsRequest\x1aE.temporal.server.api.adminservice.v1.GetDynamicConfigurationsResponse\"\x00B8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
 
 var file_temporal_server_api_adminservice_v1_service_proto_goTypes = []any{
 	(*RebuildMutableStateRequest)(nil),                  // 0: temporal.server.api.adminservice.v1.RebuildMutableStateRequest
@@ -103,70 +102,68 @@ var file_temporal_server_api_adminservice_v1_service_proto_goTypes = []any{
 	(*PurgeDLQMessagesRequest)(nil),                     // 23: temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest
 	(*MergeDLQMessagesRequest)(nil),                     // 24: temporal.server.api.adminservice.v1.MergeDLQMessagesRequest
 	(*RefreshWorkflowTasksRequest)(nil),                 // 25: temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
-	(*StartAdminBatchOperationRequest)(nil),             // 26: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest
-	(*ResendReplicationTasksRequest)(nil),               // 27: temporal.server.api.adminservice.v1.ResendReplicationTasksRequest
-	(*GetTaskQueueTasksRequest)(nil),                    // 28: temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest
-	(*DeleteWorkflowExecutionRequest)(nil),              // 29: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
-	(*StreamWorkflowReplicationMessagesRequest)(nil),    // 30: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest
-	(*GetNamespaceRequest)(nil),                         // 31: temporal.server.api.adminservice.v1.GetNamespaceRequest
-	(*GetDLQTasksRequest)(nil),                          // 32: temporal.server.api.adminservice.v1.GetDLQTasksRequest
-	(*PurgeDLQTasksRequest)(nil),                        // 33: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest
-	(*MergeDLQTasksRequest)(nil),                        // 34: temporal.server.api.adminservice.v1.MergeDLQTasksRequest
-	(*DescribeDLQJobRequest)(nil),                       // 35: temporal.server.api.adminservice.v1.DescribeDLQJobRequest
-	(*CancelDLQJobRequest)(nil),                         // 36: temporal.server.api.adminservice.v1.CancelDLQJobRequest
-	(*AddTasksRequest)(nil),                             // 37: temporal.server.api.adminservice.v1.AddTasksRequest
-	(*ListQueuesRequest)(nil),                           // 38: temporal.server.api.adminservice.v1.ListQueuesRequest
-	(*DeepHealthCheckRequest)(nil),                      // 39: temporal.server.api.adminservice.v1.DeepHealthCheckRequest
-	(*SyncWorkflowStateRequest)(nil),                    // 40: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest
-	(*GenerateLastHistoryReplicationTasksRequest)(nil),  // 41: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest
-	(*DescribeTaskQueuePartitionRequest)(nil),           // 42: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest
-	(*ForceUnloadTaskQueuePartitionRequest)(nil),        // 43: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest
-	(*MigrateScheduleRequest)(nil),                      // 44: temporal.server.api.adminservice.v1.MigrateScheduleRequest
-	(*RebuildMutableStateResponse)(nil),                 // 45: temporal.server.api.adminservice.v1.RebuildMutableStateResponse
-	(*ImportWorkflowExecutionResponse)(nil),             // 46: temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse
-	(*DescribeMutableStateResponse)(nil),                // 47: temporal.server.api.adminservice.v1.DescribeMutableStateResponse
-	(*DescribeHistoryHostResponse)(nil),                 // 48: temporal.server.api.adminservice.v1.DescribeHistoryHostResponse
-	(*GetShardResponse)(nil),                            // 49: temporal.server.api.adminservice.v1.GetShardResponse
-	(*CloseShardResponse)(nil),                          // 50: temporal.server.api.adminservice.v1.CloseShardResponse
-	(*ListHistoryTasksResponse)(nil),                    // 51: temporal.server.api.adminservice.v1.ListHistoryTasksResponse
-	(*RemoveTaskResponse)(nil),                          // 52: temporal.server.api.adminservice.v1.RemoveTaskResponse
-	(*GetWorkflowExecutionRawHistoryV2Response)(nil),    // 53: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
-	(*GetWorkflowExecutionRawHistoryResponse)(nil),      // 54: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
-	(*GetReplicationMessagesResponse)(nil),              // 55: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse
-	(*GetNamespaceReplicationMessagesResponse)(nil),     // 56: temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse
-	(*GetDLQReplicationMessagesResponse)(nil),           // 57: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse
-	(*ReapplyEventsResponse)(nil),                       // 58: temporal.server.api.adminservice.v1.ReapplyEventsResponse
-	(*AddSearchAttributesResponse)(nil),                 // 59: temporal.server.api.adminservice.v1.AddSearchAttributesResponse
-	(*RemoveSearchAttributesResponse)(nil),              // 60: temporal.server.api.adminservice.v1.RemoveSearchAttributesResponse
-	(*GetSearchAttributesResponse)(nil),                 // 61: temporal.server.api.adminservice.v1.GetSearchAttributesResponse
-	(*DescribeClusterResponse)(nil),                     // 62: temporal.server.api.adminservice.v1.DescribeClusterResponse
-	(*ListClustersResponse)(nil),                        // 63: temporal.server.api.adminservice.v1.ListClustersResponse
-	(*ListClusterMembersResponse)(nil),                  // 64: temporal.server.api.adminservice.v1.ListClusterMembersResponse
-	(*AddOrUpdateRemoteClusterResponse)(nil),            // 65: temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterResponse
-	(*RemoveRemoteClusterResponse)(nil),                 // 66: temporal.server.api.adminservice.v1.RemoveRemoteClusterResponse
-	(*GetDLQMessagesResponse)(nil),                      // 67: temporal.server.api.adminservice.v1.GetDLQMessagesResponse
-	(*PurgeDLQMessagesResponse)(nil),                    // 68: temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse
-	(*MergeDLQMessagesResponse)(nil),                    // 69: temporal.server.api.adminservice.v1.MergeDLQMessagesResponse
-	(*RefreshWorkflowTasksResponse)(nil),                // 70: temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse
-	(*StartAdminBatchOperationResponse)(nil),            // 71: temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse
-	(*ResendReplicationTasksResponse)(nil),              // 72: temporal.server.api.adminservice.v1.ResendReplicationTasksResponse
-	(*GetTaskQueueTasksResponse)(nil),                   // 73: temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse
-	(*DeleteWorkflowExecutionResponse)(nil),             // 74: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
-	(*StreamWorkflowReplicationMessagesResponse)(nil),   // 75: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse
-	(*GetNamespaceResponse)(nil),                        // 76: temporal.server.api.adminservice.v1.GetNamespaceResponse
-	(*GetDLQTasksResponse)(nil),                         // 77: temporal.server.api.adminservice.v1.GetDLQTasksResponse
-	(*PurgeDLQTasksResponse)(nil),                       // 78: temporal.server.api.adminservice.v1.PurgeDLQTasksResponse
-	(*MergeDLQTasksResponse)(nil),                       // 79: temporal.server.api.adminservice.v1.MergeDLQTasksResponse
-	(*DescribeDLQJobResponse)(nil),                      // 80: temporal.server.api.adminservice.v1.DescribeDLQJobResponse
-	(*CancelDLQJobResponse)(nil),                        // 81: temporal.server.api.adminservice.v1.CancelDLQJobResponse
-	(*AddTasksResponse)(nil),                            // 82: temporal.server.api.adminservice.v1.AddTasksResponse
-	(*ListQueuesResponse)(nil),                          // 83: temporal.server.api.adminservice.v1.ListQueuesResponse
-	(*DeepHealthCheckResponse)(nil),                     // 84: temporal.server.api.adminservice.v1.DeepHealthCheckResponse
-	(*SyncWorkflowStateResponse)(nil),                   // 85: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse
-	(*GenerateLastHistoryReplicationTasksResponse)(nil), // 86: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse
-	(*DescribeTaskQueuePartitionResponse)(nil),          // 87: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse
-	(*ForceUnloadTaskQueuePartitionResponse)(nil),       // 88: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse
-	(*MigrateScheduleResponse)(nil),                     // 89: temporal.server.api.adminservice.v1.MigrateScheduleResponse
+	(*ResendReplicationTasksRequest)(nil),               // 26: temporal.server.api.adminservice.v1.ResendReplicationTasksRequest
+	(*GetTaskQueueTasksRequest)(nil),                    // 27: temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest
+	(*DeleteWorkflowExecutionRequest)(nil),              // 28: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
+	(*StreamWorkflowReplicationMessagesRequest)(nil),    // 29: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest
+	(*GetNamespaceRequest)(nil),                         // 30: temporal.server.api.adminservice.v1.GetNamespaceRequest
+	(*GetDLQTasksRequest)(nil),                          // 31: temporal.server.api.adminservice.v1.GetDLQTasksRequest
+	(*PurgeDLQTasksRequest)(nil),                        // 32: temporal.server.api.adminservice.v1.PurgeDLQTasksRequest
+	(*MergeDLQTasksRequest)(nil),                        // 33: temporal.server.api.adminservice.v1.MergeDLQTasksRequest
+	(*DescribeDLQJobRequest)(nil),                       // 34: temporal.server.api.adminservice.v1.DescribeDLQJobRequest
+	(*CancelDLQJobRequest)(nil),                         // 35: temporal.server.api.adminservice.v1.CancelDLQJobRequest
+	(*AddTasksRequest)(nil),                             // 36: temporal.server.api.adminservice.v1.AddTasksRequest
+	(*ListQueuesRequest)(nil),                           // 37: temporal.server.api.adminservice.v1.ListQueuesRequest
+	(*DeepHealthCheckRequest)(nil),                      // 38: temporal.server.api.adminservice.v1.DeepHealthCheckRequest
+	(*SyncWorkflowStateRequest)(nil),                    // 39: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest
+	(*GenerateLastHistoryReplicationTasksRequest)(nil),  // 40: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest
+	(*DescribeTaskQueuePartitionRequest)(nil),           // 41: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest
+	(*ForceUnloadTaskQueuePartitionRequest)(nil),        // 42: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest
+	(*GetDynamicConfigurationsRequest)(nil),             // 43: temporal.server.api.adminservice.v1.GetDynamicConfigurationsRequest
+	(*RebuildMutableStateResponse)(nil),                 // 44: temporal.server.api.adminservice.v1.RebuildMutableStateResponse
+	(*ImportWorkflowExecutionResponse)(nil),             // 45: temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse
+	(*DescribeMutableStateResponse)(nil),                // 46: temporal.server.api.adminservice.v1.DescribeMutableStateResponse
+	(*DescribeHistoryHostResponse)(nil),                 // 47: temporal.server.api.adminservice.v1.DescribeHistoryHostResponse
+	(*GetShardResponse)(nil),                            // 48: temporal.server.api.adminservice.v1.GetShardResponse
+	(*CloseShardResponse)(nil),                          // 49: temporal.server.api.adminservice.v1.CloseShardResponse
+	(*ListHistoryTasksResponse)(nil),                    // 50: temporal.server.api.adminservice.v1.ListHistoryTasksResponse
+	(*RemoveTaskResponse)(nil),                          // 51: temporal.server.api.adminservice.v1.RemoveTaskResponse
+	(*GetWorkflowExecutionRawHistoryV2Response)(nil),    // 52: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	(*GetWorkflowExecutionRawHistoryResponse)(nil),      // 53: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
+	(*GetReplicationMessagesResponse)(nil),              // 54: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse
+	(*GetNamespaceReplicationMessagesResponse)(nil),     // 55: temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse
+	(*GetDLQReplicationMessagesResponse)(nil),           // 56: temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse
+	(*ReapplyEventsResponse)(nil),                       // 57: temporal.server.api.adminservice.v1.ReapplyEventsResponse
+	(*AddSearchAttributesResponse)(nil),                 // 58: temporal.server.api.adminservice.v1.AddSearchAttributesResponse
+	(*RemoveSearchAttributesResponse)(nil),              // 59: temporal.server.api.adminservice.v1.RemoveSearchAttributesResponse
+	(*GetSearchAttributesResponse)(nil),                 // 60: temporal.server.api.adminservice.v1.GetSearchAttributesResponse
+	(*DescribeClusterResponse)(nil),                     // 61: temporal.server.api.adminservice.v1.DescribeClusterResponse
+	(*ListClustersResponse)(nil),                        // 62: temporal.server.api.adminservice.v1.ListClustersResponse
+	(*ListClusterMembersResponse)(nil),                  // 63: temporal.server.api.adminservice.v1.ListClusterMembersResponse
+	(*AddOrUpdateRemoteClusterResponse)(nil),            // 64: temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterResponse
+	(*RemoveRemoteClusterResponse)(nil),                 // 65: temporal.server.api.adminservice.v1.RemoveRemoteClusterResponse
+	(*GetDLQMessagesResponse)(nil),                      // 66: temporal.server.api.adminservice.v1.GetDLQMessagesResponse
+	(*PurgeDLQMessagesResponse)(nil),                    // 67: temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse
+	(*MergeDLQMessagesResponse)(nil),                    // 68: temporal.server.api.adminservice.v1.MergeDLQMessagesResponse
+	(*RefreshWorkflowTasksResponse)(nil),                // 69: temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse
+	(*ResendReplicationTasksResponse)(nil),              // 70: temporal.server.api.adminservice.v1.ResendReplicationTasksResponse
+	(*GetTaskQueueTasksResponse)(nil),                   // 71: temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse
+	(*DeleteWorkflowExecutionResponse)(nil),             // 72: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
+	(*StreamWorkflowReplicationMessagesResponse)(nil),   // 73: temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse
+	(*GetNamespaceResponse)(nil),                        // 74: temporal.server.api.adminservice.v1.GetNamespaceResponse
+	(*GetDLQTasksResponse)(nil),                         // 75: temporal.server.api.adminservice.v1.GetDLQTasksResponse
+	(*PurgeDLQTasksResponse)(nil),                       // 76: temporal.server.api.adminservice.v1.PurgeDLQTasksResponse
+	(*MergeDLQTasksResponse)(nil),                       // 77: temporal.server.api.adminservice.v1.MergeDLQTasksResponse
+	(*DescribeDLQJobResponse)(nil),                      // 78: temporal.server.api.adminservice.v1.DescribeDLQJobResponse
+	(*CancelDLQJobResponse)(nil),                        // 79: temporal.server.api.adminservice.v1.CancelDLQJobResponse
+	(*AddTasksResponse)(nil),                            // 80: temporal.server.api.adminservice.v1.AddTasksResponse
+	(*ListQueuesResponse)(nil),                          // 81: temporal.server.api.adminservice.v1.ListQueuesResponse
+	(*DeepHealthCheckResponse)(nil),                     // 82: temporal.server.api.adminservice.v1.DeepHealthCheckResponse
+	(*SyncWorkflowStateResponse)(nil),                   // 83: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse
+	(*GenerateLastHistoryReplicationTasksResponse)(nil), // 84: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse
+	(*DescribeTaskQueuePartitionResponse)(nil),          // 85: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse
+	(*ForceUnloadTaskQueuePartitionResponse)(nil),       // 86: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse
+	(*GetDynamicConfigurationsResponse)(nil),            // 87: temporal.server.api.adminservice.v1.GetDynamicConfigurationsResponse
 }
 var file_temporal_server_api_adminservice_v1_service_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.adminservice.v1.AdminService.RebuildMutableState:input_type -> temporal.server.api.adminservice.v1.RebuildMutableStateRequest
@@ -195,72 +192,70 @@ var file_temporal_server_api_adminservice_v1_service_proto_depIdxs = []int32{
 	23, // 23: temporal.server.api.adminservice.v1.AdminService.PurgeDLQMessages:input_type -> temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest
 	24, // 24: temporal.server.api.adminservice.v1.AdminService.MergeDLQMessages:input_type -> temporal.server.api.adminservice.v1.MergeDLQMessagesRequest
 	25, // 25: temporal.server.api.adminservice.v1.AdminService.RefreshWorkflowTasks:input_type -> temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
-	26, // 26: temporal.server.api.adminservice.v1.AdminService.StartAdminBatchOperation:input_type -> temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest
-	27, // 27: temporal.server.api.adminservice.v1.AdminService.ResendReplicationTasks:input_type -> temporal.server.api.adminservice.v1.ResendReplicationTasksRequest
-	28, // 28: temporal.server.api.adminservice.v1.AdminService.GetTaskQueueTasks:input_type -> temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest
-	29, // 29: temporal.server.api.adminservice.v1.AdminService.DeleteWorkflowExecution:input_type -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
-	30, // 30: temporal.server.api.adminservice.v1.AdminService.StreamWorkflowReplicationMessages:input_type -> temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest
-	31, // 31: temporal.server.api.adminservice.v1.AdminService.GetNamespace:input_type -> temporal.server.api.adminservice.v1.GetNamespaceRequest
-	32, // 32: temporal.server.api.adminservice.v1.AdminService.GetDLQTasks:input_type -> temporal.server.api.adminservice.v1.GetDLQTasksRequest
-	33, // 33: temporal.server.api.adminservice.v1.AdminService.PurgeDLQTasks:input_type -> temporal.server.api.adminservice.v1.PurgeDLQTasksRequest
-	34, // 34: temporal.server.api.adminservice.v1.AdminService.MergeDLQTasks:input_type -> temporal.server.api.adminservice.v1.MergeDLQTasksRequest
-	35, // 35: temporal.server.api.adminservice.v1.AdminService.DescribeDLQJob:input_type -> temporal.server.api.adminservice.v1.DescribeDLQJobRequest
-	36, // 36: temporal.server.api.adminservice.v1.AdminService.CancelDLQJob:input_type -> temporal.server.api.adminservice.v1.CancelDLQJobRequest
-	37, // 37: temporal.server.api.adminservice.v1.AdminService.AddTasks:input_type -> temporal.server.api.adminservice.v1.AddTasksRequest
-	38, // 38: temporal.server.api.adminservice.v1.AdminService.ListQueues:input_type -> temporal.server.api.adminservice.v1.ListQueuesRequest
-	39, // 39: temporal.server.api.adminservice.v1.AdminService.DeepHealthCheck:input_type -> temporal.server.api.adminservice.v1.DeepHealthCheckRequest
-	40, // 40: temporal.server.api.adminservice.v1.AdminService.SyncWorkflowState:input_type -> temporal.server.api.adminservice.v1.SyncWorkflowStateRequest
-	41, // 41: temporal.server.api.adminservice.v1.AdminService.GenerateLastHistoryReplicationTasks:input_type -> temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest
-	42, // 42: temporal.server.api.adminservice.v1.AdminService.DescribeTaskQueuePartition:input_type -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest
-	43, // 43: temporal.server.api.adminservice.v1.AdminService.ForceUnloadTaskQueuePartition:input_type -> temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest
-	44, // 44: temporal.server.api.adminservice.v1.AdminService.MigrateSchedule:input_type -> temporal.server.api.adminservice.v1.MigrateScheduleRequest
-	45, // 45: temporal.server.api.adminservice.v1.AdminService.RebuildMutableState:output_type -> temporal.server.api.adminservice.v1.RebuildMutableStateResponse
-	46, // 46: temporal.server.api.adminservice.v1.AdminService.ImportWorkflowExecution:output_type -> temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse
-	47, // 47: temporal.server.api.adminservice.v1.AdminService.DescribeMutableState:output_type -> temporal.server.api.adminservice.v1.DescribeMutableStateResponse
-	48, // 48: temporal.server.api.adminservice.v1.AdminService.DescribeHistoryHost:output_type -> temporal.server.api.adminservice.v1.DescribeHistoryHostResponse
-	49, // 49: temporal.server.api.adminservice.v1.AdminService.GetShard:output_type -> temporal.server.api.adminservice.v1.GetShardResponse
-	50, // 50: temporal.server.api.adminservice.v1.AdminService.CloseShard:output_type -> temporal.server.api.adminservice.v1.CloseShardResponse
-	51, // 51: temporal.server.api.adminservice.v1.AdminService.ListHistoryTasks:output_type -> temporal.server.api.adminservice.v1.ListHistoryTasksResponse
-	52, // 52: temporal.server.api.adminservice.v1.AdminService.RemoveTask:output_type -> temporal.server.api.adminservice.v1.RemoveTaskResponse
-	53, // 53: temporal.server.api.adminservice.v1.AdminService.GetWorkflowExecutionRawHistoryV2:output_type -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
-	54, // 54: temporal.server.api.adminservice.v1.AdminService.GetWorkflowExecutionRawHistory:output_type -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
-	55, // 55: temporal.server.api.adminservice.v1.AdminService.GetReplicationMessages:output_type -> temporal.server.api.adminservice.v1.GetReplicationMessagesResponse
-	56, // 56: temporal.server.api.adminservice.v1.AdminService.GetNamespaceReplicationMessages:output_type -> temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse
-	57, // 57: temporal.server.api.adminservice.v1.AdminService.GetDLQReplicationMessages:output_type -> temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse
-	58, // 58: temporal.server.api.adminservice.v1.AdminService.ReapplyEvents:output_type -> temporal.server.api.adminservice.v1.ReapplyEventsResponse
-	59, // 59: temporal.server.api.adminservice.v1.AdminService.AddSearchAttributes:output_type -> temporal.server.api.adminservice.v1.AddSearchAttributesResponse
-	60, // 60: temporal.server.api.adminservice.v1.AdminService.RemoveSearchAttributes:output_type -> temporal.server.api.adminservice.v1.RemoveSearchAttributesResponse
-	61, // 61: temporal.server.api.adminservice.v1.AdminService.GetSearchAttributes:output_type -> temporal.server.api.adminservice.v1.GetSearchAttributesResponse
-	62, // 62: temporal.server.api.adminservice.v1.AdminService.DescribeCluster:output_type -> temporal.server.api.adminservice.v1.DescribeClusterResponse
-	63, // 63: temporal.server.api.adminservice.v1.AdminService.ListClusters:output_type -> temporal.server.api.adminservice.v1.ListClustersResponse
-	64, // 64: temporal.server.api.adminservice.v1.AdminService.ListClusterMembers:output_type -> temporal.server.api.adminservice.v1.ListClusterMembersResponse
-	65, // 65: temporal.server.api.adminservice.v1.AdminService.AddOrUpdateRemoteCluster:output_type -> temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterResponse
-	66, // 66: temporal.server.api.adminservice.v1.AdminService.RemoveRemoteCluster:output_type -> temporal.server.api.adminservice.v1.RemoveRemoteClusterResponse
-	67, // 67: temporal.server.api.adminservice.v1.AdminService.GetDLQMessages:output_type -> temporal.server.api.adminservice.v1.GetDLQMessagesResponse
-	68, // 68: temporal.server.api.adminservice.v1.AdminService.PurgeDLQMessages:output_type -> temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse
-	69, // 69: temporal.server.api.adminservice.v1.AdminService.MergeDLQMessages:output_type -> temporal.server.api.adminservice.v1.MergeDLQMessagesResponse
-	70, // 70: temporal.server.api.adminservice.v1.AdminService.RefreshWorkflowTasks:output_type -> temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse
-	71, // 71: temporal.server.api.adminservice.v1.AdminService.StartAdminBatchOperation:output_type -> temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse
-	72, // 72: temporal.server.api.adminservice.v1.AdminService.ResendReplicationTasks:output_type -> temporal.server.api.adminservice.v1.ResendReplicationTasksResponse
-	73, // 73: temporal.server.api.adminservice.v1.AdminService.GetTaskQueueTasks:output_type -> temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse
-	74, // 74: temporal.server.api.adminservice.v1.AdminService.DeleteWorkflowExecution:output_type -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
-	75, // 75: temporal.server.api.adminservice.v1.AdminService.StreamWorkflowReplicationMessages:output_type -> temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse
-	76, // 76: temporal.server.api.adminservice.v1.AdminService.GetNamespace:output_type -> temporal.server.api.adminservice.v1.GetNamespaceResponse
-	77, // 77: temporal.server.api.adminservice.v1.AdminService.GetDLQTasks:output_type -> temporal.server.api.adminservice.v1.GetDLQTasksResponse
-	78, // 78: temporal.server.api.adminservice.v1.AdminService.PurgeDLQTasks:output_type -> temporal.server.api.adminservice.v1.PurgeDLQTasksResponse
-	79, // 79: temporal.server.api.adminservice.v1.AdminService.MergeDLQTasks:output_type -> temporal.server.api.adminservice.v1.MergeDLQTasksResponse
-	80, // 80: temporal.server.api.adminservice.v1.AdminService.DescribeDLQJob:output_type -> temporal.server.api.adminservice.v1.DescribeDLQJobResponse
-	81, // 81: temporal.server.api.adminservice.v1.AdminService.CancelDLQJob:output_type -> temporal.server.api.adminservice.v1.CancelDLQJobResponse
-	82, // 82: temporal.server.api.adminservice.v1.AdminService.AddTasks:output_type -> temporal.server.api.adminservice.v1.AddTasksResponse
-	83, // 83: temporal.server.api.adminservice.v1.AdminService.ListQueues:output_type -> temporal.server.api.adminservice.v1.ListQueuesResponse
-	84, // 84: temporal.server.api.adminservice.v1.AdminService.DeepHealthCheck:output_type -> temporal.server.api.adminservice.v1.DeepHealthCheckResponse
-	85, // 85: temporal.server.api.adminservice.v1.AdminService.SyncWorkflowState:output_type -> temporal.server.api.adminservice.v1.SyncWorkflowStateResponse
-	86, // 86: temporal.server.api.adminservice.v1.AdminService.GenerateLastHistoryReplicationTasks:output_type -> temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse
-	87, // 87: temporal.server.api.adminservice.v1.AdminService.DescribeTaskQueuePartition:output_type -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse
-	88, // 88: temporal.server.api.adminservice.v1.AdminService.ForceUnloadTaskQueuePartition:output_type -> temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse
-	89, // 89: temporal.server.api.adminservice.v1.AdminService.MigrateSchedule:output_type -> temporal.server.api.adminservice.v1.MigrateScheduleResponse
-	45, // [45:90] is the sub-list for method output_type
-	0,  // [0:45] is the sub-list for method input_type
+	26, // 26: temporal.server.api.adminservice.v1.AdminService.ResendReplicationTasks:input_type -> temporal.server.api.adminservice.v1.ResendReplicationTasksRequest
+	27, // 27: temporal.server.api.adminservice.v1.AdminService.GetTaskQueueTasks:input_type -> temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest
+	28, // 28: temporal.server.api.adminservice.v1.AdminService.DeleteWorkflowExecution:input_type -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
+	29, // 29: temporal.server.api.adminservice.v1.AdminService.StreamWorkflowReplicationMessages:input_type -> temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest
+	30, // 30: temporal.server.api.adminservice.v1.AdminService.GetNamespace:input_type -> temporal.server.api.adminservice.v1.GetNamespaceRequest
+	31, // 31: temporal.server.api.adminservice.v1.AdminService.GetDLQTasks:input_type -> temporal.server.api.adminservice.v1.GetDLQTasksRequest
+	32, // 32: temporal.server.api.adminservice.v1.AdminService.PurgeDLQTasks:input_type -> temporal.server.api.adminservice.v1.PurgeDLQTasksRequest
+	33, // 33: temporal.server.api.adminservice.v1.AdminService.MergeDLQTasks:input_type -> temporal.server.api.adminservice.v1.MergeDLQTasksRequest
+	34, // 34: temporal.server.api.adminservice.v1.AdminService.DescribeDLQJob:input_type -> temporal.server.api.adminservice.v1.DescribeDLQJobRequest
+	35, // 35: temporal.server.api.adminservice.v1.AdminService.CancelDLQJob:input_type -> temporal.server.api.adminservice.v1.CancelDLQJobRequest
+	36, // 36: temporal.server.api.adminservice.v1.AdminService.AddTasks:input_type -> temporal.server.api.adminservice.v1.AddTasksRequest
+	37, // 37: temporal.server.api.adminservice.v1.AdminService.ListQueues:input_type -> temporal.server.api.adminservice.v1.ListQueuesRequest
+	38, // 38: temporal.server.api.adminservice.v1.AdminService.DeepHealthCheck:input_type -> temporal.server.api.adminservice.v1.DeepHealthCheckRequest
+	39, // 39: temporal.server.api.adminservice.v1.AdminService.SyncWorkflowState:input_type -> temporal.server.api.adminservice.v1.SyncWorkflowStateRequest
+	40, // 40: temporal.server.api.adminservice.v1.AdminService.GenerateLastHistoryReplicationTasks:input_type -> temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest
+	41, // 41: temporal.server.api.adminservice.v1.AdminService.DescribeTaskQueuePartition:input_type -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest
+	42, // 42: temporal.server.api.adminservice.v1.AdminService.ForceUnloadTaskQueuePartition:input_type -> temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest
+	43, // 43: temporal.server.api.adminservice.v1.AdminService.GetDynamicConfigurations:input_type -> temporal.server.api.adminservice.v1.GetDynamicConfigurationsRequest
+	44, // 44: temporal.server.api.adminservice.v1.AdminService.RebuildMutableState:output_type -> temporal.server.api.adminservice.v1.RebuildMutableStateResponse
+	45, // 45: temporal.server.api.adminservice.v1.AdminService.ImportWorkflowExecution:output_type -> temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse
+	46, // 46: temporal.server.api.adminservice.v1.AdminService.DescribeMutableState:output_type -> temporal.server.api.adminservice.v1.DescribeMutableStateResponse
+	47, // 47: temporal.server.api.adminservice.v1.AdminService.DescribeHistoryHost:output_type -> temporal.server.api.adminservice.v1.DescribeHistoryHostResponse
+	48, // 48: temporal.server.api.adminservice.v1.AdminService.GetShard:output_type -> temporal.server.api.adminservice.v1.GetShardResponse
+	49, // 49: temporal.server.api.adminservice.v1.AdminService.CloseShard:output_type -> temporal.server.api.adminservice.v1.CloseShardResponse
+	50, // 50: temporal.server.api.adminservice.v1.AdminService.ListHistoryTasks:output_type -> temporal.server.api.adminservice.v1.ListHistoryTasksResponse
+	51, // 51: temporal.server.api.adminservice.v1.AdminService.RemoveTask:output_type -> temporal.server.api.adminservice.v1.RemoveTaskResponse
+	52, // 52: temporal.server.api.adminservice.v1.AdminService.GetWorkflowExecutionRawHistoryV2:output_type -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	53, // 53: temporal.server.api.adminservice.v1.AdminService.GetWorkflowExecutionRawHistory:output_type -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
+	54, // 54: temporal.server.api.adminservice.v1.AdminService.GetReplicationMessages:output_type -> temporal.server.api.adminservice.v1.GetReplicationMessagesResponse
+	55, // 55: temporal.server.api.adminservice.v1.AdminService.GetNamespaceReplicationMessages:output_type -> temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse
+	56, // 56: temporal.server.api.adminservice.v1.AdminService.GetDLQReplicationMessages:output_type -> temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse
+	57, // 57: temporal.server.api.adminservice.v1.AdminService.ReapplyEvents:output_type -> temporal.server.api.adminservice.v1.ReapplyEventsResponse
+	58, // 58: temporal.server.api.adminservice.v1.AdminService.AddSearchAttributes:output_type -> temporal.server.api.adminservice.v1.AddSearchAttributesResponse
+	59, // 59: temporal.server.api.adminservice.v1.AdminService.RemoveSearchAttributes:output_type -> temporal.server.api.adminservice.v1.RemoveSearchAttributesResponse
+	60, // 60: temporal.server.api.adminservice.v1.AdminService.GetSearchAttributes:output_type -> temporal.server.api.adminservice.v1.GetSearchAttributesResponse
+	61, // 61: temporal.server.api.adminservice.v1.AdminService.DescribeCluster:output_type -> temporal.server.api.adminservice.v1.DescribeClusterResponse
+	62, // 62: temporal.server.api.adminservice.v1.AdminService.ListClusters:output_type -> temporal.server.api.adminservice.v1.ListClustersResponse
+	63, // 63: temporal.server.api.adminservice.v1.AdminService.ListClusterMembers:output_type -> temporal.server.api.adminservice.v1.ListClusterMembersResponse
+	64, // 64: temporal.server.api.adminservice.v1.AdminService.AddOrUpdateRemoteCluster:output_type -> temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterResponse
+	65, // 65: temporal.server.api.adminservice.v1.AdminService.RemoveRemoteCluster:output_type -> temporal.server.api.adminservice.v1.RemoveRemoteClusterResponse
+	66, // 66: temporal.server.api.adminservice.v1.AdminService.GetDLQMessages:output_type -> temporal.server.api.adminservice.v1.GetDLQMessagesResponse
+	67, // 67: temporal.server.api.adminservice.v1.AdminService.PurgeDLQMessages:output_type -> temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse
+	68, // 68: temporal.server.api.adminservice.v1.AdminService.MergeDLQMessages:output_type -> temporal.server.api.adminservice.v1.MergeDLQMessagesResponse
+	69, // 69: temporal.server.api.adminservice.v1.AdminService.RefreshWorkflowTasks:output_type -> temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse
+	70, // 70: temporal.server.api.adminservice.v1.AdminService.ResendReplicationTasks:output_type -> temporal.server.api.adminservice.v1.ResendReplicationTasksResponse
+	71, // 71: temporal.server.api.adminservice.v1.AdminService.GetTaskQueueTasks:output_type -> temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse
+	72, // 72: temporal.server.api.adminservice.v1.AdminService.DeleteWorkflowExecution:output_type -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
+	73, // 73: temporal.server.api.adminservice.v1.AdminService.StreamWorkflowReplicationMessages:output_type -> temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse
+	74, // 74: temporal.server.api.adminservice.v1.AdminService.GetNamespace:output_type -> temporal.server.api.adminservice.v1.GetNamespaceResponse
+	75, // 75: temporal.server.api.adminservice.v1.AdminService.GetDLQTasks:output_type -> temporal.server.api.adminservice.v1.GetDLQTasksResponse
+	76, // 76: temporal.server.api.adminservice.v1.AdminService.PurgeDLQTasks:output_type -> temporal.server.api.adminservice.v1.PurgeDLQTasksResponse
+	77, // 77: temporal.server.api.adminservice.v1.AdminService.MergeDLQTasks:output_type -> temporal.server.api.adminservice.v1.MergeDLQTasksResponse
+	78, // 78: temporal.server.api.adminservice.v1.AdminService.DescribeDLQJob:output_type -> temporal.server.api.adminservice.v1.DescribeDLQJobResponse
+	79, // 79: temporal.server.api.adminservice.v1.AdminService.CancelDLQJob:output_type -> temporal.server.api.adminservice.v1.CancelDLQJobResponse
+	80, // 80: temporal.server.api.adminservice.v1.AdminService.AddTasks:output_type -> temporal.server.api.adminservice.v1.AddTasksResponse
+	81, // 81: temporal.server.api.adminservice.v1.AdminService.ListQueues:output_type -> temporal.server.api.adminservice.v1.ListQueuesResponse
+	82, // 82: temporal.server.api.adminservice.v1.AdminService.DeepHealthCheck:output_type -> temporal.server.api.adminservice.v1.DeepHealthCheckResponse
+	83, // 83: temporal.server.api.adminservice.v1.AdminService.SyncWorkflowState:output_type -> temporal.server.api.adminservice.v1.SyncWorkflowStateResponse
+	84, // 84: temporal.server.api.adminservice.v1.AdminService.GenerateLastHistoryReplicationTasks:output_type -> temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse
+	85, // 85: temporal.server.api.adminservice.v1.AdminService.DescribeTaskQueuePartition:output_type -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse
+	86, // 86: temporal.server.api.adminservice.v1.AdminService.ForceUnloadTaskQueuePartition:output_type -> temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse
+	87, // 87: temporal.server.api.adminservice.v1.AdminService.GetDynamicConfigurations:output_type -> temporal.server.api.adminservice.v1.GetDynamicConfigurationsResponse
+	44, // [44:88] is the sub-list for method output_type
+	0,  // [0:44] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
