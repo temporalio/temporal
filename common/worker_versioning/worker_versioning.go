@@ -46,21 +46,14 @@ const (
 	WorkerDeploymentVersionWorkflowIDEscape = "|"
 
 	// Prefixes, Delimeters and Keys that are used in the internal entity workflows backing worker-versioning
-	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
-	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
-	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix)
-	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
-	WorkerDeploymentBuildIDFieldName             = "BuildID"
+	WorkerDeploymentWorkflowIDPrefix              = "temporal-sys-worker-deployment"
+	WorkerDeploymentVersionWorkflowIDPrefix       = "temporal-sys-worker-deployment-version"
+	WorkerDeploymentVersionWorkflowIDDelimeter    = ":"
+	WorkerDeploymentVersionWorkflowIDInitialSize  = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter) // 39
+	WorkerDeploymentWorkerDeploymentIDInitialSize = len(WorkerDeploymentWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter)        // 32
+	WorkerDeploymentNameFieldName                 = "WorkerDeploymentName"
+	WorkerDeploymentBuildIDFieldName              = "BuildID"
 )
-
-// EscapeChar is a helper which escapes the BuildIdSearchAttributeDelimiter character
-// in the input string
-func escapeChar(s, escape, delimiter string) string {
-	s = strings.Replace(s, escape, escape+escape, -1)
-	s = strings.Replace(s, delimiter, escape+delimiter, -1)
-	return s
-}
 
 // PinnedBuildIdSearchAttribute creates the pinned search attribute for the BuildIds list, used as a visibility optimization.
 // For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
@@ -443,19 +436,19 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 }
 
 // ValidateDeploymentVersion returns error if the deployment version is not a valid entity.
-func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion) error {
+func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion, maxIDLengthLimit int) error {
 	if version == nil {
 		return serviceerror.NewInvalidArgument("deployment version cannot be nil")
 	}
 
 	// Validate deployment name
-	err := ValidateDeploymentVersionFields(WorkerDeploymentNameFieldName, version.GetDeploymentName(), WorkerDeploymentVersionWorkflowIDInitialSize)
+	err := ValidateDeploymentVersionFields(WorkerDeploymentNameFieldName, version.GetDeploymentName(), maxIDLengthLimit)
 	if err != nil {
 		return err
 	}
 
 	// Validate build ID
-	err = ValidateDeploymentVersionFields(WorkerDeploymentBuildIDFieldName, version.GetBuildId(), WorkerDeploymentVersionWorkflowIDInitialSize)
+	err = ValidateDeploymentVersionFields(WorkerDeploymentBuildIDFieldName, version.GetBuildId(), maxIDLengthLimit)
 	if err != nil {
 		return err
 	}
@@ -472,8 +465,14 @@ func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLength
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
-	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
-		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
+	if fieldName == WorkerDeploymentNameFieldName {
+		if len(field) > (maxIDLengthLimit-WorkerDeploymentWorkerDeploymentIDInitialSize)/2 {
+			return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
+		}
+	} else if fieldName == WorkerDeploymentBuildIDFieldName {
+		if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
+			return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
+		}
 	}
 
 	// deploymentName cannot have "."

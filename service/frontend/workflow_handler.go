@@ -5285,7 +5285,7 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 		return err
 	}
 
-	return worker_versioning.ValidateDeploymentVersion(deploymentVersion)
+	return worker_versioning.ValidateDeploymentVersion(deploymentVersion, wh.config.MaxIDLengthLimit())
 }
 
 func validateDeploymentVersionMode(

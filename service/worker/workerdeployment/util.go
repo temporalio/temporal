@@ -64,8 +64,7 @@ const (
 	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 
-	errConflictTokenMismatchType = "errConflictTokenMismatch"
-	errFailedPrecondition        = "FailedPrecondition"
+	errFailedPrecondition = "FailedPrecondition"
 
 	errVersionIsDrainingSuffix   = "cannot be deleted since it is draining"
 	ErrVersionIsDraining         = "version '%s' " + errVersionIsDrainingSuffix
