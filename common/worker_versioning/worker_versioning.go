@@ -458,7 +458,6 @@ func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion, m
 
 // ValidateDeploymentVersionFields is a helper that verifies if the fields within a
 // Worker Deployment Version are valid
-// nolint:staticcheck (better to be consistent and use if conditions rather than a switch in the function itself)
 func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
@@ -466,6 +465,7 @@ func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLength
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
+	// nolint:staticcheck (better to be consistent and use if conditions rather than a switch in the function itself)
 	if fieldName == WorkerDeploymentNameFieldName {
 		if len(field) > (maxIDLengthLimit-WorkerDeploymentWorkerDeploymentIDInitialSize)/2 {
 			return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
