@@ -14,6 +14,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
@@ -126,7 +127,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		RequestId: "test-request-id",
 	})
 	require.NoError(t, err)
-	t.Logf("Started activity %s with 1s start-to-close timeout", activityID)
 
 	// First poll: activity has not started yet
 	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
@@ -185,11 +185,21 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		},
 	})
 
-	// TODO(dan): will complete this test in a subsequent PR, on top of https://github.com/temporalio/temporal/pull/8653
 	require.NoError(t, err)
 	require.NotNil(t, pollResp)
 	require.NotNil(t, pollResp.GetInfo())
+
+	// The activity has timed out due to StartToClose. This is an attempt failure, therefore the
+	// failure should be in ActivityExecutionInfo.LastFailure as well as set as the outcome failure.
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
+	failure := pollResp.GetInfo().GetLastFailure()
+	require.NotNil(t, failure)
+	timeoutFailure := failure.GetTimeoutFailureInfo()
+	require.NotNil(t, timeoutFailure)
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutFailure.GetTimeoutType())
+
+	require.NotNil(t, pollResp.GetFailure())
+	protorequire.ProtoEqual(t, failure, pollResp.GetFailure())
 }
 
 func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout() {

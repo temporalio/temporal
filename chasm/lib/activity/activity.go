@@ -361,6 +361,10 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		return nil, err
 	}
 
+	attempt, err := a.Attempt.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
 	key := ctx.ExecutionKey()
 
 	info := &activity.ActivityExecutionInfo{
@@ -372,6 +376,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		ScheduledTime: a.GetScheduledTime(),
 		Priority:      a.GetPriority(),
 		Header:        requestData.GetHeader(),
+		LastFailure:   attempt.GetLastFailureDetails().GetFailure(),
 		// TODO(dan): populate remaining fields
 	}
 
