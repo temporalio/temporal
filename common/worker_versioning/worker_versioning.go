@@ -494,6 +494,13 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
+// ValidatePinnedVersionExists validates if the pinned version exists. It does so by checking if a querying the version workflow.
+func ValidatePinnedVersionExists(pinnedVersion *deploymentpb.WorkerDeploymentVersion) error {
+	// Option 1: Forward this call to matching. The overall flow will then become: history -> matching -> history.
+	// Option 2: Forward this call back to frontend. The overall flow will then become: history -> frontend -> matching -> frontend -> history.
+	return nil
+}
+
 func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
@@ -508,7 +515,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return nil
+		return ValidatePinnedVersionExists(p.GetVersion())
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
