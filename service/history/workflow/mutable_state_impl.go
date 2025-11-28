@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -666,6 +666,19 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 	return wf, chasmCtx, nil
 }
 
+func (ms *MutableStateImpl) ensureChasmWorkflowComponent(ctx context.Context) {
+	// Initialize chasm tree once for new workflows.
+	// Using context.Background() because this is done outside an actual request context and the
+	// chasmworkflow.NewWorkflow does not actually use it currently.
+	root, ok := ms.chasmTree.(*chasm.Node)
+	softassert.That(ms.logger, ok, "chasmTree cast failed")
+
+	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
+		mutableContext := chasm.NewMutableContext(ctx, root)
+		root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
+	}
+}
+
 // ChasmWorkflowComponentReadOnly gets the root workflow component from the CHASM tree.
 // Returns both the workflow component and a read-only CHASM context.
 // This method is for read-only operations.
@@ -890,8 +903,21 @@ func (ms *MutableStateImpl) SetHistoryTree(
 ) error {
 	// NOTE: Unfortunately execution timeout and run timeout are not yet initialized into ms.executionInfo at this point.
 	// TODO: Consider explicitly initializing mutable state with these timeout parameters instead of passing them in.
-
 	workflowKey := ms.GetWorkflowKey()
+
+	archetypeID := ms.ChasmTree().ArchetypeID()
+	if archetypeID != chasm.WorkflowArchetypeID {
+		return softassert.UnexpectedInternalErr(
+			ms.logger,
+			"Backfilling history not supported for non-workflow archetype",
+			nil,
+			tag.ArchetypeID(archetypeID),
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+		)
+	}
+
 	var retentionDuration *durationpb.Duration
 	if duration := ms.namespaceEntry.Retention(); duration > 0 {
 		retentionDuration = durationpb.New(duration)
@@ -2426,9 +2452,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
-			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(context.Background(), ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
+			newTQInPinnedVersion, err = IsWFTaskQueueInVersionDetector(ctx, ms.GetNamespaceEntry().ID().String(), newTQ, inheritedPinnedVersion)
 			if err != nil {
-				return nil, errors.New(fmt.Sprintf("error determining child task queue presence in inherited version: %s", err.Error()))
+				return nil, fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
 			if !newTQInPinnedVersion {
 				inheritedPinnedVersion = nil
@@ -2446,8 +2472,35 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
+	// New run initiated by ContinueAsNew of an AUTO_UPGRADE workflow execution will inherit the previous run's
+	// deployment version and revision number iff the new run's Task Queue belongs to source deployment version.
+	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
+	var sourceDeploymentRevisionNumber int64
+	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
+		sourceDeploymentRevisionNumber = previousExecutionState.GetVersioningRevisionNumber()
+
+		newTQ := command.GetTaskQueue().GetName()
+		if newTQ != previousExecutionInfo.GetTaskQueue() {
+			// Cross-TQ CAN: check if new TQ is in parent's deployment
+			TQInSourceDeploymentVersion, err := IsWFTaskQueueInVersionDetector(
+				ctx,
+				ms.GetNamespaceEntry().ID().String(),
+				newTQ,
+				sourceDeploymentVersion,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("error determining CAN task queue presence in auto upgrade deployment: %w", err)
+			}
+			if !TQInSourceDeploymentVersion {
+				sourceDeploymentVersion = nil
+				sourceDeploymentRevisionNumber = 0
+			}
+		}
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.New(),
+		RequestId:                uuid.NewString(),
 		Namespace:                ms.namespaceEntry.Name().String(),
 		WorkflowId:               execution.WorkflowId,
 		TaskQueue:                tq,
@@ -2508,6 +2561,14 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionState.GetExecutionInfo().WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
 		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
+	}
+
+	// Add InheritedAutoUpgradeInfo if InheritedPinnedVersion is not set and source deployment version and revision number are set.
+	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 && inheritedPinnedVersion == nil {
+		req.InheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+			SourceDeploymentVersion:        sourceDeploymentVersion,
+			SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+		}
 	}
 
 	event, err := ms.AddWorkflowExecutionStartedEventWithOptions(
@@ -2649,19 +2710,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if ms.executionState.RunId != execution.GetRunId() {
 		return serviceerror.NewInternalf("applying conflicting run ID: %v != %v",
 			ms.executionState.RunId, execution.GetRunId())
-	}
-
-	if ms.ChasmEnabled() {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		root, ok := ms.chasmTree.(*chasm.Node)
-		softassert.That(ms.logger, ok, "chasmTree cast failed")
-
-		if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
-			mutableContext := chasm.NewMutableContext(context.Background(), root)
-			root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
-		}
 	}
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -2853,6 +2901,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.approximateSize += ms.executionInfo.Size()
 	ms.approximateSize += ms.executionState.Size()
 
+	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
+	if event.GetInheritedAutoUpgradeInfo() != nil {
+		ms.SetVersioningRevisionNumber(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
+		// TODO (Shivam): Remove this once you make SetDeploymentVersion and SetVersioningBehavior methods with nil checks
+		if ms.executionInfo.VersioningInfo == nil {
+			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		}
+		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
+		// Assume AutoUpgrade behavior for the first workflow task.
+		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	}
+
 	ms.writeEventToCache(startEvent)
 	return nil
 }
@@ -2974,7 +3034,14 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
 ) error {
+	if len(completionCallbacks) == 0 {
+		return nil
+	}
 	if ms.chasmCallbacksEnabled() {
+		// Initialize chasm tree once for new workflows.
+		// Using context.Background() because this is done outside an actual request context and the
+		// chasmworkflow.NewWorkflow does not actually use it currently.
+		ms.ensureChasmWorkflowComponent(context.Background())
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -5172,14 +5239,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	}
 
 	// Update completion callbacks.
-	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
-		if err := ms.addCompletionCallbacks(
-			event,
-			attributes.GetAttachedRequestId(),
-			attributes.GetAttachedCompletionCallbacks(),
-		); err != nil {
-			return err
-		}
+	if err := ms.addCompletionCallbacks(
+		event,
+		attributes.GetAttachedRequestId(),
+		attributes.GetAttachedCompletionCallbacks(),
+	); err != nil {
+		return err
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
@@ -5392,7 +5457,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	var err error
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	newExecution := commonpb.WorkflowExecution{
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      newRunID,
@@ -7216,6 +7281,12 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	replicationTasks = append(replicationTasks, ms.syncActivityToReplicationTask(transactionPolicy)...)
 	replicationTasks = append(replicationTasks, ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...)
 
+	archetypeID := ms.ChasmTree().ArchetypeID()
+	isWorkflow := archetypeID == chasm.WorkflowArchetypeID
+	if !isWorkflow && len(replicationTasks) != 0 {
+		return softassert.UnexpectedInternalErr(ms.logger, "chasm execution generated workflow replication tasks", nil)
+	}
+
 	if ms.transitionHistoryEnabled {
 		switch transactionPolicy {
 		case historyi.TransactionPolicyActive:
@@ -7258,6 +7329,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
 						WorkflowKey:            workflowKey,
 						VisibilityTimestamp:    now,
+						ArchetypeID:            archetypeID,
 						Priority:               enumsspb.TASK_PRIORITY_HIGH,
 						VersionedTransition:    currentVersionedTransition,
 						FirstEventID:           firstEventID,
@@ -7282,11 +7354,13 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 		default:
 			panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 		}
-	} else {
+	} else if isWorkflow {
 		ms.InsertTasks[tasks.CategoryReplication] = append(
 			ms.InsertTasks[tasks.CategoryReplication],
 			replicationTasks...,
 		)
+	} else {
+		return softassert.UnexpectedInternalErr(ms.logger, "state-based replication not enabled for chasm execution", nil)
 	}
 
 	if transactionPolicy == historyi.TransactionPolicyPassive &&
@@ -8681,6 +8755,9 @@ func (ms *MutableStateImpl) GetVersioningRevisionNumber() int64 {
 }
 
 func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
+	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
+		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+	}
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
 }
 

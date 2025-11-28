@@ -97,10 +97,10 @@ func NewScheduler(
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
 	sched.Schedule.State = &schedulepb.ScheduleState{}
 
-	invoker := NewInvoker(ctx, sched)
+	invoker := NewInvoker(ctx)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
 
-	generator := NewGenerator(ctx, sched, invoker)
+	generator := NewGenerator(ctx)
 	sched.Generator = chasm.NewComponentField(ctx, generator)
 
 	// Create backfillers to fulfill initialPatch.

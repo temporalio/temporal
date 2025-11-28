@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -222,7 +222,7 @@ func (d *ClientImpl) SetManager(
 		return nil, err
 	}
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetManagerIdentityArgs{
 		Identity:        request.GetIdentity(),
 		ManagerIdentity: newManagerID,
@@ -441,7 +441,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 ) (_ *deploymentpb.VersionMetadata, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("UpdateVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
@@ -670,8 +670,8 @@ func (d *ClientImpl) SetCurrentVersion(
 	}
 
 	// Generating a new updateID and requestID for each request. No-ops are handled by the worker-deployment workflow.
-	updateID := uuid.New()
-	requestID := uuid.New()
+	updateID := uuid.NewString()
+	requestID := uuid.NewString()
 
 	var outcome *updatepb.Outcome
 	if allowNoPollers {
@@ -785,8 +785,8 @@ func (d *ClientImpl) SetRampingVersion(
 	}
 
 	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
-	updateID := uuid.New()
-	requestID := uuid.New()
+	updateID := uuid.NewString()
+	requestID := uuid.NewString()
 
 	var outcome *updatepb.Outcome
 	if allowNoPollers {
@@ -871,7 +871,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 
 	//revive:disable-next-line:defer
 	defer d.record("DeleteWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, buildId)()
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 
 	if identity == "" {
 		identity = requestID
@@ -942,7 +942,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		return err
 	}
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteDeploymentArgs{
 		Identity: identity,
 	})
@@ -1805,7 +1805,7 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 		return err
 	}
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, versionObj.DeploymentName, versionObj.BuildId, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInDeploymentVersion, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},

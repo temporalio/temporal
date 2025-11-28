@@ -1,7 +1,7 @@
 package api
 
 import (
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -53,7 +53,7 @@ func ValidateNamespaceUUID(
 ) error {
 	if namespaceUUID == "" {
 		return serviceerror.NewInvalidArgument("Missing namespace UUID.")
-	} else if uuid.Parse(namespaceUUID.String()) == nil {
+	} else if uuid.Validate(namespaceUUID.String()) != nil {
 		return serviceerror.NewInvalidArgument("Invalid namespace UUID.")
 	}
 	return nil

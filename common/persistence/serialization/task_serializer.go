@@ -200,6 +200,11 @@ func (s *TaskSerializer) timerChasmPureTaskToProto(task *tasks.ChasmTaskPure) *p
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		TaskType:       task.GetType(),
+		TaskDetails: &persistencespb.TimerTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
+				ArchetypeId: task.ArchetypeID,
+			},
+		},
 	}
 }
 
@@ -278,7 +283,7 @@ func (s *TaskSerializer) timerChasmPureTaskFromProto(info *persistencespb.TimerT
 		),
 		VisibilityTimestamp: info.VisibilityTime.AsTime(),
 		TaskID:              info.TaskId,
-		Category:            tasks.CategoryTimer,
+		ArchetypeID:         info.GetChasmTaskInfo().GetArchetypeId(),
 	}
 }
 
@@ -704,6 +709,11 @@ func (s *TaskSerializer) transferDeleteExecutionTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
 		TaskId:         deleteExecutionTask.TaskID,
 		VisibilityTime: timestamppb.New(deleteExecutionTask.VisibilityTimestamp),
+		TaskDetails: &persistencespb.TransferTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
+				ArchetypeId: deleteExecutionTask.ArchetypeID,
+			},
+		},
 	}
 }
 
@@ -718,6 +728,7 @@ func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
 		),
 		VisibilityTimestamp: deleteExecutionTask.VisibilityTime.AsTime(),
 		TaskID:              deleteExecutionTask.TaskId,
+		ArchetypeID:         deleteExecutionTask.GetChasmTaskInfo().GetArchetypeId(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		ProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -983,6 +994,11 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
 		// We set this to true even though it's no longer checked in case someone downgrades to a version that still
 		// checks this field.
 		AlreadyArchived: true,
+		TaskDetails: &persistencespb.TimerTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
+				ArchetypeId: workflowCleanupTimer.ArchetypeID,
+			},
+		},
 	}
 }
 
@@ -1011,6 +1027,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskFromProto(
 		TaskID:              workflowCleanupTimer.TaskId,
 		Version:             workflowCleanupTimer.Version,
 		BranchToken:         workflowCleanupTimer.BranchToken,
+		ArchetypeID:         workflowCleanupTimer.GetChasmTaskInfo().GetArchetypeId(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		ProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
@@ -1126,6 +1143,11 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
+		TaskDetails: &persistencespb.VisibilityTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
+				ArchetypeId: deleteVisibilityTask.ArchetypeID,
+			},
+		},
 	}
 }
 
@@ -1140,6 +1162,7 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		),
 		VisibilityTimestamp:            deleteVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:                         deleteVisibilityTask.TaskId,
+		ArchetypeID:                    deleteVisibilityTask.GetChasmTaskInfo().GetArchetypeId(),
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
 	}
@@ -1384,6 +1407,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 		TaskType:               enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
 		TaskId:                 syncVersionedTransitionTask.TaskID,
 		VisibilityTime:         timestamppb.New(syncVersionedTransitionTask.VisibilityTimestamp),
+		ArchetypeId:            syncVersionedTransitionTask.ArchetypeID,
 		VersionedTransition:    syncVersionedTransitionTask.VersionedTransition,
 		FirstEventId:           syncVersionedTransitionTask.FirstEventID,
 		Version:                syncVersionedTransitionTask.FirstEventVersion,
@@ -1422,6 +1446,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 		),
 		VisibilityTimestamp:    visibilityTimestamp,
 		TaskID:                 syncVersionedTransitionTask.TaskId,
+		ArchetypeID:            syncVersionedTransitionTask.ArchetypeId,
 		FirstEventID:           syncVersionedTransitionTask.FirstEventId,
 		FirstEventVersion:      syncVersionedTransitionTask.Version,
 		NextEventID:            syncVersionedTransitionTask.NextEventId,

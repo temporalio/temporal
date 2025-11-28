@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
@@ -236,7 +237,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	for i := 0; i < 100; i++ {
 		wid := "wf_id_" + strconv.Itoa(i)
 		resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:    uuid.New(),
+			RequestId:    uuid.NewString(),
 			Namespace:    "ns_name_seattle",
 			WorkflowId:   wid,
 			WorkflowType: &commonpb.WorkflowType{Name: "workflowTypeName"},
@@ -320,7 +321,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	for i := 0; i < 10; i++ {
 		wid := "wf_id_" + strconv.Itoa(i)
 		resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:    uuid.New(),
+			RequestId:    uuid.NewString(),
 			Namespace:    "ns_name_los_angeles",
 			WorkflowId:   wid,
 			WorkflowType: &commonpb.WorkflowType{Name: "workflowTypeName"},
@@ -347,6 +348,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 			NamespaceID: nsID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
 	}

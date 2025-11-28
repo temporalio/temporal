@@ -178,7 +178,7 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil)
 
 	s.workflowCache = wcache.NewMockCache(s.controller)
-	s.workflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.WorkflowArchetype, locks.PriorityHigh).
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.WorkflowArchetypeID, locks.PriorityHigh).
 		Return(s.currentContext, wcache.NoopReleaseFn, nil)
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(

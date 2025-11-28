@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -698,7 +698,7 @@ func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescr
 func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-		return uuid.New()
+		return uuid.NewString()
 	}).Get(&val)
 	return val
 }

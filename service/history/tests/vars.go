@@ -6,6 +6,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -35,6 +36,7 @@ var (
 	WorkflowID                               = "mock-workflow-id"
 	RunID                                    = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 	WorkflowKey                              = definition.NewWorkflowKey(NamespaceID.String(), WorkflowID, RunID)
+	ArchetypeID                              = chasm.ArchetypeID(1234)
 
 	LocalNamespaceEntry = namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: NamespaceID.String(), Name: Namespace.String()},
