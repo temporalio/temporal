@@ -760,6 +760,67 @@ func (s *standaloneActivityTestSuite) TestCompletedActivity_CannotTerminate() {
 	require.Error(t, err)
 }
 
+func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout_WithRetry() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+
+	// Start an activity
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		ActivityType: &commonpb.ActivityType{
+			Name: "test-activity-type",
+		},
+		Options: &activitypb.ActivityOptions{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			// It's not possible to guarantee (e.g. via NextRetryDelay or RetryPolicy) that a retry
+			// will start with a delay <1s because of the use of TimerProcessorMaxTimeShift in the
+			// timer queue. Therefore we allow 1s for the ActivityDispatchTask to be executed, and
+			// time out the activity 1s into Attempt 2.
+			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+		},
+	})
+	require.NoError(t, err)
+
+	// Fail attempt 1, causing the attempt counter to increment.
+	pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+	require.NoError(t, err)
+	_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Failure: &failurepb.Failure{
+			Message: "Retryable failure",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				NonRetryable:   false,
+				NextRetryDelay: durationpb.New(1 * time.Second),
+			}},
+		},
+	})
+	require.NoError(t, err)
+	pollTaskResp, err = s.pollActivityTaskQueue(ctx, taskQueue)
+	require.NoError(t, err)
+
+	// Wait for schedule-to-close timeout.
+	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          startResp.RunId,
+		IncludeInfo:    true,
+		IncludeOutcome: true,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitCompletion{
+			WaitCompletion: &workflowservice.PollActivityExecutionRequest_CompletionWaitOptions{},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus())
+	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+}
+
 // TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is
 // started. It also verifies that PollActivityExecution can be used to poll for a TimedOut state
 // change caused by execution of a timer task.
@@ -863,11 +924,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	protorequire.ProtoEqual(t, failure, pollResp.GetFailure())
 	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected StartToCloseTimeout but is %s", pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
-}
-
-func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout() {
-	// TODO implement when we have PollActivityExecution. Make sure we check the attempt vs. outcome failure population.
-	s.T().Skip("Temporarily disabled")
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_NoWait() {

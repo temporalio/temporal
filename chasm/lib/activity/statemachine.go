@@ -62,9 +62,7 @@ var TransitionScheduled = chasm.NewTransition(
 				chasm.TaskAttributes{
 					ScheduledTime: currentTime.Add(timeout),
 				},
-				&activitypb.ScheduleToCloseTimeoutTask{
-					Attempt: attempt.GetCount(),
-				})
+				&activitypb.ScheduleToCloseTimeoutTask{})
 		}
 
 		ctx.AddTask(

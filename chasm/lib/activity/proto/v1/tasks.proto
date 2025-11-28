@@ -17,9 +17,6 @@ message ScheduleToStartTimeoutTask {
 }
 
 message ScheduleToCloseTimeoutTask {
-  // The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-  // need to guard against any concurrent operations where the originally intended task may be outdated.
-  int32 attempt = 1;
 }
 
 message StartToCloseTimeoutTask {
