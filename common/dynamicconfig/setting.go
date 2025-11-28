@@ -34,6 +34,7 @@ type (
 		Key() Key
 		Precedence() Precedence
 		Validate(v any) error
+		DefaultValue() []ConstrainedValue
 
 		// for internal use:
 		dispatchUpdate(*Collection, any, []ConstrainedValue)

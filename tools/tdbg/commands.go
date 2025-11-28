@@ -745,3 +745,29 @@ func AdminReplicateWorkflow(
 	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
 	return nil
 }
+
+func AdminGetClusterConfig(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+    keys := c.StringSlice(FlagKey)
+    if len(keys) == 0 {
+        return fmt.Errorf("flag %q is required", FlagKey)
+    }
+
+    filteredKeys := make([]string, 0, len(keys))
+    for _, k := range keys {
+        if trimmed := strings.TrimSpace(k); trimmed != "" {
+            filteredKeys = append(filteredKeys, trimmed)
+        }
+    }
+	resp, err := adminClient.GetDynamicConfigurations(ctx, &adminservice.GetDynamicConfigurationsRequest{
+		DynamicConfigKeys: keys,
+	})
+	if err != nil {
+		return fmt.Errorf("error getting cluster config: %s", err)
+	}
+	prettyPrintJSONObject(c, resp)
+	return nil
+}
