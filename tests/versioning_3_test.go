@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -4141,7 +4141,7 @@ func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
 
 	// Simulate an old SDK polling a sticky task queue without providing normalName
 	stickyTaskQueueWithoutNormalName := &taskqueuepb.TaskQueue{
-		Name:       "sticky-" + uuid.New(),
+		Name:       "sticky-" + uuid.NewString(),
 		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		NormalName: "",
 	}

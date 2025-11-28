@@ -42,7 +42,7 @@ const (
 	// WorkerDeploymentVersionIdDelimiterV31 will be deleted once we stop supporting v31 version string fields
 	// in external and internal APIs. Until then, both delimiters are banned in deployment name. All
 	// deprecated version string fields in APIs keep using the old delimiter. Workflow SA uses new delimiter.
-	WorkerDeploymentVersionIdDelimiterV31   = "."
+	WorkerDeploymentVersionIDDelimiterV31   = "."
 	WorkerDeploymentVersionWorkflowIDEscape = "|"
 
 	// Prefixes, Delimeters and Keys that are used in the internal entity workflows backing worker-versioning
@@ -164,9 +164,9 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 		if b == "" {
 			return nil, serviceerror.NewInvalidArgumentf("versioned worker must have build id")
 		}
-		if strings.Contains(d, WorkerDeploymentVersionWorkflowIDDelimeter) || strings.Contains(d, WorkerDeploymentVersionIdDelimiterV31) {
+		if strings.Contains(d, WorkerDeploymentVersionWorkflowIDDelimeter) || strings.Contains(d, WorkerDeploymentVersionIDDelimiterV31) {
 			// TODO: allow '.' once we get rid of v31 stuff
-			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIdDelimiterV31)
+			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31)
 		}
 		return &deploymentpb.Deployment{
 			SeriesName: d,
@@ -425,9 +425,9 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 		return serviceerror.NewInvalidArgument("deployment name cannot be empty")
 	}
 	// TODO: remove '.' restriction once the v31 version strings are completely cleaned from external and internal API
-	if strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIdDelimiterV31) ||
+	if strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIDDelimiterV31) ||
 		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIdDelimiterV31, WorkerDeploymentVersionWorkflowIDDelimeter)
+		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIDDelimiterV31, WorkerDeploymentVersionWorkflowIDDelimeter)
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
@@ -458,6 +458,7 @@ func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion, m
 
 // ValidateDeploymentVersionFields is a helper that verifies if the fields within a
 // Worker Deployment Version are valid
+// nolint:staticcheck (better to be consistent and use if conditions rather than a switch in the function itself)
 func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
@@ -477,8 +478,8 @@ func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLength
 
 	// deploymentName cannot have "."
 	// TODO: remove this restriction once the old version strings are completely cleaned from external and internal API
-	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionIdDelimiterV31) {
-		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionIdDelimiterV31)
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionIDDelimiterV31) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionIDDelimiterV31)
 	}
 	// deploymentName cannot have ":"
 	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionWorkflowIDDelimeter) {
@@ -921,7 +922,7 @@ func WorkerDeploymentVersionToStringV31(v *deploymentspb.WorkerDeploymentVersion
 	if v == nil {
 		return UnversionedVersionId
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiterV31 + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionIDDelimiterV31 + v.GetBuildId()
 }
 
 func WorkerDeploymentVersionToStringV32(v *deploymentspb.WorkerDeploymentVersion) string {
@@ -946,7 +947,7 @@ func ExternalWorkerDeploymentVersionToStringV31(v *deploymentpb.WorkerDeployment
 	if v == nil {
 		return UnversionedVersionId
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiterV31 + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionIDDelimiterV31 + v.GetBuildId()
 }
 
 func ExternalWorkerDeploymentVersionFromStringV31(s string) *deploymentpb.WorkerDeploymentVersion {
@@ -967,11 +968,11 @@ func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploy
 	if s == UnversionedVersionId {
 		return nil, nil
 	}
-	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiterV31)
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionIDDelimiterV31)
 	// Also try parsing via the v32 delimiter in case user is using an old CLI/SDK but passing new version strings.
 	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
 	if !found && !found32 {
-		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIdDelimiterV31, s)
+		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31, s)
 	}
 	if found && found32 && len(before32) < len(before) {
 		// choose the values based on the delimiter appeared first to ensure that deployment name does not contain any of the banned delimiters
