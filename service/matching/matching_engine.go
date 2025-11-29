@@ -2039,8 +2039,28 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					tqWorkerDeploymentData.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionData)
 				}
 				for buildID, versionData := range req.GetUpsertVersionsData() {
+					existing := tqWorkerDeploymentData.Versions[buildID]
+					// Skip if existing version data has a higher revision number to avoid stale writes.
+					// Equal revision number is accepted for now because we may roll back the workflow version
+					// and stop incrementing the revision number.
+					if existing != nil && existing.GetRevisionNumber() > versionData.GetRevisionNumber() {
+						continue
+					}
 					tqWorkerDeploymentData.Versions[buildID] = versionData
 					changed = true
+					if versionData.GetDeleted() {
+						// Remove the version from the old deployment data format if present.
+						//nolint:staticcheck // SA1019 deprecated versions will clean up later
+						for idx, oldVersions := range deploymentData.GetVersions() {
+							if oldVersions.GetVersion().GetDeploymentName() == req.GetDeploymentName() &&
+								oldVersions.GetVersion().GetBuildId() == buildID {
+								//nolint:staticcheck // SA1019 deprecated versions will clean up later
+								deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+								changed = true
+								break
+							}
+						}
+					}
 				}
 
 				if removed := removeDeploymentVersions(
@@ -2085,6 +2105,10 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 						tqWorkerDeploymentData,
 					)
 				}
+
+				if cleanupOldDeletedVersions(tqWorkerDeploymentData) {
+					changed = true
+				}
 			}
 		}
 		if !changed {
@@ -2098,6 +2122,20 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		return nil, err
 	}
 	return &matchingservice.SyncDeploymentUserDataResponse{Version: version, RoutingConfigChanged: applyUpdatesToRoutingConfig}, nil
+}
+
+func cleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData) bool {
+	cleaned := false
+	for buildID, versionData := range deploymentData.Versions {
+		// TODO: improve this logic to remove even more old versions if we're reaching the limit of max versions per task queue.
+		// max versions per task queue is not implemented yet but we should have it because as of now a task queue can be polled from
+		// numerous deployment versions (accross different deployments) and that leads to a very large user data size.
+		if versionData.GetDeleted() && versionData.GetUpdateTime().AsTime().Before(time.Now().Add(-time.Hour*24*30)) {
+			delete(deploymentData.Versions, buildID)
+			cleaned = true
+		}
+	}
+	return cleaned
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(

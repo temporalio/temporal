@@ -596,8 +596,13 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 		// Build pending routing config with the updated ramping version
 		// Initialize for both sync and async modes to simplify state update logic
+		// Ensure CurrentDeploymentVersion is populated from deprecated field if needed for backward compatibility
+		currentDeploymentVersion := d.State.RoutingConfig.CurrentDeploymentVersion
+		if currentDeploymentVersion == nil {
+			currentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(d.State.RoutingConfig.CurrentVersion)
+		}
 		pendingRoutingConfig := &deploymentpb.RoutingConfig{
-			CurrentDeploymentVersion:            d.State.RoutingConfig.CurrentDeploymentVersion,
+			CurrentDeploymentVersion:            currentDeploymentVersion,
 			CurrentVersion:                      d.State.RoutingConfig.CurrentVersion,
 			RampingDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newRampingVersion),
 			RampingVersion:                      newRampingVersion,
@@ -1033,10 +1038,15 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 		// Build pending routing config with the updated current version
 		// Initialize for both sync and async modes to simplify state update logic
+		// Ensure RampingDeploymentVersion is populated from deprecated field if needed for backward compatibility
+		rampingDeploymentVersion := d.State.RoutingConfig.RampingDeploymentVersion
+		if rampingDeploymentVersion == nil {
+			rampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(d.State.RoutingConfig.RampingVersion)
+		}
 		pendingRoutingConfig := &deploymentpb.RoutingConfig{
 			CurrentDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newCurrentVersion),
 			CurrentVersion:                      newCurrentVersion,
-			RampingDeploymentVersion:            d.State.RoutingConfig.RampingDeploymentVersion,
+			RampingDeploymentVersion:            rampingDeploymentVersion,
 			RampingVersion:                      d.State.RoutingConfig.RampingVersion,
 			RampingVersionPercentage:            d.State.RoutingConfig.RampingVersionPercentage,
 			CurrentVersionChangedTime:           updateTime,

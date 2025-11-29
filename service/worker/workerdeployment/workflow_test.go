@@ -38,6 +38,9 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Run("v1", func(t *testing.T) {
 		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: AsyncSetCurrentAndRamping})
 	})
+	t.Run("v2", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: VersionDataRevisionNumber})
+	})
 }
 
 func (s *WorkerDeploymentSuite) SetupTest() {
