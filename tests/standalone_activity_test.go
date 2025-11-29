@@ -1037,7 +1037,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion(
 			},
 			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
 				protorequire.ProtoEqual(t, defaultFailure, response.GetInfo().GetLastFailure())
-				protorequire.ProtoEqual(t, &failurepb.Failure{}, response.GetFailure())
+				require.Nil(t, response.GetFailure())
 			},
 		},
 	}
@@ -1523,7 +1523,7 @@ func (s *standaloneActivityTestSuite) validateFailure(
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	protorequire.ProtoEqual(t, defaultFailure, info.GetLastFailure())
-	protorequire.ProtoEqual(t, &failurepb.Failure{}, activityResp.GetFailure())
+	require.Nil(t, activityResp.GetFailure())
 
 	if expectedHeartbeatDetails != nil {
 		protorequire.ProtoEqual(t, expectedHeartbeatDetails, info.GetHeartbeatDetails())
