@@ -1744,7 +1744,7 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 	)
 	TimerProcessorMaxTimeShift = NewGlobalDurationSetting(
 		"history.timerProcessorMaxTimeShift",
-		1*time.Second,
+		1*time.Millisecond,
 		`TimerProcessorMaxTimeShift is the max shift timer processor can have`,
 	)
 	TimerQueueMaxReaderCount = NewGlobalIntSetting(
