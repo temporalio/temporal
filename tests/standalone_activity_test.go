@@ -727,7 +727,11 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
+			// It's not possible to guarantee (e.g. via NextRetryDelay or RetryPolicy) that a retry
+			// will start with a delay <1s because of the use of TimerProcessorMaxTimeShift in the
+			// timer queue. Therefore we allow 1s for the ActivityDispatchTask to be executed, and
+			// time out the activity 1s into Attempt 2.
+			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 		},
 	})
 	require.NoError(t, err)
@@ -742,7 +746,7 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 			Message: "Retryable failure",
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 				NonRetryable:   false,
-				NextRetryDelay: durationpb.New(1 * time.Millisecond),
+				NextRetryDelay: durationpb.New(1 * time.Second),
 			}},
 		},
 	})
