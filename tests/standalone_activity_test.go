@@ -747,6 +747,8 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 		},
 	})
 	require.NoError(t, err)
+	pollTaskResp, err = s.pollActivityTaskQueue(ctx, taskQueue)
+	require.NoError(t, err)
 
 	// Wait for schedule-to-close timeout.
 	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
