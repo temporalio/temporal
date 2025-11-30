@@ -200,6 +200,8 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 
 	require.NotNil(t, pollResp.GetFailure())
 	protorequire.ProtoEqual(t, failure, pollResp.GetFailure())
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"expected StartToCloseTimeout but is %s", pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
 func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout() {
