@@ -760,7 +760,59 @@ func (s *standaloneActivityTestSuite) TestCompletedActivity_CannotTerminate() {
 	require.Error(t, err)
 }
 
-func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout_WithRetry() {
+func (s *standaloneActivityTestSuite) Test_RetryWithoutScheduleToCloseTimeout() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+
+	// Start activity without ScheduleToCloseTimeout
+	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		ActivityId:   activityID,
+		ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+		Options: &activitypb.ActivityOptions{
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(1 * time.Millisecond),
+				MaximumAttempts: 2,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Attempt 1: fail retryably
+	pollResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, pollResp1.Attempt)
+	_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollResp1.TaskToken,
+		Failure: &failurepb.Failure{
+			Message: "retryable failure",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Attempt 2 should be scheduled
+	pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, pollResp2.Attempt)
+}
+
+func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
