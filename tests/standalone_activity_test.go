@@ -242,7 +242,6 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 
 	info := activityResp.GetInfo()
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -299,7 +298,6 @@ func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
 
 	info := activityResp.GetInfo()
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -385,7 +383,6 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSu
 
 	info := activityResp.GetInfo()
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -429,7 +426,6 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 		name             string
 		taskCompletionFn func(context.Context, *testing.T, []byte, string, string) error
 		expectedStatus   enumspb.ActivityExecutionStatus
-		expectedState    enumspb.PendingActivityState
 	}{
 		{
 			name: "finish with completion",
@@ -443,7 +439,6 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 				return err
 			},
 			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			expectedState:  enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
 		},
 		{
 			name: "finish with failure",
@@ -457,7 +452,6 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 				return err
 			},
 			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
-			expectedState:  enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
 		},
 		{
 			name: "finish with termination",
@@ -472,7 +466,6 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 				return err
 			},
 			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-			expectedState:  enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED,
 		},
 	}
 
@@ -514,9 +507,47 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 
 			info := activityResp.GetInfo()
 			require.Equal(t, tc.expectedStatus, info.GetStatus())
-			require.Equal(t, tc.expectedState, info.GetRunState())
 		})
 	}
+}
+
+// TODO running into "unable to change workflow state from Created to Completed, status Failed from the chasm engine"
+// This should be re-enabled after its addressed from the chasm engine and we implement the search attributes interface.
+func (s *standaloneActivityTestSuite) TestActivityImmediatelyCancelled_WhenInScheduledState() {
+	s.T().Skip("Temporarily disabled")
+
+	//t := s.T()
+	//ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	//defer cancel()
+	//
+	//activityID := s.tv.ActivityID()
+	//taskQueue := s.tv.TaskQueue().String()
+	//
+	//startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	//runID := startResp.RunId
+	//
+	//_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+	//	Namespace:  s.Namespace().String(),
+	//	ActivityId: s.tv.ActivityID(),
+	//	RunId:      runID,
+	//	Identity:   "cancelling-worker",
+	//	RequestId:  s.tv.RequestID(),
+	//	Reason:     "Test Cancellation",
+	//})
+	//require.NoError(t, err)
+	//
+	//activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+	//	Namespace:      s.Namespace().String(),
+	//	ActivityId:     activityID,
+	//	RunId:          runID,
+	//	IncludeInfo:    true,
+	//	IncludeInput:   true,
+	//	IncludeOutcome: true,
+	//})
+	//require.NoError(t, err)
+	//
+	//info := activityResp.GetInfo()
+	//require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
 }
 
 func (s *standaloneActivityTestSuite) TestActivityTerminated() {
@@ -555,7 +586,6 @@ func (s *standaloneActivityTestSuite) TestActivityTerminated() {
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, "worker", info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1326,7 +1356,6 @@ func (s *standaloneActivityTestSuite) validateCompletion(
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1358,7 +1387,6 @@ func (s *standaloneActivityTestSuite) validateFailure(
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())

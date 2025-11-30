@@ -176,11 +176,11 @@ func (h *handler) TerminateActivityExecution(
 	return response, nil
 }
 
-// CancelActivityExecution requests cancellation on a standalone activity execution
-func (h *handler) CancelActivityExecution(
+// RequestCancelActivityExecution requests cancellation on a standalone activity execution
+func (h *handler) RequestCancelActivityExecution(
 	ctx context.Context,
-	req *activitypb.CancelActivityExecutionRequest,
-) (response *activitypb.CancelActivityExecutionResponse, err error) {
+	req *activitypb.RequestCancelActivityExecutionRequest,
+) (response *activitypb.RequestCancelActivityExecutionResponse, err error) {
 	frontendReq := req.GetFrontendRequest()
 
 	ref := chasm.NewComponentRef[*Activity](chasm.EntityKey{

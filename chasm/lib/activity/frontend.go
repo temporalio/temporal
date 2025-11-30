@@ -148,7 +148,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	_, err = h.client.CancelActivityExecution(ctx, &activitypb.CancelActivityExecutionRequest{
+	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})

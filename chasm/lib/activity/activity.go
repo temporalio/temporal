@@ -294,8 +294,8 @@ func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.Activ
 	return heartbeat, nil
 }
 
-func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *activitypb.CancelActivityExecutionRequest) (
-	*activitypb.CancelActivityExecutionResponse, error) {
+func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *activitypb.RequestCancelActivityExecutionRequest) (
+	*activitypb.RequestCancelActivityExecutionResponse, error) {
 	newReqID := req.GetFrontendRequest().GetRequestId()
 	existingReqID := a.GetCancelState().GetRequestId()
 
@@ -306,14 +306,24 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *ac
 				fmt.Sprintf("cancellation already requested with request ID %s", existingReqID))
 		}
 
-		return &activitypb.CancelActivityExecutionResponse{}, nil
+		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
-	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
+	// If in scheduled state, cancel immediately
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		err := TransitionCanceled.Apply(a, ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
+	}
+
+	if err := TransitionCancelRequested.Apply(a, ctx, req.GetFrontendRequest()); err != nil {
 		return nil, err
 	}
 
-	return &activitypb.CancelActivityExecutionResponse{}, nil
+	return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 }
 
 func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Failure) (bool, time.Duration, error) {

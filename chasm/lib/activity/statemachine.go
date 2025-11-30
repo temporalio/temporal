@@ -6,6 +6,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -286,18 +287,16 @@ var TransitionTerminated = chasm.NewTransition(
 // TransitionCancelRequested affects a transition to CancelRequested status
 var TransitionCancelRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
-		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, // Allow idempotent transition
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-	func(a *Activity, ctx chasm.MutableContext, req *activitypb.CancelActivityExecutionRequest) error {
-		frontendReq := req.GetFrontendRequest()
+	func(a *Activity, ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
 
 		a.CancelState = &activitypb.ActivityCancelState{
-			Identity:    frontendReq.GetIdentity(),
-			RequestId:   req.GetFrontendRequest().GetRequestId(),
-			Reason:      frontendReq.GetReason(),
+			Identity:    req.GetIdentity(),
+			RequestId:   req.GetRequestId(),
+			Reason:      req.GetReason(),
 			RequestTime: timestamppb.New(ctx.Now(a)),
 		}
 
@@ -309,6 +308,7 @@ var TransitionCancelRequested = chasm.NewTransition(
 var TransitionCanceled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskCanceledRequest) error {

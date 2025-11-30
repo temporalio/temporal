@@ -209,6 +209,10 @@ func ValidateStandaloneActivity(
 }
 
 func validateAndNormalizeRequestID(requestID *string, maxIDLengthLimit int) error {
+	if requestID == nil {
+		return serviceerror.NewInvalidArgument("RequestID is required.")
+	}
+
 	if *requestID == "" {
 		// For easy direct API use, we default the request ID here but expect all SDKs and other auto-retrying clients to set it
 		*requestID = uuid.New().String()

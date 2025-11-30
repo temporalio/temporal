@@ -472,12 +472,10 @@ func TestTransitionCancelRequested(t *testing.T) {
 		Attempt: chasm.NewDataField(ctx, attemptState),
 	}
 
-	err := TransitionCancelRequested.Apply(activity, ctx, &activitypb.CancelActivityExecutionRequest{
-		FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
-			RequestId: "cancel-request",
-			Reason:    "Test Cancel Requested",
-			Identity:  "worker",
-		},
+	err := TransitionCancelRequested.Apply(activity, ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		RequestId: "cancel-request",
+		Reason:    "Test Cancel Requested",
+		Identity:  "worker",
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, activity.Status)
