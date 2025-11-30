@@ -457,8 +457,12 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 		retryInterval = backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.Count)
 	}
 
-	deadline := a.ScheduledTime.AsTime().Add(a.GetScheduleToCloseTimeout().AsDuration())
+	scheduleToClose := a.GetScheduleToCloseTimeout().AsDuration()
+	if scheduleToClose == 0 {
+		return true, retryInterval, nil
+	}
 
+	deadline := a.ScheduledTime.AsTime().Add(scheduleToClose)
 	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval, nil
 }
 
