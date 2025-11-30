@@ -199,12 +199,7 @@ func (h *handler) TerminateActivityExecution(
 		(*Activity).handleTerminated,
 		req,
 	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
+	return response, err
 }
 
 // CancelActivityExecution requests cancellation on a standalone activity execution
@@ -226,10 +221,5 @@ func (h *handler) CancelActivityExecution(
 		(*Activity).handleCancellationRequested,
 		req,
 	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
+	return response, err
 }
