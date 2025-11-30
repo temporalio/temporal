@@ -172,3 +172,45 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 	// Reached maximum attempts, timeout the activity
 	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 }
+
+// HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
+type heartbeatTimeoutTaskExecutor struct{}
+
+func newHeartbeatTimeoutTaskExecutor() *heartbeatTimeoutTaskExecutor {
+	return &heartbeatTimeoutTaskExecutor{}
+}
+
+func (e *heartbeatTimeoutTaskExecutor) Validate(
+	ctx chasm.Context,
+	activity *Activity,
+	_ chasm.TaskAttributes,
+	task *activitypb.HeartbeatTimeoutTask,
+) (bool, error) {
+	attempt, err := activity.Attempt.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	valid := (activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) &&
+		attempt.GetCount() == task.Attempt
+	return valid, nil
+}
+
+func (e *heartbeatTimeoutTaskExecutor) Execute(
+	ctx chasm.MutableContext,
+	activity *Activity,
+	_ chasm.TaskAttributes,
+	task *activitypb.HeartbeatTimeoutTask,
+) error {
+	shouldRetry, retryInterval, err := activity.shouldRetry(ctx, 0)
+	if err != nil {
+		return err
+	}
+	if shouldRetry {
+		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
+			retryInterval: retryInterval,
+			failure:       createHeartbeatTimeoutFailure(),
+		})
+	}
+	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_HEARTBEAT)
+}

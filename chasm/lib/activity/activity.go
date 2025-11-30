@@ -471,12 +471,29 @@ func createStartToCloseTimeoutFailure() *failurepb.Failure {
 	}
 }
 
-func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.Payloads) (chasm.NoValue, error) {
+func createHeartbeatTimeoutFailure() *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, enumspb.TIMEOUT_TYPE_HEARTBEAT.String()),
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			},
+		},
+	}
+}
+
+func (a *Activity) RecordHeartbeat(
+	ctx chasm.MutableContext,
+	request *historyservice.RecordActivityTaskHeartbeatRequest,
+) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
 		RecordedTime: timestamppb.New(ctx.Now(a)),
-		Details:      details,
+		Details:      request.HeartbeatRequest.GetDetails(),
 	})
-	return nil, nil
+	return &historyservice.RecordActivityTaskHeartbeatResponse{
+		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		// TODO(dan): ActivityPaused, ActivityReset
+	}, nil
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.ActivityExecutionInfo, error) {
