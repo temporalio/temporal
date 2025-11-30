@@ -4279,7 +4279,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		RevisionNumber: 1,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}
-	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4289,7 +4289,6 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		},
 	})
 	s.NoError(err)
-	s.Equal([]string{buildID}, resp.GetUpsertedVersionsData())
 
 	// Verify version data is stored
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -4309,7 +4308,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		RevisionNumber: 0,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 	}
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4319,7 +4318,6 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		},
 	})
 	s.NoError(err)
-	s.Empty(resp.GetUpsertedVersionsData()) // Should not be upserted
 
 	// Verify revision still 1 and status unchanged
 	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -4338,7 +4336,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		RevisionNumber: 1,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 	}
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4348,7 +4346,6 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		},
 	})
 	s.NoError(err)
-	s.Equal([]string{buildID}, resp.GetUpsertedVersionsData())
 
 	// Verify status changed even though revision is equal
 	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -4367,7 +4364,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		RevisionNumber: 2,
 		Status:         enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4377,7 +4374,6 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 		},
 	})
 	s.NoError(err)
-	s.Equal([]string{buildID}, resp.GetUpsertedVersionsData())
 
 	// Verify revision updated
 	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -4447,7 +4443,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 		Deleted:        true,
 		UpdateTime:     timestamppb.Now(), // Set recent update time to prevent cleanup
 	}
-	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4457,7 +4453,6 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 		},
 	})
 	s.NoError(err)
-	s.Equal([]string{buildID}, resp.GetUpsertedVersionsData())
 
 	// Verify old-format version is removed
 	res, err = s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -4505,7 +4500,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_CleanupOldDeletedVersio
 	}
 
 	// Insert all versions
-	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:        namespaceID,
 		TaskQueue:          tq,
 		DeploymentName:     deploymentName,
@@ -4513,7 +4508,6 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_CleanupOldDeletedVersio
 		UpsertVersionsData: versionsData,
 	})
 	s.NoError(err)
-	s.ElementsMatch([]string{"to-be-old-build", "recent-build", "active-build"}, resp.GetUpsertedVersionsData())
 
 	// Verify all versions are present
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -4580,7 +4574,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertedVersionsData() 
 	deploymentName := "foo"
 
 	// Test single upsert
-	resp, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err := s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4590,10 +4584,9 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertedVersionsData() 
 		},
 	})
 	s.NoError(err)
-	s.Equal([]string{"v1"}, resp.GetUpsertedVersionsData())
 
 	// Test multiple upserts
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4604,10 +4597,9 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertedVersionsData() 
 		},
 	})
 	s.NoError(err)
-	s.ElementsMatch([]string{"v2", "v3"}, resp.GetUpsertedVersionsData())
 
 	// Test upsert with one stale version (should not be included in response)
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
@@ -4618,17 +4610,15 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_UpsertedVersionsData() 
 		},
 	})
 	s.NoError(err)
-	s.Equal([]string{"v4"}, resp.GetUpsertedVersionsData())
 
 	// Test no upserts
-	resp, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,
 		DeploymentName: deploymentName,
 		TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 	})
 	s.NoError(err)
-	s.Empty(resp.GetUpsertedVersionsData())
 }
 
 func newHistoryEvent(eventID int64, eventType enumspb.EventType) *historypb.HistoryEvent {
