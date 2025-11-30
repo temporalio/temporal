@@ -15,6 +15,7 @@ var HistoryModule = fx.Module(
 		newScheduleToStartTimeoutTaskExecutor,
 		newScheduleToCloseTimeoutTaskExecutor,
 		newStartToCloseTimeoutTaskExecutor,
+		newHeartbeatTimeoutTaskExecutor,
 		newHandler,
 		newLibrary,
 	),
