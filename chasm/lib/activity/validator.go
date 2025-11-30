@@ -1,8 +1,6 @@
 package activity
 
 import (
-	"fmt"
-
 	"github.com/google/uuid"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -44,7 +42,7 @@ func ValidateAndNormalizeActivityAttributes(
 	runTimeout *durationpb.Duration,
 ) error {
 	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
-		return fmt.Errorf("invalid TaskQueue: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+		return err
 	}
 
 	if activityID == "" {
@@ -55,7 +53,7 @@ func ValidateAndNormalizeActivityAttributes(
 	}
 
 	if err := validateActivityRetryPolicy(namespaceID, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
-		return fmt.Errorf("invalid ActivityRetryPolicy: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+		return err
 	}
 
 	if len(activityID) > maxIDLengthLimit {
@@ -164,10 +162,10 @@ func normalizeAndValidateTimeouts(
 	return nil
 }
 
-// ValidateStandaloneActivity validates and normalizes the standalone activity specific attributes.
+// validateAndNormalizeStartActivityExecutionRequest validates and normalizes the standalone activity specific attributes.
 // IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
 // (i.e., when incoming request can potentially be retried), clone the params first before passing it in.
-func ValidateStandaloneActivity(
+func validateAndNormalizeStartActivityExecutionRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -221,22 +219,12 @@ func validateAndNormalizeRequestID(requestID *string, maxIDLengthLimit int) erro
 }
 
 func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
-	if req.GetIdConflictPolicy() == enumspb.ACTIVITY_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
-		req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE {
-		return serviceerror.NewInvalidArgument("Invalid ActivityIdReusePolicy: ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE " +
-			"cannot be used together with ActivityIdConflictPolicy ACTIVITY_ID_CONFLICT_POLICY_TERMINATE_EXISTING")
-	}
-
 	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
 		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
 	if req.GetIdConflictPolicy() == enumspb.ACTIVITY_ID_CONFLICT_POLICY_UNSPECIFIED {
 		req.IdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL
-	}
-
-	if req.GetOnConflictOptions().GetAttachCompletionCallbacks() && !req.GetOnConflictOptions().GetAttachRequestId() {
-		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
 	}
 
 	return nil
@@ -275,13 +263,6 @@ func validateAndNormalizeSearchAttributes(
 	saValidator *searchattribute.Validator,
 ) error {
 	namespaceName := req.GetNamespace()
-
-	unaliased, err := searchattribute.UnaliasFields(saMapperProvider, req.SearchAttributes, namespaceName)
-	if err != nil {
-		return err
-	}
-
-	req.SearchAttributes.IndexedFields = unaliased.IndexedFields
 
 	if err := saValidator.Validate(req.SearchAttributes, namespaceName); err != nil {
 		return err

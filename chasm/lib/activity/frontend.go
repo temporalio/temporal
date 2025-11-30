@@ -184,7 +184,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		return nil, err
 	}
 
-	err = ValidateStandaloneActivity(
+	err = validateAndNormalizeStartActivityExecutionRequest(
 		req,
 		dynamicconfig.BlobSizeLimitError.Get(h.dc),
 		dynamicconfig.BlobSizeLimitWarn.Get(h.dc),

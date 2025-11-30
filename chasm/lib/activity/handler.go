@@ -22,8 +22,7 @@ var (
 
 	// TODO this will change once we rebase on main
 	businessIDConflictPolicyMap = map[enumspb.ActivityIdConflictPolicy]chasm.BusinessIDConflictPolicy{
-		enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL:               chasm.BusinessIDConflictPolicyFail,
-		enumspb.ACTIVITY_ID_CONFLICT_POLICY_TERMINATE_EXISTING: chasm.BusinessIDConflictPolicyTermiateExisting,
+		enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL: chasm.BusinessIDConflictPolicyFail,
 	}
 )
 

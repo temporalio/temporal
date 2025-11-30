@@ -606,7 +606,7 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 				ActivityId: s.tv.ActivityID(),
 				RunId:      runID,
 				Identity:   "cancelling-worker",
-				RequestId:  uuid.New().String(),
+				RequestId:  uuid.NewString(),
 				Reason:     "Test Cancellation",
 			})
 			require.NoError(t, err)

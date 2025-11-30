@@ -8,6 +8,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -211,6 +212,7 @@ func TestValidateFailures(t *testing.T) {
 				tc.priority,
 				durationpb.New(0))
 			require.Error(t, err)
+			require.IsType(t, &serviceerror.InvalidArgument{}, err)
 		})
 	}
 }
@@ -225,7 +227,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 		Input:        payloads.EncodeString("test-input"),
 	}
 
-	err := ValidateStandaloneActivity(
+	err := validateAndNormalizeStartActivityExecutionRequest(
 		req,
 		defaultBlobSizeLimitError,
 		defaultBlobSizeLimitWarn,
@@ -234,6 +236,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 		nil,
 		nil)
 	require.Error(t, err)
+	require.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
 
 func TestValidateStandAloneInputTooLarge(t *testing.T) {
@@ -246,7 +249,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 		Input:        payloads.EncodeString(string(make([]byte, 1000))),
 	}
 
-	err := ValidateStandaloneActivity(
+	err := validateAndNormalizeStartActivityExecutionRequest(
 		req,
 		defaultBlobSizeLimitError,
 		defaultBlobSizeLimitWarn,
@@ -255,6 +258,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 		nil,
 		nil)
 	require.Error(t, err)
+	require.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
 
 func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
@@ -270,7 +274,7 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		Input:        payload,
 	}
 
-	err := ValidateStandaloneActivity(
+	err := validateAndNormalizeStartActivityExecutionRequest(
 		req,
 		func(ns string) int { return payloadSize + 1 },
 		func(ns string) int { return payloadSize },
@@ -290,7 +294,7 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 		RequestId:    "test-request-id",
 	}
 
-	err := ValidateStandaloneActivity(
+	err := validateAndNormalizeStartActivityExecutionRequest(
 		req,
 		defaultBlobSizeLimitError,
 		defaultBlobSizeLimitWarn,
@@ -302,29 +306,6 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)
 	require.Equal(t, enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL, req.IdConflictPolicy)
-}
-
-func TestValidateStandAlone_IDPolicyMismatched(t *testing.T) {
-	req := &workflowservice.StartActivityExecutionRequest{
-		ActivityId:       defaultActivityID,
-		ActivityType:     &commonpb.ActivityType{Name: defaultActivityType},
-		Options:          &defaultActivityOptions,
-		Namespace:        "default",
-		RequestId:        "test-request-id",
-		IdReusePolicy:    enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		IdConflictPolicy: enumspb.ACTIVITY_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
-	}
-
-	err := ValidateStandaloneActivity(
-		req,
-		defaultBlobSizeLimitError,
-		defaultBlobSizeLimitWarn,
-		log.NewNoopLogger(),
-		defaultMaxIDLengthLimit,
-		nil,
-		nil)
-
-	require.Error(t, err)
 }
 
 func TestModifiedActivityTimeouts(t *testing.T) {
@@ -457,6 +438,7 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 
 			if tc.isErr {
 				require.Error(t, err)
+				require.IsType(t, &serviceerror.InvalidArgument{}, err)
 				return
 			}
 
