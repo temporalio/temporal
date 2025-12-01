@@ -3122,6 +3122,11 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 		return nil, err
 	}
 
+	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
+		metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("CreateSchedule"))
+		metrics.HeaderSize.With(metricsHandler).Record(int64(startWorkflow.GetHeader().Size()))
+	}
+
 	// size limits will be validated on history. note that the start workflow request is
 	// embedded in the schedule, which is in the scheduler input. so if the scheduler itself
 	// doesn't exceed the limit, the started workflows should be safe as well.
@@ -3975,6 +3980,11 @@ func (wh *WorkflowHandler) updateScheduleWorkflow(
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
+	}
+
+	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
+		metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("UpdateSchedule"))
+		metrics.HeaderSize.With(metricsHandler).Record(int64(startWorkflow.GetHeader().Size()))
 	}
 
 	input := &schedulespb.FullUpdateRequest{
