@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -451,6 +452,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	skipVersioningCheck bool,
 	updateReg update.Registry,
+	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -475,6 +477,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
 	if updateReg != nil {
 		suggestContinueAsNew = cmp.Or(suggestContinueAsNew, updateReg.SuggestContinueAsNew())
+	}
+
+	if m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW && targetDeploymentVersion != nil {
+		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
+			currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName {
+			suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
+		}
 	}
 
 	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)

@@ -114,6 +114,7 @@ func NewWorkflowWithSignal(
 			nil,
 			nil,
 			false,
+			nil,
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history

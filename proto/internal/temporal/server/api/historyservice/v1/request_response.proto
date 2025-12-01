@@ -247,6 +247,9 @@ message RecordWorkflowTaskStartedRequest {
     // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
     // that may arise due to stale routing configs in task queue partitions.
     int64 task_dispatch_revision_number = 12;
+    // Target worker deployment version according to matching when starting the task.
+    // Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
+    temporal.api.deployment.v1.WorkerDeploymentVersion target_deployment_version = 13;
 }
 
 message RecordWorkflowTaskStartedResponse {

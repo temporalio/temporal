@@ -7,6 +7,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -66,6 +67,8 @@ type (
 		recycleToken          func(*internalTask)
 		removeFromMatcher     atomic.Pointer[func()]
 
+		targetWorkerDeploymentVersion *deploymentspb.WorkerDeploymentVersion
+
 		// These fields are for use by matcherData:
 		waitableMatchResult
 		forwardCtx context.Context // non-nil for sync match task only
@@ -107,6 +110,7 @@ func newInternalTaskForSyncMatch(
 	info *persistencespb.TaskInfo,
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	taskDispatchRevisionNumber int64,
+	targetVersion *deploymentspb.WorkerDeploymentVersion,
 ) *internalTask {
 	var redirectInfo *taskqueuespb.BuildIdRedirectInfo
 	// if this task is not forwarded, source can only be history
@@ -124,11 +128,12 @@ func newInternalTaskForSyncMatch(
 				TaskId: syncMatchTaskId,
 			},
 		},
-		forwardInfo:       forwardInfo,
-		source:            source,
-		redirectInfo:      redirectInfo,
-		responseC:         make(chan taskResponse, 1),
-		effectivePriority: priorityKey(info.GetPriority().GetPriorityKey()),
+		forwardInfo:                   forwardInfo,
+		source:                        source,
+		redirectInfo:                  redirectInfo,
+		responseC:                     make(chan taskResponse, 1),
+		effectivePriority:             priorityKey(info.GetPriority().GetPriorityKey()),
+		targetWorkerDeploymentVersion: targetVersion,
 	}
 }
 

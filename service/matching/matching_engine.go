@@ -2996,6 +2996,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
 		Stamp:                      task.event.Data.GetStamp(),
+		TargetDeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromVersion(task.targetWorkerDeploymentVersion),
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -3055,6 +3056,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		// TODO(carlydf): Do I send target version here? probably not but just double check
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)

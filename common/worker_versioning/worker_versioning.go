@@ -669,13 +669,13 @@ func calcRampThreshold(id string) float64 {
 //revive:disable-next-line:cognitive-complexity,confusing-results,function-result-limit,cyclomatic
 func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) (
 	*deploymentspb.WorkerDeploymentVersion, // current version
-	int64,                                  // current revision number
-	time.Time,                              // current update time
+	int64, // current revision number
+	time.Time, // current update time
 	*deploymentspb.WorkerDeploymentVersion, // ramping version
-	bool,                                   // is ramping (ramping_since_time != nil)
-	float32,                                // ramp percentage
-	int64,                                  // ramping revision number
-	time.Time,                              // ramping update time
+	bool, // is ramping (ramping_since_time != nil)
+	float32, // ramp percentage
+	int64, // ramping revision number
+	time.Time, // ramping update time
 ) {
 	if deployments == nil {
 		return nil, 0, time.Time{}, nil, false, 0, 0, time.Time{}

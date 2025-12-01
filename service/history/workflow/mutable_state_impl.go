@@ -3192,12 +3192,13 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	updateReg update.Registry,
 	skipVersioningCheck bool,
+	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg, targetDeploymentVersion)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
