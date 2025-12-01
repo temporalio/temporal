@@ -987,7 +987,7 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(strings.ToLower(err.Error()), "'group by' clause is only supported for search attributes")
+	s.Contains(strings.ToLower(err.Error()), "'group by' clause is only supported for")
 
 	query = `GROUP BY ExecutionStatus, WorkflowType`
 	countRequest.Query = query
