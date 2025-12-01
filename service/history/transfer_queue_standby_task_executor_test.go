@@ -320,7 +320,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 		),
 		VisibilityTimestamp: s.now,
 		TaskID:              s.mustGenerateTaskID(),
-		Info:                &persistencespb.ChasmTaskInfo{},
+		Info: &persistencespb.ChasmTaskInfo{
+			ArchetypeId: tests.ArchetypeID,
+		},
 	}
 
 	wfCtx := historyi.NewMockWorkflowContext(s.controller)
@@ -328,7 +330,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 
 	mockCache := wcache.NewMockCache(s.controller)
 	mockCache.EXPECT().GetOrCreateChasmExecution(
-		gomock.Any(), s.mockShard, gomock.Any(), execution, chasm.ArchetypeAny, gomock.Any(),
+		gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, gomock.Any(),
 	).Return(wfCtx, wcache.NoopReleaseFn, nil).AnyTimes()
 
 	//nolint:revive // unchecked-type-assertion
@@ -799,6 +801,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		Namespace:       tests.ParentNamespace.String(),
 		Execution:       parentExecution,
 		SkipForceReload: true,
+		Archetype:       chasm.WorkflowArchetype,
 	})).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())

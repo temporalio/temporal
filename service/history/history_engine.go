@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -419,7 +420,7 @@ func (e *historyEngineImpl) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
-	return api.GetOrPollMutableState(ctx, e.shardContext, request, e.workflowConsistencyChecker, e.eventNotifier)
+	return api.GetOrPollWorkflowMutableState(ctx, e.shardContext, request, e.workflowConsistencyChecker, e.eventNotifier)
 }
 
 // PollMutableState retrieves the mutable state of the workflow execution with long polling
@@ -428,7 +429,7 @@ func (e *historyEngineImpl) PollMutableState(
 	request *historyservice.PollMutableStateRequest,
 ) (*historyservice.PollMutableStateResponse, error) {
 
-	response, err := api.GetOrPollMutableState(
+	response, err := api.GetOrPollWorkflowMutableState(
 		ctx,
 		e.shardContext,
 		&historyservice.GetMutableStateRequest{
@@ -762,8 +763,13 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
-func (e *historyEngineImpl) ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error {
-	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName)
+func (e *historyEngineImpl) ReplicateVersionedTransition(
+	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
+	artifact *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) error {
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, archetypeID, artifact, sourceClusterName)
 }
 
 func (e *historyEngineImpl) ImportWorkflowExecution(
@@ -964,10 +970,12 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	namespaceUUID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	archetypeID chasm.ArchetypeID,
 ) (retError error) {
 	return refreshworkflow.Invoke(
 		ctx,
 		definition.NewWorkflowKey(namespaceUUID.String(), execution.WorkflowId, execution.RunId),
+		archetypeID,
 		e.shardContext,
 		e.workflowConsistencyChecker,
 	)

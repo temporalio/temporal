@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -656,6 +657,7 @@ func AdminHandlerProvider(
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	matchingClient resource.MatchingClient,
+	chasmRegistry *chasm.Registry,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -684,6 +686,7 @@ func AdminHandlerProvider(
 		healthServer,
 		eventSerializer,
 		timeSource,
+		chasmRegistry,
 		taskCategoryRegistry,
 		matchingClient,
 	}

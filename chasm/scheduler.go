@@ -1,9 +1,8 @@
 package chasm
 
-// Scheduler's library and component name constants are exported here, as they
-// are used as part of old VisibilityManager queries (e.g., visibility queries
-// out-of-band of CHASM). Most components shouldn't have to define, or export,
-// these names.
+// This file defines constants for Scheduler which is special to the CHASM framework
+// because it shares the same ID space with Workflow for backwards compatibility reasons.
+
 const (
 	SchedulerLibraryName   = "scheduler"
 	SchedulerComponentName = "scheduler"
