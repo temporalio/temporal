@@ -211,7 +211,6 @@ func TestValidateFailures(t *testing.T) {
 				tc.options,
 				tc.priority,
 				durationpb.New(0))
-			require.Error(t, err)
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
 		})
@@ -236,7 +235,6 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 		defaultMaxIDLengthLimit,
 		nil,
 		nil)
-	require.Error(t, err)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -259,7 +257,6 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 		defaultMaxIDLengthLimit,
 		nil,
 		nil)
-	require.Error(t, err)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -440,7 +437,6 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 				tc.runTimeout)
 
 			if tc.isErr {
-				require.Error(t, err)
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
 				return
