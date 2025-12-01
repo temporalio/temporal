@@ -709,7 +709,7 @@ func (s *standaloneActivityTestSuite) TestCompletedActivity_CannotTerminate() {
 	require.Error(t, err)
 }
 
-func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
+func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout_WithRetry() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -771,7 +771,7 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 }
 
 // TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is started.
-func (s *standaloneActivityTestSuite) Test_StartToCloseTimeout() {
+func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	t := s.T()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
