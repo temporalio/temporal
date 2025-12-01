@@ -212,7 +212,8 @@ func TestValidateFailures(t *testing.T) {
 				tc.priority,
 				durationpb.New(0))
 			require.Error(t, err)
-			require.IsType(t, &serviceerror.InvalidArgument{}, err)
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
 		})
 	}
 }
@@ -236,7 +237,8 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 		nil,
 		nil)
 	require.Error(t, err)
-	require.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalidArgErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgErr)
 }
 
 func TestValidateStandAloneInputTooLarge(t *testing.T) {
@@ -258,7 +260,8 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 		nil,
 		nil)
 	require.Error(t, err)
-	require.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalidArgErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgErr)
 }
 
 func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
@@ -438,7 +441,8 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 
 			if tc.isErr {
 				require.Error(t, err)
-				require.IsType(t, &serviceerror.InvalidArgument{}, err)
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
 				return
 			}
 
