@@ -181,7 +181,9 @@ type ActivityState struct {
 	// Priority metadata.
 	Priority *v1.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
 	// Set if activity cancelation was requested.
-	CancelState   *ActivityCancelState `protobuf:"bytes,11,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
+	CancelState *ActivityCancelState `protobuf:"bytes,11,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
+	// Activity ID passed in the original start request.
+	BusinessId    string `protobuf:"bytes,12,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -291,6 +293,13 @@ func (x *ActivityState) GetCancelState() *ActivityCancelState {
 		return x.CancelState
 	}
 	return nil
+}
+
+func (x *ActivityState) GetBusinessId() string {
+	if x != nil {
+		return x.BusinessId
+	}
+	return ""
 }
 
 type ActivityCancelState struct {
@@ -815,7 +824,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xef\x06\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\x90\a\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
 	"\n" +
@@ -829,7 +838,9 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x0escheduled_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12c\n" +
-	"\fcancel_state\x18\v \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\"\xa7\x01\n" +
+	"\fcancel_state\x18\v \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\x12\x1f\n" +
+	"\vbusiness_id\x18\f \x01(\tR\n" +
+	"businessId\"\xa7\x01\n" +
 	"\x13ActivityCancelState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +

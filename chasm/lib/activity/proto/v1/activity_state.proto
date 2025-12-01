@@ -96,6 +96,9 @@ message ActivityState {
 
     // Set if activity cancelation was requested.
     ActivityCancelState cancel_state = 11;
+
+    // Activity ID passed in the original start request.
+    string business_id = 12;
 }
 
 message ActivityCancelState {
