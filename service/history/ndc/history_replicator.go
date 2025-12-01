@@ -214,17 +214,15 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 
 func (r *HistoryReplicatorImpl) backfillHistoryEventsQuotaRequest(ctx context.Context, request *historyi.BackfillHistoryEventsRequest) quotas.Request {
 	eventCount := 1
-	if request != nil {
-		totalEvents := 0
-		for _, batch := range request.Events {
-			totalEvents += len(batch)
-		}
-		if request.NewEvents != nil {
-			totalEvents += len(request.NewEvents)
-		}
-		if totalEvents > 0 {
-			eventCount = totalEvents
-		}
+	totalEvents := 0
+	for _, batch := range request.Events {
+		totalEvents += len(batch)
+	}
+	if request.NewEvents != nil {
+		totalEvents += len(request.NewEvents)
+	}
+	if totalEvents > 0 {
+		eventCount = totalEvents
 	}
 	tokenCount := eventCount / backfillHistoryEventsPerToken
 
