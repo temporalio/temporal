@@ -351,8 +351,10 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 	require.NoError(t, err)
 
 	info := activityResp.GetInfo()
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
+		"expected status=Canceled but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -408,8 +410,10 @@ func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
 	require.NoError(t, err)
 
 	info := activityResp.GetInfo()
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
+		"expected status=Canceled but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -494,8 +498,10 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSu
 	require.NoError(t, err)
 
 	info := activityResp.GetInfo()
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
+		"expected status=Canceled but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -664,8 +670,10 @@ func (s *standaloneActivityTestSuite) TestActivityTerminated() {
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, info.GetStatus(),
+		"expected status=Terminated but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, "worker", info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1466,8 +1474,10 @@ func (s *standaloneActivityTestSuite) startAndValidateActivity(
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, startResponse.RunId, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus(),
+		"expected status=Running but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState(),
+		"expected run state=Scheduled but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Nil(t, activityResp.Outcome)
 	require.Nil(t, info.GetLastFailure())
@@ -1510,8 +1520,10 @@ func (s *standaloneActivityTestSuite) pollActivityTaskAndValidate(
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus(),
+		"expected status=Running but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState(),
+		"expected run state=Started but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, s.tv.WorkerIdentity(), info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1543,8 +1555,10 @@ func (s *standaloneActivityTestSuite) validateCompletion(
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, info.GetStatus(),
+		"expected status=Completed but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1575,8 +1589,10 @@ func (s *standaloneActivityTestSuite) validateFailure(
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, info.GetStatus(),
+		"expected status=Failed but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
