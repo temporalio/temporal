@@ -298,11 +298,6 @@ func ValidateStartWorkflowExecutionRequest(
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	// // TODO (Shivam): Move this call to frontend.
-	// if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
-	// 	return err
-	// }
-
 	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err
 	}

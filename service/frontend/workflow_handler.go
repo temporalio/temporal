@@ -489,6 +489,11 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	// Validate versioning override, if present.
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return nil, err
+	}
+
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
@@ -2014,11 +2019,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
+	namespaceName := namespace.Name(request.GetNamespace())
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
@@ -2031,7 +2032,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateRetryPolicy(namespaceEntry.Name(), request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
 		return nil, err
 	}
 
@@ -2040,7 +2041,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if err := wh.validateWorkflowIdReusePolicy(
-		namespaceEntry.Name(),
+		namespaceName,
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy,
 	); err != nil {
@@ -2060,7 +2061,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceEntry.Name())
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2074,17 +2075,21 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateLinks(namespaceEntry.Name(), request.GetLinks()); err != nil {
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
 		return nil, err
 	}
 
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
 	// Validate versioning override, if present.
 	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
 		return nil, err
 	}
 
 	resp, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId:            namespaceEntry.ID().String(),
+		NamespaceId:            namespaceID.String(),
 		SignalWithStartRequest: request,
 	})
 
@@ -4531,14 +4536,14 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	visibilityQuery := request.GetVisibilityQuery()
 
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
 	input := &batchspb.BatchOperationInput{
 		Request:     request,
-		NamespaceId: namespaceEntry.ID().String(),
+		NamespaceId: namespaceID.String(),
 	}
 
 	var identity string
@@ -4623,7 +4628,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	_, err = wh.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
-			namespaceEntry.ID().String(),
+			namespaceID.String(),
 			startReq,
 			nil,
 			nil,
@@ -5720,7 +5725,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 		return nil, serviceerror.NewInvalidArgumentf("error parsing UpdateMask: %s", err.Error())
 	}
 
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
@@ -5729,7 +5734,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	}
 
 	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
-		NamespaceId:   namespaceEntry.ID().String(),
+		NamespaceId:   namespaceID.String(),
 		UpdateRequest: request,
 	})
 	if err != nil {
