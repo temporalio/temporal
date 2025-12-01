@@ -225,6 +225,9 @@ func (r *HistoryReplicatorImpl) backfillHistoryEventsQuotaRequest(ctx context.Co
 		eventCount = totalEvents
 	}
 	tokenCount := eventCount / backfillHistoryEventsPerToken
+	if tokenCount == 0 {
+		tokenCount = 1
+	}
 
 	nsName, err := r.namespaceRegistry.GetNamespaceName(namespace.ID(request.NamespaceID))
 	if err != nil {
