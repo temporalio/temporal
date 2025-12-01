@@ -653,7 +653,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
@@ -670,7 +670,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetPendingChildIds().Return(nil).Times(1)
 	mockMutableState.EXPECT().ApplySnapshot(versionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State)
-	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), false, gomock.Any(), nil).Return(nil).Times(1)
+	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), false, chasm.WorkflowArchetypeID, gomock.Any(), nil).Return(nil).Times(1)
 	mockTaskRefresher.EXPECT().
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 2,
@@ -678,7 +678,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		}), nil, false,
 		).Return(nil).Times(1)
 
-	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
+	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
 	s.NoError(err)
 }
 
@@ -744,7 +744,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
@@ -760,10 +760,10 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
-	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), true, gomock.Any(), nil).Return(nil).Times(1)
+	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), true, chasm.WorkflowArchetypeID, gomock.Any(), nil).Return(nil).Times(1)
 	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), mockMutableState, gomock.Any()).Return(nil).Times(1)
 
-	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
+	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
 	s.NoError(err)
 }
 
@@ -832,7 +832,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
@@ -849,7 +849,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	}).AnyTimes()
 	mockMutableState.EXPECT().GetPendingChildIds().Return(nil).Times(1)
 	mockMutableState.EXPECT().ApplyMutation(versionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes().StateMutation)
-	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), false, gomock.Any(), nil).Return(nil).Times(1)
+	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), false, chasm.WorkflowArchetypeID, gomock.Any(), nil).Return(nil).Times(1)
 	mockTaskRefresher.EXPECT().
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 2,
@@ -857,7 +857,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		}), nil, false,
 		).Return(nil).Times(1)
 
-	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
+	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
 	s.NoError(err)
 }
 
@@ -911,7 +911,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
@@ -925,8 +925,9 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 
 	mockTransactionManager.EXPECT().CreateWorkflow(
 		gomock.Any(),
+		chasm.WorkflowArchetypeID,
 		gomock.AssignableToTypeOf(&WorkflowImpl{}),
-	).DoAndReturn(func(ctx context.Context, wf Workflow) error {
+	).DoAndReturn(func(ctx context.Context, _ chasm.ArchetypeID, wf Workflow) error {
 		// Capture localMutableState from the workflow
 		localMutableState := wf.GetMutableState()
 
@@ -935,7 +936,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 
 		return nil
 	}).Times(1)
-	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
+	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
 	s.NoError(err)
 
 }
@@ -1005,7 +1006,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
@@ -1020,7 +1021,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		RunId: s.runID,
 	}).AnyTimes()
 
-	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
+	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
 	s.IsType(&serviceerrors.SyncState{}, err)
 }
 

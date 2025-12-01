@@ -94,6 +94,7 @@ type (
 		taskCategoryRegistry         tasks.TaskCategoryRegistry
 		dlqMetricsEmitter            *persistence.DLQMetricsEmitter
 		chasmEngine                  chasm.Engine
+		chasmRegistry                *chasm.Registry
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -129,6 +130,7 @@ type (
 		TaskCategoryRegistry         tasks.TaskCategoryRegistry
 		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
 		ChasmEngine                  chasm.Engine
+		ChasmRegistry                *chasm.Registry
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -1881,10 +1883,8 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	err = engine.RefreshWorkflowTasks(
 		ctx,
 		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.RunId,
-		},
+		execution,
+		request.GetArchetypeId(),
 	)
 
 	if err != nil {
@@ -2244,6 +2244,7 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		ctx,
 		request,
 		shardID,
+		h.chasmRegistry,
 		h.persistenceExecutionManager,
 		h.persistenceVisibilityManager,
 		h.logger,

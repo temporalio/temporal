@@ -27,6 +27,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -2505,6 +2506,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 		VersionedTransition: nil,
 		VersionHistories:    nil,
 		TargetClusterId:     int32(cluster.TestAlternativeClusterInitialFailoverVersion),
+		ArchetypeId:         chasm.WorkflowArchetypeID,
 	}
 	resp := &adminservice.SyncWorkflowStateResponse{
 		VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{
@@ -2523,7 +2525,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 		gomock.Any(),
 		req,
 	).Return(resp, nil)
-	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(gomock.Any(), resp.VersionedTransitionArtifact, cluster.TestCurrentClusterName).Return(nil)
+	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(gomock.Any(), chasm.WorkflowArchetypeID, resp.VersionedTransitionArtifact, cluster.TestCurrentClusterName).Return(nil)
 
 	// prepare closed workflow
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
@@ -2795,7 +2797,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 		gomock.Any(),
 	).Return(startEvent, nil).AnyTimes()
 
-	err = s.historyEngine.RefreshWorkflowTasks(metrics.AddMetricsContext(context.Background()), tests.NamespaceID, execution)
+	err = s.historyEngine.RefreshWorkflowTasks(metrics.AddMetricsContext(context.Background()), tests.NamespaceID, execution, chasm.WorkflowArchetypeID)
 	s.NoError(err)
 }
 
