@@ -1490,6 +1490,76 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.Contains(t, statusErr.Message(), "activity task not found")
 	})
 
+	t.Run("StaleAttemptToken", func(t *testing.T) {
+		// Start an activity with retries, fail first attempt, then try to heartbeat with old token.
+		// Use NextRetryDelay=1s to ensure the retry dispatch happens within test timeout.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+				ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
+				RetryPolicy: &commonpb.RetryPolicy{
+					MaximumAttempts: 3,
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll and get task token for attempt 1
+		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, attempt1Resp.Attempt)
+
+		// Fail the task with NextRetryDelay to control retry timing
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: attempt1Resp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					NonRetryable:   false,
+					NextRetryDelay: durationpb.New(1 * time.Second),
+				}},
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll to get attempt 2 (ensures retry has happened)
+		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, attempt2Resp.Attempt)
+
+		// Heartbeat with the attempt 2 token
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: attempt2Resp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Try to heartbeat with the old attempt 1 token - should fail with NotFound
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: attempt1Resp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.Error(t, err)
+		statusErr := serviceerror.ToStatus(err)
+		require.Equal(t, codes.NotFound, statusErr.Code())
+		require.Contains(t, statusErr.Message(), "activity task not found")
+	})
+
 	t.Run("ResponseIncludesCancelRequested", func(t *testing.T) {
 		// Start activity, worker accepts task, request cancellation, worker heartbeats.
 		// Verify: heartbeat response has cancel_requested=true.
