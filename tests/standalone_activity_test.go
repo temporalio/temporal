@@ -1459,7 +1459,6 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 	})
 
 	t.Run("StaleToken", func(t *testing.T) {
-		t.Skip("TODO(dan): implement task token validation for heartbeat/complete/fail etc")
 		// Start an activity and get a valid task token, then complete it
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
