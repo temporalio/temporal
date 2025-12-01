@@ -760,7 +760,7 @@ func (s *standaloneActivityTestSuite) TestCompletedActivity_CannotTerminate() {
 	require.Error(t, err)
 }
 
-func (s *standaloneActivityTestSuite) Test_RetryWithoutScheduleToCloseTimeout() {
+func (s *standaloneActivityTestSuite) TestRetryWithoutScheduleToCloseTimeout() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
