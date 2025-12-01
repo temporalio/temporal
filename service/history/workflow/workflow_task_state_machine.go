@@ -519,7 +519,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// Create WorkflowTaskStartedEvent only if WorkflowTaskScheduledEvent was created.
 	// (it wasn't created for transient/speculative WT).
 	var startedEvent *historypb.HistoryEvent
-	if workflowTaskScheduledEventCreated {
+	if workflowTaskScheduledEventCreated { // TODO(carlydf): put reasons into history event
 		startedEvent = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
 			requestID,
