@@ -222,7 +222,6 @@ func newVisibilityManagerFromDataStoreConfig(
 		metrics.VisibilityPluginNameTag(visStore.GetName()),
 		metrics.VisibilityIndexNameTag(visStore.GetIndexName()),
 		logger,
-		searchAttributesProvider,
 		searchAttributesMapperProvider,
 		chasmRegistry,
 	), nil
