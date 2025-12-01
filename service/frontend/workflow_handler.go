@@ -493,6 +493,11 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	// Validate versioning override, if present.
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return nil, err
+	}
+
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
@@ -2082,6 +2087,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	// Validate versioning override, if present.
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return nil, err
+	}
 
 	resp, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId:            namespaceID.String(),
@@ -2117,6 +2126,10 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
+	if err := validatePostResetOperationInputs(request.GetPostResetOperations()); err != nil {
+		return nil, err
+	}
+
 	enums.SetDefaultResetReapplyType(&request.ResetReapplyType)
 	if _, validType := enumspb.ResetReapplyType_name[int32(request.GetResetReapplyType())]; !validType {
 		return nil, serviceerror.NewInternalf("unknown reset reapply type: %v", request.GetResetReapplyType())
@@ -2136,6 +2149,22 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	}
 
 	return &workflowservice.ResetWorkflowExecutionResponse{RunId: resp.GetRunId()}, nil
+}
+
+// validatePostResetOperationInputs validates the optional post reset operation inputs.
+func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
+	for _, operation := range postResetOperations {
+		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
+			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
+			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+				return err
+			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
+		}
+	}
+	return nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
@@ -4708,12 +4737,12 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errRequestNotSet
 	}
 
-	if err := batcher.ValidateBatchOperation(request); err != nil {
-		return nil, err
-	}
-
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
+	}
+
+	if err := batcher.ValidateBatchOperation(request); err != nil {
+		return nil, err
 	}
 
 	// Validate concurrent batch operation
@@ -4788,10 +4817,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
-	}
-
-	if err := batcher.ValidateBatchOperation(request); err != nil {
-		return nil, err
 	}
 
 	inputPayload, err := payloads.Encode(input)
@@ -5925,16 +5950,17 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("error parsing UpdateMask: %s", err.Error())
 	}
-	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
 		return nil, err
 	}
-	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
+	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
 		return nil, err
 	}
 
 	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
-		NamespaceId:   namespaceId.String(),
+		NamespaceId:   namespaceID.String(),
 		UpdateRequest: request,
 	})
 	if err != nil {
