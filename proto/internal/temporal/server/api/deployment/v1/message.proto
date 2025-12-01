@@ -112,7 +112,10 @@ message VersionLocalState {
     // Arbitrary user-provided metadata attached to this version.
     temporal.api.deployment.v1.VersionMetadata metadata = 8;
 
-    bool started_deployment_workflow = 9;
+  // Deployment workflow should always be running before starting the version workflow.
+  // We should not start the deployment workflow. If we cannot find the deployment workflow when signaling, it means a bug and we should fix it.
+  // Deprecated.
+  bool started_deployment_workflow = 9 [deprecated = true];
 
     // Key: Task Queue Name
     map<string, TaskQueueFamilyData> task_queue_families = 10;

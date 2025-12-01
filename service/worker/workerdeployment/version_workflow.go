@@ -92,6 +92,12 @@ func VersionWorkflow(
 }
 
 func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("Panic in version listenToSignals", "panic", r)
+		}
+	}()
+
 	// Fetch signal channels
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	drainageStatusSignalChannel := workflow.GetSignalChannel(ctx, SyncDrainageSignalName)
@@ -204,17 +210,21 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	// First ensure deployment workflow is running
-	if !d.VersionState.StartedDeploymentWorkflow {
-		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
-			DeploymentName: d.VersionState.Version.DeploymentName,
-			RequestId:      d.newUUID(ctx),
-		}).Get(ctx, nil)
-		if err != nil {
-			return err
+	// Deployment workflow should always be running before starting the version workflow.
+	// We should not start the deployment workflow. If we cannot find the deployment workflow when signaling, it means a bug and we should fix it.
+	if !d.hasMinVersion(VersionDataRevisionNumber) {
+		// First ensure deployment workflow is running
+		if !d.VersionState.StartedDeploymentWorkflow {
+			activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+			err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
+				DeploymentName: d.VersionState.Version.DeploymentName,
+				RequestId:      d.newUUID(ctx),
+			}).Get(ctx, nil)
+			if err != nil {
+				return err
+			}
+			d.VersionState.StartedDeploymentWorkflow = true
 		}
-		d.VersionState.StartedDeploymentWorkflow = true
 	}
 
 	// Listen to signals in a different goroutine to make business logic clearer
@@ -324,11 +334,13 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		d.lock.Unlock()
 	}()
 
-	// wait until deployment workflow started
-	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
-	if err != nil {
-		d.logger.Error("Update canceled before worker deployment workflow started")
-		return serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+	if !d.hasMinVersion(VersionDataRevisionNumber) {
+		// wait until deployment workflow started
+		err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
+		if err != nil {
+			d.logger.Error("Update canceled before worker deployment workflow started")
+			return serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+		}
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -596,6 +608,18 @@ func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersio
 
 //nolint:staticcheck // SA1019
 func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.SyncVersionStateResponse, error) {
+	fmt.Println("handleSyncState history size", workflow.GetInfo(ctx).GetCurrentHistoryLength(), workflow.GetInfo(ctx).GetCurrentHistorySize())
+	if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+		// History is too large, do not accept new syncs until wf CaNs.
+		return nil, temporal.NewApplicationError(errLongHistory, errLongHistory)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("Panic in handleSyncState", "panic", r, "version", d.VersionState.Version)
+		}
+	}()
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -613,11 +637,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		return nil, err
 	}
 
-	// wait until deployment workflow started
-	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
-	if err != nil {
-		d.logger.Error("Update canceled before worker deployment workflow started")
-		return nil, serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+	if !d.hasMinVersion(VersionDataRevisionNumber) {
+		// wait until deployment workflow started
+		err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
+		if err != nil {
+			d.logger.Error("Update canceled before worker deployment workflow started")
+			return nil, serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+		}
 	}
 
 	state := d.GetVersionState()
@@ -767,6 +793,12 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 }
 
 func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("Panic in version refreshDrainageInfo", "panic", r)
+		}
+	}()
+
 	if d.VersionState.GetDrainageInfo().GetStatus() != enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 		return // only refresh when status is draining
 	}
@@ -811,8 +843,6 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 		d.logger.Error("could not get version drainage status", tag.Error(err))
 		return
 	}
-
-	d.metrics.Counter(metrics.WorkerDeploymentVersionVisibilityQueryCount.Name()).Inc(1)
 
 	if d.hasMinVersion(VersionDataRevisionNumber) {
 		// Need to lock so there is no race condition with setCurrent/Ramping
@@ -1024,6 +1054,12 @@ func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routin
 
 	// Start async propagation - DON'T WAIT
 	workflow.Go(ctx, func(gCtx workflow.Context) {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("Panic in async", "panic", r, "version")
+			}
+		}()
+
 		d.executeAndTrackAsyncPropagation(gCtx, batches, routingConfig, versionData)
 
 		if routingConfig != nil && withRevisionNumber {
@@ -1043,6 +1079,12 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 	routingConfig *deploymentpb.RoutingConfig,
 	versionData *deploymentspb.WorkerDeploymentVersionData,
 ) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("Panic in executeAndTrackAsyncPropagation", "panic", r)
+		}
+	}()
+
 	// Number of batches to check might be less than the original batches because some TQ might not update.
 	var taskQueueMaxVersionsToCheck []map[string]int64
 
@@ -1202,6 +1244,12 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Contex
 
 	// Start async propagation - DON'T WAIT
 	workflow.Go(ctx, func(gCtx workflow.Context) {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("Panic in async registration", "panic", r)
+			}
+		}()
+
 		// We only sync to the root partition and don't wait for all partitions propagation, this is because
 		// the task queue partition initiating the registration itself is responsible to block until it sees the version in user data.
 		d.executePropagationBatch(gCtx, batch, args.GetRoutingConfig(), versionData)
