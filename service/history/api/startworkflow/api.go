@@ -125,7 +125,8 @@ func (s *Starter) prepare(ctx context.Context) error {
 		s.shardContext.GetMetricsHandler(),
 	)
 
-	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
+	// TODO (Shivam): Can this validation come somewhere in the frontend?
+	err := api.ValidateStartWorkflowExecutionRequest(request, s.shardContext, s.namespace, "StartWorkflowExecution")
 	if err != nil {
 		return err
 	}

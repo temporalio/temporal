@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -298,9 +297,12 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
-	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
-		return err
-	}
+
+	// // TODO (Shivam): Move this call to frontend.
+	// if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+	// 	return err
+	// }
+
 	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err
 	}
