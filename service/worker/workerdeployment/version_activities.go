@@ -49,6 +49,7 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	ctx context.Context,
 	input *deploymentspb.SyncDeploymentVersionUserDataRequest,
 ) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
+	//fmt.Printf("syncing task queue userdata rn %d for deployment version %s\n", input.GetUpdateRoutingConfig().GetRevisionNumber(), input.GetVersion().GetBuildId())
 	logger := activity.GetLogger(ctx)
 
 	errs := make(chan error)
@@ -112,6 +113,7 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 }
 
 func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context.Context, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
+	//fmt.Printf("checking userdata propagation\n")
 	logger := activity.GetLogger(ctx)
 
 	errs := make(chan error)

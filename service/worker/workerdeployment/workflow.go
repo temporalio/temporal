@@ -47,9 +47,9 @@ type (
 		stateChanged  bool
 		signalHandler *SignalHandler
 		forceCAN      bool
-		// workflowVersion is set at workflow start based on the dynamic config of the worker
-		// that completes the first task. It remains constant for the lifetime of the run and
-		// only updates when the workflow performs continue-as-new.
+		// Tracks the version of the deployment workflow when a particular run of a workflow starts base on the dynamic config of the
+		// worker who completes the first task of the workflow. `workflowVersion` remains the same until the workflow CaNs when it
+		// will get another chance to pick the latest manager version.
 		workflowVersion DeploymentWorkflowVersion
 	}
 )
@@ -148,6 +148,7 @@ func (d *WorkflowRunner) handlePropagationComplete(completion *deploymentspb.Pro
 		d.logger.Error("Received propagation complete signal, but no in-progress propagations found",
 			"revision", revisionNumber,
 			"build_id", buildID)
+		return
 	}
 
 	// Remove this revision from in-progress tracking for this build
@@ -304,18 +305,6 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	// to-be-deprecated
-	if err := workflow.SetUpdateHandlerWithOptions(
-		ctx,
-		AddVersionToWorkerDeployment,
-		d.handleAddVersionToWorkerDeployment,
-		workflow.UpdateHandlerOptions{
-			Validator: d.validateAddVersionToWorkerDeployment,
-		},
-	); err != nil {
-		return err
-	}
-
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		DeleteVersion,
@@ -393,6 +382,27 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
 }
 
+func (d *WorkflowRunner) preUpdateChecks(ctx workflow.Context) error {
+	err := d.ensureNotDeleted()
+	if err != nil {
+		return err
+	}
+
+	if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+		// History is too large, do not accept new updates until wf CaNs.
+		// Since this needs workflow context we cannot do it in validators.
+		return temporal.NewApplicationError(errLongHistory, errLongHistory)
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) ensureNotDeleted() error {
+	if d.deleteDeployment {
+		return temporal.NewNonRetryableApplicationError(errDeploymentDeleted, errDeploymentDeleted, nil)
+	}
+	return nil
+}
+
 func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
 	if d.State.Versions == nil {
 		return nil
@@ -424,6 +434,10 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 }
 
 func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -483,8 +497,17 @@ func (d *WorkflowRunner) validateDeleteDeployment() error {
 }
 
 func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
-	// Even if the update doesn't change the state we mark it as dirty because of created history events.
-	defer d.setStateChanged()
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
+		d.lock.Unlock()
+	}()
 
 	if len(d.State.Versions) == 0 {
 		d.deleteDeployment = true
@@ -530,12 +553,19 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 }
 
 func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
 	return d.validateStateBeforeAcceptingRampingUpdate(args)
 }
 
 //revive:disable-next-line:cognitive-complexity
 //nolint:staticcheck // deprecated stuff will be cleaned
 func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *deploymentspb.SetRampingVersionArgs) (*deploymentspb.SetRampingVersionResponse, error) {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -746,9 +776,10 @@ func (d *WorkflowRunner) setRamp(
 				)
 			}
 		}
-
-		// Erase summary drainage status immediately, so it is not draining/drained.
-		d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, routingUpdateTime)
+		if !asyncMode {
+			// Erase summary drainage status immediately, so it is not draining/drained.
+			d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, routingUpdateTime)
+		}
 	}
 
 	setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
@@ -811,9 +842,11 @@ func (d *WorkflowRunner) unsetPreviousRamp(
 			return err
 		}
 	}
-	// Set summary drainage status immediately to draining.
-	// We know prevRampingVersion cannot have been current, so it must now be draining
-	d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
+	if !asyncMode {
+		// Set summary drainage status immediately to draining.
+		// We know prevRampingVersion cannot have been current, so it must now be draining
+		d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
+	}
 	return nil
 }
 
@@ -829,6 +862,10 @@ func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.Versio
 }
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
+
 	if _, ok := d.State.Versions[args.Version]; !ok {
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
@@ -876,6 +913,10 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 }
 
 func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -912,10 +953,17 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetManager(args *deployment
 }
 
 func (d *WorkflowRunner) validateSetManager(args *deploymentspb.SetManagerIdentityArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
 	return d.validateStateBeforeAcceptingSetManager(args)
 }
 
 func (d *WorkflowRunner) handleSetManager(ctx workflow.Context, args *deploymentspb.SetManagerIdentityArgs) (*deploymentspb.SetManagerIdentityResponse, error) {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -968,11 +1016,19 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
+
 	return d.validateStateBeforeAcceptingSetCurrent(args)
 }
 
 //nolint:staticcheck // deprecated stuff will be cleaned
 func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentVersionArgs) (*deploymentspb.SetCurrentVersionResponse, error) {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -1118,9 +1174,11 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
 				return nil, err
 			}
-			// Set summary drainage status immediately to draining.
-			// We know prevCurrentVersion cannot have been ramping, so it must now be draining
-			d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
+			if !asyncMode {
+				// Set summary drainage status immediately to draining.
+				// We know prevCurrentVersion cannot have been ramping, so it must now be draining
+				d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
+			}
 		}
 
 		//nolint:staticcheck // deprecated stuff will be cleaned
@@ -1190,28 +1248,6 @@ func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
 		return defaultMaxVersions
 	}
 	return maxVersions
-}
-
-// to-be-deprecated
-func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
-	// Even if the update doesn't change the state we mark it as dirty because of created history events.
-	defer d.setStateChanged()
-
-	maxVersions := d.getMaxVersions(ctx)
-
-	if len(d.State.Versions) >= maxVersions {
-		err := d.tryDeleteVersion(ctx)
-		if err != nil {
-			return temporal.NewApplicationError(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions), errTooManyVersions)
-		}
-	}
-
-	d.State.Versions[args.Version] = &deploymentspb.WorkerDeploymentVersionSummary{
-		Version:    args.Version,
-		CreateTime: args.CreateTime,
-	}
-
-	return nil
 }
 
 func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
