@@ -125,6 +125,11 @@ func (s *Starter) prepare(ctx context.Context) error {
 		s.shardContext.GetMetricsHandler(),
 	)
 
+	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
+	if err != nil {
+		return err
+	}
+
 	if request.RequestEagerExecution {
 		metricsHandler := s.getMetricsHandler()
 		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(1)
