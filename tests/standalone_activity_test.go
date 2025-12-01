@@ -222,7 +222,7 @@ func createDefaultInput() *commonpb.Payloads {
 	}
 }
 
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_NoWait() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -278,7 +278,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NoWait() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateChange() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_WaitAnyStateChange() {
 	// Long poll for any state change. PollActivityTaskQueue is used to cause a state change.
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -365,14 +365,14 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitAnyStateCha
 	require.NoError(t, err)
 }
 
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_WaitCompletion() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_WaitCompletion() {
 	t := s.T()
 	t.Skip("TODO(dan): implement test when RecordActivityTaskCompleted is implemented")
 }
 
 // TODO(dan): add tests that PollActivityExecution can wait for deletion, termination, cancellation etc
 
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_DeadlineExceeded() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_DeadlineExceeded() {
 	t := s.T()
 	originalCtx := testcore.NewContext()
 
@@ -448,7 +448,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_DeadlineExceede
 	require.Empty(t, pollResp.GetInfo())
 }
 
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 	t := s.T()
 	ctx := testcore.NewContext()
 
@@ -540,7 +540,7 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_NotFound() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument() {
 
 	t := s.T()
 	ctx := testcore.NewContext()
