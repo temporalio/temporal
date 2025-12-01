@@ -159,6 +159,9 @@ type Config struct {
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable creation of new schedules on CHASM (V2) engine
+	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -325,7 +328,8 @@ func NewConfig(
 
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
-		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableSchedules:              dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableCHASMSchedulerCreation: dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
