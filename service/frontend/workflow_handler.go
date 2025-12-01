@@ -4515,6 +4515,10 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
+	if err := batcher.ValidateBatchOperation(request); err != nil {
+		return nil, err
+	}
+
 	// Validate concurrent batch operation
 	maxConcurrentBatchOperation := wh.config.MaxConcurrentBatchOperation(request.GetNamespace())
 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
@@ -4587,10 +4591,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
-	}
-
-	if err := batcher.ValidateBatchOperation(request); err != nil {
-		return nil, err
 	}
 
 	inputPayload, err := payloads.Encode(input)
