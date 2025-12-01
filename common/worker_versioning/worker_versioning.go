@@ -510,12 +510,17 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override.GetAutoUpgrade() { // v0.32
 		return nil
 	} else if p := override.GetPinned(); p != nil {
-		if p.GetVersion() == nil {
-			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
+		switch p.GetBehavior() {
+		case workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED:
+			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
+		case workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_KEEP_IF_PINNING:
+			if p.GetIfNotPinning() == workflowpb.VersioningOverride_NON_PINNING_POLICY_UNSPECIFIED {
+				return serviceerror.NewInvalidArgument("must specify non-pinning policy if behavior is 'KEEP_IF_PINNING'")
+			}
 		}
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
-			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
+
 		return nil
 	}
 
@@ -664,13 +669,13 @@ func calcRampThreshold(id string) float64 {
 //revive:disable-next-line:cognitive-complexity,confusing-results,function-result-limit,cyclomatic
 func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) (
 	*deploymentspb.WorkerDeploymentVersion, // current version
-	int64, // current revision number
-	time.Time, // current update time
+	int64,                                  // current revision number
+	time.Time,                              // current update time
 	*deploymentspb.WorkerDeploymentVersion, // ramping version
-	bool, // is ramping (ramping_since_time != nil)
-	float32, // ramp percentage
-	int64, // ramping revision number
-	time.Time, // ramping update time
+	bool,                                   // is ramping (ramping_since_time != nil)
+	float32,                                // ramp percentage
+	int64,                                  // ramping revision number
+	time.Time,                              // ramping update time
 ) {
 	if deployments == nil {
 		return nil, 0, time.Time{}, nil, false, 0, 0, time.Time{}

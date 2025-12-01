@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -104,6 +105,35 @@ func MergeAndApply(
 	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms))
 	if !hasChanges {
 		return mergedOpts, false, nil
+	}
+
+	// Reject 'keep_if_pinning' override if base behavior is not a Pinning Behavior (Pinned or PinnedUntilContinueAsNew)
+	if mergedOpts.GetVersioningOverride().GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_KEEP_IF_PINNING &&
+		!worker_versioning.BehaviorIsPinning(ms.GetExecutionInfo().GetVersioningInfo().GetBehavior()) {
+		nonPinningPolicy := mergedOpts.GetVersioningOverride().GetPinned().GetIfNotPinning()
+		if nonPinningPolicy == workflowpb.VersioningOverride_NON_PINNING_POLICY_REJECT {
+			return nil,
+				false,
+				serviceerror.NewFailedPreconditionf("rejecting 'keep_if_pinning' override because 'non_pinning_policy' is 'REJECT' and behavior for workflow with id %v is '%s'",
+					ms.GetExecutionInfo().GetWorkflowId(),
+					ms.GetExecutionInfo().GetVersioningInfo().GetBehavior().String(),
+				)
+		}
+	}
+
+	// If the requested override is pinned and omitted optional pinned version, fill in the current pinned version if it exists,
+	// or error if no pinned version exists.
+	if mergedOpts.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
+		mergedOpts.GetVersioningOverride().GetPinned().GetVersion() == nil {
+		currentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(workflow.GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo()))
+		if worker_versioning.BehaviorIsPinning(workflow.GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo())) {
+			mergedOpts.GetVersioningOverride().GetPinned().Version = currentVersion
+		} else {
+			return nil, false, serviceerror.NewFailedPreconditionf("must specify a specific pinned override version because workflow with id %v has behavior %s and is not yet pinned to any version",
+				ms.GetExecutionInfo().GetWorkflowId(),
+				ms.GetExecutionInfo().GetVersioningInfo().GetBehavior().String(),
+			)
+		}
 	}
 
 	unsetOverride := false
