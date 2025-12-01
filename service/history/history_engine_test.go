@@ -5455,6 +5455,10 @@ func (s *engineSuite) TestGetHistory() {
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
+	// This test was written when SendRawHistoryBetweenInternalServices was false by default.
+	// Set it explicitly to false to maintain the original test behavior.
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return false }
+
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 	newRunID := uuid.New()
 

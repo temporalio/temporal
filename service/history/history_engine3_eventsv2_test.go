@@ -25,9 +25,9 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -162,6 +162,7 @@ func (s *engine3Suite) TearDownTest() {
 }
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
+	serializer := serialization.NewSerializer()
 	fakeHistory := []*historypb.HistoryEvent{
 		{
 			EventId:   int64(1),
@@ -186,9 +187,16 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
+	historyBlob, err := serializer.SerializeEvents(fakeHistory)
+	s.NoError(err)
 
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: fakeHistory,
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         historyBlob.Data,
+			},
+		},
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
@@ -198,10 +206,6 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
-
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
-		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
 	namespaceID := tests.NamespaceID
 	we := &commonpb.WorkflowExecution{
@@ -258,7 +262,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken, _ = ms.GetCurrentBranchToken()
-	expectedResponse.History = &historypb.History{Events: fakeHistory}
+	expectedResponse.RawHistoryBytes = [][]byte{historyBlob.Data}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
