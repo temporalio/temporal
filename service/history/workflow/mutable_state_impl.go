@@ -162,7 +162,7 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
-		chasmNodeSizes  map[string]int // chasm node path -> size in bytes
+		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -532,6 +532,16 @@ func NewMutableStateFromDB(
 
 	mutableState.mustInitHSM()
 
+	// Track chasm node size even if chasm is not enabled,
+	// because those nodes are still stored in the mutable state,
+	// and should be taken into account when deciding if execution
+	// should be terminated based on mutable state size.
+	for key, node := range dbRecord.ChasmNodes {
+		nodeSize := len(key) + node.Size()
+		mutableState.approximateSize += nodeSize
+		mutableState.chasmNodeSizes[key] = nodeSize
+	}
+
 	if shard.GetConfig().EnableChasm() {
 		var err error
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
@@ -544,11 +554,6 @@ func NewMutableStateFromDB(
 		)
 		if err != nil {
 			return nil, err
-		}
-		for key, node := range dbRecord.ChasmNodes {
-			nodeSize := node.Size()
-			mutableState.approximateSize += len(key) + nodeSize
-			mutableState.chasmNodeSizes[key] = nodeSize
 		}
 	}
 
@@ -6792,7 +6797,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		delete(ms.chasmNodeSizes, nodePath)
 	}
 	for nodePath, node := range chasmNodesMutation.UpdatedNodes {
-		newSize := node.Size()
+		newSize := len(nodePath) + node.Size()
 		ms.approximateSize += newSize - ms.chasmNodeSizes[nodePath]
 		ms.chasmNodeSizes[nodePath] = newSize
 	}
