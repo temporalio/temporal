@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -720,7 +720,11 @@ func (d *WorkflowRunner) setRamp(
 				return err
 			}
 			if isMissingTaskQueues {
-				return serviceerror.NewFailedPrecondition(ErrRampingVersionDoesNotHaveAllTaskQueues)
+				newRampingVersionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(newRampingVersion)
+				return serviceerror.NewFailedPreconditionf(
+					ErrRampingVersionDoesNotHaveAllTaskQueues,
+					worker_versioning.WorkerDeploymentVersionToStringV32(newRampingVersionObj),
+				)
 			}
 		}
 
@@ -814,13 +818,14 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 	// deployment workflow because that's the source of truth for routing config.
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if d.State.RoutingConfig.CurrentVersion == args.Version || d.State.RoutingConfig.RampingVersion == args.Version {
+		versionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(args.Version)
 		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
+		return serviceerror.NewFailedPreconditionf(ErrVersionIsCurrentOrRamping, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj))
 	}
 
 	// Ignore the manager identity check if the delete operation is initiated by the server internally
 	if !args.GetServerDelete() && d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
+		return serviceerror.NewFailedPreconditionf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity)
 	}
 	return nil
 }
@@ -833,7 +838,7 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 		Identity:         args.Identity,
 		DeploymentName:   d.DeploymentName,
 		Version:          args.Version,
-		RequestId:        uuid.New(),
+		RequestId:        uuid.NewString(),
 		SkipDrainage:     args.SkipDrainage,
 		AsyncPropagation: d.hasMinVersion(AsyncSetCurrentAndRamping),
 	}).Get(ctx, &res)
@@ -1012,7 +1017,11 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			return nil, err
 		}
 		if isMissingTaskQueues {
-			return nil, serviceerror.NewFailedPrecondition(ErrCurrentVersionDoesNotHaveAllTaskQueues)
+			newCurrentVersionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(newCurrentVersion)
+			return nil, serviceerror.NewFailedPreconditionf(
+				ErrCurrentVersionDoesNotHaveAllTaskQueues,
+				worker_versioning.WorkerDeploymentVersionToStringV32(newCurrentVersionObj),
+			)
 		}
 	}
 
@@ -1330,7 +1339,7 @@ func (d *WorkflowRunner) startVersion(ctx workflow.Context, args *deploymentspb.
 func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-		return uuid.New()
+		return uuid.NewString()
 	}).Get(&val)
 	return val
 }

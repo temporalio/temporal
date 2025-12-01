@@ -81,6 +81,17 @@ func (r *Registry) ComponentFqnByID(id uint32) (string, bool) {
 	return fqn, ok
 }
 
+// ComponentIDByFqn converts fully qualified component type name to component type ID.
+// This method should only be used by CHASM framework internal code,
+// NOT CHASM library developers.
+func (r *Registry) ComponentIDByFqn(fqn string) (uint32, bool) {
+	rc, ok := r.componentByType[fqn]
+	if !ok {
+		return 0, false
+	}
+	return rc.componentID, true
+}
+
 // ComponentIDFor converts registered component instance to component type ID.
 // This method should only be used by CHASM framework internal code,
 // NOT CHASM library developers.

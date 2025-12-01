@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -89,12 +90,16 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		RunId:      task.GetRunID(),
 	}
 
-	weContext, release, err := t.cache.GetOrCreateChasmEntity(
+	if task.ArchetypeID == chasm.UnspecifiedArchetypeID {
+		task.ArchetypeID = chasm.WorkflowArchetypeID
+	}
+
+	weContext, release, err := t.cache.GetOrCreateChasmExecution(
 		ctx,
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
-		chasm.ArchetypeAny, // Retention time logic works on all Archetypes.
+		task.ArchetypeID,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -214,13 +219,13 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 ) error {
 	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(timer.Type)
 	if !ok {
-		return queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", timer.Type))
+		return queueserrors.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", timer.Type))
 	}
 	smt, err := def.Deserialize(timer.Data, hsm.TaskAttributes{Deadline: deadline})
 	if err != nil {
 		return fmt.Errorf(
 			"%w: %w",
-			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", timer.Type)),
+			queueserrors.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", timer.Type)),
 			err,
 		)
 	}

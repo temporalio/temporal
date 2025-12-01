@@ -12,6 +12,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -302,6 +303,7 @@ func (r *HistoryReplicatorImpl) doApplyBackfillEvents(
 			task.getNamespaceID().String(),
 			task.getWorkflowID(),
 			task.getRunID(),
+			chasm.WorkflowArchetypeID,
 			task.getVersionedTransition(),
 			nil,
 		)
@@ -334,6 +336,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 				task.getNamespaceID().String(),
 				task.getWorkflowID(),
 				task.getRunID(),
+				chasm.WorkflowArchetypeID,
 				task.getVersionedTransition(),
 				mutableState.GetExecutionInfo().VersionHistories,
 			)
@@ -583,6 +586,7 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 
 	err = r.transactionMgr.CreateWorkflow(
 		ctx,
+		chasm.WorkflowArchetypeID,
 		NewWorkflow(
 			r.clusterMetadata,
 			wfContext,
@@ -631,6 +635,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 				newExecutionInfo.WorkflowId,
 				newExecutionState.RunId,
 			),
+			chasm.WorkflowArchetypeID,
 			r.logger,
 			r.shardContext.GetThrottledLogger(),
 			r.shardContext.GetMetricsHandler(),
@@ -647,6 +652,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	err = r.transactionMgr.UpdateWorkflow(
 		ctx,
 		isRebuilt,
+		chasm.WorkflowArchetypeID,
 		targetWorkflow,
 		newWorkflow,
 	)
@@ -879,6 +885,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 
 	err = r.transactionMgr.CreateWorkflow(
 		ctx,
+		chasm.WorkflowArchetypeID,
 		targetWorkflow,
 	)
 	if err != nil {

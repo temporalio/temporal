@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/protocol"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -240,7 +239,7 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 		handler.effects)
 
 	if len(rejectedUpdateIDs) > 0 {
-		softassert.Sometimes(handler.logger).Warn(
+		handler.logger.Warn(
 			"Workflow task completed w/o processing updates.",
 			tag.WorkflowNamespaceID(wfKey.NamespaceID),
 			tag.WorkflowID(wfKey.WorkflowID),
@@ -374,21 +373,12 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 		}
 		if upd == nil {
 			// Update was not found in the registry and can't be resurrected.
-			softassert.Sometimes(handler.logger).Debug("update lost and cannot be resurrected",
-				tag.WorkflowID(handler.mutableState.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(handler.mutableState.GetExecutionState().RunId),
-				tag.NewStringTag("protocol-instance-id", message.ProtocolInstanceId))
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
 				serviceerror.NewNotFoundf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId))
 		}
 
 		if err := upd.OnProtocolMessage(message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
-			softassert.Sometimes(handler.logger).Debug("update failed",
-				tag.WorkflowID(handler.mutableState.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(handler.mutableState.GetExecutionState().RunId),
-				tag.NewStringTag("protocol-instance-id", message.ProtocolInstanceId),
-				tag.NewStringTag("error", err.Error()))
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 		}
@@ -552,7 +542,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
 		ai.GetScheduledEventId(),
-		uuid.New(),
+		uuid.NewString(),
 		handler.identity,
 		stamp,
 		nil,
@@ -719,7 +709,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 	cronBackoff := handler.mutableState.GetCronBackoffDuration()
 	var newExecutionRunID string
 	if cronBackoff != backoff.NoBackoff {
-		newExecutionRunID = uuid.New()
+		newExecutionRunID = uuid.NewString()
 	}
 
 	// Always add workflow completed event to this one
@@ -781,7 +771,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 
 	var newExecutionRunID string
 	if retryBackoff != backoff.NoBackoff || cronBackoff != backoff.NoBackoff {
-		newExecutionRunID = uuid.New()
+		newExecutionRunID = uuid.NewString()
 	}
 
 	// Always add workflow failed event
@@ -893,7 +883,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED, err)
 	}
 
-	cancelRequestID := uuid.New()
+	cancelRequestID := uuid.NewString()
 	event, _, err := handler.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, cancelRequestID, attr, targetNamespaceID,
 	)
@@ -1178,7 +1168,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		return nil, handler.terminateWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, err)
 	}
 
-	signalRequestID := uuid.New() // for deduplicate
+	signalRequestID := uuid.NewString() // for deduplicate
 	event, _, err := handler.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, signalRequestID, attr, targetNamespaceID,
 	)

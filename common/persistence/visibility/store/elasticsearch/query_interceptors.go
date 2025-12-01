@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -61,7 +62,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 
 	switch usage {
 	case query.FieldNameFilter:
-		if fieldName == searchattribute.TemporalNamespaceDivision {
+		if fieldName == sadefs.TemporalNamespaceDivision {
 			ni.seenNamespaceDivision = true
 		}
 	case query.FieldNameSorter:
@@ -73,10 +74,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 			)
 		}
 	case query.FieldNameGroupBy:
-		if fieldName != searchattribute.ExecutionStatus {
+		if fieldName != sadefs.ExecutionStatus {
 			return "", query.NewConverterError(
 				"'group by' clause is only supported for %s search attribute",
-				searchattribute.ExecutionStatus,
+				sadefs.ExecutionStatus,
 			)
 		}
 	}
@@ -97,7 +98,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 			return nil, err
 		}
 
-		if name == searchattribute.ScheduleID && fieldName == searchattribute.WorkflowID {
+		if name == sadefs.ScheduleID && fieldName == sadefs.WorkflowID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
@@ -112,18 +113,18 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 
 func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 	switch name {
-	case searchattribute.StartTime, searchattribute.CloseTime, searchattribute.ExecutionTime:
+	case sadefs.StartTime, sadefs.CloseTime, sadefs.ExecutionTime:
 		if nanos, isNumber := value.(int64); isNumber {
 			value = time.Unix(0, nanos).UTC().Format(time.RFC3339Nano)
 		}
-	case searchattribute.ExecutionStatus:
+	case sadefs.ExecutionStatus:
 		if status, isNumber := value.(int64); isNumber {
 			if _, ok := enumspb.WorkflowExecutionStatus_name[int32(status)]; !ok {
 				return nil, query.NewConverterError("invalid value for search attribute %s: %v", name, value)
 			}
 			value = enumspb.WorkflowExecutionStatus(status).String()
 		}
-	case searchattribute.ExecutionDuration:
+	case sadefs.ExecutionDuration:
 		if durationStr, isString := value.(string); isString {
 			duration, err := query.ParseExecutionDurationStr(durationStr)
 			if err != nil {

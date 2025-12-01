@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -129,7 +129,7 @@ func (notifier *NotifierImpl) WatchHistoryEvent(
 	identifier definition.WorkflowKey) (string, chan *Notification, error) {
 
 	channel := make(chan *Notification, 1)
-	subscriberID := uuid.New()
+	subscriberID := uuid.NewString()
 	subscribers := map[string]chan *Notification{
 		subscriberID: channel,
 	}

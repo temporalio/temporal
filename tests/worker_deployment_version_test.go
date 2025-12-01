@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -515,7 +515,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 	s.Nil(err)
 
 	// Deleting this version should fail since the version is current
-	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionIsCurrentOrRamping, false)
+	s.tryDeleteVersion(ctx, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsCurrentOrRamping, tv1.DeploymentVersionStringV32()), false)
 
 	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
 	// state, the passed context would have timed out making the following operation fail.
@@ -545,7 +545,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	s.Nil(err)
 
 	// Deleting this version should fail since the version is ramping
-	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionIsCurrentOrRamping, false)
+	s.tryDeleteVersion(ctx, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsCurrentOrRamping, tv1.DeploymentVersionStringV32()), false)
 
 	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
 	// state, the passed context would have timed out making the following operation fail.
@@ -622,7 +622,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DrainingVersion() {
 	}, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, false, false)
 
 	// delete should fail
-	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionIsDraining, false)
+	s.tryDeleteVersion(ctx, tv1, fmt.Sprintf(workerdeployment.ErrVersionIsDraining, tv1.DeploymentVersionStringV32()), false)
 
 }
 
@@ -650,7 +650,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 	s.signalAndWaitForDrained(ctx, tv1)
 
 	// Version will bypass "drained" check but delete should still fail since we have active pollers.
-	s.tryDeleteVersion(ctx, tv1, workerdeployment.ErrVersionHasPollers, false)
+	s.tryDeleteVersion(ctx, tv1, fmt.Sprintf(workerdeployment.ErrVersionHasPollers, tv1.DeploymentVersionStringV32()), false)
 }
 
 func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv *testvars.TestVars) {
@@ -936,7 +936,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 
 	// SetCurrent should fail since task_queue_1 does not have a current version than the deployment's existing current version
 	// and it either has a backlog of tasks being present or an add rate > 0.
-	s.EqualError(err, workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues)
+	s.EqualError(err, fmt.Sprintf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv2.DeploymentVersionStringV32()))
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVersion() {
@@ -994,7 +994,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 
 	// SetRampingVersion should fail since task_queue_1 does not have a current version than the deployment's existing current version
 	// and it either has a backlog of tasks being present or an add rate > 0.
-	s.EqualError(err, workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues)
+	s.EqualError(err, fmt.Sprintf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv2.DeploymentVersionStringV32()))
 }
 
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetRampingVersion() {
@@ -1439,7 +1439,7 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 
 	// start batch update-options operation
 	pinnedOverride := s.makePinnedOverride(tv)
-	batchJobId := uuid.New()
+	batchJobID := uuid.NewString()
 
 	// unpause the activities in both workflows with batch unpause
 	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
@@ -1452,13 +1452,13 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 			},
 		},
 		Executions: workflows,
-		JobId:      batchJobId,
+		JobId:      batchJobID,
 		Reason:     "test",
 	})
 	s.NoError(err)
 
 	// wait til batch completes
-	s.checkListAndWaitForBatchCompletion(ctx, batchJobId)
+	s.checkListAndWaitForBatchCompletion(ctx, batchJobID)
 
 	// check all the workflows
 	for _, wf := range workflows {
@@ -1467,10 +1467,10 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 	}
 
 	// unset with empty update opts with mutation mask
-	batchJobId = uuid.New()
+	batchJobID = uuid.NewString()
 	err = s.startBatchJobWithinConcurrentJobLimit(ctx, &workflowservice.StartBatchOperationRequest{
 		Namespace:  s.Namespace().String(),
-		JobId:      batchJobId,
+		JobId:      batchJobID,
 		Reason:     "test",
 		Executions: workflows,
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
@@ -1484,7 +1484,7 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 	s.NoError(err)
 
 	// wait til batch completes
-	s.checkListAndWaitForBatchCompletion(ctx, batchJobId)
+	s.checkListAndWaitForBatchCompletion(ctx, batchJobID)
 
 	// check all the workflows
 	for _, wf := range workflows {

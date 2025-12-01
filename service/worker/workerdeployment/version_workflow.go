@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -17,7 +17,7 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -295,7 +295,7 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
 
 func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttributes {
 	return temporal.NewSearchAttributes(
-		temporal.NewSearchAttributeKeyString(searchattribute.TemporalNamespaceDivision).ValueSet(WorkerDeploymentNamespaceDivision),
+		temporal.NewSearchAttributeKeyString(sadefs.TemporalNamespaceDivision).ValueSet(WorkerDeploymentNamespaceDivision),
 	)
 }
 
@@ -698,7 +698,7 @@ func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescr
 func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-		return uuid.New()
+		return uuid.NewString()
 	}).Get(&val)
 	return val
 }

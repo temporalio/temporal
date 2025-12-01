@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -256,7 +256,7 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_Inco
 func (s *activityReplicatorStateSuite) TestVersionHistory_LocalIsSuperSet() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -304,7 +304,7 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_LocalIsSuperSet() {
 func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_NoResend() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -352,7 +352,7 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_NoR
 func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_Resend() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -409,7 +409,7 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_Res
 func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_LocalLarger() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -465,7 +465,7 @@ func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_LocalLarger() 
 func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_IncomingLarger() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 
@@ -531,7 +531,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	version := int64(100)
 
 	request := &historyservice.SyncActivityRequest{
@@ -544,6 +544,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
@@ -568,7 +569,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	version := int64(100)
 
 	request := &historyservice.SyncActivitiesRequest{
@@ -581,6 +582,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowNotFound() {
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		namespace.NewGlobalNamespaceForTest(
@@ -605,7 +607,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -634,6 +636,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -642,7 +645,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	weContext.EXPECT().Clear().AnyTimes()
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -686,7 +688,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -715,6 +717,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -723,7 +726,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_WorkflowClosed() {
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	weContext.EXPECT().Clear().AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -771,7 +773,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -800,6 +802,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -808,7 +811,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	weContext.EXPECT().Clear().AnyTimes()
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -853,7 +855,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -882,6 +884,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -889,7 +892,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityNotFound() {
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 	weContext.EXPECT().Clear().AnyTimes()
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
@@ -939,7 +941,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -968,6 +970,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -975,7 +978,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1042,7 +1044,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -1071,6 +1073,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -1078,7 +1081,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1148,7 +1150,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -1177,6 +1179,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -1184,7 +1187,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)
@@ -1250,7 +1252,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
-	runID := uuid.New()
+	runID := uuid.NewString()
 	scheduledEventID := int64(99)
 	version := int64(100)
 	lastWriteVersion := version
@@ -1279,6 +1281,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 
 	key := wcache.Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		ShardUUID:   s.mockShard.GetOwner(),
 	}
 	weContext := historyi.NewMockWorkflowContext(s.controller)
@@ -1286,7 +1289,6 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 	weContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock()
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
-	weContext.EXPECT().SetArchetype(chasm.WorkflowArchetype).Times(1)
 
 	err := wcache.PutContextIfNotExist(s.workflowCache, key, weContext)
 	s.NoError(err)

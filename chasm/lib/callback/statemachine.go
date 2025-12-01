@@ -1,6 +1,8 @@
 package callback
 
 import (
+	"fmt"
+	"net/url"
 	"time"
 
 	failurepb "go.temporal.io/api/failure/v1"
@@ -18,7 +20,11 @@ var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventScheduled) error {
-		ctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
+		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
+		if err != nil {
+			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+		}
+		ctx.AddTask(cb, chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
@@ -31,7 +37,15 @@ var TransitionRescheduled = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{Attempt: cb.Attempt})
+		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		if err != nil {
+			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+		}
+		ctx.AddTask(
+			cb,
+			chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host},
+			&callbackspb.InvocationTask{Attempt: cb.Attempt},
+		)
 		return nil
 	},
 )
@@ -60,7 +74,11 @@ var TransitionAttemptFailed = chasm.NewTransition(
 				},
 			},
 		}
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		ctx.AddTask(
+			cb,
+			chasm.TaskAttributes{ScheduledTime: nextAttemptScheduleTime},
+			&callbackspb.BackoffTask{Attempt: cb.Attempt},
+		)
 		return nil
 	},
 )
@@ -84,7 +102,6 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
-		ctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
@@ -100,7 +117,6 @@ var TransitionSucceeded = chasm.NewTransition(
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = nil
-		ctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )

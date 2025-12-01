@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -70,6 +71,13 @@ func (s *VisibilityStore) Close() {
 
 func (s *VisibilityStore) GetName() string {
 	return s.sqlStore.GetName()
+}
+
+func convertSQLError(message string, err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("%s: %w", message, err)
+	}
+	return serviceerror.NewUnavailable(fmt.Sprintf("%s: %v", message, err))
 }
 
 func (s *VisibilityStore) GetIndexName() string {
@@ -159,7 +167,7 @@ func (s *VisibilityStore) DeleteWorkflowExecution(
 		RunID:       request.RunID,
 	})
 	if err != nil {
-		return serviceerror.NewUnavailable(err.Error())
+		return convertSQLError("DeleteWorkflowExecution operation failed.", err)
 	}
 	return nil
 }
@@ -224,8 +232,7 @@ func (s *VisibilityStore) listWorkflowExecutions(
 
 	rows, err := s.sqlStore.DB.SelectFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("ListWorkflowExecutions operation failed. Select failed: %v", err))
+		return nil, convertSQLError("ListWorkflowExecutions operation failed.", err)
 	}
 	if len(rows) == 0 {
 		return &store.InternalListWorkflowExecutionsResponse{}, nil
@@ -295,8 +302,7 @@ func (s *VisibilityStore) listWorkflowExecutionsLegacy(
 
 	rows, err := s.sqlStore.DB.SelectFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("ListWorkflowExecutions operation failed. Select failed: %v", err))
+		return nil, convertSQLError("ListWorkflowExecutions operation failed.", err)
 	}
 	if len(rows) == 0 {
 		return &store.InternalListWorkflowExecutionsResponse{}, nil
@@ -380,8 +386,7 @@ func (s *VisibilityStore) countWorkflowExecutionsLegacy(
 
 	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("CountWorkflowExecutions operation failed. Query failed: %v", err))
+		return nil, convertSQLError("CountWorkflowExecutions operation failed.", err)
 	}
 
 	return &manager.CountWorkflowExecutionsResponse{Count: count}, nil
@@ -442,8 +447,7 @@ func (s *VisibilityStore) countWorkflowExecutions(
 
 	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("CountWorkflowExecutions operation failed. Query failed: %v", err))
+		return nil, convertSQLError("CountWorkflowExecutions operation failed.", err)
 	}
 
 	return &manager.CountWorkflowExecutionsResponse{Count: count}, nil
@@ -468,8 +472,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 
 	rows, err := s.sqlStore.DB.CountGroupByFromVisibility(ctx, *selectFilter)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("CountWorkflowExecutions operation failed. Query failed: %v", err))
+		return nil, convertSQLError("CountWorkflowExecutions operation failed.", err)
 	}
 	resp := &manager.CountWorkflowExecutionsResponse{
 		Count:  0,
@@ -504,8 +507,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 		RunID:       request.RunID,
 	})
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("GetWorkflowExecution operation failed. Select failed: %v", err))
+		return nil, convertSQLError("GetWorkflowExecution operation failed.", err)
 	}
 	info, err := s.rowToInfo(row, request.Namespace)
 	if err != nil {
@@ -650,7 +652,7 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		// TODO: CHASM search attributes are not in the typeMap and SQL only stores raw values (no metadata).
 		// The Encode() call below will fail to add type metadata, causing decode issues.
-		if searchattribute.IsChasmSearchAttribute(name) {
+		if sadefs.IsChasmSearchAttribute(name) {
 			continue
 		}
 		tp, err := saTypeMap.GetType(name)

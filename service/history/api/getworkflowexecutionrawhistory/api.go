@@ -3,7 +3,7 @@ package getworkflowexecutionrawhistory
 import (
 	"context"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -42,7 +42,7 @@ func Invoke(
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if req.NextPageToken == nil {
-		response, err := api.GetOrPollMutableState(
+		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
 			&historyservice.GetMutableStateRequest{
@@ -160,7 +160,7 @@ func validateGetWorkflowExecutionRawHistoryRequest(
 		return consts.ErrWorkflowIDNotSet
 	}
 
-	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+	if execution.GetRunId() == "" || uuid.Validate(execution.GetRunId()) != nil {
 		return consts.ErrInvalidRunID
 	}
 

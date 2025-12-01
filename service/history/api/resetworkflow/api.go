@@ -63,7 +63,7 @@ func Invoke(
 	}
 
 	// also load the current run of the workflow, it can be different from the base runID
-	currentRunID, err := workflowConsistencyChecker.GetCurrentRunID(
+	currentRunID, err := workflowConsistencyChecker.GetCurrentWorkflowRunID(
 		ctx,
 		namespaceID.String(),
 		request.WorkflowExecution.GetWorkflowId(),

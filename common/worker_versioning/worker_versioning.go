@@ -22,7 +22,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -124,7 +124,7 @@ func FindBuildId(versioningData *persistencespb.VersioningData, buildId string) 
 func WorkflowsExistForBuildId(ctx context.Context, visibilityManager manager.VisibilityManager, ns *namespace.Namespace, taskQueue, buildId string) (bool, error) {
 	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
 	escapedBuildId := sqlparser.String(sqlparser.NewStrVal([]byte(VersionedBuildIdSearchAttribute(buildId))))
-	query := fmt.Sprintf("%s = %s AND %s = %s", searchattribute.TaskQueue, escapedTaskQueue, searchattribute.BuildIds, escapedBuildId)
+	query := fmt.Sprintf("%s = %s AND %s = %s", sadefs.TaskQueue, escapedTaskQueue, sadefs.BuildIds, escapedBuildId)
 
 	response, err := visibilityManager.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: ns.ID(),
@@ -767,6 +767,8 @@ func ValidateTaskVersionDirective(
 	wfDeployment *deploymentpb.Deployment,
 	scheduledDeployment *deploymentpb.Deployment,
 ) error {
+	// TODO: consider using activity and wft Stamp for simplifying validation here.
+
 	// Effective behavior and deployment of the workflow when History scheduled the WFT.
 	directiveBehavior := directive.GetBehavior()
 	if directiveBehavior != wfBehavior &&
