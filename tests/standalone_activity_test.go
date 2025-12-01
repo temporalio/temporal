@@ -516,38 +516,38 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 func (s *standaloneActivityTestSuite) TestActivityImmediatelyCancelled_WhenInScheduledState() {
 	s.T().Skip("Temporarily disabled")
 
-	//t := s.T()
-	//ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	//defer cancel()
-	//
-	//activityID := s.tv.ActivityID()
-	//taskQueue := s.tv.TaskQueue().String()
-	//
-	//startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	//runID := startResp.RunId
-	//
-	//_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
-	//	Namespace:  s.Namespace().String(),
-	//	ActivityId: s.tv.ActivityID(),
-	//	RunId:      runID,
-	//	Identity:   "cancelling-worker",
-	//	RequestId:  s.tv.RequestID(),
-	//	Reason:     "Test Cancellation",
-	//})
-	//require.NoError(t, err)
-	//
-	//activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-	//	Namespace:      s.Namespace().String(),
-	//	ActivityId:     activityID,
-	//	RunId:          runID,
-	//	IncludeInfo:    true,
-	//	IncludeInput:   true,
-	//	IncludeOutcome: true,
-	//})
-	//require.NoError(t, err)
-	//
-	//info := activityResp.GetInfo()
-	//require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
+	/*	t := s.T()
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
+
+		activityID := s.tv.ActivityID()
+		taskQueue := s.tv.TaskQueue().String()
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: s.tv.ActivityID(),
+			RunId:      runID,
+			Identity:   "cancelling-worker",
+			RequestId:  s.tv.RequestID(),
+			Reason:     "Test Cancellation",
+		})
+		require.NoError(t, err)
+
+		activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          runID,
+			IncludeInfo:    true,
+			IncludeInput:   true,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+
+		info := activityResp.GetInfo()
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus()) */
 }
 
 func (s *standaloneActivityTestSuite) TestActivityTerminated() {
