@@ -104,7 +104,9 @@ func Invoke(
 				request.GetCause(),
 				request.GetFailure(),
 				request.GetIdentity(),
+				//nolint:staticcheck
 				request.GetWorkerVersion(),
+				//nolint:staticcheck
 				request.GetBinaryChecksum(),
 				"",
 				"",
