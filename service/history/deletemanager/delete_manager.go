@@ -6,6 +6,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -97,6 +98,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		// RangeID is set by shardContext
 		NamespaceID: nsID.String(),
 		WorkflowID:  we.GetWorkflowId(),
+		ArchetypeID: chasm.WorkflowArchetypeID, // this method is specific to workflow executions
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer: {deleteTask},
 		},
@@ -150,6 +152,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			WorkflowID:  we.GetWorkflowId(),
 			RunID:       we.GetRunId(),
 		},
+		ms.ChasmTree().ArchetypeID(),
 		currentBranchToken,
 		executionInfo.GetCloseVisibilityTaskId(),
 		executionInfo.GetCloseTime().AsTime(),

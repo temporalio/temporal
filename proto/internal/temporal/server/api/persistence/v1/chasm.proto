@@ -89,6 +89,10 @@ message ChasmTaskInfo {
     // Opaque attached task data. May be nil. Usable by components, not the CHASM
     // framework itself.
     temporal.api.common.v1.DataBlob data = 5;
+
+    // ArchetypeID of the execution that generated this task.
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 6;
 }
 
 // ChasmComponentRef references a specific chasm component.

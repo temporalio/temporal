@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -49,7 +49,7 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		tv := testvars.New(s.T())
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:    uuid.New(),
+			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
@@ -70,7 +70,7 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		tv := testvars.New(s.T())
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			RequestId:    uuid.New(),
+			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
@@ -92,7 +92,7 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		tv := testvars.New(s.T())
 		metadata := prepareTestUserMetadata()
 		startWorkflowRequest := &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:    uuid.New(),
+			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WorkflowID(),
 			WorkflowType: tv.WorkflowType(),

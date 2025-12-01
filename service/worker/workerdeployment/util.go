@@ -73,15 +73,17 @@ const (
 	errConflictTokenMismatchType = "errConflictTokenMismatch"
 	errFailedPrecondition        = "FailedPrecondition"
 
-	ErrVersionIsDraining         = "Version cannot be deleted since it is draining."
-	ErrVersionHasPollers         = "Version cannot be deleted since it has active pollers."
-	ErrVersionIsCurrentOrRamping = "Version cannot be deleted since it is current or ramping."
+	errVersionIsDrainingSuffix   = "cannot be deleted since it is draining"
+	ErrVersionIsDraining         = "version '%s' " + errVersionIsDrainingSuffix
+	errVersionHasPollersSuffix   = "cannot be deleted since it has active pollers"
+	ErrVersionHasPollers         = "version '%s' " + errVersionHasPollersSuffix
+	ErrVersionIsCurrentOrRamping = "version '%s' cannot be deleted since it is current or ramping"
 
-	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
-	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version is missing active task queues from the current version; these would become unversioned if it is set as the current version"
+	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version '%s' is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
+	ErrCurrentVersionDoesNotHaveAllTaskQueues = "proposed current version '%s' is missing active task queues from the current version; these would become unversioned if it is set as the current version"
 	ErrManagerIdentityMismatch                = "ManagerIdentity '%s' is set and does not match user identity '%s'; to proceed, set your own identity as the ManagerIdentity, remove the ManagerIdentity, or wait for the other client to do so"
-	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name %s; does your Worker Deployment have pollers?"
-	ErrWorkerDeploymentVersionNotFound        = "build ID %s not fount in Worker Deployment %s"
+	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name '%s'; does your Worker Deployment have pollers?"
+	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
 )
 
 var (

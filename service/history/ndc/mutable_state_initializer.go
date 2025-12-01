@@ -10,6 +10,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -156,6 +157,7 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 	wfContext := workflow.NewContext(
 		r.shardContext.GetConfig(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		r.logger,
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),

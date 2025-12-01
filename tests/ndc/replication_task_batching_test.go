@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -119,8 +119,8 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 	versions := []int64{1, 1, 21, 31, 301, 401, 601, 501, 801, 1001, 901, 701, 1101}
 	executions := make(map[workflow.Execution][]*historypb.History)
 	for _, version := range versions {
-		workflowID := "replication-message-test" + uuid.New()
-		runID := uuid.New()
+		workflowID := "replication-message-test" + uuid.NewString()
+		runID := uuid.NewString()
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 		for s.generator.HasNextVertex() {

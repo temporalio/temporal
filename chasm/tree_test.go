@@ -513,6 +513,66 @@ func (s *nodeSuite) TestPointerAttributes() {
 	})
 }
 
+func (s *nodeSuite) TestParentPointer_InMemory() {
+	node := s.testComponentTree()
+
+	s.assertParentPointer(node)
+
+	// Additionally also test parentPtr for components inside a map.
+
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	mapSubComponent1 := &TestSubComponent1{}
+	// Try using the testComponent we get from the ParentPtr for the mutation.
+	testComponent.SubComponents = Map[string, *TestSubComponent1]{
+		"mapSubComponent1": NewComponentField(mutableContext, mapSubComponent1),
+	}
+
+	s.Panics(func() {
+		_ = mapSubComponent1.ParentPtr.Get(mutableContext)
+	})
+
+	// Sync structure initializes the parent pointer
+	err = node.syncSubComponents()
+	s.NoError(err)
+
+	testComponentFromPtr := mapSubComponent1.ParentPtr.Get(mutableContext)
+	// Asserting they actually point to the same testComponent object.
+	s.Same(testComponent, testComponentFromPtr)
+}
+
+func (s *nodeSuite) TestParentPointer_FromDB() {
+	serializedNodes := testComponentSerializedNodes()
+
+	node, err := s.newTestTree(serializedNodes)
+	s.NoError(err)
+
+	s.assertParentPointer(node)
+}
+
+func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
+	chasmContext := NewContext(context.Background(), testComponentNode)
+	component, err := testComponentNode.Component(chasmContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	_, found := testComponent.ParentPtr.TryGet(chasmContext)
+	s.False(found)
+
+	subComponent1 := testComponent.SubComponent1.Get(chasmContext)
+	testComponentFromPtr := subComponent1.ParentPtr.Get(chasmContext)
+	// Asserting they actually point to the same testComponent object.
+	s.Same(testComponent, testComponentFromPtr)
+
+	subComponent11 := subComponent1.SubComponent11.Get(chasmContext)
+	testSubComponent1FromPtr := subComponent11.ParentPtr.Get(chasmContext)
+	// Asserting they actually point to the same testSubComponent1 object.
+	s.Same(subComponent1, testSubComponent1FromPtr)
+}
+
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	node := s.testComponentTree()
 
@@ -2159,6 +2219,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		Path:                                   rootPath,
 		TypeId:                                 testSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
+		ArchetypeId:                            testComponentTypeID,
 	}, chasmTask.Info)
 
 	s.Len(rootAttr.PureTasks, 1) // Only one valid side effect task.
@@ -2173,7 +2234,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	}, newPureTask)
 	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTimer], 1)
 	chasmPureTask := s.nodeBackend.TasksByCategory[tasks.CategoryTimer][0].(*tasks.ChasmTaskPure)
-	s.Equal(tasks.CategoryTimer, chasmPureTask.Category)
+	s.Equal(tasks.CategoryTimer, chasmPureTask.GetCategory())
 	s.True(chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
 
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()
@@ -2195,6 +2256,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		Path:                                   []string{"SubComponent2"},
 		TypeId:                                 testOutboundSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
+		ArchetypeId:                            testComponentTypeID,
 	}, chasmTask.Info)
 }
 

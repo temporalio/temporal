@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -221,7 +222,7 @@ func (d *ClientImpl) SetManager(
 		return nil, err
 	}
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetManagerIdentityArgs{
 		Identity:        request.GetIdentity(),
 		ManagerIdentity: newManagerID,
@@ -339,9 +340,9 @@ func newResourceExhaustedError(message string) *serviceerror.ResourceExhausted {
 	}
 }
 
-func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome) error {
+func (d *ClientImpl) handleUpdateVersionFailures(outcome *updatepb.Outcome, deploymentName, buildID string) error {
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
-		return serviceerror.NewNotFound(errVersionNotFound)
+		return serviceerror.NewNotFoundf(ErrWorkerDeploymentVersionNotFound, buildID, deploymentName)
 	} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 		return serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
@@ -440,7 +441,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 ) (_ *deploymentpb.VersionMetadata, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("UpdateVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
@@ -669,8 +670,8 @@ func (d *ClientImpl) SetCurrentVersion(
 	}
 
 	// Generating a new updateID and requestID for each request. No-ops are handled by the worker-deployment workflow.
-	updateID := uuid.New()
-	requestID := uuid.New()
+	updateID := uuid.NewString()
+	requestID := uuid.NewString()
 
 	var outcome *updatepb.Outcome
 	if allowNoPollers {
@@ -705,7 +706,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		if err != nil {
 			var notFound *serviceerror.NotFound
 			if errors.As(err, &notFound) {
-				return nil, serviceerror.NewFailedPreconditionf(ErrWorkerDeploymentNotFound, deploymentName)
+				return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 			}
 			return nil, err
 		}
@@ -720,7 +721,7 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
-	} else if updateErr := d.handleUpdateVersionFailures(outcome); updateErr != nil {
+	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
 	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
 		return nil, registerErr
@@ -784,8 +785,8 @@ func (d *ClientImpl) SetRampingVersion(
 	}
 
 	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
-	updateID := uuid.New()
-	requestID := uuid.New()
+	updateID := uuid.NewString()
+	requestID := uuid.NewString()
 
 	var outcome *updatepb.Outcome
 	if allowNoPollers {
@@ -819,7 +820,7 @@ func (d *ClientImpl) SetRampingVersion(
 		if err != nil {
 			var notFound *serviceerror.NotFound
 			if errors.As(err, &notFound) {
-				return nil, serviceerror.NewFailedPreconditionf(ErrWorkerDeploymentNotFound, deploymentName)
+				return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 			}
 			return nil, err
 		}
@@ -837,7 +838,7 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
-	} else if updateErr := d.handleUpdateVersionFailures(outcome); updateErr != nil {
+	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
 	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
 		return nil, registerErr
@@ -870,7 +871,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 
 	//revive:disable-next-line:defer
 	defer d.record("DeleteWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, buildId)()
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 
 	if identity == "" {
 		identity = requestID
@@ -941,7 +942,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		return err
 	}
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteDeploymentArgs{
 		Identity: identity,
 	})
@@ -1154,10 +1155,10 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		if failure.Message == ErrVersionIsDraining {
-			return temporal.NewNonRetryableApplicationError(ErrVersionIsDraining, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
-		} else if failure.Message == ErrVersionHasPollers {
-			return temporal.NewNonRetryableApplicationError(ErrVersionHasPollers, errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
+		if strings.Contains(failure.Message, errVersionIsDrainingSuffix) {
+			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionIsDraining, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
+		} else if strings.Contains(failure.Message, errVersionHasPollersSuffix) {
+			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionHasPollers, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -1804,7 +1805,7 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 		return err
 	}
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, versionObj.DeploymentName, versionObj.BuildId, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInDeploymentVersion, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},

@@ -50,7 +50,7 @@ func Invoke(
 	}
 
 	if len(request.Request.Execution.RunId) == 0 {
-		request.Request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentRunID(
+		request.Request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentWorkflowRunID(
 			ctx,
 			request.NamespaceId,
 			request.Request.Execution.WorkflowId,

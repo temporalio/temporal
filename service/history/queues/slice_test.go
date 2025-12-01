@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -132,10 +132,10 @@ func (s *sliceSuite) TestSplitByRange() {
 
 func (s *sliceSuite) TestSplitByPredicate() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	slice := s.newTestSlice(r, namespaceIDs, nil)
 
-	splitNamespaceIDs := append(slices.Clone(namespaceIDs[:rand.Intn(len(namespaceIDs))]), uuid.New(), uuid.New())
+	splitNamespaceIDs := append(slices.Clone(namespaceIDs[:rand.Intn(len(namespaceIDs))]), uuid.NewString(), uuid.NewString())
 	splitPredicate := tasks.NewNamespacePredicate(splitNamespaceIDs)
 	passSlice, failSlice := slice.SplitByPredicate(splitPredicate)
 	s.Equal(r, passSlice.Scope().Range)
@@ -151,14 +151,14 @@ func (s *sliceSuite) TestSplitByPredicate() {
 
 func (s *sliceSuite) TestCanMergeWithSlice() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	slice := NewSlice(nil, nil, s.monitor, NewScope(r, predicate), GrouperNamespaceID{}, noPredicateSizeLimit)
 
 	testPredicates := []tasks.Predicate{
 		predicate,
 		tasks.NewNamespacePredicate(namespaceIDs),
-		tasks.NewNamespacePredicate([]string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}),
+		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}),
 	}
 	s.True(predicate.Equals(testPredicates[0]))
 	s.True(predicate.Equals(testPredicates[1]))
@@ -216,7 +216,7 @@ func (s *sliceSuite) TestMergeWithSlice_SamePredicate() {
 
 func (s *sliceSuite) TestMergeWithSlice_SameRange() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	slice := s.newTestSlice(r, namespaceIDs, nil)
 	totalExecutables := len(slice.pendingExecutables)
 
@@ -235,7 +235,7 @@ func (s *sliceSuite) TestMergeWithSlice_SameRange() {
 
 func (s *sliceSuite) TestMergeWithSlice_MaxPredicateSizeApplied() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	slice := s.newTestSlice(r, namespaceIDs, nil)
 	slice.maxPredicateSizeFn = func() int { return 4 }
 	totalExecutables := len(slice.pendingExecutables)
@@ -255,7 +255,7 @@ func (s *sliceSuite) TestMergeWithSlice_MaxPredicateSizeApplied() {
 
 func (s *sliceSuite) TestMergeWithSlice_SameMinKey() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	slice := s.newTestSlice(r, namespaceIDs, nil)
 	totalExecutables := len(slice.pendingExecutables)
 
@@ -263,7 +263,7 @@ func (s *sliceSuite) TestMergeWithSlice_SameMinKey() {
 		r.InclusiveMin,
 		NewRandomKeyInRange(NewRange(r.InclusiveMin, tasks.MaximumKey)),
 	)
-	incomingNamespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	incomingNamespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	incomingSlice := s.newTestSlice(incomingRange, incomingNamespaceIDs, nil)
 	totalExecutables += len(incomingSlice.pendingExecutables)
 
@@ -275,7 +275,7 @@ func (s *sliceSuite) TestMergeWithSlice_SameMinKey() {
 
 func (s *sliceSuite) TestMergeWithSlice_SameMaxKey() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	slice := s.newTestSlice(r, namespaceIDs, nil)
 	totalExecutables := len(slice.pendingExecutables)
 
@@ -283,7 +283,7 @@ func (s *sliceSuite) TestMergeWithSlice_SameMaxKey() {
 		NewRandomKeyInRange(NewRange(tasks.MinimumKey, r.ExclusiveMax)),
 		r.ExclusiveMax,
 	)
-	incomingNamespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	incomingNamespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	incomingSlice := s.newTestSlice(incomingRange, incomingNamespaceIDs, nil)
 	totalExecutables += len(incomingSlice.pendingExecutables)
 
@@ -295,7 +295,7 @@ func (s *sliceSuite) TestMergeWithSlice_SameMaxKey() {
 
 func (s *sliceSuite) TestMergeWithSlice_DifferentMinMaxKey() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	slice := s.newTestSlice(r, namespaceIDs, nil)
 	totalExecutables := len(slice.pendingExecutables)
 
@@ -304,7 +304,7 @@ func (s *sliceSuite) TestMergeWithSlice_DifferentMinMaxKey() {
 		incomingMinKey,
 		NewRandomKeyInRange(NewRange(incomingMinKey, tasks.MaximumKey)),
 	)
-	incomingNamespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	incomingNamespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	incomingSlice := s.newTestSlice(incomingRange, incomingNamespaceIDs, nil)
 	totalExecutables += len(incomingSlice.pendingExecutables)
 
@@ -319,7 +319,7 @@ func (s *sliceSuite) TestMergeWithSlice_DifferentMinMaxKey() {
 
 func (s *sliceSuite) TestCompactWithSlice() {
 	r1 := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	slice1 := s.newTestSlice(r1, namespaceIDs, nil)
 	totalExecutables := len(slice1.pendingExecutables)
 
@@ -371,7 +371,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkRange() {
 	numAcked := 0
 	for idx, executable := range executables {
 		mockExecutable := executable.(*MockExecutable)
-		mockExecutable.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+		mockExecutable.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 		mockExecutable.EXPECT().GetTask().Return(mockExecutable).AnyTimes()
 
 		acked := rand.Intn(10) < 8
@@ -416,7 +416,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 		return a.GetKey().CompareTo(b.GetKey())
 	})
 
-	pendingNamespaceID := []string{uuid.New(), uuid.New()}
+	pendingNamespaceID := []string{uuid.NewString(), uuid.NewString()}
 	s.True(len(pendingNamespaceID) <= shrinkPredicateMaxPendingKeys)
 	for _, executable := range executables {
 		mockExecutable := executable.(*MockExecutable)
@@ -425,7 +425,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 
 		acked := rand.Intn(10) < 8
 		if acked {
-			mockExecutable.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockExecutable.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 			mockExecutable.EXPECT().State().Return(ctasks.TaskStateAcked).MaxTimes(1)
 		} else {
 			mockExecutable.EXPECT().GetNamespaceID().Return(pendingNamespaceID[rand.Intn(len(pendingNamespaceID))]).AnyTimes()
@@ -447,7 +447,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 
 func (s *sliceSuite) TestSelectTasks_NoError() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 
 	numTasks := 20
@@ -463,7 +463,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 
 				namespaceID := namespaceIDs[rand.Intn(len(namespaceIDs))]
 				if i >= numTasks/2 {
-					namespaceID = uuid.New() // should be filtered out
+					namespaceID = uuid.NewString() // should be filtered out
 				}
 				mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
@@ -514,7 +514,7 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 				mockTask := tasks.NewMockTask(s.controller)
 				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
-				mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+				mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
 			}
@@ -558,7 +558,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 				mockTask := tasks.NewMockTask(s.controller)
 				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
-				mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+				mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
 			}
@@ -623,7 +623,7 @@ func (s *sliceSuite) newTestSlice(
 	}
 
 	if len(namespaceIDs) == 0 {
-		namespaceIDs = []string{uuid.New()}
+		namespaceIDs = []string{uuid.NewString()}
 	}
 
 	if len(taskTypes) == 0 {

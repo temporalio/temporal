@@ -17,10 +17,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	chasmnexus "go.temporal.io/server/chasm/nexus"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -44,6 +46,8 @@ type Scheduler struct {
 	Invoker     chasm.Field[*Invoker]
 	Backfillers chasm.Map[string, *Backfiller] // Backfill ID => *Backfiller
 
+	Visibility chasm.Field[*chasm.Visibility]
+
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
 	cacheConflictToken int64
 	compiledSpec       *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
@@ -52,9 +56,19 @@ type Scheduler struct {
 const (
 	// How many recent actions to keep on the Info.RecentActions list.
 	recentActionCount = 10
+
+	// Item limit per spec field on the ScheduleInfo memo.
+	listInfoSpecFieldLimit = 10
+
+	// Field in which the schedule's memo is stored.
+	visibilityMemoFieldInfo = "ScheduleInfo"
 )
 
-var ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
+var (
+	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
+	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
+	ErrUnprocessable         = serviceerror.NewInternal("unprocessable schedule")
+)
 
 // NewScheduler returns an initialized CHASM scheduler root component.
 func NewScheduler(
@@ -83,13 +97,16 @@ func NewScheduler(
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
 	sched.Schedule.State = &schedulepb.ScheduleState{}
 
-	invoker := NewInvoker(ctx, sched)
-	generator := NewGenerator(ctx, sched, invoker)
+	invoker := NewInvoker(ctx)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
+
+	generator := NewGenerator(ctx)
 	sched.Generator = chasm.NewComponentField(ctx, generator)
 
 	// Create backfillers to fulfill initialPatch.
 	sched.handlePatch(ctx, patch)
+	visibility := chasm.NewVisibility(ctx)
+	sched.Visibility = chasm.NewComponentField(ctx, visibility)
 
 	return sched
 }
@@ -112,7 +129,6 @@ func CreateScheduler(
 	ctx chasm.MutableContext,
 	req *schedulerpb.CreateScheduleRequest,
 ) (*Scheduler, *schedulerpb.CreateScheduleResponse, error) {
-	// TODO: namespace name should be resolved from namespace_id via namespace registry
 	sched := NewScheduler(
 		ctx,
 		req.FrontendRequest.Namespace,
@@ -122,7 +138,10 @@ func CreateScheduler(
 		req.FrontendRequest.InitialPatch,
 	)
 
-	// TODO - use visibility component to update SAs
+	// Update visibility with custom attributes.
+	visibility := sched.Visibility.Get(ctx)
+	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, &schedulerpb.CreateScheduleResponse{
 		FrontendResponse: &workflowservice.CreateScheduleResponse{
@@ -368,7 +387,7 @@ func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	}
 }
 
-var _ chasmnexus.CompletionHandler = &Scheduler{}
+var _ chasm.NexusCompletionHandler = &Scheduler{}
 
 func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExecutionStatus {
 	switch failure.FailureInfo.(type) {
@@ -536,9 +555,14 @@ func (s *Scheduler) Update(
 		return nil, ErrConflictTokenMismatch
 	}
 
-	s.Schedule = common.CloneProto(req.FrontendRequest.Schedule)
-	// TODO - use visibility component to update SAs
+	// Update custom search attributes.
+	//
+	// TODO - we could also easily support allowing the customer to update their
+	// memo here.
+	visibility := s.Visibility.Get(ctx)
+	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
 
+	s.Schedule = common.CloneProto(req.FrontendRequest.Schedule)
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
 
@@ -581,4 +605,75 @@ func (s *Scheduler) generateConflictToken() []byte {
 func (s *Scheduler) validateConflictToken(token []byte) bool {
 	current := s.generateConflictToken()
 	return bytes.Equal(current, token)
+}
+
+// SearchAttributes returns the Temporal-managed key values for visibility.
+func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
+	return []chasm.SearchAttributeKeyValue{
+		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
+	}
+}
+
+// Memo returns the scheduler's info block for visibility.
+func (s *Scheduler) Memo(
+	ctx chasm.Context,
+) map[string]chasm.VisibilityValue {
+	newInfo := s.ListInfo(ctx)
+
+	infoPayload, err := proto.MarshalOptions{
+		Deterministic: true,
+	}.Marshal(newInfo)
+	if err != nil {
+		return nil
+	}
+
+	return map[string]chasm.VisibilityValue{
+		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(infoPayload),
+	}
+}
+
+// ListInfo returns the ScheduleListInfo, used as the visibility memo, and to
+// answer List queries.
+func (s *Scheduler) ListInfo(
+	ctx chasm.Context,
+) *schedulepb.ScheduleListInfo {
+	spec := common.CloneProto(s.Schedule.Spec)
+
+	// Clear fields that are too large/not useful for the list view.
+	spec.TimezoneData = nil
+
+	// Limit the number of specs and exclusions stored on the memo.
+	spec.ExcludeStructuredCalendar = util.SliceHead(spec.ExcludeStructuredCalendar, listInfoSpecFieldLimit)
+	spec.Interval = util.SliceHead(spec.Interval, listInfoSpecFieldLimit)
+	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
+
+	generator := s.Generator.Get(ctx)
+
+	return &schedulepb.ScheduleListInfo{
+		Spec:              spec,
+		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
+		Notes:             s.Schedule.State.Notes,
+		Paused:            s.Schedule.State.Paused,
+		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
+		FutureActionTimes: generator.FutureActionTimes,
+	}
+}
+
+// startWorkflowSearchAttributes returns the search attributes to be applied to
+// workflows kicked off. Includes custom search attributes and Temporal-managed.
+func (s *Scheduler) startWorkflowSearchAttributes(
+	nominal time.Time,
+) *commonpb.SearchAttributes {
+	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
+
+	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
+	if p, err := payload.Encode(nominal); err == nil {
+		fields[sadefs.TemporalScheduledStartTime] = p
+	}
+	if p, err := payload.Encode(s.ScheduleId); err == nil {
+		fields[sadefs.TemporalScheduledById] = p
+	}
+	return &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
 }

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -74,6 +75,7 @@ import (
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
 	"go.temporal.io/server/service/history/api/unpauseactivity"
+	"go.temporal.io/server/service/history/api/unpauseworkflow"
 	"go.temporal.io/server/service/history/api/updateactivityoptions"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
@@ -418,7 +420,7 @@ func (e *historyEngineImpl) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
-	return api.GetOrPollMutableState(ctx, e.shardContext, request, e.workflowConsistencyChecker, e.eventNotifier)
+	return api.GetOrPollWorkflowMutableState(ctx, e.shardContext, request, e.workflowConsistencyChecker, e.eventNotifier)
 }
 
 // PollMutableState retrieves the mutable state of the workflow execution with long polling
@@ -427,7 +429,7 @@ func (e *historyEngineImpl) PollMutableState(
 	request *historyservice.PollMutableStateRequest,
 ) (*historyservice.PollMutableStateResponse, error) {
 
-	response, err := api.GetOrPollMutableState(
+	response, err := api.GetOrPollWorkflowMutableState(
 		ctx,
 		e.shardContext,
 		&historyservice.GetMutableStateRequest{
@@ -761,8 +763,13 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
-func (e *historyEngineImpl) ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error {
-	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName)
+func (e *historyEngineImpl) ReplicateVersionedTransition(
+	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
+	artifact *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) error {
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, archetypeID, artifact, sourceClusterName)
 }
 
 func (e *historyEngineImpl) ImportWorkflowExecution(
@@ -963,10 +970,12 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	namespaceUUID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	archetypeID chasm.ArchetypeID,
 ) (retError error) {
 	return refreshworkflow.Invoke(
 		ctx,
 		definition.NewWorkflowKey(namespaceUUID.String(), execution.WorkflowId, execution.RunId),
+		archetypeID,
 		e.shardContext,
 		e.workflowConsistencyChecker,
 	)
@@ -1086,4 +1095,11 @@ func (e *historyEngineImpl) PauseWorkflowExecution(
 	req *historyservice.PauseWorkflowExecutionRequest,
 ) (resp *historyservice.PauseWorkflowExecutionResponse, retError error) {
 	return pauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) UnpauseWorkflowExecution(
+	ctx context.Context,
+	req *historyservice.UnpauseWorkflowExecutionRequest,
+) (resp *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
+	return unpauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }

@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -12,6 +13,7 @@ type (
 		CreateWorkflowExecution(
 			ctx context.Context,
 			createMode persistence.CreateWorkflowMode,
+			archetypeID chasm.ArchetypeID,
 			newWorkflowFailoverVersion int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -21,6 +23,7 @@ type (
 		ConflictResolveWorkflowExecution(
 			ctx context.Context,
 			conflictResolveMode persistence.ConflictResolveWorkflowMode,
+			archetypeID chasm.ArchetypeID,
 			resetWorkflowFailoverVersion int64,
 			resetWorkflowSnapshot *persistence.WorkflowSnapshot,
 			resetWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -36,6 +39,7 @@ type (
 		UpdateWorkflowExecution(
 			ctx context.Context,
 			updateMode persistence.UpdateWorkflowMode,
+			archetypeID chasm.ArchetypeID,
 			currentWorkflowFailoverVersion int64,
 			currentWorkflowMutation *persistence.WorkflowMutation,
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -47,6 +51,7 @@ type (
 
 		SetWorkflowExecution(
 			ctx context.Context,
+			archetypeID chasm.ArchetypeID,
 			workflowSnapshot *persistence.WorkflowSnapshot,
 		) error
 	}

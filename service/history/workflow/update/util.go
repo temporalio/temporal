@@ -64,7 +64,7 @@ func (i *instrumentation) countTooMany() {
 func (i *instrumentation) countAborted(updateID string, reason AbortReason) {
 	i.metrics.Counter(metrics.WorkflowExecutionUpdateAborted.Name()).
 		Record(1, metrics.ReasonTag(metrics.ReasonString(reason.String())))
-	softassert.Sometimes(i.log).Debug("update aborted",
+	i.log.Debug("update aborted",
 		tag.NewStringTag("reason", reason.String()),
 		tag.NewStringTag("update-id", updateID),
 	)
@@ -103,7 +103,7 @@ func (i *instrumentation) oneOf(counterName string) {
 }
 
 func (i *instrumentation) stateChange(updateID string, from, to state) {
-	softassert.Sometimes(i.log).Debug(
+	i.log.Debug(
 		"update state change",
 		tag.ComponentWorkflowUpdate,
 		tag.NewStringTag("update-id", updateID),
