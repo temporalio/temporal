@@ -20,8 +20,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -54,7 +54,6 @@ type Starter struct {
 	shardContext               historyi.ShardContext
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	tokenSerializer            *tasktoken.Serializer
-	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
@@ -85,7 +84,6 @@ func NewStarter(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
-	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
@@ -100,7 +98,6 @@ func NewStarter(
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tokenSerializer:            tokenSerializer,
-		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
@@ -254,7 +251,11 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
-		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
+		return nil, softassert.UnexpectedInternalErr(
+			s.shardContext.GetLogger(),
+			"unexpected error: mutable state did not have a started workflow task",
+			nil,
+		)
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
 		historyi.TransactionPolicyActive,
@@ -263,7 +264,11 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		return nil, err
 	}
 	if len(eventBatches) != 1 {
-		return nil, serviceerror.NewInternal("unable to create 1st event batch")
+		return nil, softassert.UnexpectedInternalErr(
+			s.shardContext.GetLogger(),
+			"unable to create 1st event batch",
+			nil,
+		)
 	}
 
 	return &creationParams{
@@ -665,7 +670,8 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 					requestID,
 					completionCallbacks,
 					links,
-					nil,
+					"",  // identity
+					nil, // priority
 				)
 				return api.UpdateWorkflowWithoutWorkflowTask, err
 			},
@@ -740,15 +746,6 @@ func (s *Starter) generateResponse(
 			Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			Link:    s.generateStartedEventRefLink(runID),
 		}, nil
-	}
-
-	if err := api.ProcessOutgoingSearchAttributes(
-		shardCtx.GetSearchAttributesProvider(),
-		shardCtx.GetSearchAttributesMapperProvider(),
-		historyEvents,
-		s.namespace.Name(),
-		s.visibilityManager); err != nil {
-		return nil, err
 	}
 
 	clock, err := shardCtx.NewVectorClock()

@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -106,14 +105,8 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	if _, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(
-		mergedOpts.GetVersioningOverride(),
-		unsetOverride,
-		"",
-		nil,
-		nil,
-		mergedOpts.GetPriority(),
-	); err != nil {
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority())
+	if err != nil {
 		return nil, hasChanges, err
 	}
 	return mergedOpts, hasChanges, nil
@@ -122,10 +115,16 @@ func MergeAndApply(
 func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
-		opts.VersioningOverride = common.CloneProto(versioningInfo.GetVersioningOverride())
+		override, ok := proto.Clone(versioningInfo.GetVersioningOverride()).(*workflowpb.VersioningOverride)
+		if !ok {
+			return nil
+		}
+		opts.VersioningOverride = override
 	}
 	if priority := ms.GetExecutionInfo().GetPriority(); priority != nil {
-		opts.Priority = common.CloneProto(priority)
+		if cloned, ok := proto.Clone(priority).(*commonpb.Priority); ok {
+			opts.Priority = cloned
+		}
 	}
 	return opts
 }
@@ -140,6 +139,23 @@ func mergeWorkflowExecutionOptions(
 		return nil, err
 	}
 	updateFields := util.ParseFieldMask(updateMask)
+	if _, ok := updateFields["versioningOverride"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	if _, ok := updateFields["versioningOverride.deployment"]; ok {
+		if _, ok := updateFields["versioningOverride.behavior"]; !ok {
+			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+		}
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	if _, ok := updateFields["versioningOverride.behavior"]; ok {
+		if _, ok := updateFields["versioningOverride.deployment"]; !ok {
+			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+		}
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
 
 	// ==== Priority
 
@@ -166,26 +182,6 @@ func mergeWorkflowExecutionOptions(
 			mergeInto.Priority = &commonpb.Priority{}
 		}
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
-	}
-
-	// ==== VersioningOverride
-
-	if _, ok := updateFields["versioningOverride"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.deployment"]; ok {
-		if _, ok := updateFields["versioningOverride.behavior"]; !ok {
-			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
-		}
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.behavior"]; ok {
-		if _, ok := updateFields["versioningOverride.deployment"]; !ok {
-			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
-		}
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
 	return mergeInto, nil

@@ -936,7 +936,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Priority() {
 	_, err := wh.StartWorkflowExecution(context.Background(), request)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
-	s.ErrorContains(err, "PriorityKey can't be negative")
+	s.ErrorContains(err, "priority key can't be negative")
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
 
@@ -1059,7 +1059,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Priority() {
 	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), request)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
-	s.ErrorContains(err, "PriorityKey can't be negative")
+	s.ErrorContains(err, "priority key can't be negative")
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
 
@@ -4030,7 +4030,7 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
 	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), request)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
-	s.ErrorContains(err, "PriorityKey can't be negative")
+	s.ErrorContains(err, "priority key can't be negative")
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
 
@@ -4056,6 +4056,6 @@ func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
 	_, err := wh.UpdateActivityOptions(context.Background(), request)
 	var invalidArg *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArg)
-	s.ErrorContains(err, "PriorityKey can't be negative")
+	s.ErrorContains(err, "priority key can't be negative")
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }

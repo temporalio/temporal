@@ -111,6 +111,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetAttachedRequestId(),
 		attr.GetAttachedCompletionCallbacks(),
 		event.Links,
+		attr.GetIdentity(),
 		attr.GetPriority(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()

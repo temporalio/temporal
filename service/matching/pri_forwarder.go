@@ -90,7 +90,6 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				VersionDirective:       task.event.Data.GetVersionDirective(),
 				Stamp:                  task.event.Data.GetStamp(),
 				Priority:               task.event.Data.GetPriority(),
-				Stamp:                  task.event.Data.GetStamp(),
 			},
 		)
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
@@ -106,8 +105,8 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            f.getForwardInfo(task),
-				Stamp:                  task.event.Data.GetStamp(),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
+				Stamp:                  task.event.Data.GetStamp(),
 				Priority:               task.event.Data.GetPriority(),
 			},
 		)

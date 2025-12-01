@@ -171,35 +171,35 @@ func TestApplyActivityOptionsErrors(t *testing.T) {
 	var err error
 	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_interval"}}))
-	assert.ErrorContains(t, err, "RetryPolicy is not provided")
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
 
 	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}}))
-	assert.ErrorContains(t, err, "RetryPolicy is not provided")
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
 
 	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.backoff_coefficient"}}))
-	assert.ErrorContains(t, err, "RetryPolicy is not provided")
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
 
 	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}}))
-	assert.ErrorContains(t, err, "RetryPolicy is not provided")
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
 
 	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"taskQueue.name"}}))
-	assert.ErrorContains(t, err, "TaskQueue is not provided")
+	require.ErrorContains(t, err, "TaskQueue is not provided")
 
 	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"priority.priority_key"}}))
-	assert.ErrorContains(t, err, "Priority is not provided")
+	require.ErrorContains(t, err, "Priority is not provided")
 
 	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"priority.fairness_key"}}))
-	assert.ErrorContains(t, err, "Priority is not provided")
+	require.ErrorContains(t, err, "Priority is not provided")
 
 	err = mergeActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"priority.fairness_weight"}}))
-	assert.ErrorContains(t, err, "Priority is not provided")
+	require.ErrorContains(t, err, "Priority is not provided")
 
 }
 
@@ -260,8 +260,8 @@ func TestApplyActivityOptionsReset(t *testing.T) {
 	assert.Nil(t, options.HeartbeatTimeout)
 
 	assert.Equal(t, int32(10), options.Priority.PriorityKey)
-	assert.Equal(t, "", options.Priority.FairnessKey)
-	assert.Equal(t, float32(0), options.Priority.FairnessWeight)
+	assert.Empty(t, options.Priority.FairnessKey)
+	assert.Zero(t, options.Priority.FairnessWeight)
 
 	assert.Nil(t, options.RetryPolicy.InitialInterval)
 	assert.Nil(t, options.RetryPolicy.MaximumInterval)
