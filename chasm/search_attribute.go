@@ -432,8 +432,7 @@ func GetValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, 
 		return zero, false
 	}
 
-	rawValue := visibilityValue.Value()
-	finalVal, ok := rawValue.(T)
+	finalVal, ok := visibilityValue.Value().(T)
 	if !ok {
 		return zero, false
 	}

@@ -131,7 +131,6 @@ func newVisibilityManager(
 	visibilityPluginNameTag metrics.Tag,
 	visibilityIndexNameTag metrics.Tag,
 	logger log.Logger,
-	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	chasmRegistry *chasm.Registry,
 ) manager.VisibilityManager {

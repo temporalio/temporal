@@ -37,7 +37,7 @@ func TestChasmTestSuiteLegacy(t *testing.T) {
 	suite.Run(t, &ChasmTestSuite{enableUnifiedQueryConverter: false})
 }
 
-func TestChasmTestSuiteUnifiedQueryConverter(t *testing.T) {
+func TestChasmTestSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &ChasmTestSuite{enableUnifiedQueryConverter: true})
 }

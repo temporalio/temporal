@@ -13,7 +13,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -209,7 +208,7 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		return nil, err
 	}
 
-	userMemo, chasmMemoPayload, err := p.splitUserAndChasmMemo(exec)
+	userMemo, chasmMemoPayload, err := splitUserAndChasmMemo(exec)
 	if err != nil {
 		return nil, err
 	}
@@ -244,18 +243,18 @@ func splitSearchAttributes(searchAttributes *commonpb.SearchAttributes) (customS
 }
 
 // splitUserAndChasmMemo extracts user memo and CHASM memo from the combined memo.
-func (p *visibilityManagerImpl) splitUserAndChasmMemo(exec *store.InternalExecutionInfo) (userMemo *commonpb.Memo, chasmMemoPayload *commonpb.Payload, err error) {
+func splitUserAndChasmMemo(exec *store.InternalExecutionInfo) (userMemo *commonpb.Memo, chasmMemoPayload *commonpb.Payload, err error) {
 	combinedMemo, err := deserializeMemo(exec.Memo)
 	if err != nil {
 		return
 	}
 
-	if isChasmExecution(exec.SearchAttributes) && combinedMemo != nil {
+	if combinedMemo != nil && isChasmExecution(exec.SearchAttributes) {
 		// Archetype exists - split memo into user and chasm parts
 		userPayload := combinedMemo.Fields[chasm.UserMemoKey]
 		if err := payload.Decode(userPayload, &userMemo); err != nil {
-			p.logger.Error("failed to decode user memo", tag.Error(err))
-			userMemo = nil
+			return nil, nil, serialization.NewDeserializationError(
+				enumspb.ENCODING_TYPE_PROTO3, fmt.Errorf("unable to decode user memo from combined memo payload: %w", err))
 		}
 		chasmMemoPayload = combinedMemo.Fields[chasm.ChasmMemoKey]
 	} else {
@@ -401,7 +400,7 @@ func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 	if err != nil {
 		return nil, err
 	}
-	userMemo, _, err := p.splitUserAndChasmMemo(internalExecution)
+	userMemo, _, err := splitUserAndChasmMemo(internalExecution)
 	if err != nil {
 		return nil, err
 	}
