@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service"
-	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
@@ -45,7 +44,6 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
-	workerdeployment.Module,
 	fx.Provide(hsm.NewRegistry),
 	workflow.Module,
 	shard.Module,

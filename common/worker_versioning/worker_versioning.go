@@ -498,6 +498,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
 	}
+
 	if override.GetAutoUpgrade() { // v0.32
 		return nil
 	} else if p := override.GetPinned(); p != nil {
@@ -507,6 +508,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
+		return nil
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
