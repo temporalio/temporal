@@ -526,6 +526,14 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return nil, err
+	}
+	if request.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
+		request.GetVersioningOverride().GetPinned().GetVersion() == nil {
+		return nil, serviceerror.NewInvalidArgument("override version is required to start a workflow with a pinned override")
+	}
+
 	return request, nil
 }
 
@@ -2072,6 +2080,14 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
 		return nil, err
+	}
+
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return nil, err
+	}
+	if request.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
+		request.GetVersioningOverride().GetPinned().GetVersion() == nil {
+		return nil, serviceerror.NewInvalidArgument("override version is required to start a workflow with a pinned override")
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
