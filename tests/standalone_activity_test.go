@@ -327,7 +327,8 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_FailsIfNeverRequeste
 		Details:   details,
 		Identity:  "new-worker",
 	})
-	require.Error(t, err)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSucceeds() {
@@ -341,7 +342,7 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSu
 	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 	runID := startResp.RunId
 
-	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
 	for i := 0; i < 2; i++ {
 		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
@@ -357,20 +358,6 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSu
 
 	// TODO: we should get the cancel request from heart beat once we implement it
 
-	details := &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			payload.EncodeString("Canceled Details"),
-		},
-	}
-
-	_, err := s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
-		Namespace: s.Namespace().String(),
-		TaskToken: pollTaskResp.TaskToken,
-		Details:   details,
-		Identity:  "new-worker",
-	})
-	require.NoError(t, err)
-
 	activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:      s.Namespace().String(),
 		ActivityId:     activityID,
@@ -382,9 +369,9 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSu
 	require.NoError(t, err)
 
 	info := activityResp.GetInfo()
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
-	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCancelled_DifferentRequestIDFails() {
@@ -418,7 +405,8 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_DifferentRequestIDFa
 		RequestId:  "different-cancel-request-id",
 		Reason:     "Test Cancellation",
 	})
-	require.Error(t, err)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
 }
 
 func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested() {
@@ -626,7 +614,8 @@ func (s *standaloneActivityTestSuite) TestCompletedActivity_CannotTerminate() {
 		Reason:     "Test Termination",
 		Identity:   "worker",
 	})
-	require.Error(t, err)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
 }
 
 // TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is started.

@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/payload"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -262,7 +263,7 @@ func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.Re
 // HandleCanceled updates the activity on activity canceled.
 func (a *Activity) HandleCanceled(ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCanceledRequest) (
 	*historyservice.RespondActivityTaskCanceledResponse, error) {
-	if err := TransitionCanceled.Apply(a, ctx, request); err != nil {
+	if err := TransitionCanceled.Apply(a, ctx, request.GetCancelRequest().GetDetails()); err != nil {
 		return nil, err
 	}
 
@@ -309,18 +310,24 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *ac
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
-	// If in scheduled state, cancel immediately
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
-		err := TransitionCanceled.Apply(a, ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
-	}
+	// If in scheduled state, cancel immediately right after marking cancel requested
+	isCancelImmediately := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
 
 	if err := TransitionCancelRequested.Apply(a, ctx, req.GetFrontendRequest()); err != nil {
 		return nil, err
+	}
+
+	if isCancelImmediately {
+		details := &commonpb.Payloads{
+			Payloads: []*commonpb.Payload{
+				payload.EncodeString(req.GetFrontendRequest().GetReason()),
+			},
+		}
+
+		err := TransitionCanceled.Apply(a, ctx, details)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &activitypb.RequestCancelActivityExecutionResponse{}, nil

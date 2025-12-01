@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -288,6 +289,7 @@ var TransitionTerminated = chasm.NewTransition(
 var TransitionCancelRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, // Allow idempotent transition
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
@@ -308,10 +310,9 @@ var TransitionCancelRequested = chasm.NewTransition(
 var TransitionCanceled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskCanceledRequest) error {
+	func(a *Activity, ctx chasm.MutableContext, details *common.Payloads) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
@@ -330,7 +331,7 @@ var TransitionCanceled = chasm.NewTransition(
 			failure := &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-						Details: req.GetCancelRequest().GetDetails(),
+						Details: details,
 					},
 				},
 			}

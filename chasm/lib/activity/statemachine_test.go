@@ -506,11 +506,7 @@ func TestTransitionCanceled(t *testing.T) {
 		Outcome: chasm.NewDataField(ctx, outcome),
 	}
 
-	err := TransitionCanceled.Apply(activity, ctx, &historyservice.RespondActivityTaskCanceledRequest{
-		CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{
-			Details: payloads.EncodeString("Details"),
-		},
-	})
+	err := TransitionCanceled.Apply(activity, ctx, payloads.EncodeString("Details"))
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
 

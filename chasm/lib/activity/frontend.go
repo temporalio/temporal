@@ -3,7 +3,9 @@ package activity
 import (
 	"context"
 
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -143,9 +145,13 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 
 	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
-	err = validateAndNormalizeRequestID(&req.RequestId, dynamicconfig.MaxIDLengthLimit.Get(h.dc)())
-	if err != nil {
-		return nil, err
+
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
+	if len(req.GetRequestId()) > dynamicconfig.MaxIDLengthLimit.Get(h.dc)() {
+		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
 	}
 
 	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
@@ -185,18 +191,12 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		return nil, err
 	}
 
-	err = ValidateStandaloneActivity(
-		req.ActivityId,
-		req.ActivityType.GetName(),
+	err = validateAndNormalizeStartActivityExecutionRequest(
+		req,
 		dynamicconfig.BlobSizeLimitError.Get(h.dc),
 		dynamicconfig.BlobSizeLimitWarn.Get(h.dc),
-		req.Input.Size(),
 		h.logger,
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
-		req.Namespace,
-		&req.RequestId,
-		req.SearchAttributes,
-		h.saMapperProvider,
 		h.saValidator)
 	if err != nil {
 		return nil, err
