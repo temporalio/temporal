@@ -38,7 +38,7 @@ func TestEmitWorkflowCompletionStats_WorkflowDuration(t *testing.T) {
 
 	snapshot, err := testHandler.Snapshot()
 	require.NoError(t, err)
-	buckets, err := snapshot.Histogram("workflow_duration_milliseconds",
+	buckets, err := snapshot.Histogram("workflow_schedule_to_close_latency_milliseconds",
 
 		metrics.StringTag("namespace", "test-namespace"),
 		metrics.StringTag("namespace_state", "active"),
@@ -60,6 +60,6 @@ func TestEmitWorkflowCompletionStats_SkipNonWorkflow(t *testing.T) {
 	emitWorkflowCompletionStats(testHandler, testNamespace, completionMetric, nil)
 	snapshot, err := testHandler.Snapshot()
 	require.NoError(t, err)
-	_, err = snapshot.Histogram("workflow_duration_milliseconds")
+	_, err = snapshot.Histogram("workflow_schedule_to_close_latency_milliseconds")
 	require.Error(t, err)
 }

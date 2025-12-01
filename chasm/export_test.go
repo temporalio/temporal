@@ -1,6 +1,9 @@
 package chasm
 
-import "reflect"
+import (
+	"context"
+	"reflect"
+)
 
 func (r *Registry) Component(fqn string) (*RegistrableComponent, bool) {
 	return r.component(fqn)
@@ -18,6 +21,10 @@ func (r *Registry) ComponentOf(componentGoType reflect.Type) (*RegistrableCompon
 	return r.componentOf(componentGoType)
 }
 
+func (r *Registry) ComponentByID(id uint32) (*RegistrableComponent, bool) {
+	return r.componentByID(id)
+}
+
 func (r *Registry) TaskFor(taskInstance any) (*RegistrableTask, bool) {
 	return r.taskFor(taskInstance)
 }
@@ -26,10 +33,18 @@ func (r *Registry) TaskOf(taskGoType reflect.Type) (*RegistrableTask, bool) {
 	return r.taskOf(taskGoType)
 }
 
+func (r *Registry) TaskByID(id uint32) (*RegistrableTask, bool) {
+	return r.taskByID(id)
+}
+
 func (rc RegistrableComponent) FqType() string {
 	return rc.fqType()
 }
 
 func (rt RegistrableTask) FqType() string {
 	return rt.fqType()
+}
+
+func EngineFromContext(ctx context.Context) Engine {
+	return engineFromContext(ctx)
 }

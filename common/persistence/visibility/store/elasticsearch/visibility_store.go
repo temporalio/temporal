@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/olivere/elastic/v7"
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -27,6 +28,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 )
 
@@ -46,11 +48,18 @@ type (
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
 		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableUnifiedQueryConverter    dynamicconfig.BoolPropertyFn
 		metricsHandler                 metrics.Handler
 	}
 
 	visibilityPageToken struct {
 		SearchAfter []interface{}
+	}
+
+	esQueryParams struct {
+		Query   elastic.Query
+		Sorter  []elastic.Sorter
+		GroupBy []string
 	}
 
 	fieldSort struct {
@@ -73,8 +82,8 @@ var (
 	// It is indirectly built so buildPaginationQuery can have access to
 	// the field names to build the page query from the token.
 	defaultSorterFields = []fieldSort{
-		{searchattribute.CloseTime, true, true},
-		{searchattribute.StartTime, true, true},
+		{sadefs.CloseTime, true, true},
+		{sadefs.StartTime, true, true},
 	}
 
 	defaultSorter = func() []elastic.Sorter {
@@ -105,6 +114,7 @@ func NewVisibilityStore(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (*VisibilityStore, error) {
@@ -139,6 +149,7 @@ func NewVisibilityStore(
 		processorAckTimeout:            processorAckTimeout,
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
+		enableUnifiedQueryConverter:    enableUnifiedQueryConverter,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
 	}, nil
 }
@@ -363,9 +374,19 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	queryParams, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
-	if err != nil {
-		return nil, err
+	var queryParams *esQueryParams
+	var err error
+	if s.enableUnifiedQueryConverter() {
+		queryParams, err = s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		queryParamsLegacy, err := s.convertQueryLegacy(request.Namespace, request.NamespaceID, request.Query)
+		if err != nil {
+			return nil, err
+		}
+		queryParams = (*esQueryParams)(queryParamsLegacy)
 	}
 
 	if len(queryParams.GroupBy) > 0 {
@@ -383,7 +404,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 
 func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
-	queryParams *query.QueryParams,
+	queryParams *esQueryParams,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	groupByFields := queryParams.GroupBy
 
@@ -419,7 +440,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 		termsAgg,
 	)
 	if err != nil {
-		return nil, err
+		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err)
 	}
 	return s.parseCountGroupByResponse(esResponse, groupByFields)
 }
@@ -461,13 +482,23 @@ func (s *VisibilityStore) BuildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 ) (*client.SearchParameters, error) {
-	queryParams, err := s.convertQuery(
-		request.Namespace,
-		request.NamespaceID,
-		request.Query,
-	)
-	if err != nil {
-		return nil, err
+	var queryParams *esQueryParams
+	var err error
+	if s.enableUnifiedQueryConverter() {
+		queryParams, err = s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		queryParamsLegacy, err := s.convertQueryLegacy(
+			request.Namespace,
+			request.NamespaceID,
+			request.Query,
+		)
+		if err != nil {
+			return nil, err
+		}
+		queryParams = (*esQueryParams)(queryParamsLegacy)
 	}
 
 	searchParams := &client.SearchParameters{
@@ -563,16 +594,81 @@ func (s *VisibilityStore) processPageToken(
 }
 
 func (s *VisibilityStore) convertQuery(
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	queryString string,
+) (res *esQueryParams, err error) {
+	defer func() {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
+		// only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			err = converterErr.ToInvalidArgument()
+		}
+	}()
+
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	c := query.NewQueryConverter(&queryConverter{}, namespaceName, saTypeMap, saMapper)
+	queryParams, err := c.Convert(queryString)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams.QueryExpr = elastic.NewBoolQuery().Filter(
+		elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()),
+		queryParams.QueryExpr,
+	)
+
+	orderBy := make([]elastic.Sorter, 0, len(queryParams.OrderBy))
+	for _, orderByExpr := range queryParams.OrderBy {
+		// query converter is supposed to parse the expression and convert to SAColumn
+		colName, ok := orderByExpr.Expr.(*query.SAColumn)
+		if !ok {
+			return nil, query.NewConverterError(
+				"%s: unexpected field in 'ORDER BY' clause: %s",
+				query.NotSupportedErrMessage,
+				sqlparser.String(orderByExpr),
+			)
+		}
+		fieldSort := elastic.NewFieldSort(colName.FieldName)
+		if orderByExpr.Direction == sqlparser.DescScr {
+			fieldSort = fieldSort.Desc()
+		}
+		orderBy = append(orderBy, fieldSort)
+	}
+
+	groupBy := make([]string, 0, len(queryParams.GroupBy))
+	for _, field := range queryParams.GroupBy {
+		groupBy = append(groupBy, field.FieldName)
+	}
+
+	return &esQueryParams{
+		Query:   queryParams.QueryExpr,
+		Sorter:  orderBy,
+		GroupBy: groupBy,
+	}, nil
+}
+
+func (s *VisibilityStore) convertQueryLegacy(
 	namespace namespace.Name,
 	namespaceID namespace.ID,
 	requestQueryStr string,
-) (*query.QueryParams, error) {
+) (*query.QueryParamsLegacy, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
 	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider)
-	queryConverter := NewQueryConverter(
+	queryConverter := NewQueryConverterLegacy(
 		nameInterceptor,
 		NewValuesInterceptor(namespace, saTypeMap),
 		saTypeMap,
@@ -588,12 +684,12 @@ func (s *VisibilityStore) convertQuery(
 	}
 
 	// Create a new bool query because a request query might have only "should" (="or") queries.
-	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID.String()))
+	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()))
 
 	// If the query did not explicitly filter on TemporalNamespaceDivision somehow, then add a
 	// "must not exist" (i.e. "is null") query for it.
 	if !nameInterceptor.seenNamespaceDivision {
-		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
+		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(sadefs.TemporalNamespaceDivision))
 	}
 
 	if queryParams.Query != nil {
@@ -613,7 +709,7 @@ func (s *VisibilityStore) GetListFieldSorter(fieldSorts []elastic.Sorter) ([]ela
 		res[i] = fs
 	}
 	// RunID is explicit tiebreaker.
-	res[len(res)-1] = elastic.NewFieldSort(searchattribute.RunID).Desc()
+	res[len(res)-1] = elastic.NewFieldSort(sadefs.RunID).Desc()
 
 	return res, nil
 }
@@ -691,29 +787,29 @@ func (s *VisibilityStore) GenerateESDoc(
 	visibilityTaskKey string,
 ) (map[string]interface{}, error) {
 	doc := map[string]interface{}{
-		searchattribute.VisibilityTaskKey: visibilityTaskKey,
-		searchattribute.NamespaceID:       request.NamespaceID,
-		searchattribute.WorkflowID:        request.WorkflowID,
-		searchattribute.RunID:             request.RunID,
-		searchattribute.WorkflowType:      request.WorkflowTypeName,
-		searchattribute.StartTime:         request.StartTime,
-		searchattribute.ExecutionTime:     request.ExecutionTime,
-		searchattribute.ExecutionStatus:   request.Status.String(),
-		searchattribute.TaskQueue:         request.TaskQueue,
-		searchattribute.RootWorkflowID:    request.RootWorkflowID,
-		searchattribute.RootRunID:         request.RootRunID,
+		sadefs.VisibilityTaskKey: visibilityTaskKey,
+		sadefs.NamespaceID:       request.NamespaceID,
+		sadefs.WorkflowID:        request.WorkflowID,
+		sadefs.RunID:             request.RunID,
+		sadefs.WorkflowType:      request.WorkflowTypeName,
+		sadefs.StartTime:         request.StartTime,
+		sadefs.ExecutionTime:     request.ExecutionTime,
+		sadefs.ExecutionStatus:   request.Status.String(),
+		sadefs.TaskQueue:         request.TaskQueue,
+		sadefs.RootWorkflowID:    request.RootWorkflowID,
+		sadefs.RootRunID:         request.RootRunID,
 	}
 
 	if request.ParentWorkflowID != nil {
-		doc[searchattribute.ParentWorkflowID] = *request.ParentWorkflowID
+		doc[sadefs.ParentWorkflowID] = *request.ParentWorkflowID
 	}
 	if request.ParentRunID != nil {
-		doc[searchattribute.ParentRunID] = *request.ParentRunID
+		doc[sadefs.ParentRunID] = *request.ParentRunID
 	}
 
 	if len(request.Memo.GetData()) > 0 {
-		doc[searchattribute.Memo] = request.Memo.GetData()
-		doc[searchattribute.MemoEncoding] = request.Memo.GetEncodingType().String()
+		doc[sadefs.Memo] = request.Memo.GetData()
+		doc[sadefs.MemoEncoding] = request.Memo.GetEncodingType().String()
 	}
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
@@ -756,11 +852,11 @@ func (s *VisibilityStore) GenerateClosedESDoc(
 		return nil, err
 	}
 
-	doc[searchattribute.CloseTime] = request.CloseTime
-	doc[searchattribute.ExecutionDuration] = request.ExecutionDuration
-	doc[searchattribute.HistoryLength] = request.HistoryLength
-	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
-	doc[searchattribute.HistorySizeBytes] = request.HistorySizeBytes
+	doc[sadefs.CloseTime] = request.CloseTime
+	doc[sadefs.ExecutionDuration] = request.ExecutionDuration
+	doc[sadefs.HistoryLength] = request.HistoryLength
+	doc[sadefs.StateTransitionCount] = request.StateTransitionCount
+	doc[sadefs.HistorySizeBytes] = request.HistorySizeBytes
 
 	return doc, nil
 }
@@ -795,11 +891,11 @@ func (s *VisibilityStore) ParseESDoc(
 	record := &store.InternalWorkflowExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
 		switch fieldName {
-		case searchattribute.NamespaceID,
-			searchattribute.VisibilityTaskKey:
+		case sadefs.NamespaceID,
+			sadefs.VisibilityTaskKey:
 			// Ignore these fields.
 			continue
-		case searchattribute.Memo:
+		case sadefs.Memo:
 			var memoStr string
 			if memoStr, isValidType = fieldValue.(string); !isValidType {
 				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), docID)
@@ -809,7 +905,7 @@ func (s *VisibilityStore) ParseESDoc(
 				return nil, logParseError(fieldName, memoStr[:10], err, docID)
 			}
 			continue
-		case searchattribute.MemoEncoding:
+		case sadefs.MemoEncoding:
 			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
 				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), docID)
 			}
@@ -832,41 +928,41 @@ func (s *VisibilityStore) ParseESDoc(
 		}
 
 		switch fieldName {
-		case searchattribute.WorkflowID:
+		case sadefs.WorkflowID:
 			record.WorkflowID = fieldValueParsed.(string)
-		case searchattribute.RunID:
+		case sadefs.RunID:
 			record.RunID = fieldValueParsed.(string)
-		case searchattribute.WorkflowType:
+		case sadefs.WorkflowType:
 			record.TypeName = fieldValue.(string)
-		case searchattribute.StartTime:
+		case sadefs.StartTime:
 			record.StartTime = fieldValueParsed.(time.Time)
-		case searchattribute.ExecutionTime:
+		case sadefs.ExecutionTime:
 			record.ExecutionTime = fieldValueParsed.(time.Time)
-		case searchattribute.CloseTime:
+		case sadefs.CloseTime:
 			record.CloseTime = fieldValueParsed.(time.Time)
-		case searchattribute.ExecutionDuration:
+		case sadefs.ExecutionDuration:
 			record.ExecutionDuration = time.Duration(fieldValueParsed.(int64))
-		case searchattribute.TaskQueue:
+		case sadefs.TaskQueue:
 			record.TaskQueue = fieldValueParsed.(string)
-		case searchattribute.ExecutionStatus:
+		case sadefs.ExecutionStatus:
 			status, err := enumspb.WorkflowExecutionStatusFromString(fieldValueParsed.(string))
 			if err != nil {
 				return nil, logParseError(fieldName, fieldValueParsed.(string), err, docID)
 			}
 			record.Status = status
-		case searchattribute.HistoryLength:
+		case sadefs.HistoryLength:
 			record.HistoryLength = fieldValueParsed.(int64)
-		case searchattribute.StateTransitionCount:
+		case sadefs.StateTransitionCount:
 			record.StateTransitionCount = fieldValueParsed.(int64)
-		case searchattribute.HistorySizeBytes:
+		case sadefs.HistorySizeBytes:
 			record.HistorySizeBytes = fieldValueParsed.(int64)
-		case searchattribute.ParentWorkflowID:
+		case sadefs.ParentWorkflowID:
 			record.ParentWorkflowID = fieldValueParsed.(string)
-		case searchattribute.ParentRunID:
+		case sadefs.ParentRunID:
 			record.ParentRunID = fieldValueParsed.(string)
-		case searchattribute.RootWorkflowID:
+		case sadefs.RootWorkflowID:
 			record.RootWorkflowID = fieldValueParsed.(string)
-		case searchattribute.RootRunID:
+		case sadefs.RootRunID:
 			record.RootRunID = fieldValueParsed.(string)
 		default:
 			// All custom and predefined search attributes are handled here.
@@ -908,7 +1004,7 @@ func (s *VisibilityStore) ParseESDoc(
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf(
 			"%q field is missing in Elasticsearch document(%s)",
-			searchattribute.MemoEncoding,
+			sadefs.MemoEncoding,
 			docID,
 		)
 	}
@@ -1058,14 +1154,19 @@ func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interfac
 
 func ConvertElasticsearchClientError(message string, err error) error {
 	errMessage := fmt.Sprintf("%s: %s", message, detailedErrorMessage(err))
-	switch e := err.(type) {
-	case *elastic.Error:
-		switch e.Status {
+	var elasticErr *elastic.Error
+	switch {
+	case errors.As(err, &elasticErr):
+		switch elasticErr.Status {
 		case 400: // BadRequest
 			// Returning InvalidArgument error will prevent retry on a caller side.
 			return serviceerror.NewInvalidArgument(errMessage)
 		}
+		return serviceerror.NewUnavailable(errMessage)
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return fmt.Errorf("%s: %w", message, err)
 	}
+
 	return serviceerror.NewUnavailable(errMessage)
 }
 

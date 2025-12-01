@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -163,12 +164,14 @@ const (
 type (
 	MutableStateTaskStore struct {
 		Session gocql.Session
+		Logger  log.Logger
 	}
 )
 
-func NewMutableStateTaskStore(session gocql.Session) *MutableStateTaskStore {
+func NewMutableStateTaskStore(session gocql.Session, logger log.Logger) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
 		Session: session,
+		Logger:  logger,
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -73,7 +74,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
-	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable.GetTask())
+	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable.GetTask(), t.shardContext.ChasmRegistry())
 
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
@@ -122,7 +123,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	default:
-		err = queues.NewUnprocessableTaskError("unknown task type")
+		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
 
 	return queues.ExecuteResponse{
@@ -373,6 +374,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	workflowTask := mutableState.GetWorkflowTaskByID(task.EventID)
 	if workflowTask == nil {
 		return nil
+	}
+	if task.Stamp != workflowTask.Stamp {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrStaleReference
 	}
 
 	var operationMetricsTag string
@@ -666,7 +671,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 
 	var newRunID string
 	if initiator != enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
-		newRunID = uuid.New()
+		newRunID = uuid.NewString()
 	}
 
 	// First add timeout workflow event, no matter what we're doing next.
@@ -747,6 +752,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 				newExecutionInfo.WorkflowId,
 				newExecutionState.RunId,
 			),
+			chasm.WorkflowArchetypeID,
 			t.logger,
 			t.shardContext.GetThrottledLogger(),
 			t.shardContext.GetMetricsHandler(),

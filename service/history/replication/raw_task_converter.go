@@ -13,7 +13,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -26,6 +25,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -122,7 +122,7 @@ func convertActivityStateReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetypeID,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -210,7 +210,7 @@ func convertWorkflowStateReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetypeID,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			state, _ := mutableState.GetWorkflowStateStatus()
@@ -222,13 +222,21 @@ func convertWorkflowStateReplicationTask(
 			if err := common.DiscardUnknownProto(workflowMutableState); err != nil {
 				return nil, err
 			}
+
+			isCloseTransferTaskAcked := isCloseTransferTaskAckedForWorkflow(shardContext, &tasks.CloseExecutionTask{
+				WorkflowKey: mutableState.GetWorkflowKey(),
+				TaskID:      mutableState.GetExecutionInfo().GetCloseTransferTaskId(),
+			})
+
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 				SourceTaskId: taskInfo.TaskID,
 				Priority:     taskInfo.Priority,
 				Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
 					SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-						WorkflowState: workflowMutableState,
+						WorkflowState:            workflowMutableState,
+						IsForceReplication:       taskInfo.IsForceReplication,
+						IsCloseTransferTaskAcked: isCloseTransferTaskAcked,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -247,7 +255,7 @@ func convertSyncHSMReplicationTask(
 		ctx,
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetypeID,
 		workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			// HSM can be updated after workflow is completed
@@ -295,11 +303,14 @@ func convertSyncVersionedTransitionTask(
 	targetClusterID int32,
 	converter *syncVersionedTransitionTaskConverter,
 ) (*replicationspb.ReplicationTask, error) {
+	if taskInfo.ArchetypeID == chasm.UnspecifiedArchetypeID {
+		taskInfo.ArchetypeID = chasm.WorkflowArchetypeID
+	}
 	return generateStateReplicationTask(
 		ctx,
 		converter.shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		chasm.ArchetypeAny, // SyncVersionedTransitionTask works for all Archetypes.
+		taskInfo.ArchetypeID,
 		converter.workflowCache,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			return converter.convert(ctx, taskInfo, targetClusterID, mutableState, releaseFunc)
@@ -374,11 +385,11 @@ func generateStateReplicationTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
-	archetype chasm.Archetype,
+	archetypeID chasm.ArchetypeID,
 	workflowCache wcache.Cache,
 	action func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
-	wfContext, release, err := workflowCache.GetOrCreateChasmEntity(
+	wfContext, release, err := workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		shardContext,
 		namespace.ID(workflowKey.NamespaceID),
@@ -386,7 +397,7 @@ func generateStateReplicationTask(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		archetype,
+		archetypeID,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -644,7 +655,11 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	// If workflow is not on any versionedTransition (in an unknown state from state-based replication perspective),
 	// we can't convert this raw task to a replication task, instead we need to rely on its task equivalents.
 	if len(executionInfo.TransitionHistory) == 0 {
+		isWorkflow := mutableState.IsWorkflow()
 		releaseFunc(nil)
+		if !isWorkflow {
+			return nil, serviceerror.NewInternalf("chasm execution not on any versioned transition, is state-based replication enabled? execution key: %v", taskInfo.WorkflowKey)
+		}
 		return c.convertTaskEquivalents(ctx, taskInfo, targetClusterID)
 	}
 
@@ -677,6 +692,13 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		return nil, err
 	}
 	currentHistoryCopy := versionhistory.CopyVersionHistory(currentHistory)
+
+	// Extract data from mutable state before releasing the lock
+	closeTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: mutableState.GetWorkflowKey(),
+		TaskID:      executionInfo.GetCloseTransferTaskId(),
+	}
+
 	var syncStateResult *SyncStateResult
 	if taskInfo.IsFirstTask {
 		syncStateResult, err = c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableStateForNewWorkflow(
@@ -708,7 +730,14 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	if err != nil {
 		return nil, err
 	}
-	// do not access mutable state after this point
+
+	// WARNING: do not access mutable state after this point. If you are using mutable state in this function, be warned that the
+	// releaseFunc that is being passed into this function is what is used to release the lock we are holding on mutable state. If
+	// you use mutable state after the releaseFunc has been called, you will be accessing mutable state without holding the lock.
+	// Deep copy what you need.
+
+	syncStateResult.VersionedTransitionArtifact.IsCloseTransferTaskAcked = c.isCloseTransferTaskAcked(closeTransferTask)
+	syncStateResult.VersionedTransitionArtifact.IsForceReplication = taskInfo.IsForceReplication
 
 	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, syncStateResult.VersionedTransitionHistory, currentHistoryCopy.Items)
 	if err != nil {
@@ -723,6 +752,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 				NamespaceId:                 taskInfo.NamespaceID,
 				WorkflowId:                  taskInfo.WorkflowID,
 				RunId:                       taskInfo.RunID,
+				ArchetypeId:                 taskInfo.ArchetypeID,
 			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,
@@ -772,6 +802,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 				NamespaceId:         taskInfo.NamespaceID,
 				WorkflowId:          taskInfo.WorkflowID,
 				RunId:               taskInfo.RunID,
+				ArchetypeId:         taskInfo.ArchetypeID,
 				NewRunId:            taskInfo.NewRunID,
 				EventVersionHistory: eventVersionHistory,
 				NextEventId:         nextEventId,
@@ -847,6 +878,28 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 	}, nil
 }
 
+func (c *syncVersionedTransitionTaskConverter) isCloseTransferTaskAcked(
+	closeTransferTask *tasks.CloseExecutionTask,
+) bool {
+	return isCloseTransferTaskAckedForWorkflow(c.shardContext, closeTransferTask)
+}
+
+func isCloseTransferTaskAckedForWorkflow(
+	shardContext historyi.ShardContext,
+	closeTransferTask *tasks.CloseExecutionTask,
+) bool {
+	if closeTransferTask.TaskID == 0 {
+		return false
+	}
+
+	transferQueueState, ok := shardContext.GetQueueState(tasks.CategoryTransfer)
+	if !ok {
+		return false
+	}
+
+	return queues.IsTaskAcked(closeTransferTask, transferQueueState)
+}
+
 func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
 	ctx context.Context,
 	taskInfo *tasks.SyncVersionedTransitionTask,
@@ -886,6 +939,7 @@ func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
 			ShardID:     c.shardID,
 			NamespaceID: taskInfo.NamespaceID,
 			WorkflowID:  taskInfo.WorkflowID,
+			ArchetypeID: chasm.WorkflowArchetypeID, // only workflow has task equivalents
 			Tasks: map[tasks.Category][]tasks.Task{
 				tasks.CategoryReplication: taskInfo.TaskEquivalents,
 			},

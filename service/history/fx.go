@@ -120,6 +120,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 		chasmEngine:                  args.ChasmEngine,
+		chasmRegistry:                args.ChasmRegistry,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -303,6 +304,7 @@ func VisibilityManagerProvider(
 		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
+		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 	)

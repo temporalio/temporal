@@ -9,10 +9,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
 )
 
@@ -37,8 +38,7 @@ func TestFieldSuite(t *testing.T) {
 func (s *fieldSuite) SetupTest() {
 	s.initAssertions()
 	s.controller = gomock.NewController(s.T())
-	s.nodeBackend = NewMockNodeBackend(s.controller)
-	s.nodeBackend.EXPECT().IsWorkflow().Return(false).AnyTimes()
+	s.nodeBackend = &MockNodeBackend{}
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	s.registry = NewRegistry(s.logger)
@@ -102,8 +102,7 @@ func (s *fieldSuite) TestFieldGetSimple() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result, err := tt.field.Get(nil)
-			s.NoError(err)
+			result, _ := tt.field.TryGet(nil)
 			s.Equal(tt.expected, result)
 		})
 	}
@@ -123,15 +122,13 @@ func (s *fieldSuite) TestFieldGetComponent() {
 
 	tc := c.(*TestComponent)
 
-	sc1, err := tc.SubComponent1.Get(chasmContext)
-	s.NoError(err)
+	sc1 := tc.SubComponent1.Get(chasmContext)
 	s.NotNil(sc1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-component1-data",
 	}, sc1.SubComponent1Data)
 
-	sd1, err := tc.SubData1.Get(chasmContext)
-	s.NoError(err)
+	sd1 := tc.SubData1.Get(chasmContext)
 	s.NotNil(sd1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-data1",
@@ -141,7 +138,16 @@ func (s *fieldSuite) TestFieldGetComponent() {
 func (s *fieldSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
-	return NewTree(
+	if len(serializedNodes) == 0 {
+		return NewEmptyTree(
+			s.registry,
+			s.timeSource,
+			s.nodeBackend,
+			s.nodePathEncoder,
+			s.logger,
+		), nil
+	}
+	return NewTreeFromDB(
 		serializedNodes,
 		s.registry,
 		s.timeSource,
@@ -166,14 +172,18 @@ func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node
 }
 
 func (s *fieldSuite) TestDeferredPointerResolution() {
-	tv := testvars.New(s.T())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
-	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
+	s.nodeBackend = &MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 1 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
+	}
 
-	// Create component structure that will simulate NewEntity scenario.
+	// Create component structure that will simulate NewExecution scenario.
 	sc2 := &TestSubComponent2{
 		SubComponent2Data: &protoMessageType{
 			CreateRequestId: "sub-component2-data",
@@ -227,8 +237,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.Equal([]string{"SubData1"}, dResolvedPath)
 
 	// Verify we can dereference the pointers.
-	resolvedComponent, err := sc1.SubComponent2Pointer.Get(ctx)
-	s.NoError(err)
+	resolvedComponent := sc1.SubComponent2Pointer.Get(ctx)
 	s.Equal(sc2, resolvedComponent)
 
 	// TODO - this doesn't resolve, but I've manually verified the tree structure looks correct
@@ -240,12 +249,16 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 }
 
 func (s *fieldSuite) TestMixedPointerScenario() {
-	tv := testvars.New(s.T())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
-	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
+	s.nodeBackend = &MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 1 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
+	}
 
 	existingComponent := &TestSubComponent11{
 		SubComponent11Data: &protoMessageType{CreateRequestId: "existing-component"},
@@ -279,8 +292,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.NoError(err)
 
 	rootComponent = rootComponentInterface.(*TestComponent)
-	sc1, err = rootComponent.SubComponent1.Get(ctx2)
-	s.NoError(err)
+	sc1 = rootComponent.SubComponent1.Get(ctx2)
 
 	// Now, add a new component and deferred pointer for it.
 	newComponent := &TestSubComponent2{
@@ -302,22 +314,24 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
-	resolved1, err := rootComponent.SubComponent11Pointer.Get(ctx2)
-	s.NoError(err)
+	resolved1 := rootComponent.SubComponent11Pointer.Get(ctx2)
 	s.Equal(existingComponent, resolved1)
 
-	resolved2, err := sc1.SubComponent2Pointer.Get(ctx2)
-	s.NoError(err)
+	resolved2 := sc1.SubComponent2Pointer.Get(ctx2)
 	s.Equal(newComponent, resolved2)
 }
 
 func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
-	tv := testvars.New(s.T())
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
-	s.nodeBackend.EXPECT().UpdateWorkflowStateStatus(gomock.Any(), gomock.Any()).AnyTimes()
-	s.nodeBackend.EXPECT().GetWorkflowKey().Return(tv.Any().WorkflowKey()).AnyTimes()
-	s.nodeBackend.EXPECT().AddTasks(gomock.Any()).AnyTimes()
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
+	s.nodeBackend = &MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 1 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
+	}
 
 	s.logger.(*testlogger.TestLogger).
 		Expect(testlogger.Error, "failed to resolve deferred pointer during transaction close")

@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -55,7 +55,7 @@ func (s *ConcurrentTxMapSuite) TestLen() {
 
 func (s *ConcurrentTxMapSuite) TestGetAndDo() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
-	key := uuid.New()
+	key := uuid.NewString()
 	var value intType
 	fnApplied := false
 
@@ -86,7 +86,7 @@ func (s *ConcurrentTxMapSuite) TestGetAndDo() {
 
 func (s *ConcurrentTxMapSuite) TestPutOrDo() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
-	key := uuid.New()
+	key := uuid.NewString()
 	var value intType
 	fnApplied := false
 
@@ -117,7 +117,7 @@ func (s *ConcurrentTxMapSuite) TestPutOrDo() {
 
 func (s *ConcurrentTxMapSuite) TestRemoveIf() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
-	key := uuid.New()
+	key := uuid.NewString()
 	value := intType(1)
 	testMap.Put(key, &value)
 
@@ -142,7 +142,7 @@ func (s *ConcurrentTxMapSuite) TestGetAfterPut() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
 
 	for i := 0; i < 1024; i++ {
-		key := uuid.New()
+		key := uuid.NewString()
 		countMap[key] = 0
 		testMap.Put(key, boolType(true))
 	}
@@ -175,7 +175,7 @@ func (s *ConcurrentTxMapSuite) TestGetAfterPut() {
 
 func (s *ConcurrentTxMapSuite) TestPutIfNotExist() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
-	key := uuid.New()
+	key := uuid.NewString()
 	ok := testMap.PutIfNotExist(key, boolType(true))
 	s.True(ok, "PutIfNotExist failed to insert item")
 	ok = testMap.PutIfNotExist(key, boolType(true))
@@ -186,7 +186,7 @@ func (s *ConcurrentTxMapSuite) TestMapConcurrency() {
 	nKeys := 1024
 	keys := make([]string, nKeys)
 	for i := 0; i < nKeys; i++ {
-		keys[i] = uuid.New()
+		keys[i] = uuid.NewString()
 	}
 
 	var total int32

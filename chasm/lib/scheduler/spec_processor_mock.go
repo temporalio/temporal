@@ -14,6 +14,7 @@ import (
 	time "time"
 
 	enums "go.temporal.io/api/enums/v1"
+	scheduler "go.temporal.io/server/service/worker/scheduler"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,17 +42,32 @@ func (m *MockSpecProcessor) EXPECT() *MockSpecProcessorMockRecorder {
 	return m.recorder
 }
 
-// ProcessTimeRange mocks base method.
-func (m *MockSpecProcessor) ProcessTimeRange(scheduler *Scheduler, start, end time.Time, overlapPolicy enums.ScheduleOverlapPolicy, backfillID string, manual bool, limit *int) (*ProcessedTimeRange, error) {
+// NextTime mocks base method.
+func (m *MockSpecProcessor) NextTime(arg0 *Scheduler, after time.Time) (scheduler.GetNextTimeResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessTimeRange", scheduler, start, end, overlapPolicy, backfillID, manual, limit)
+	ret := m.ctrl.Call(m, "NextTime", arg0, after)
+	ret0, _ := ret[0].(scheduler.GetNextTimeResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NextTime indicates an expected call of NextTime.
+func (mr *MockSpecProcessorMockRecorder) NextTime(arg0, after any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTime", reflect.TypeOf((*MockSpecProcessor)(nil).NextTime), arg0, after)
+}
+
+// ProcessTimeRange mocks base method.
+func (m *MockSpecProcessor) ProcessTimeRange(arg0 *Scheduler, start, end time.Time, overlapPolicy enums.ScheduleOverlapPolicy, workflowID, backfillID string, manual bool, limit *int) (*ProcessedTimeRange, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProcessTimeRange", arg0, start, end, overlapPolicy, workflowID, backfillID, manual, limit)
 	ret0, _ := ret[0].(*ProcessedTimeRange)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ProcessTimeRange indicates an expected call of ProcessTimeRange.
-func (mr *MockSpecProcessorMockRecorder) ProcessTimeRange(scheduler, start, end, overlapPolicy, backfillID, manual, limit any) *gomock.Call {
+func (mr *MockSpecProcessorMockRecorder) ProcessTimeRange(arg0, start, end, overlapPolicy, workflowID, backfillID, manual, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessTimeRange", reflect.TypeOf((*MockSpecProcessor)(nil).ProcessTimeRange), scheduler, start, end, overlapPolicy, backfillID, manual, limit)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessTimeRange", reflect.TypeOf((*MockSpecProcessor)(nil).ProcessTimeRange), arg0, start, end, overlapPolicy, workflowID, backfillID, manual, limit)
 }

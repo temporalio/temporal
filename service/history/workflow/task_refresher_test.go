@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -272,16 +272,16 @@ func (s *taskRefresherSuite) TestRefreshWorkflowCloseTasks() {
 	)
 	s.NoError(err)
 
-	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(closeTime.AsTime(), false).Return(nil).Times(1)
+	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(closeTime.AsTime(), false, false).Return(nil).Times(1)
 
-	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition)
+	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition, false)
 	s.NoError(err)
 
 	err = s.taskRefresher.refreshTasksForWorkflowClose(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		// TransitionCount is higher than workflow state's last update versioned transition,
 		TransitionCount:          3,
 		NamespaceFailoverVersion: common.EmptyVersion,
-	})
+	}, false)
 	s.NoError(err)
 }
 
@@ -363,7 +363,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowTaskTasks() {
 				record.ExecutionInfo.WorkflowTaskAttempt = 1
 				record.ExecutionInfo.WorkflowTaskStartedEventId = 3
 				record.ExecutionInfo.WorkflowTaskStartedTime = timestamppb.New(time.Now().Add(time.Second))
-				record.ExecutionInfo.WorkflowTaskRequestId = uuid.New()
+				record.ExecutionInfo.WorkflowTaskRequestId = uuid.NewString()
 				record.ExecutionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 				return record
 			},
@@ -507,7 +507,7 @@ func (s *taskRefresherSuite) TestRefreshActivityTasks() {
 				ScheduledTime:          timestamppb.Now(),
 				StartedTime:            timestamppb.New(time.Now().Add(time.Second)),
 				StartedEventId:         8,
-				RequestId:              uuid.New(),
+				RequestId:              uuid.NewString(),
 				TimerTaskStatus:        TimerTaskStatusCreatedStartToClose,
 				ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 				StartToCloseTimeout:    durationpb.New(10 * time.Second),
@@ -945,7 +945,7 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 			5: {
 				InitiatedEventBatchId: 4,
 				InitiatedEventId:      5,
-				CreateRequestId:       uuid.New(),
+				CreateRequestId:       uuid.NewString(),
 				StartedWorkflowId:     "child-workflow-id-5",
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          3,
@@ -955,7 +955,7 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 			6: {
 				InitiatedEventBatchId: 4,
 				InitiatedEventId:      6,
-				CreateRequestId:       uuid.New(),
+				CreateRequestId:       uuid.NewString(),
 				StartedWorkflowId:     "child-workflow-id-6",
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          5,
@@ -966,7 +966,7 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 				InitiatedEventBatchId: 4,
 				InitiatedEventId:      7,
 				StartedEventId:        8,
-				CreateRequestId:       uuid.New(),
+				CreateRequestId:       uuid.NewString(),
 				StartedWorkflowId:     "child-workflow-id-7",
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          5,
@@ -1053,7 +1053,7 @@ func (s *taskRefresherSuite) TestRefreshRequestCancelExternalTasks() {
 			5: {
 				InitiatedEventBatchId: 4,
 				InitiatedEventId:      5,
-				CancelRequestId:       uuid.New(),
+				CancelRequestId:       uuid.NewString(),
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          3,
 					NamespaceFailoverVersion: common.EmptyVersion,
@@ -1062,7 +1062,7 @@ func (s *taskRefresherSuite) TestRefreshRequestCancelExternalTasks() {
 			6: {
 				InitiatedEventBatchId: 4,
 				InitiatedEventId:      6,
-				CancelRequestId:       uuid.New(),
+				CancelRequestId:       uuid.NewString(),
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          5,
 					NamespaceFailoverVersion: common.EmptyVersion,
@@ -1139,7 +1139,7 @@ func (s *taskRefresherSuite) TestRefreshSignalExternalTasks() {
 			5: {
 				InitiatedEventBatchId: 4,
 				InitiatedEventId:      5,
-				RequestId:             uuid.New(),
+				RequestId:             uuid.NewString(),
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          3,
 					NamespaceFailoverVersion: common.EmptyVersion,
@@ -1148,7 +1148,7 @@ func (s *taskRefresherSuite) TestRefreshSignalExternalTasks() {
 			6: {
 				InitiatedEventBatchId: 4,
 				InitiatedEventId:      6,
-				RequestId:             uuid.New(),
+				RequestId:             uuid.NewString(),
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 					TransitionCount:          5,
 					NamespaceFailoverVersion: common.EmptyVersion,

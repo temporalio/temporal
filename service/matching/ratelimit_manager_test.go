@@ -47,7 +47,7 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 	s.Equal(2, rateLimitManager.perKeyReady.Size())
 	s.True(rateLimitManager.perKeyLimit.limited())
 	// Update the per-key simple rate limit with fairnessKeyRateLimitDefault as nil
-	rateLimitManager.updatePerKeySimpleRateLimitLocked(time.Second)
+	rateLimitManager.updatePerKeySimpleRateLimitWithBurstLocked(time.Second)
 	// Verify that clearPerKeyRateLimitsLocked was called
 	// The cache should be replaced with a new empty cache
 	s.Equal(0, rateLimitManager.perKeyReady.Size(), "All per-key ready entries should be cleared")
@@ -57,16 +57,16 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 
 // Additions to rateLimitManager for use by other unit tests:
 
-func (r *rateLimitManager) UpdateSimpleRateLimitForTesting(burstDuration time.Duration) {
+func (r *rateLimitManager) UpdateSimpleRateLimitWithBurstForTesting(burstDuration time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.updateSimpleRateLimitLocked(burstDuration)
+	r.updateSimpleRateLimitWithBurstLocked(burstDuration)
 }
 
-func (r *rateLimitManager) UpdatePerKeySimpleRateLimitForTesting(burstDuration time.Duration) {
+func (r *rateLimitManager) UpdatePerKeySimpleRateLimitWithBurstForTesting(burstDuration time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.updatePerKeySimpleRateLimitLocked(burstDuration)
+	r.updatePerKeySimpleRateLimitWithBurstLocked(burstDuration)
 }
 
 func (r *rateLimitManager) SetAdminRateForTesting(rps float64) {

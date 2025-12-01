@@ -31,6 +31,7 @@ func (s *invokerProcessBufferTaskSuite) SetupTest() {
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     s.logger,
+		SpecProcessor:  s.specProcessor,
 	})
 }
 
@@ -299,8 +300,7 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_NeedsCancel() {
 
 func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBufferTestCase) {
 	ctx := s.newMutableContext()
-	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := s.scheduler.Invoker.Get(ctx)
 
 	// Set up initial state
 	invoker.BufferedStarts = c.InitialBufferedStarts
@@ -311,7 +311,7 @@ func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBuffe
 	// Set LastProcessedTime to current time to ensure time checks pass
 	invoker.LastProcessedTime = timestamppb.New(s.timeSource.Now())
 
-	err = s.executor.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
+	err := s.executor.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)

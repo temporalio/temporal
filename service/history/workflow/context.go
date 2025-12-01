@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"runtime/debug"
+	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -20,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -31,7 +34,7 @@ import (
 type (
 	ContextImpl struct {
 		workflowKey     definition.WorkflowKey
-		archetype       chasm.Archetype
+		archetypeID     chasm.ArchetypeID
 		logger          log.Logger
 		throttledLogger log.ThrottledLogger
 		metricsHandler  metrics.Handler
@@ -48,6 +51,7 @@ var _ historyi.WorkflowContext = (*ContextImpl)(nil)
 func NewContext(
 	config *configs.Config,
 	workflowKey definition.WorkflowKey,
+	archetypeID chasm.ArchetypeID,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
@@ -59,15 +63,23 @@ func NewContext(
 			tag.WorkflowRunID(workflowKey.RunID),
 		}
 	}
-	return &ContextImpl{
+	contextImpl := &ContextImpl{
 		workflowKey:     workflowKey,
-		archetype:       chasm.ArchetypeAny,
+		archetypeID:     archetypeID,
 		logger:          log.NewLazyLogger(logger, tags),
 		throttledLogger: log.NewLazyLogger(throttledLogger, tags),
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
 		config:          config,
 		lock:            locks.NewPrioritySemaphore(1),
 	}
+	softassert.That(
+		contextImpl.throttledLogger,
+		contextImpl.archetypeID != chasm.UnspecifiedArchetypeID,
+		"Creating execution context with unspecified archetype ID",
+		tag.SysStackTrace(string(debug.Stack())),
+	)
+
+	return contextImpl
 }
 
 func (c *ContextImpl) Lock(
@@ -115,10 +127,6 @@ func (c *ContextImpl) GetNamespace(shardContext historyi.ShardContext) namespace
 	return namespaceEntry.Name()
 }
 
-func (c *ContextImpl) SetArchetype(archetype chasm.Archetype) {
-	c.archetype = archetype
-}
-
 func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext historyi.ShardContext) (*persistencespb.ExecutionStats, error) {
 	_, err := c.LoadMutableState(ctx, shardContext)
 	if err != nil {
@@ -141,6 +149,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 			NamespaceID: c.workflowKey.NamespaceID,
 			WorkflowID:  c.workflowKey.WorkflowID,
 			RunID:       c.workflowKey.RunID,
+			ArchetypeID: c.archetypeID,
 		})
 		if err != nil {
 			return nil, err
@@ -166,18 +175,31 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 		c.MutableState = mutableState
 	}
 
-	if actualArchetype := c.MutableState.ChasmTree().Archetype(); actualArchetype != "" && c.archetype != chasm.ArchetypeAny && c.archetype != actualArchetype {
+	mutableStateArchetypeID := c.MutableState.ChasmTree().ArchetypeID()
+	if c.archetypeID != chasm.UnspecifiedArchetypeID && c.archetypeID != mutableStateArchetypeID {
+		chasmRegistry := shardContext.ChasmRegistry()
+		contextArchetype, ok := chasmRegistry.ComponentFqnByID(c.archetypeID)
+		if !ok {
+			contextArchetype = strconv.FormatUint(uint64(c.archetypeID), 10)
+		}
+
+		mutableStateArchetype, ok := chasmRegistry.ComponentFqnByID(mutableStateArchetypeID)
+		if !ok {
+			mutableStateArchetype = strconv.FormatUint(uint64(mutableStateArchetypeID), 10)
+		}
+
 		c.logger.Warn("Potential ID conflict across different archetypes",
-			tag.Archetype(c.archetype.String()),
-			tag.NewStringTag("actual-archetype", actualArchetype.String()),
+			tag.Archetype(contextArchetype),
+			tag.NewStringTag("mutable-state-archetype", mutableStateArchetype),
 		)
 		return nil, serviceerror.NewNotFoundf(
 			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
 			c.workflowKey,
-			c.archetype,
-			actualArchetype,
+			contextArchetype,
+			mutableStateArchetype,
 		)
 	}
+	c.archetypeID = mutableStateArchetypeID
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
 	if err != nil {
@@ -236,6 +258,8 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		Mode:                     createMode,
 		PreviousRunID:            prevRunID,
 		PreviousLastWriteVersion: prevLastWriteVersion,
+
+		ArchetypeID: c.archetypeID,
 
 		NewWorkflowSnapshot: *newWorkflow,
 		NewWorkflowEvents:   newWorkflowEvents,
@@ -355,6 +379,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	if _, _, _, err := NewTransaction(shardContext).ConflictResolveWorkflowExecution(
 		ctx,
 		conflictResolveMode,
+		c.archetypeID,
 		resetMutableState.GetCurrentVersion(),
 		resetWorkflow,
 		resetWorkflowEventsSeq,
@@ -572,6 +597,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
 		ctx,
 		updateMode,
+		c.archetypeID,
 		c.MutableState.GetCurrentVersion(),
 		updateWorkflow,
 		updateWorkflowEventsSeq,
@@ -629,6 +655,7 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 
 	return NewTransaction(shardContext).SetWorkflowExecution(
 		ctx,
+		c.archetypeID,
 		resetWorkflowSnapshot,
 	)
 }
@@ -909,7 +936,7 @@ func (c *ContextImpl) RefreshTasks(
 		return err
 	}
 
-	if err := NewTaskRefresher(shardContext).Refresh(ctx, mutableState); err != nil {
+	if err := NewTaskRefresher(shardContext).Refresh(ctx, mutableState, false); err != nil {
 		return err
 	}
 

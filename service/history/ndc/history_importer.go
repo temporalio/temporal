@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -328,6 +328,7 @@ func (r *HistoryImporterImpl) commit(
 		if err := r.taskRefresher.Refresh(
 			ctx,
 			memNDCWorkflow.GetMutableState(),
+			false,
 		); err != nil {
 			return err
 		}
@@ -336,6 +337,7 @@ func (r *HistoryImporterImpl) commit(
 		memMutableState.SetUpdateCondition(nextEventID, mutableStateSpec.DBRecordVersion)
 		if err := r.transactionMgr.CreateWorkflow(
 			ctx,
+			chasm.WorkflowArchetypeID,
 			memNDCWorkflow,
 		); err != nil {
 			r.logger.Error("HistoryImporter::commit encountered error", tag.Error(err))
@@ -350,7 +352,7 @@ func (r *HistoryImporterImpl) commit(
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
 		workflowKey.RunID,
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetypeID,
 	)
 	if err != nil {
 		r.logger.Error("HistoryImporter::commit unable to find workflow in DB", tag.Error(err))
@@ -420,6 +422,7 @@ func (r *HistoryImporterImpl) commit(
 	if err := r.taskRefresher.Refresh(
 		ctx,
 		memNDCWorkflow.GetMutableState(),
+		false,
 	); err != nil {
 		return err
 	}
@@ -429,6 +432,7 @@ func (r *HistoryImporterImpl) commit(
 	if err := r.transactionMgr.UpdateWorkflow(
 		ctx,
 		true,
+		chasm.WorkflowArchetypeID,
 		memNDCWorkflow,
 		nil,
 	); err != nil {

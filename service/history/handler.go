@@ -7,8 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -16,6 +16,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
@@ -93,6 +94,7 @@ type (
 		taskCategoryRegistry         tasks.TaskCategoryRegistry
 		dlqMetricsEmitter            *persistence.DLQMetricsEmitter
 		chasmEngine                  chasm.Engine
+		chasmRegistry                *chasm.Registry
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -128,6 +130,7 @@ type (
 		TaskCategoryRegistry         tasks.TaskCategoryRegistry
 		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
 		ChasmEngine                  chasm.Engine
+		ChasmRegistry                *chasm.Registry
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -1578,7 +1581,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
+	if request.GetNamespaceId() == "" || uuid.Validate(request.GetNamespaceId()) != nil {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
@@ -1586,7 +1589,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 		return nil, h.convertError(errWorkflowIDNotSet)
 	}
 
-	if request.GetRunId() == "" || uuid.Parse(request.GetRunId()) == nil {
+	if request.GetRunId() == "" || uuid.Validate(request.GetRunId()) != nil {
 		return nil, h.convertError(errRunIDNotValid)
 	}
 
@@ -1880,10 +1883,8 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	err = engine.RefreshWorkflowTasks(
 		ctx,
 		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.RunId,
-		},
+		execution,
+		request.GetArchetypeId(),
 	)
 
 	if err != nil {
@@ -2243,6 +2244,7 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		ctx,
 		request,
 		shardID,
+		h.chasmRegistry,
 		h.persistenceExecutionManager,
 		h.persistenceVisibilityManager,
 		h.logger,
@@ -2359,6 +2361,51 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		return nil, h.convertError(err)
 	}
 	return &historyservice.CompleteNexusOperationResponse{}, nil
+}
+
+func (h *Handler) CompleteNexusOperationChasm(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationChasmRequest,
+) (_ *historyservice.CompleteNexusOperationChasmResponse, retErr error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	completion := &persistencespb.ChasmNexusCompletion{
+		CloseTime: request.CloseTime,
+		RequestId: request.Completion.RequestId,
+	}
+	switch variant := request.Outcome.(type) {
+	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
+		completion.Outcome = &persistencespb.ChasmNexusCompletion_Failure{
+			Failure: variant.Failure,
+		}
+	case *historyservice.CompleteNexusOperationChasmRequest_Success:
+		completion.Outcome = &persistencespb.ChasmNexusCompletion_Success{
+			Success: variant.Success,
+		}
+	default:
+		return nil, serviceerror.NewUnimplemented("unhandled Nexus operation outcome")
+	}
+
+	// Attempt to access the component and call its invocation method. We execute
+	// this similarly as we would a pure task (holding an exclusive lock), as the
+	// assumption is that the accessed component will be recording (or generating a
+	// task) based on this result.
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		request.GetCompletion().GetComponentRef(),
+		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+			return nil, c.HandleNexusCompletion(ctx, completion)
+		},
+		completion)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
@@ -2564,4 +2611,66 @@ func (h *Handler) ResetActivity(
 		return nil, h.convertError(err)
 	}
 	return response, nil
+}
+
+// PauseWorkflowExecution is used to pause a running workflow execution. This results in
+// WorkflowExecutionPaused event recorded in the history.
+func (h *Handler) PauseWorkflowExecution(ctx context.Context, request *historyservice.PauseWorkflowExecutionRequest) (_ *historyservice.PauseWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.GetPauseRequest().GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err2 := engine.PauseWorkflowExecution(ctx, request)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return resp, nil
+}
+
+func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *historyservice.UnpauseWorkflowExecutionRequest) (_ *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.GetUnpauseRequest().GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	unpauseResp, unpauseErr := engine.UnpauseWorkflowExecution(ctx, request)
+	if unpauseErr != nil {
+		return nil, h.convertError(unpauseErr)
+	}
+
+	return unpauseResp, nil
 }

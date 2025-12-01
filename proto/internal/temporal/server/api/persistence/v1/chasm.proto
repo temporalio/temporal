@@ -4,9 +4,9 @@ package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
-
-import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 
 message ChasmNode {
     // Metadata present for all nodes. 
@@ -32,12 +32,13 @@ message ChasmNodeMetadata {
 
 message ChasmComponentAttributes {
     message Task {
-        // Fully qualified type name of a registered task.
-        string type = 1;
+        // Registered task's type ID.
+        // (-- api-linter: core::0141::forbidden-types=disabled --)
+        uint32 type_id = 1;
         string destination = 2;
         google.protobuf.Timestamp scheduled_time = 3;
         temporal.api.common.v1.DataBlob data = 4;
-        // Versioned transition of the Entity when the task was created.
+        // Versioned transition of the execution when the task was created.
         VersionedTransition versioned_transition = 5;
         // The xth task generated in this versioned transition.
         // Together with the versioned transition, this is a unique identifier for
@@ -49,8 +50,9 @@ message ChasmComponentAttributes {
         int32 physical_task_status = 7;
     }
 
-    // Fully qualified type name of a registered component.
-    string type = 1;
+    // Registered component's type ID.
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 type_id = 1;
     // Tasks are in their insertion order, 
     // i.e. by versioned transtion and versioned_transition_offset.
     repeated Task side_effect_tasks = 2;
@@ -70,34 +72,56 @@ message ChasmPointerAttributes {
 
 // ChasmTaskInfo includes component-facing task metadata
 message ChasmTaskInfo {
-    // Initial versioned transition of the entity being referenced.
+    // Initial versioned transition of the component being referenced.
     VersionedTransition component_initial_versioned_transition = 1;
 
-    // Last updated transition of the entity being referenced at the time the
+    // Last updated transition of the component being referenced at the time the
     // reference was created. Can be used to invalidate this reference.
     VersionedTransition component_last_update_versioned_transition = 2;
 
     // Path to the component.
     repeated string path = 3;
 
-    // Task type (registered by components).
-    string type = 4;
+    // Registered task's type ID.
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 type_id = 4;
 
     // Opaque attached task data. May be nil. Usable by components, not the CHASM
     // framework itself.
     temporal.api.common.v1.DataBlob data = 5;
+
+    // ArchetypeID of the execution that generated this task.
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 6;
 }
 
 // ChasmComponentRef references a specific chasm component.
 message ChasmComponentRef {
     string namespace_id = 1;
     string business_id = 2;
-    string entity_id = 3;
+    string run_id = 3;
 
-    string archetype = 4;
+    // Executions's root component's type ID.
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 4;
     
-    VersionedTransition entity_versioned_transition = 5;
+    VersionedTransition execution_versioned_transition = 5;
 
     repeated string component_path = 6;
     VersionedTransition component_initial_versioned_transition = 7;
+}
+
+// ChasmNexusCompletion includes details about a completed Nexus operation.
+message ChasmNexusCompletion {
+    oneof outcome {
+        // Result of a successful operation, only set if state == successful.
+        temporal.api.common.v1.Payload success = 1;
+        // Operation failure, only set if state != successful.
+        temporal.api.failure.v1.Failure failure = 2;
+    }
+    // Time when the operation was closed.
+    google.protobuf.Timestamp close_time = 3;
+    // Request ID embedded in the NexusOperationScheduledEvent.
+    // Allows completing a started operation after a workflow has been reset.
+    string request_id = 4;
 }

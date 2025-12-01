@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -195,7 +196,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	saPayload, err := searchattribute.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
-		"CustomKeywordField": saPayload,
+		"Keyword01": saPayload,
 	}
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)
@@ -203,9 +204,9 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 
 	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be upserted
 	deploymentRestrictedAttributes := []string{
-		searchattribute.TemporalWorkerDeploymentVersion,
-		searchattribute.TemporalWorkerDeployment,
-		searchattribute.TemporalWorkflowVersioningBehavior,
+		sadefs.TemporalWorkerDeploymentVersion,
+		sadefs.TemporalWorkerDeployment,
+		sadefs.TemporalWorkflowVersioningBehavior,
 	}
 
 	for _, attr := range deploymentRestrictedAttributes {
@@ -256,9 +257,9 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 
 	deploymentRestrictedAttributes := []string{
-		searchattribute.TemporalWorkerDeploymentVersion,
-		searchattribute.TemporalWorkerDeployment,
-		searchattribute.TemporalWorkflowVersioningBehavior,
+		sadefs.TemporalWorkerDeploymentVersion,
+		sadefs.TemporalWorkerDeployment,
+		sadefs.TemporalWorkflowVersioningBehavior,
 	}
 
 	for _, attr := range deploymentRestrictedAttributes {

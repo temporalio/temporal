@@ -10,7 +10,7 @@ retract (
 require (
 	cloud.google.com/go/storage v1.51.0
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/aws/aws-sdk-go v1.55.6
+	github.com/aws/aws-sdk-go v1.55.8
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
@@ -35,7 +35,6 @@ require (
 	github.com/nexus-rpc/sdk-go v0.5.1
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
-	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.21.0
 	github.com/prometheus/client_model v0.6.1
@@ -59,7 +58,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.54.1-0.20251016004347-cf9c3e8c6ed7
+	go.temporal.io/api v1.58.1-0.20251126231839-2fcd2247e106
 	go.temporal.io/sdk v1.35.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0

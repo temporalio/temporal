@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -42,7 +42,8 @@ type (
 	// Unless a test calls out a specific methods, all three methods are tested in each test case.
 	TaskQueueStatsSuite struct {
 		testcore.FunctionalTestBase
-		usePriMatcher bool
+		usePriMatcher        bool
+		useNewDeploymentData bool
 	}
 
 	TaskQueueExpectations struct {
@@ -256,13 +257,13 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 
 				request := &workflowservice.StartWorkflowExecutionRequest{
 					Namespace:             s.Namespace().String(),
-					WorkflowId:            uuid.New(),
+					WorkflowId:            uuid.NewString(),
 					WorkflowType:          workflowType,
 					TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                 nil,
 					WorkflowRunTimeout:    durationpb.New(10 * time.Minute),
 					WorkflowTaskTimeout:   durationpb.New(10 * time.Minute),
-					RequestId:             uuid.New(),
+					RequestId:             uuid.NewString(),
 					WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 					Priority:              &commonpb.Priority{PriorityKey: int32(priority)},
 				}
@@ -294,6 +295,7 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 }
 
 func (s *TaskQueueStatsSuite) createDeploymentInTaskQueue(tqName string) {
+	// Using old DeploymentData format
 	var wg sync.WaitGroup
 	wg.Add(2)
 
