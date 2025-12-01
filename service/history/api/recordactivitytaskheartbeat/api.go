@@ -40,7 +40,10 @@ func Invoke(
 			ctx,
 			componentRef,
 			(*activity.Activity).RecordHeartbeat,
-			req,
+			activity.WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+				Token:   token,
+				Request: req,
+			},
 		)
 		return response, err
 	}
