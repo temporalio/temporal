@@ -126,6 +126,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 				NamespaceId: s.namespaceID,
 				WorkflowId:  s.workflowID,
 				RunId:       s.runID,
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -164,6 +165,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 				RunId:       s.runID,
 				NextEventId: taskNextEvent,
 				NewRunId:    s.newRunID,
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -220,6 +222,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 				RunId:       s.runID,
 				NextEventId: taskNextEvent,
 				NewRunId:    s.newRunID,
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -286,7 +289,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 			WorkflowId: workflowId,
 			RunId:      runId,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(wfCtx, func(err error) {}, err)
 }
@@ -303,6 +306,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 				RunId:       s.runID,
 				NextEventId: taskNextEvent,
 				NewRunId:    s.newRunID,
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -359,6 +363,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_MissingVersio
 				RunId:       s.runID,
 				NextEventId: taskNextEvent,
 				NewRunId:    s.newRunID,
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -418,6 +423,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 						Version: 1,
 					},
 				},
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -507,6 +513,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 						Version: 1,
 					},
 				},
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: &persistencespb.VersionedTransition{

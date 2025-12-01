@@ -13,6 +13,8 @@ import (
 
 var _ historyi.ChasmTree = (*noopChasmTree)(nil)
 
+var NoopChasmTree = &noopChasmTree{}
+
 type noopChasmTree struct{}
 
 func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {

@@ -25,6 +25,11 @@ func Invoke(
 		return nil, err
 	}
 
+	archetypeID := req.GetArchetypeId()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+
 	chasmLease, err := workflowConsistencyChecker.GetChasmLease(
 		ctx,
 		nil,
@@ -33,7 +38,7 @@ func Invoke(
 			req.Execution.WorkflowId,
 			req.Execution.RunId,
 		),
-		chasm.ArchetypeAny, // DescribeMutableState works for all Archetypes.
+		archetypeID,
 		locks.PriorityHigh,
 	)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -23,9 +24,10 @@ func newTestUpdateRequest(keys []tasks.Key) *p.UpdateWorkflowExecutionRequest {
 		tasks.CategoryTimer: keys,
 	}
 	return &p.UpdateWorkflowExecutionRequest{
-		ShardID: 1,
-		RangeID: 1,
-		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+		ShardID:     1,
+		RangeID:     1,
+		Mode:        p.UpdateWorkflowModeUpdateCurrent,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:         &persistencespb.WorkflowExecutionInfo{NamespaceId: "ns", WorkflowId: "wid", ExecutionStats: &persistencespb.ExecutionStats{}},
 			ExecutionState:        &persistencespb.WorkflowExecutionState{RunId: "rid", State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},

@@ -769,6 +769,9 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmVisTask(
 	visTaskTypeID, ok := s.mockShard.ChasmRegistry().TaskIDFor(&persistencespb.ChasmVisibilityTaskData{})
 	s.True(ok)
 
+	archetypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
+	s.True(ok)
+
 	return &tasks.ChasmTask{
 		WorkflowKey:         key,
 		VisibilityTimestamp: time.Now().UTC(),
@@ -783,6 +786,7 @@ func (s *visibilityQueueTaskExecutorSuite) buildChasmVisTask(
 				Data:         data,
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 			},
+			ArchetypeId: archetypeID,
 		},
 	}
 }

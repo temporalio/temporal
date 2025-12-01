@@ -51,6 +51,7 @@ type chasmEngineSuite struct {
 	executionCache wcache.Cache
 	registry       *chasm.Registry
 	config         *configs.Config
+	archetypeID    chasm.ArchetypeID
 
 	engine *ChasmEngine
 }
@@ -107,6 +108,10 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetChasmRegistry(s.registry)
 
+	var ok bool
+	s.archetypeID, ok = s.registry.ComponentIDFor(&testComponent{})
+	s.True(ok)
+
 	s.mockShard.SetEngineForTesting(s.mockEngine)
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
@@ -146,7 +151,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, newActivityID, "", 0)
+			s.validateCreateRequest(request, s.archetypeID, newActivityID, "", 0)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
@@ -238,7 +243,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			s.validateCreateRequest(request, s.archetypeID, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
@@ -292,7 +297,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			s.validateCreateRequest(request, s.archetypeID, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
@@ -480,10 +485,13 @@ func (s *chasmEngineSuite) newTestExecutionFn(
 
 func (s *chasmEngineSuite) validateCreateRequest(
 	request *persistence.CreateWorkflowExecutionRequest,
+	expectedArchetypeID chasm.ArchetypeID,
 	expectedActivityID string,
 	expectedPreviousRunID string,
 	expectedPreviousLastWriteVersion int64,
 ) {
+	s.Equal(expectedArchetypeID, request.ArchetypeID)
+
 	if expectedPreviousRunID == "" && expectedPreviousLastWriteVersion == 0 {
 		s.Equal(persistence.CreateWorkflowModeBrandNew, request.Mode)
 	} else {
