@@ -75,19 +75,6 @@ func Invoke(
 				}, nil
 			}
 
-			if _, err := mutableState.AddWorkflowTaskFailedEvent(
-				workflowTask,
-				request.GetCause(),
-				request.GetFailure(),
-				request.GetIdentity(),
-				request.GetWorkerVersion(),
-				request.GetBinaryChecksum(),
-				"",
-				"",
-				0); err != nil {
-				return nil, err
-			}
-
 			metrics.FailedWorkflowTasksCounter.With(shardContext.GetMetricsHandler()).Record(
 				1,
 				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskFailedScope),
@@ -110,6 +97,19 @@ func Invoke(
 				}
 
 				return api.UpdateWorkflowTerminate, nil
+			}
+
+			if _, err := mutableState.AddWorkflowTaskFailedEvent(
+				workflowTask,
+				request.GetCause(),
+				request.GetFailure(),
+				request.GetIdentity(),
+				request.GetWorkerVersion(),
+				request.GetBinaryChecksum(),
+				"",
+				"",
+				0); err != nil {
+				return nil, err
 			}
 
 			// TODO (alex-update): if it was speculative WT that failed, and there is nothing but pending updates,
