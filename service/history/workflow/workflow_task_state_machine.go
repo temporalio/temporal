@@ -474,15 +474,18 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// events. That's okay, it doesn't have to be 100% accurate. It just has to be kept
 	// consistent between the started event in history and the event that was sent to the SDK
 	// that resulted in the successful completion.
-	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
-	if updateReg != nil {
-		suggestContinueAsNew = cmp.Or(suggestContinueAsNew, updateReg.SuggestContinueAsNew())
+	historySizeBytes, suggestContinueAsNewReasons := m.getHistorySizeInfo()
+	suggestContinueAsNew := len(suggestContinueAsNewReasons) > 0
+	if updateReg != nil && updateReg.SuggestContinueAsNew() {
+		suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
+		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
 	if m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW && targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
 			currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName {
 			suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
+			suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)
 		}
 	}
 
@@ -1327,10 +1330,11 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	return durationpb.New(startToCloseTimeout)
 }
 
-func (m *workflowTaskStateMachine) getHistorySizeInfo() (bool, int64) {
+func (m *workflowTaskStateMachine) getHistorySizeInfo() (int64, []enumspb.SuggestContinueAsNewReason) {
+	var reasons []enumspb.SuggestContinueAsNewReason
 	stats := m.ms.GetExecutionInfo().ExecutionStats
 	if stats == nil {
-		return false, 0
+		return 0, reasons
 	}
 	// This only includes events that have actually been written to persistence, so it won't
 	// include the workflow task started event that we're currently writing. That's okay, it
@@ -1343,8 +1347,13 @@ func (m *workflowTaskStateMachine) getHistorySizeInfo() (bool, int64) {
 	namespaceName := m.ms.GetNamespaceEntry().Name().String()
 	sizeLimit := int64(config.HistorySizeSuggestContinueAsNew(namespaceName))
 	countLimit := int64(config.HistoryCountSuggestContinueAsNew(namespaceName))
-	suggestContinueAsNew := historySize >= sizeLimit || historyCount >= countLimit
-	return suggestContinueAsNew, historySize
+	if historySize >= sizeLimit {
+		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)
+	}
+	if historyCount >= countLimit {
+		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)
+	}
+	return historySize, reasons
 }
 
 func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() error {
