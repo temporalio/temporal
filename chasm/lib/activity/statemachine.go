@@ -224,7 +224,7 @@ var TransitionFailed = chasm.NewTransition(
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
-				heartbeat, err := a.getLastHeartbeat(ctx)
+				heartbeat, err := a.getOrCreateLastHeartbeat(ctx)
 				if err != nil {
 					return err
 				}

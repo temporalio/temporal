@@ -292,9 +292,9 @@ func (a *Activity) handleTerminated(
 	return &activitypb.TerminateActivityExecutionResponse{}, nil
 }
 
-// getLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
-// to avoid unnecessary writes when heartbeats are not used.
-func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.ActivityHeartbeatState, error) {
+// getOrCreateLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The
+// heartbeat is lazily created to avoid unnecessary writes when heartbeats are not used.
+func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) (*activitypb.ActivityHeartbeatState, error) {
 	heartbeat, err := a.LastHeartbeat.Get(ctx)
 	if err != nil {
 		return nil, err
