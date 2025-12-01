@@ -1,15 +1,15 @@
 package chasm
 
 import (
-	"errors"
 	"reflect"
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-var ErrEmptyComponentRef = errors.New("empty chasm component ref")
-var defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
+var (
+	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
+)
 
 // EntityKey uniquely identifies a CHASM execution in the system.
 // TODO: Rename to ExecutionKey.
@@ -131,9 +131,6 @@ func (r *ComponentRef) Serialize(
 // DeserializeComponentRef deserializes a byte slice into a ComponentRef.
 // Provides caller the access to information including EntityKey, Archetype, and ShardingKey.
 func DeserializeComponentRef(data []byte) (ComponentRef, error) {
-	if len(data) == 0 {
-		return ComponentRef{}, ErrEmptyComponentRef
-	}
 	var pRef persistencespb.ChasmComponentRef
 	if err := pRef.Unmarshal(data); err != nil {
 		return ComponentRef{}, err

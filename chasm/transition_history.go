@@ -6,18 +6,15 @@ import (
 	"go.temporal.io/server/service/history/consts"
 )
 
-// ErrMalformedComponentRef is returned when the provided component ref cannot be deserialized.
-var ErrMalformedComponentRef = serviceerror.NewInternal("malformed component ref")
-
-// ErrInvalidComponentRef is returned when the provided component ref does not match the target execution.
-var ErrInvalidComponentRef = serviceerror.NewInvalidArgument("invalid component ref")
+// ErrInvalidComponentRefBytes is returned when the provided component ref cannot be deserialized.
+var ErrInvalidComponentRefBytes = serviceerror.NewInternal("invalid component ref bytes")
 
 // ExecutionStateChanged returns true if execution state has advanced beyond the state encoded in
 // refBytes.
 func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) (bool, error) {
 	ref, err := DeserializeComponentRef(refBytes)
 	if err != nil {
-		return false, ErrMalformedComponentRef
+		return false, ErrInvalidComponentRefBytes
 	}
 	currentRefBytes, err := ctx.Ref(c)
 	if err != nil {
@@ -28,8 +25,9 @@ func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) (bool, err
 		return false, err
 	}
 
-	if ref.EntityKey != currentRef.EntityKey {
-		return false, ErrInvalidComponentRef
+	if len(refBytes) > 0 && ref.EntityKey != currentRef.EntityKey {
+		return false, serviceerror.NewInternalf(
+			"ref execution key (%v) does not match component execution (%v)", ref.EntityKey, currentRef.EntityKey)
 	}
 
 	switch transitionhistory.Compare(ref.entityLastUpdateVT, currentRef.entityLastUpdateVT) {

@@ -43,7 +43,6 @@ type Engine interface {
 		context.Context,
 		ComponentRef,
 		func(Context, Component) (bool, error),
-		...TransitionOption,
 	) ([]byte, error)
 }
 
@@ -177,7 +176,7 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 //     comment of the NewRef method in MutableContext.
 //
 // UpdateComponent applies updateFn to the component identified by the supplied component reference.
-// It returns the result, along with the new component reference. opts are currently ignored.
+// It returns the result, along with the new component reference.
 func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
@@ -209,8 +208,8 @@ func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 	return output, newSerializedRef, err
 }
 
-// ReadComponent returns the result of evaluating readFn against the component identified by the
-// component reference. opts are currently ignored.
+// ReadComponent returns the result of evaluating readFn against the current state of the component
+// identified by the supplied component reference.
 func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
@@ -239,19 +238,17 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 }
 
 // PollComponent waits until the predicate is true when evaluated against the component identified
-// by the supplied component reference. If this times out due to a server-imposed long-poll timeout
-// then it returns (nil, nil, nil), as an indication that the caller should continue long-polling.
-// Otherwise it returns (output, ref, err), where output is the output of the predicate function,
-// and ref is a component reference identifying the state at which the predicate was satisfied. The
-// predicate must be monotonic: if it returns true at execution state transition s then it must
-// return true at all transitions t > s. If the predicate is true at the outset then PollComponent
-// returns immediately. opts are currently ignored.
+// by the supplied component reference. If it times out due to a server-imposed long-poll timeout
+// then it returns (nil, nil, nil). Otherwise it returns (output, ref, err), where output is the
+// output of the predicate function, and ref is a component reference identifying the state at which
+// the predicate was satisfied. The predicate must be monotonic: if it returns true at execution
+// state transition s then it must return true at all transitions t > s. If the predicate is true at
+// the outset then PollComponent returns immediately.
 func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
 	monotonicPredicate func(C, Context, I) (O, bool, error),
 	input I,
-	opts ...TransitionOption,
 ) (O, []byte, error) {
 	var output O
 
@@ -270,7 +267,6 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 			}
 			return satisfied, err
 		},
-		opts...,
 	)
 	if err != nil {
 		return output, nil, err

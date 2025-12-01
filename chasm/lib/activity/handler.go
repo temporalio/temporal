@@ -98,16 +98,6 @@ func (h *handler) PollActivityExecution(
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		EntityID:    req.GetFrontendRequest().GetRunId(),
 	})
-	defer func() {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			// TODO(dan): include execution key in error message; we may do this at the CHASM
-			// framework level.
-			// cf. "workflow execution not found for workflow ID XXX and run ID YYY"
-			err = serviceerror.NewNotFound("activity execution not found")
-		}
-	}()
-
 	waitPolicy := req.GetFrontendRequest().GetWaitPolicy()
 
 	if waitPolicy == nil {
@@ -127,9 +117,6 @@ func (h *handler) PollActivityExecution(
 		token := req.GetFrontendRequest().
 			GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
 			WaitAnyStateChange.GetLongPollToken()
-		if len(token) == 0 {
-			return chasm.ReadComponent(ctx, ref, (*Activity).buildPollActivityExecutionResponse, req, nil)
-		}
 		response, _, err = chasm.PollComponent(childCtx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
@@ -137,11 +124,8 @@ func (h *handler) PollActivityExecution(
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
 			changed, err := chasm.ExecutionStateChanged(a, ctx, token)
 			if err != nil {
-				if errors.Is(err, chasm.ErrMalformedComponentRef) {
+				if errors.Is(err, chasm.ErrInvalidComponentRefBytes) {
 					return nil, false, serviceerror.NewInvalidArgument("invalid long poll token")
-				}
-				if errors.Is(err, chasm.ErrInvalidComponentRef) {
-					return nil, false, serviceerror.NewInvalidArgument("long poll token does not match execution")
 				}
 				return nil, false, err
 			}
