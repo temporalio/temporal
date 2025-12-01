@@ -1959,9 +1959,6 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, err
 	}
 
-	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()))
-	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetHeader().Size()))
-
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(
@@ -1971,7 +1968,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		namespaceID.String(),
 		request.GetWorkflowExecution().GetWorkflowId(),
 		request.GetWorkflowExecution().GetRunId(),
-		metricsHandler,
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("SignalWorkflowExecution"),
 	); err != nil {
@@ -2780,7 +2777,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()))
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("QueryWorkflow"))
 	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetQuery().GetHeader().Size()))
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
@@ -2793,7 +2790,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		namespaceID.String(),
 		request.GetExecution().GetWorkflowId(),
 		request.GetExecution().GetRunId(),
-		metricsHandler,
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("QueryWorkflow")); err != nil {
 		return nil, err
@@ -4379,6 +4376,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("UpdateWorkflowExecution"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetRequest().GetInput().GetHeader().Size()))
 
 	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
 	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
