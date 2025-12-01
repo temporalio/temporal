@@ -294,7 +294,6 @@ var TransitionCancelRequested = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	func(a *Activity, ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
-
 		a.CancelState = &activitypb.ActivityCancelState{
 			Identity:    req.GetIdentity(),
 			RequestId:   req.GetRequestId(),

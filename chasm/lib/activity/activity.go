@@ -134,7 +134,8 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
-	*historyservice.RecordActivityTaskStartedResponse, error) {
+	*historyservice.RecordActivityTaskStartedResponse, error,
+) {
 	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
 		return nil, err
 	}
@@ -222,7 +223,8 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 
 // HandleCompleted updates the activity on activity completion.
 func (a *Activity) HandleCompleted(ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) (
-	*historyservice.RespondActivityTaskCompletedResponse, error) {
+	*historyservice.RespondActivityTaskCompletedResponse, error,
+) {
 	if err := TransitionCompleted.Apply(a, ctx, request); err != nil {
 		return nil, err
 	}
@@ -233,7 +235,8 @@ func (a *Activity) HandleCompleted(ctx chasm.MutableContext, request *historyser
 // HandleFailed updates the activity on activity failure. if the activity is retryable, it will be rescheduled
 // for retry instead.
 func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) (
-	*historyservice.RespondActivityTaskFailedResponse, error) {
+	*historyservice.RespondActivityTaskFailedResponse, error,
+) {
 	failure := req.GetFailedRequest().GetFailure()
 
 	shouldRetry, retryInterval, err := a.shouldRetryOnFailure(ctx, failure)
@@ -262,7 +265,8 @@ func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.Re
 
 // HandleCanceled updates the activity on activity canceled.
 func (a *Activity) HandleCanceled(ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCanceledRequest) (
-	*historyservice.RespondActivityTaskCanceledResponse, error) {
+	*historyservice.RespondActivityTaskCanceledResponse, error,
+) {
 	if err := TransitionCanceled.Apply(a, ctx, request.GetCancelRequest().GetDetails()); err != nil {
 		return nil, err
 	}
@@ -271,7 +275,8 @@ func (a *Activity) HandleCanceled(ctx chasm.MutableContext, request *historyserv
 }
 
 func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) (
-	*activitypb.TerminateActivityExecutionResponse, error) {
+	*activitypb.TerminateActivityExecutionResponse, error,
+) {
 	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
@@ -296,7 +301,8 @@ func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.Activ
 }
 
 func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *activitypb.RequestCancelActivityExecutionRequest) (
-	*activitypb.RequestCancelActivityExecutionResponse, error) {
+	*activitypb.RequestCancelActivityExecutionResponse, error,
+) {
 	newReqID := req.GetFrontendRequest().GetRequestId()
 	existingReqID := a.GetCancelState().GetRequestId()
 

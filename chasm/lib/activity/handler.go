@@ -43,7 +43,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}, nil
 		},
 		req.GetFrontendRequest())
-
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +167,6 @@ func (h *handler) TerminateActivityExecution(
 		(*Activity).handleTerminated,
 		req,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +193,6 @@ func (h *handler) RequestCancelActivityExecution(
 		(*Activity).handleCancellationRequested,
 		req,
 	)
-
 	if err != nil {
 		return nil, err
 	}
