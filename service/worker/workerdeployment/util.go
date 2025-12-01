@@ -27,17 +27,16 @@ const (
 	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
 
 	// Updates
-	RegisterWorkerInDeploymentVersion = "register-task-queue-worker"       // for Worker Deployment Version wf
-	SyncVersionState                  = "sync-version-state"               // for Worker Deployment Version wfs
-	UpdateVersionMetadata             = "update-version-metadata"          // for Worker Deployment Version wfs
-	RegisterWorkerInWorkerDeployment  = "register-worker-in-deployment"    // for Worker Deployment wfs
-	SetCurrentVersion                 = "set-current-version"              // for Worker Deployment wfs
-	SetRampingVersion                 = "set-ramping-version"              // for Worker Deployment wfs
-	AddVersionToWorkerDeployment      = "add-version-to-worker-deployment" // for Worker Deployment wfs
-	DeleteVersion                     = "delete-version"                   // for WorkerDeployment wfs
-	DeleteDeployment                  = "delete-deployment"                // for WorkerDeployment wfs
-	SetManagerIdentity                = "set-manager-identity"             // for WorkerDeployment wfs
-	serverDeleteVersionIdentity       = "try-delete-for-add-version"       // identity of the worker-deployment workflow when it tries to delete a version on the event that the addition
+	RegisterWorkerInDeploymentVersion = "register-task-queue-worker"    // for Worker Deployment Version wf
+	SyncVersionState                  = "sync-version-state"            // for Worker Deployment Version wfs
+	UpdateVersionMetadata             = "update-version-metadata"       // for Worker Deployment Version wfs
+	RegisterWorkerInWorkerDeployment  = "register-worker-in-deployment" // for Worker Deployment wfs
+	SetCurrentVersion                 = "set-current-version"           // for Worker Deployment wfs
+	SetRampingVersion                 = "set-ramping-version"           // for Worker Deployment wfs
+	DeleteVersion                     = "delete-version"                // for WorkerDeployment wfs
+	DeleteDeployment                  = "delete-deployment"             // for WorkerDeployment wfs
+	SetManagerIdentity                = "set-manager-identity"          // for WorkerDeployment wfs
+	serverDeleteVersionIdentity       = "try-delete-for-add-version"    // identity of the worker-deployment workflow when it tries to delete a version on the event that the addition
 	// of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions)
 
 	// Signals
@@ -63,6 +62,7 @@ const (
 	errVersionNotFound            = "Version not found in deployment"
 	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
+	errLongHistory                = "errLongHistory"                    // update is not accepted until CaN happens. client should retry
 
 	errFailedPrecondition = "FailedPrecondition"
 
@@ -77,6 +77,7 @@ const (
 	ErrManagerIdentityMismatch                = "ManagerIdentity '%s' is set and does not match user identity '%s'; to proceed, set your own identity as the ManagerIdentity, remove the ManagerIdentity, or wait for the other client to do so"
 	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name '%s'; does your Worker Deployment have pollers?"
 	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
+	ErrTooManyRequests                        = "too many requests issued to the same Worker Deployment. Please try again later"
 )
 
 var (
@@ -159,9 +160,8 @@ func durationEq(a, b any) bool {
 	return a == b
 }
 
-// isFailedPrecondition checks if the error is a FailedPrecondition error. It also checks if the FailedPrecondition error is wrapped in an ApplicationError.
-func isFailedPrecondition(err error) bool {
+func isFailedPreconditionOrNotFound(err error) bool {
 	var failedPreconditionError *serviceerror.FailedPrecondition
-	var applicationError *temporal.ApplicationError
-	return errors.As(err, &failedPreconditionError) || (errors.As(err, &applicationError) && applicationError.Type() == errFailedPrecondition)
+	var notFound *serviceerror.NotFound
+	return errors.As(err, &failedPreconditionError) || errors.As(err, &notFound)
 }

@@ -65,6 +65,7 @@ func ClientProvider(
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
 	testHooks testhooks.TestHooks,
+	metricsHandler metrics.Handler,
 ) Client {
 	return &ClientImpl{
 		logger:                           logger,
@@ -76,6 +77,7 @@ func ClientProvider(
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
 		testHooks:                        testHooks,
+		metricsHandler:                   metricsHandler,
 	}
 }
 
