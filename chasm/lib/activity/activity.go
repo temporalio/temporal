@@ -181,6 +181,7 @@ func (a *Activity) HandleStarted(
 	return response, nil
 }
 
+// PopulateRecordStartedResponse populates the response for HandleStarted.
 func (a *Activity) PopulateRecordStartedResponse(
 	ctx chasm.Context,
 	key chasm.EntityKey,
@@ -228,6 +229,7 @@ func (a *Activity) PopulateRecordStartedResponse(
 	return nil
 }
 
+// RecordCompleted applies the provided function to record activity completion.
 func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
 	return applyFn(ctx)
 }
@@ -504,6 +506,7 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 	}
 }
 
+// RecordHeartbeat records a heartbeat for the activity.
 func (a *Activity) RecordHeartbeat(
 	ctx chasm.MutableContext,
 	input WithToken[*historyservice.RecordActivityTaskHeartbeatRequest],
@@ -511,7 +514,6 @@ func (a *Activity) RecordHeartbeat(
 	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
 		return nil, err
 	}
-
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
 		RecordedTime: timestamppb.New(ctx.Now(a)),
 		Details:      input.Request.HeartbeatRequest.GetDetails(),
