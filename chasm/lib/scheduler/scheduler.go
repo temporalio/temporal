@@ -432,18 +432,16 @@ func (s *Scheduler) HandleNexusCompletion(
 	var wfStatus enumspb.WorkflowExecutionStatus
 	switch outcome := info.Outcome.(type) {
 	case *persistencespb.ChasmNexusCompletion_Failure:
+		previousResult := s.LastCompletionResult.Get(ctx) // Most-recent success is kept after failure.
 		wfStatus = executionStatusFromFailure(outcome.Failure)
 		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-			Outcome: &schedulerpb.LastCompletionResult_Failure{
-				Failure: outcome.Failure,
-			},
+			Failure: outcome.Failure,
+			Success: previousResult.Success,
 		})
 	case *persistencespb.ChasmNexusCompletion_Success:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-			Outcome: &schedulerpb.LastCompletionResult_Success{
-				Success: outcome.Success,
-			},
+			Success: outcome.Success,
 		})
 	default:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
