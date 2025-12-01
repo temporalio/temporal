@@ -254,10 +254,7 @@ var TransitionTerminated = chasm.NewTransition(
 			if err != nil {
 				return err
 			}
-
-			if identity := req.GetFrontendRequest().GetIdentity(); identity != "" {
-				attempt.LastWorkerIdentity = identity
-			}
+			attempt.LastWorkerIdentity = req.GetFrontendRequest().GetIdentity()
 
 			outcome, err := a.Outcome.Get(ctx)
 			if err != nil {
