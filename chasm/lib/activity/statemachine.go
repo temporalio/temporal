@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -312,7 +312,7 @@ var TransitionCanceled = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-	func(a *Activity, ctx chasm.MutableContext, details *common.Payloads) error {
+	func(a *Activity, ctx chasm.MutableContext, details *commonpb.Payloads) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
