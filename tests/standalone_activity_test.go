@@ -208,7 +208,7 @@ func (s *standaloneActivityTestSuite) TestActivityTerminated() {
 		ActivityId: activityID,
 		RunId:      runID,
 		Reason:     "Test Termination",
-		Identity:   "worker",
+		Identity:   "terminator",
 	})
 	require.NoError(t, err)
 
@@ -228,7 +228,7 @@ func (s *standaloneActivityTestSuite) TestActivityTerminated() {
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, info.GetStatus())
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
-	require.Equal(t, "worker", info.GetLastWorkerIdentity())
+	require.Equal(t, s.tv.WorkerIdentity(), info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	require.Nil(t, info.GetLastFailure())
 

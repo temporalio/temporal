@@ -250,12 +250,6 @@ var TransitionTerminated = chasm.NewTransition(
 		}
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			attempt, err := a.Attempt.Get(ctx)
-			if err != nil {
-				return err
-			}
-			attempt.LastWorkerIdentity = req.GetFrontendRequest().GetIdentity()
-
 			outcome, err := a.Outcome.Get(ctx)
 			if err != nil {
 				return err

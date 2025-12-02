@@ -423,7 +423,10 @@ func TestTransitionFailed(t *testing.T) {
 func TestTransitionTerminated(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	attemptState := &activitypb.ActivityAttemptState{
+		Count:              1,
+		LastWorkerIdentity: "worker",
+	}
 	outcome := &activitypb.ActivityOutcome{}
 
 	activity := &Activity{
@@ -441,7 +444,7 @@ func TestTransitionTerminated(t *testing.T) {
 	err := TransitionTerminated.Apply(activity, ctx, &activitypb.TerminateActivityExecutionRequest{
 		FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
 			Reason:   "Test Termination",
-			Identity: "worker",
+			Identity: "terminator",
 		},
 	})
 	require.NoError(t, err)
