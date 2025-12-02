@@ -420,6 +420,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					StartTime: timestamppb.New(p.StartTime),
 				}
 				mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
+				mutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 				if p.ExpectAddTask {
 					mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...*tasks.DeleteHistoryEventTask) {
 						require.Len(t, ts, 1)
@@ -439,6 +440,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 							ShardID:     shardID,
 							NamespaceID: tests.NamespaceID.String(),
 							WorkflowID:  task.WorkflowID,
+							ArchetypeID: chasm.WorkflowArchetypeID,
 							Tasks:       popTasks,
 						})
 					})
@@ -449,12 +451,12 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					p.LoadMutableStateError,
 				).AnyTimes()
 			}
-			workflowCache.EXPECT().GetOrCreateChasmEntity(
+			workflowCache.EXPECT().GetOrCreateChasmExecution(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-				chasm.WorkflowArchetype,
+				chasm.WorkflowArchetypeID,
 				gomock.Any(),
 			).Return(
 				workflowContext,

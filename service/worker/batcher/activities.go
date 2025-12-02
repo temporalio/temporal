@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -450,7 +450,7 @@ func startTaskProcessorProtobuf(
 							Namespace:                 namespace,
 							WorkflowExecution:         execution,
 							Reason:                    batchOperation.Request.Reason,
-							RequestId:                 uuid.New(),
+							RequestId:                 uuid.NewString(),
 							WorkflowTaskFinishEventId: eventId,
 							ResetReapplyType:          resetReapplyType,
 							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
@@ -495,6 +495,7 @@ func startTaskProcessorProtobuf(
 							WorkflowExecution:        execution,
 							WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
+							Identity:                 operation.UpdateWorkflowOptionsOperation.Identity,
 						})
 						return err
 					})

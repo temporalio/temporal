@@ -102,7 +102,7 @@ func NewVisibilityWithData(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 	customMemo map[string]*commonpb.Payload,
-) (*Visibility, error) {
+) *Visibility {
 	visibility := &Visibility{
 		Data: &persistencespb.ChasmVisibilityData{
 			TransitionCount: 0,
@@ -118,7 +118,7 @@ func NewVisibilityWithData(
 	}
 
 	visibility.generateTask(mutableContext)
-	return visibility, nil
+	return visibility
 }
 
 func (v *Visibility) LifecycleState(_ Context) LifecycleState {
@@ -127,24 +127,19 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 
 func (v *Visibility) GetSearchAttributes(
 	chasmContext Context,
-) (map[string]*commonpb.Payload, error) {
-	sa, err := v.SA.Get(chasmContext)
-	if err != nil {
-		return nil, err
-	}
-	return sa.GetIndexedFields(), nil
+) map[string]*commonpb.Payload {
+	sa, _ := v.SA.TryGet(chasmContext)
+	// nil check handled by the proto getter.
+	return sa.GetIndexedFields()
 }
 
 func (v *Visibility) SetSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
-) error {
-	currentSA, err := v.SA.Get(mutableContext)
-	if err != nil {
-		return err
-	}
+) {
+	currentSA, ok := v.SA.TryGet(mutableContext)
 
-	if currentSA == nil {
+	if !ok {
 		currentSA = &commonpb.SearchAttributes{}
 		v.SA = NewDataField(mutableContext, currentSA)
 	}
@@ -154,30 +149,23 @@ func (v *Visibility) SetSearchAttributes(
 		customSearchAttributes,
 	)
 	v.generateTask(mutableContext)
-
-	return nil
 }
 
 func (v *Visibility) GetMemo(
 	chasmContext Context,
-) (map[string]*commonpb.Payload, error) {
-	memo, err := v.Memo.Get(chasmContext)
-	if err != nil {
-		return nil, err
-	}
-	return memo.GetFields(), nil
+) map[string]*commonpb.Payload {
+	memo, _ := v.Memo.TryGet(chasmContext)
+	// nil check handled by the proto getter.
+	return memo.GetFields()
 }
 
 func (v *Visibility) SetMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
-) error {
-	currentMemo, err := v.Memo.Get(mutableContext)
-	if err != nil {
-		return err
-	}
+) {
+	currentMemo, ok := v.Memo.TryGet(mutableContext)
 
-	if currentMemo == nil {
+	if !ok {
 		currentMemo = &commonpb.Memo{}
 		v.Memo = NewDataField(mutableContext, currentMemo)
 	}
@@ -187,8 +175,6 @@ func (v *Visibility) SetMemo(
 		customMemo,
 	)
 	v.generateTask(mutableContext)
-
-	return nil
 }
 
 func (v *Visibility) generateTask(

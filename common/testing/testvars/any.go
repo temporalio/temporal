@@ -3,7 +3,7 @@ package testvars
 import (
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/common/definition"
@@ -77,7 +77,7 @@ func (a Any) InfiniteTimeout() *durationpb.Duration {
 }
 
 func (a Any) RunID() string {
-	return uuid.New()
+	return uuid.NewString()
 }
 
 func (a Any) WorkflowKey() definition.WorkflowKey {

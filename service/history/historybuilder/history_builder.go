@@ -288,6 +288,18 @@ func (b *HistoryBuilder) AddWorkflowExecutionPausedEvent(
 	return event
 }
 
+func (b *HistoryBuilder) AddWorkflowExecutionUnpausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) *historypb.HistoryEvent {
+	event := b.CreateWorkflowExecutionUnpausedEvent(identity, reason, requestID)
+	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
+	event.WorkerMayIgnore = true
+	event, _ = b.add(event)
+	return event
+}
+
 func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
@@ -440,6 +452,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	attachRequestID string,
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
+	identity string,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
 		worker_versioning.ConvertOverrideToV32(versioningOverride),
@@ -447,6 +460,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 		attachRequestID,
 		attachCompletionCallbacks,
 		links,
+		identity,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

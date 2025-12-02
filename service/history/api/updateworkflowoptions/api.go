@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -30,11 +29,6 @@ func Invoke(
 	req := request.GetUpdateRequest()
 	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
 
-	opts := req.GetWorkflowExecutionOptions()
-	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
-
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
@@ -51,7 +45,7 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			mergedOpts, hasChanges, err := MergeAndApply(mutableState, opts, req.GetUpdateMask())
+			mergedOpts, hasChanges, err := MergeAndApply(mutableState, req.GetWorkflowExecutionOptions(), req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -88,6 +82,7 @@ func MergeAndApply(
 	ms historyi.MutableState,
 	opts *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
+	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
 	mergedOpts, err := mergeWorkflowExecutionOptions(
@@ -109,7 +104,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil)
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity)
 	if err != nil {
 		return nil, hasChanges, err
 	}

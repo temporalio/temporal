@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -64,6 +65,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -128,6 +130,7 @@ type (
 		matchingClient                  matchingservice.MatchingServiceClient
 		deploymentStoreClient           deployment.DeploymentStoreClient
 		workerDeploymentClient          workerdeployment.Client
+		schedulerClient                 schedulerpb.SchedulerServiceClient
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry
@@ -159,6 +162,7 @@ func NewWorkflowHandler(
 	matchingClient matchingservice.MatchingServiceClient,
 	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentClient workerdeployment.Client,
+	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -199,6 +203,7 @@ func NewWorkflowHandler(
 		matchingClient:                  matchingClient,
 		deploymentStoreClient:           deploymentStoreClient,
 		workerDeploymentClient:          workerDeploymentClient,
+		schedulerClient:                 schedulerClient,
 		archiverProvider:                archiverProvider,
 		payloadSerializer:               payloadSerializer,
 		namespaceRegistry:               namespaceRegistry,
@@ -384,7 +389,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 		return nil, err
 	}
 
-	wh.logger.Debug("Received StartWorkflowExecution.", tag.WorkflowID(request.GetWorkflowId()))
+	wh.logger.Debug("Received StartWorkflowExecution.", tag.WorkflowID(request.GetWorkflowId()), tag.WorkflowType(request.GetWorkflowType().GetName()))
 
 	namespaceName := namespace.Name(request.GetNamespace())
 
@@ -485,6 +490,11 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		namespaceName,
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy); err != nil {
+		return nil, err
+	}
+
+	// Validate versioning override, if present.
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
 		return nil, err
 	}
 
@@ -897,7 +907,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 	}
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 
@@ -1127,7 +1137,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return &workflowservice.PollActivityTaskQueueResponse{}, nil
 	}
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 	matchingResponse, err := wh.matchingClient.PollActivityTaskQueue(childCtx, &matchingservice.PollActivityTaskQueueRequest{
@@ -2077,6 +2087,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	// Validate versioning override, if present.
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return nil, err
+	}
 
 	resp, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId:            namespaceID.String(),
@@ -2112,6 +2126,10 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
+	if err := validatePostResetOperationInputs(request.GetPostResetOperations()); err != nil {
+		return nil, err
+	}
+
 	enums.SetDefaultResetReapplyType(&request.ResetReapplyType)
 	if _, validType := enumspb.ResetReapplyType_name[int32(request.GetResetReapplyType())]; !validType {
 		return nil, serviceerror.NewInternalf("unknown reset reapply type: %v", request.GetResetReapplyType())
@@ -2131,6 +2149,22 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	}
 
 	return &workflowservice.ResetWorkflowExecutionResponse{RunId: resp.GetRunId()}, nil
+}
+
+// validatePostResetOperationInputs validates the optional post reset operation inputs.
+func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
+	for _, operation := range postResetOperations {
+		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
+			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
+			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+				return err
+			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
+		}
+	}
+	return nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
@@ -2233,7 +2267,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 
 	query = append(query, fmt.Sprintf(
 		"%s = '%s'",
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	))
 
@@ -2244,20 +2278,20 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s BETWEEN '%s' AND '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s >= '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s <= '%s'",
-			searchattribute.StartTime,
+			sadefs.StartTime,
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	}
@@ -2268,7 +2302,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowID,
+			sadefs.WorkflowID,
 			request.GetExecutionFilter().GetWorkflowId()))
 
 		wh.logger.Debug("List open workflow with filter",
@@ -2279,7 +2313,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowType,
+			sadefs.WorkflowType,
 			request.GetTypeFilter().GetName()))
 
 		wh.logger.Debug("List open workflow with filter",
@@ -2334,7 +2368,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	query = append(query, fmt.Sprintf(
 		"%s != '%s'",
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	))
 
@@ -2345,20 +2379,20 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s BETWEEN '%s' AND '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if earliestTime != nil && !earliestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s >= '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			earliestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	} else if latestTime != nil && !latestTime.AsTime().IsZero() {
 		query = append(query, fmt.Sprintf(
 			"%s <= '%s'",
-			searchattribute.CloseTime,
+			sadefs.CloseTime,
 			latestTime.AsTime().Format(time.RFC3339Nano),
 		))
 	}
@@ -2369,7 +2403,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowID,
+			sadefs.WorkflowID,
 			request.GetExecutionFilter().GetWorkflowId()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -2380,7 +2414,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.WorkflowType,
+			sadefs.WorkflowType,
 			request.GetTypeFilter().GetName()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -2394,7 +2428,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		}
 		query = append(query, fmt.Sprintf(
 			"%s = '%s'",
-			searchattribute.ExecutionStatus,
+			sadefs.ExecutionStatus,
 			request.GetStatusFilter().GetStatus()))
 
 		wh.logger.Debug("List closed workflow with filter",
@@ -3044,36 +3078,61 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 	}, err
 }
 
-// Creates a new schedule.
-func (wh *WorkflowHandler) CreateSchedule(
+func (wh *WorkflowHandler) createScheduleCHASM(
 	ctx context.Context,
 	request *workflowservice.CreateScheduleRequest,
 ) (_ *workflowservice.CreateScheduleResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if !wh.config.EnableSchedules(request.Namespace) {
-		return nil, errSchedulesNotAllowed
-	}
-
-	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
-
-	if err := wh.validateWorkflowID(workflowID); err != nil {
+	namespaceName := namespace.Name(request.Namespace)
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
 		return nil, err
 	}
 
-	wh.logger.Debug("Received CreateSchedule", tag.ScheduleID(request.ScheduleId))
-
-	if request.GetRequestId() == "" {
-		return nil, errRequestIDNotSet
+	// Search attribute validation happens as part of unaliasing on the V1 codepath,
+	// must be done explicitly here (even though we aren't using the unaliased
+	// attributes).
+	if _, err = wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName); err != nil {
+		return nil, err
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	// Validate blob size limit here. In the V1 codepath, this is done automatically
+	// as part of StartWorkflowExecution, but here it must be done separately (to
+	// maintain equal payload size limits between versions).
+	switch action := request.GetSchedule().GetAction().GetAction().(type) {
+	case *schedulepb.ScheduleAction_StartWorkflow:
+		payloadSize := request.GetMemo().Size() + action.StartWorkflow.GetInput().Size()
+		sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
+		sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
+		if err := common.CheckEventBlobSizeLimit(
+			payloadSize,
+			sizeLimitWarn,
+			sizeLimitError,
+			namespaceID.String(),
+			request.ScheduleId,
+			"", // don't have runid yet
+			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.throttledLogger,
+			tag.BlobSizeViolationOperation("CreateSchedule"),
+		); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, serviceerror.NewInvalidArgument("Only StartWorkflow action is supported for schedules")
 	}
+
+	res, err := wh.schedulerClient.CreateSchedule(ctx, &schedulerpb.CreateScheduleRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+	return res.GetFrontendResponse(), err
+
+}
+
+func (wh *WorkflowHandler) createScheduleWorkflow(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+) (_ *workflowservice.CreateScheduleResponse, retError error) {
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceName := namespace.Name(request.Namespace)
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
@@ -3081,29 +3140,11 @@ func (wh *WorkflowHandler) CreateSchedule(
 		return nil, err
 	}
 
-	// Check if CHASM scheduler experiment is enabled
-	if headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
-		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName.String()) {
-		wh.logger.Debug("CHASM scheduler enabled for request", tag.ScheduleID(request.ScheduleId))
-	}
-
-	if request.Schedule == nil {
-		request.Schedule = &schedulepb.Schedule{}
-	}
-	err = wh.canonicalizeScheduleSpec(request.Schedule)
-	if err != nil {
-		return nil, err
-	}
-
 	// Add namespace division before unaliasing search attributes.
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 
 	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
-		return nil, err
-	}
-
-	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
 	}
 
@@ -3162,6 +3203,71 @@ func (wh *WorkflowHandler) CreateSchedule(
 	return &workflowservice.CreateScheduleResponse{
 		ConflictToken: token,
 	}, nil
+}
+
+func (wh *WorkflowHandler) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+) (_ *workflowservice.CreateScheduleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableSchedules(request.Namespace) {
+		return nil, errSchedulesNotAllowed
+	}
+
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+	// We apply this validation to both V1 and V2 schedules, even though CHASM
+	// schedules don't need the workflow ID prefix, so that we can roll back to V1 and
+	// not overrun the limit.
+	if err := wh.validateWorkflowID(workflowID); err != nil {
+		return nil, err
+	}
+
+	if request.GetRequestId() == "" {
+		return nil, errRequestIDNotSet
+	}
+
+	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errRequestIDTooLong
+	}
+
+	namespaceName := namespace.Name(request.Namespace)
+
+	useChasmScheduler := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	wh.logger.Debug("Received CreateSchedule",
+		tag.ScheduleID(request.ScheduleId),
+		tag.WorkflowNamespace(namespaceName.String()),
+		tag.NewBoolTag("chasm-enabled", useChasmScheduler))
+
+	if request.Schedule == nil {
+		request.Schedule = &schedulepb.Schedule{}
+	}
+	err := wh.canonicalizeScheduleSpec(request.Schedule)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
+		return nil, err
+	}
+
+	if useChasmScheduler {
+		return wh.createScheduleCHASM(ctx, request)
+	}
+	return wh.createScheduleWorkflow(ctx, request)
+}
+
+// chasmSchedulerEnabled returns true when CHASM codepaths should be enabled for
+// the request. All handlers must be capable of falling back to V1 codepaths for
+// schedules that haven't been migrated to CHASM.
+func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
+	return (headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
+		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName)) ||
+		wh.config.EnableCHASMSchedulerCreation(namespaceName)
 }
 
 // Validates inner start workflow request. Note that this can mutate search attributes if present.
@@ -3574,7 +3680,7 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
-	identity := uuid.New()
+	identity := uuid.NewString()
 	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
 	if err != nil {
 		if common.IsResourceExhausted(err) {
@@ -3600,6 +3706,34 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, errSchedulesNotAllowed
 	}
 
+	// Prefer CHASM scheduler if enabled.
+	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+		resp, err := wh.describeScheduleCHASM(ctx, request)
+		if err == nil {
+			return resp, nil
+		}
+		var notFoundErr *serviceerror.NotFound
+		if !errors.As(err, &notFoundErr) {
+			return nil, err
+		}
+	}
+	return wh.describeScheduleWorkflow(ctx, request)
+}
+
+func (wh *WorkflowHandler) describeScheduleCHASM(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (*workflowservice.DescribeScheduleResponse, error) {
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := wh.schedulerClient.DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+		FrontendRequest: request,
+		NamespaceId:     namespaceID.String(),
+	})
+	return res.GetFrontendResponse(), err
+}
+
+func (wh *WorkflowHandler) describeScheduleWorkflow(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (*workflowservice.DescribeScheduleResponse, error) {
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -3700,7 +3834,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 					WorkflowExecution: execution,
 					SignalName:        scheduler.SignalNameRefresh,
 					Identity:          "internal refresh from describe request",
-					RequestId:         uuid.New(),
+					RequestId:         uuid.NewString(),
 				},
 			})
 		}()
@@ -3788,46 +3922,84 @@ func (wh *WorkflowHandler) UpdateSchedule(
 ) (_ *workflowservice.UpdateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
 	if !wh.config.EnableSchedules(request.Namespace) {
 		return nil, errSchedulesNotAllowed
 	}
 
-	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errRequestIDTooLong
+	if request == nil {
+		return nil, errRequestNotSet
 	}
 
-	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+	namespaceName := namespace.Name(request.GetNamespace())
 
-	namespaceName := namespace.Name(request.Namespace)
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
+	if err := wh.validateStartWorkflowArgsForSchedule(
+		namespaceName,
+		request.GetSchedule().GetAction().GetStartWorkflow(),
+	); err != nil {
 		return nil, err
 	}
 
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
-	err = wh.canonicalizeScheduleSpec(request.Schedule)
+	err := wh.canonicalizeScheduleSpec(request.Schedule)
 	if err != nil {
 		return nil, err
 	}
 
-	// Need to validate the custom search attributes, but need to pass the original
-	// custom search attributes map to FullUpdateRequest because it needs to call
-	// UpsertSearchAttributes which expects aliased names.
-	_, err = wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
+	// Both V1 and V2 use unaliasedSearchAttributesFrom for validation, without using
+	// the result. V1 uses UpsertSearchAttributes which expects aliased names, and V2
+	// lets CHASM handle all visibility aliasing.
+	if _, err = wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName); err != nil {
+		return nil, err
+	}
+
+	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+		res, err := wh.updateScheduleCHASM(ctx, request)
+		if err == nil {
+			return res, nil
+		}
+		var notFoundErr *serviceerror.NotFound
+		if !errors.As(err, &notFoundErr) {
+			return nil, err
+		}
+	}
+
+	return wh.updateScheduleWorkflow(ctx, request)
+}
+
+func (wh *WorkflowHandler) updateScheduleCHASM(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+) (*workflowservice.UpdateScheduleResponse, error) {
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = wh.validateStartWorkflowArgsForSchedule(
-		namespaceName,
-		request.GetSchedule().GetAction().GetStartWorkflow(),
-	); err != nil {
+	res, err := wh.schedulerClient.UpdateSchedule(ctx, &schedulerpb.UpdateScheduleRequest{
+		FrontendRequest: request,
+		NamespaceId:     namespaceID.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.GetFrontendResponse(), err
+}
+
+func (wh *WorkflowHandler) updateScheduleWorkflow(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+) (*workflowservice.UpdateScheduleResponse, error) {
+	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errRequestIDTooLong
+	}
+
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
 		return nil, err
 	}
 
@@ -3878,7 +4050,10 @@ func (wh *WorkflowHandler) UpdateSchedule(
 }
 
 // Makes a specific change to a schedule or triggers an immediate action.
-func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflowservice.PatchScheduleRequest) (_ *workflowservice.PatchScheduleResponse, retError error) {
+func (wh *WorkflowHandler) PatchSchedule(
+	ctx context.Context,
+	request *workflowservice.PatchScheduleRequest,
+) (_ *workflowservice.PatchScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3891,13 +4066,6 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, errRequestIDTooLong
-	}
-
-	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
-
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
 	}
 
 	if len(request.Patch.Pause) > common.ScheduleNotesSizeLimit ||
@@ -3914,6 +4082,16 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, err
 	}
 
+	// workflowID is included in size calculations with the V1 prefix, since V2 may
+	// have to roll back.
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO - when V2 supports updating the scheduler memo, make sure to add that to
+	// the size validation here (like in CreateSchedule).
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(
@@ -3927,6 +4105,31 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("PatchSchedule"),
 	); err != nil {
+		return nil, err
+	}
+
+	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+		res, err := wh.patchScheduleCHASM(ctx, request)
+		if err == nil {
+			return res, nil
+		}
+		var notFoundErr *serviceerror.NotFound
+		if !errors.As(err, &notFoundErr) {
+			return nil, err
+		}
+	}
+
+	return wh.patchScheduleWorkflow(ctx, request, inputPayloads)
+}
+
+func (wh *WorkflowHandler) patchScheduleWorkflow(
+	ctx context.Context,
+	request *workflowservice.PatchScheduleRequest,
+	inputPayloads *commonpb.Payloads,
+) (_ *workflowservice.PatchScheduleResponse, retError error) {
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
 		return nil, err
 	}
 
@@ -3946,6 +4149,26 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	}
 
 	return &workflowservice.PatchScheduleResponse{}, nil
+}
+
+func (wh *WorkflowHandler) patchScheduleCHASM(
+	ctx context.Context,
+	request *workflowservice.PatchScheduleRequest,
+) (_ *workflowservice.PatchScheduleResponse, retError error) {
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := wh.schedulerClient.PatchSchedule(ctx, &schedulerpb.PatchScheduleRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return res.GetFrontendResponse(), nil
 }
 
 // Lists matching times within a range.
@@ -4024,6 +4247,39 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
+	// Prefer CHASM scheduler if enabled.
+	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+		res, err := wh.deleteScheduleCHASM(ctx, request)
+		if err == nil {
+			return res, nil
+		}
+		var notFoundErr *serviceerror.NotFound
+		if !errors.As(err, &notFoundErr) {
+			return nil, err
+		}
+	}
+
+	return wh.deleteScheduleWorkflow(ctx, request)
+}
+
+func (wh *WorkflowHandler) deleteScheduleCHASM(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (*workflowservice.DeleteScheduleResponse, error) {
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := wh.schedulerClient.DeleteSchedule(ctx, &schedulerpb.DeleteScheduleRequest{
+		FrontendRequest: request,
+		NamespaceId:     namespaceID.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return res.GetFrontendResponse(), err
+}
+
+func (wh *WorkflowHandler) deleteScheduleWorkflow(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (*workflowservice.DeleteScheduleResponse, error) {
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -4184,7 +4440,7 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 	}
 
 	if request.GetRequest().GetMeta().GetUpdateId() == "" {
-		request.GetRequest().GetMeta().UpdateId = uuid.New()
+		request.GetRequest().GetMeta().UpdateId = uuid.NewString()
 	}
 
 	if request.GetRequest().GetInput() == nil {
@@ -4481,12 +4737,12 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errRequestNotSet
 	}
 
-	if err := batcher.ValidateBatchOperation(request); err != nil {
-		return nil, err
-	}
-
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
+	}
+
+	if err := batcher.ValidateBatchOperation(request); err != nil {
+		return nil, err
 	}
 
 	// Validate concurrent batch operation
@@ -4548,9 +4804,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		case *batchpb.BatchOperationUnpauseActivities_Type:
 			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
 			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
+			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", searchattribute.TemporalPauseInfo)
+			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", sadefs.TemporalPauseInfo)
 			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
@@ -4561,10 +4817,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		identity = op.UpdateActivityOptionsOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
-	}
-
-	if err := batcher.ValidateBatchOperation(request); err != nil {
-		return nil, err
 	}
 
 	inputPayload, err := payloads.Encode(input)
@@ -4581,8 +4833,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	// Add pre-define search attributes
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
@@ -4591,7 +4843,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayload,
 		Identity:                 identity,
-		RequestId:                uuid.New(),
+		RequestId:                uuid.NewString(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		Memo:                     memo,
@@ -4724,7 +4976,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, err
 	}
 	var identity string
-	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[searchattribute.BatcherUser]
+	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.BatcherUser]
 	err = payload.Decode(encodedBatcherIdentity, &identity)
 	if err != nil {
 		return nil, err
@@ -4833,7 +5085,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		PageSize:      request.PageSize,
 		NextPageToken: request.GetNextPageToken(),
 		Query: fmt.Sprintf("%s = '%s'",
-			searchattribute.TemporalNamespaceDivision,
+			sadefs.TemporalNamespaceDivision,
 			batcher.NamespaceDivision,
 		),
 	})
@@ -4915,7 +5167,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		return &workflowservice.PollNexusTaskQueueResponse{}, nil
 	}
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	childCtx := wh.registerOutstandingPollContext(ctx, pollerID, namespaceID.String())
 	defer wh.unregisterOutstandingPollContext(pollerID, namespaceID.String())
 	matchingResponse, err := wh.matchingClient.PollNexusTaskQueue(childCtx, &matchingservice.PollNexusTaskQueueRequest{
@@ -5489,7 +5741,7 @@ func validateRequestId(requestID *string, lenLimit int) error {
 	if *requestID == "" {
 		// For easy direct API use, we default the request ID here but expect all
 		// SDKs and other auto-retrying clients to set it
-		*requestID = uuid.New()
+		*requestID = uuid.NewString()
 	}
 
 	if len(*requestID) > lenLimit {
@@ -5612,14 +5864,14 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commo
 		return nil
 	}
 
-	delete(fields, searchattribute.TemporalSchedulePaused)
+	delete(fields, sadefs.TemporalSchedulePaused)
 	delete(fields, "TemporalScheduleInfoJSON") // used by older version, clean this up if present
 	// these aren't schedule-related but they aren't relevant to the user for
 	// scheduler workflows since it's the server worker
-	delete(fields, searchattribute.BinaryChecksums)
-	delete(fields, searchattribute.BuildIds)
+	delete(fields, sadefs.BinaryChecksums)
+	delete(fields, sadefs.BuildIds)
 	// all schedule workflows should be in this namespace division so there's no need to include it
-	delete(fields, searchattribute.TemporalNamespaceDivision)
+	delete(fields, sadefs.TemporalNamespaceDivision)
 
 	if len(fields) == 0 {
 		return nil
@@ -5698,16 +5950,17 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("error parsing UpdateMask: %s", err.Error())
 	}
-	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
 		return nil, err
 	}
-	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
+	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
 		return nil, err
 	}
 
 	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
-		NamespaceId:   namespaceId.String(),
+		NamespaceId:   namespaceID.String(),
 		UpdateRequest: request,
 	})
 	if err != nil {
@@ -6121,4 +6374,66 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 	return &workflowservice.DescribeWorkerResponse{
 		WorkerInfo: resp.GetWorkerInfo(),
 	}, nil
+}
+
+// PauseWorkflowExecution pauses a workflow execution.
+func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *workflowservice.PauseWorkflowExecutionRequest) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.WorkflowPauseEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf("workflow pause is not enabled for namespace: %s", request.GetNamespace())
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, historyErr := wh.historyClient.PauseWorkflowExecution(ctx, &historyservice.PauseWorkflowExecutionRequest{
+		NamespaceId:  namespaceID.String(),
+		PauseRequest: request,
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+
+	return &workflowservice.PauseWorkflowExecutionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request *workflowservice.UnpauseWorkflowExecutionRequest) (_ *workflowservice.UnpauseWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// verify size limits of reason, request id and identity.
+	if len(request.GetReason()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("reason is too long.")
+	}
+	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("request id is too long.")
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, serviceerror.NewInvalidArgument("identity is too long.")
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, historyErr := wh.historyClient.UnpauseWorkflowExecution(ctx, &historyservice.UnpauseWorkflowExecutionRequest{
+		NamespaceId:    namespaceID.String(),
+		UnpauseRequest: request,
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+
+	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
 }

@@ -48,9 +48,10 @@ type chasmEngineSuite struct {
 	mockClusterMetadata   *cluster.MockMetadata
 
 	namespaceEntry *namespace.Namespace
-	entityCache    wcache.Cache
+	executionCache wcache.Cache
 	registry       *chasm.Registry
 	config         *configs.Config
+	archetypeID    chasm.ArchetypeID
 
 	engine *ChasmEngine
 }
@@ -77,7 +78,7 @@ func (s *chasmEngineSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.entityCache = wcache.NewHostLevelCache(
+	s.executionCache = wcache.NewHostLevelCache(
 		s.mockShard.GetConfig(),
 		s.mockShard.GetLogger(),
 		metrics.NoopMetricsHandler,
@@ -107,12 +108,16 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetChasmRegistry(s.registry)
 
+	var ok bool
+	s.archetypeID, ok = s.registry.ComponentIDFor(&testComponent{})
+	s.True(ok)
+
 	s.mockShard.SetEngineForTesting(s.mockEngine)
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
 	s.engine = newChasmEngine(
-		s.entityCache,
+		s.executionCache,
 		s.registry,
 		s.config,
 	)
@@ -128,14 +133,14 @@ func (s *chasmEngineSuite) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
-func (s *chasmEngineSuite) TestNewEntity_BrandNew() {
+func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 	tv := testvars.New(s.T())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    "",
+			RunID:       "",
 		},
 	)
 	newActivityID := tv.ActivityID()
@@ -146,40 +151,40 @@ func (s *chasmEngineSuite) TestNewEntity_BrandNew() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, newActivityID, "", 0)
+			s.validateCreateRequest(request, s.archetypeID, newActivityID, "", 0)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 
-	entityKey, serializedRef, err := s.engine.NewEntity(
+	executionKey, serializedRef, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
-		s.newTestEntityFn(newActivityID),
+		s.newTestExecutionFn(newActivityID),
 		chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyRejectDuplicate,
 			chasm.BusinessIDConflictPolicyFail,
 		),
 	)
 	s.NoError(err)
-	expectedEntityKey := chasm.EntityKey{
+	expectedExecutionKey := chasm.ExecutionKey{
 		NamespaceID: string(tests.NamespaceID),
 		BusinessID:  tv.WorkflowID(),
-		EntityID:    runID,
+		RunID:       runID,
 	}
-	s.Equal(expectedEntityKey, entityKey)
-	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+	s.Equal(expectedExecutionKey, executionKey)
+	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
 }
 
-func (s *chasmEngineSuite) TestNewEntity_RequestIDDedup() {
+func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    "",
+			RunID:       "",
 		},
 	)
 	newActivityID := tv.ActivityID()
@@ -193,32 +198,32 @@ func (s *chasmEngineSuite) TestNewEntity_RequestIDDedup() {
 		),
 	).Times(1)
 
-	entityKey, serializedRef, err := s.engine.NewEntity(
+	executionKey, serializedRef, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
-		s.newTestEntityFn(newActivityID),
+		s.newTestExecutionFn(newActivityID),
 		chasm.WithRequestID(tv.RequestID()),
 	)
 	s.NoError(err)
 
-	expectedEntityKey := chasm.EntityKey{
+	expectedExecutionKey := chasm.ExecutionKey{
 		NamespaceID: string(tests.NamespaceID),
 		BusinessID:  tv.WorkflowID(),
-		EntityID:    tv.RunID(),
+		RunID:       tv.RunID(),
 	}
-	s.Equal(expectedEntityKey, entityKey)
-	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+	s.Equal(expectedExecutionKey, executionKey)
+	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
 }
 
-func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
+func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    "",
+			RunID:       "",
 		},
 	)
 	newActivityID := tv.ActivityID()
@@ -238,16 +243,16 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			s.validateCreateRequest(request, s.archetypeID, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 
-	entityKey, serializedRef, err := s.engine.NewEntity(
+	executionKey, serializedRef, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
-		s.newTestEntityFn(newActivityID),
+		s.newTestExecutionFn(newActivityID),
 		chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyAllowDuplicate,
 			chasm.BusinessIDConflictPolicyFail,
@@ -255,24 +260,24 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_AllowDuplicate() {
 	)
 	s.NoError(err)
 
-	expectedEntityKey := chasm.EntityKey{
+	expectedExecutionKey := chasm.ExecutionKey{
 		NamespaceID: string(tests.NamespaceID),
 		BusinessID:  tv.WorkflowID(),
-		EntityID:    runID,
+		RunID:       runID,
 	}
-	s.Equal(expectedEntityKey, entityKey)
-	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+	s.Equal(expectedExecutionKey, executionKey)
+	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
 }
 
-func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
+func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    "",
+			RunID:       "",
 		},
 	)
 	newActivityID := tv.ActivityID()
@@ -292,16 +297,16 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			s.validateCreateRequest(request, s.archetypeID, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
 
-	entityKey, serializedRef, err := s.engine.NewEntity(
+	executionKey, serializedRef, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
-		s.newTestEntityFn(newActivityID),
+		s.newTestExecutionFn(newActivityID),
 		chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly,
 			chasm.BusinessIDConflictPolicyFail,
@@ -309,24 +314,24 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Success() {
 	)
 	s.NoError(err)
 
-	expectedEntityKey := chasm.EntityKey{
+	expectedExecutionKey := chasm.ExecutionKey{
 		NamespaceID: string(tests.NamespaceID),
 		BusinessID:  tv.WorkflowID(),
-		EntityID:    runID,
+		RunID:       runID,
 	}
-	s.Equal(expectedEntityKey, entityKey)
-	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+	s.Equal(expectedExecutionKey, executionKey)
+	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
 }
 
-func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
+func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    "",
+			RunID:       "",
 		},
 	)
 	newActivityID := tv.ActivityID()
@@ -340,10 +345,10 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
 		),
 	).Times(1)
 
-	_, _, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
-		s.newTestEntityFn(newActivityID),
+		s.newTestExecutionFn(newActivityID),
 		chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly,
 			chasm.BusinessIDConflictPolicyFail,
@@ -352,15 +357,15 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_FailedOnly_Fail() {
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
 }
 
-func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
+func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    "",
+			RunID:       "",
 		},
 	)
 	newActivityID := tv.ActivityID()
@@ -374,10 +379,10 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
 		),
 	).Times(1)
 
-	_, _, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
-		s.newTestEntityFn(newActivityID),
+		s.newTestExecutionFn(newActivityID),
 		chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyRejectDuplicate,
 			chasm.BusinessIDConflictPolicyFail,
@@ -386,15 +391,15 @@ func (s *chasmEngineSuite) TestNewEntity_ReusePolicy_RejectDuplicate() {
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
 }
 
-func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_UseExisting() {
+func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    "",
+			RunID:       "",
 		},
 	)
 	newActivityID := tv.ActivityID()
@@ -410,10 +415,10 @@ func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_UseExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	entityKey, serializedRef, err := s.engine.NewEntity(
+	executionKey, serializedRef, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
-		s.newTestEntityFn(newActivityID),
+		s.newTestExecutionFn(newActivityID),
 		chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyAllowDuplicate,
 			chasm.BusinessIDConflictPolicyUseExisting,
@@ -421,24 +426,24 @@ func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_UseExisting() {
 	)
 	s.NoError(err)
 
-	expectedEntityKey := chasm.EntityKey{
+	expectedExecutionKey := chasm.ExecutionKey{
 		NamespaceID: string(tests.NamespaceID),
 		BusinessID:  tv.WorkflowID(),
-		EntityID:    tv.RunID(),
+		RunID:       tv.RunID(),
 	}
-	s.Equal(expectedEntityKey, entityKey)
-	s.validateNewEntityResponseRef(serializedRef, expectedEntityKey)
+	s.Equal(expectedExecutionKey, executionKey)
+	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
 }
 
-func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_TerminateExisting() {
+func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    "",
+			RunID:       "",
 		},
 	)
 	newActivityID := tv.ActivityID()
@@ -454,10 +459,10 @@ func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_TerminateExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	_, _, err := s.engine.NewEntity(
+	_, _, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
-		s.newTestEntityFn(newActivityID),
+		s.newTestExecutionFn(newActivityID),
 		chasm.WithBusinessIDPolicy(
 			chasm.BusinessIDReusePolicyAllowDuplicate,
 			chasm.BusinessIDConflictPolicyTerminateExisting,
@@ -466,7 +471,7 @@ func (s *chasmEngineSuite) TestNewEntity_ConflictPolicy_TerminateExisting() {
 	s.ErrorAs(err, new(*serviceerror.Unimplemented))
 }
 
-func (s *chasmEngineSuite) newTestEntityFn(
+func (s *chasmEngineSuite) newTestExecutionFn(
 	activityID string,
 ) func(ctx chasm.MutableContext) (chasm.Component, error) {
 	return func(ctx chasm.MutableContext) (chasm.Component, error) {
@@ -480,10 +485,13 @@ func (s *chasmEngineSuite) newTestEntityFn(
 
 func (s *chasmEngineSuite) validateCreateRequest(
 	request *persistence.CreateWorkflowExecutionRequest,
+	expectedArchetypeID chasm.ArchetypeID,
 	expectedActivityID string,
 	expectedPreviousRunID string,
 	expectedPreviousLastWriteVersion int64,
 ) {
+	s.Equal(expectedArchetypeID, request.ArchetypeID)
+
 	if expectedPreviousRunID == "" && expectedPreviousLastWriteVersion == 0 {
 		s.Equal(persistence.CreateWorkflowModeBrandNew, request.Mode)
 	} else {
@@ -502,13 +510,13 @@ func (s *chasmEngineSuite) validateCreateRequest(
 	s.Equal(expectedActivityID, activityInfo.ActivityId)
 }
 
-func (s *chasmEngineSuite) validateNewEntityResponseRef(
+func (s *chasmEngineSuite) validateNewExecutionResponseRef(
 	serializedRef []byte,
-	expectedEntityKey chasm.EntityKey,
+	expectedExecutionKey chasm.ExecutionKey,
 ) {
 	deserializedRef, err := chasm.DeserializeComponentRef(serializedRef)
 	s.NoError(err)
-	s.Equal(expectedEntityKey, deserializedRef.EntityKey)
+	s.Equal(expectedExecutionKey, deserializedRef.ExecutionKey)
 
 	archetypeID, err := deserializedRef.ArchetypeID(s.registry)
 	s.NoError(err)
@@ -541,17 +549,17 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    tv.RunID(),
+			RunID:       tv.RunID(),
 		},
 	)
 	newActivityID := tv.ActivityID()
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
 				ActivityId: "",
 			}),
 		}, nil).Times(1)
@@ -594,17 +602,17 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    tv.RunID(),
+			RunID:       tv.RunID(),
 		},
 	)
 	expectedActivityID := tv.ActivityID()
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
 				ActivityId: expectedActivityID,
 			}),
 		}, nil).Times(1)
@@ -626,7 +634,7 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 }
 
 func (s *chasmEngineSuite) buildPersistenceMutableState(
-	key chasm.EntityKey,
+	key chasm.ExecutionKey,
 	componentState proto.Message,
 ) *persistencespb.WorkflowMutableState {
 
@@ -652,7 +660,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			ExecutionStats: &persistencespb.ExecutionStats{},
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId:     key.EntityID,
+			RunId:     key.RunID,
 			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			StartTime: timestamppb.New(s.mockShard.GetTimeSource().Now().Add(-1 * time.Minute)),

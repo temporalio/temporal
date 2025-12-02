@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -24,13 +24,13 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -123,7 +123,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	default:
-		err = queues.NewUnprocessableTaskError("unknown task type")
+		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
 
 	return queues.ExecuteResponse{
@@ -537,7 +537,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 
 	if task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
-		softassert.Sometimes(t.logger).Info("Duplicate activity retry timer task",
+		t.logger.Info("Duplicate activity retry timer task",
 			tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
 			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
@@ -671,7 +671,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 
 	var newRunID string
 	if initiator != enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
-		newRunID = uuid.New()
+		newRunID = uuid.NewString()
 	}
 
 	// First add timeout workflow event, no matter what we're doing next.
@@ -752,6 +752,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 				newExecutionInfo.WorkflowId,
 				newExecutionState.RunId,
 			),
+			chasm.WorkflowArchetypeID,
 			t.logger,
 			t.shardContext.GetThrottledLogger(),
 			t.shardContext.GetMetricsHandler(),
@@ -910,12 +911,6 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		metrics.HeartbeatTimeoutCounter.With(metricsScope).Record(1)
 	}
-
-	softassert.Sometimes(t.logger).Debug("timer queue task timed out",
-		tag.NewStringTag("timer-type", timerType.String()),
-		tag.Operation(operation),
-		tag.Attempt(taskAttempt),
-	)
 }
 
 func (t *timerQueueActiveTaskExecutor) processActivityWorkflowRules(

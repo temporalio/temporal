@@ -2,10 +2,9 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -471,6 +470,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		err = t.deleteExecution(
 			ctx,
 			task,
+			chasm.WorkflowArchetypeID,
 			false,
 			&task.DeleteProcessStage,
 		)
@@ -924,7 +924,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
 			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
 			if err != nil {
-				return errors.New(fmt.Sprintf("error determining child task queue presence in inherited version: %s", err.Error()))
+				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
 			}
 			if !newTQInPinnedVersion {
 				inheritedPinnedVersion = nil
@@ -940,6 +940,34 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() && !newTQInPinnedVersion ||
 			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
 			inheritedPinnedOverride = nil
+		}
+	}
+
+	// If the parent has AutoUpgrade behavior, we populate the inherited auto upgrade info based on whether the child TQ is in the same deployment version as the parent TQ.
+	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
+	sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+	sourceDeploymentRevisionNumber := mutableState.GetVersioningRevisionNumber()
+
+	// Only set inherited auto upgrade info if source deployment version and revision number are not nil
+	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+		if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+				SourceDeploymentVersion:        sourceDeploymentVersion,
+				SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+			}
+
+			newTQ := attributes.GetTaskQueue().GetName()
+			if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit auto upgrade info if child is in a different namespace
+				inheritedAutoUpgradeInfo = nil
+			} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
+				TQInSourceDeploymentVersion, err := worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient)(ctx, attributes.GetNamespaceId(), newTQ, inheritedAutoUpgradeInfo.GetSourceDeploymentVersion())
+				if err != nil {
+					return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
+				}
+				if !TQInSourceDeploymentVersion {
+					inheritedAutoUpgradeInfo = nil
+				}
+			}
 		}
 	}
 
@@ -1013,6 +1041,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedPinnedOverride,
 		inheritedPinnedVersion,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
+		inheritedAutoUpgradeInfo,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1122,7 +1151,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 		t.shardContext,
 		t.cache,
 		wfKey,
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -1178,6 +1207,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			ShardID:     t.shardContext.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		if err != nil {
 			return err
@@ -1238,7 +1268,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
-			chasm.WorkflowArchetype,
+			chasm.WorkflowArchetypeID,
 			locks.PriorityLow,
 		)
 		if err != nil {
@@ -1585,6 +1615,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedPinnedOverride *workflowpb.VersioningOverride,
 	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	priority *commonpb.Priority,
+	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                targetNamespace.String(),
@@ -1631,6 +1662,11 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
 
+	// Only set the AutoUpgrade info if the Pinned version is not set.
+	if request.InheritedPinnedVersion == nil {
+		request.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
+	}
+
 	if shouldTerminateAndStartChild {
 		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 		request.StartRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
@@ -1665,7 +1701,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	workflowID := task.WorkflowID
 	baseRunID := baseMutableState.GetExecutionState().GetRunId()
 
-	resetRunID := uuid.New()
+	resetRunID := uuid.NewString()
 	baseRebuildLastEventID := resetPoint.GetFirstWorkflowTaskCompletedId() - 1
 	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
@@ -1700,7 +1736,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
-		uuid.New(),
+		uuid.NewString(),
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),

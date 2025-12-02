@@ -69,7 +69,8 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		Priority:                        req.GetPriority(),
 		InheritedPinnedVersion:          request.InheritedPinnedVersion,
 		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
-		EagerExecutionAccepted: req.GetRequestEagerExecution(),
+		EagerExecutionAccepted:   req.GetRequestEagerExecution(),
+		InheritedAutoUpgradeInfo: request.InheritedAutoUpgradeInfo,
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -383,6 +384,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	attachRequestID string,
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
+	identity string,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -391,6 +393,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			UnsetVersioningOverride:     unsetVersioningOverride,
 			AttachedRequestId:           attachRequestID,
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
+			Identity:                    identity,
 		},
 	}
 	event.Links = links
@@ -1014,6 +1017,22 @@ func (b *EventFactory) CreateWorkflowExecutionPausedEvent(
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionPausedEventAttributes{
 		WorkflowExecutionPausedEventAttributes: &historypb.WorkflowExecutionPausedEventAttributes{
+			Identity:  identity,
+			Reason:    reason,
+			RequestId: requestID,
+		},
+	}
+	return event
+}
+
+func (b *EventFactory) CreateWorkflowExecutionUnpausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUnpausedEventAttributes{
+		WorkflowExecutionUnpausedEventAttributes: &historypb.WorkflowExecutionUnpausedEventAttributes{
 			Identity:  identity,
 			Reason:    reason,
 			RequestId: requestID,

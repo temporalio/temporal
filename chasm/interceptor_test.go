@@ -1,4 +1,4 @@
-package chasm
+package chasm_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -22,7 +23,7 @@ func (h ServiceHandler) Test(
 	ctx context.Context,
 	req *testspb.TestRequest,
 ) (resp *testspb.TestResponse, err error) {
-	hasEngineCtx := engineFromContext(ctx) != nil
+	hasEngineCtx := chasm.EngineFromContext(ctx) != nil
 
 	return &testspb.TestResponse{
 		RequestId:    req.RequestId,
@@ -31,7 +32,7 @@ func (h ServiceHandler) Test(
 }
 
 type ServiceLibrary struct {
-	UnimplementedLibrary
+	chasm.UnimplementedLibrary
 }
 
 func NewServiceLibrary() *ServiceLibrary {
@@ -43,8 +44,8 @@ func (l *ServiceLibrary) RegisterServices(server *grpc.Server) {
 }
 
 func TestChasmRequestInterceptor_ShouldRespond(t *testing.T) {
-	mockEngine := NewMockEngine(gomock.NewController(t))
-	requestInterceptor := ChasmRequestInterceptorProvider(mockEngine, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	mockEngine := chasm.NewMockEngine(gomock.NewController(t))
+	requestInterceptor := chasm.ChasmRequestInterceptorProvider(mockEngine, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 
 	server, address := startTestServer(t, grpc.UnaryInterceptor(requestInterceptor.Intercept))
 	defer server.Stop()

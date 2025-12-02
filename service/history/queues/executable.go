@@ -29,11 +29,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -105,25 +105,6 @@ const (
 	// while task is retrying
 	taskCriticalLogMetricAttempts = 30
 )
-
-// UnprocessableTaskError is an indicator that an executor does not know how to handle a task. Considered terminal.
-type UnprocessableTaskError struct {
-	Message string
-}
-
-// NewUnprocessableTaskError returns a new UnprocessableTaskError from given message.
-func NewUnprocessableTaskError(message string) UnprocessableTaskError {
-	return UnprocessableTaskError{Message: message}
-}
-
-func (e UnprocessableTaskError) Error() string {
-	return "unprocessable task: " + e.Message
-}
-
-// IsTerminalTaskError marks this error as terminal to be handled appropriately.
-func (UnprocessableTaskError) IsTerminalTaskError() bool {
-	return true
-}
 
 type (
 	executableImpl struct {
@@ -467,7 +448,6 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 	if errors.As(err, &resourceExhaustedErr) {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
-			softassert.Sometimes(e.logger).Debug("task throttled due to busy workflow", tag.TaskType(e.GetType()))
 			err = consts.ErrResourceExhaustedBusyWorkflow
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
 			err = consts.ErrResourceExhaustedAPSLimit
@@ -510,14 +490,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	var terr MaybeTerminalTaskError
 	if errors.As(err, &terr) {
-		isTerminal := terr.IsTerminalTaskError()
-		if isTerminal {
-			softassert.Sometimes(e.logger).Debug("terminal task error detected",
-				tag.TaskType(e.GetType()),
-				tag.Error(err),
-			)
-		}
-		return isTerminal
+		return terr.IsTerminalTaskError()
 	}
 
 	if _, isDataLoss := err.(*serviceerror.DataLoss); isDataLoss {
@@ -527,10 +500,6 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
 		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1)
-		softassert.Sometimes(e.logger).Debug("internal non-retryable task processing error",
-			tag.TaskType(e.GetType()),
-			tag.Error(err),
-		)
 		// Only DQL/drop when configured to
 		shouldDLQ := e.dlqInternalErrors()
 		return shouldDLQ
@@ -588,9 +557,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		tag.NewStringTag("task-category", e.GetCategory().Name()),
 	)
 	if attempt > taskCriticalLogMetricAttempts {
-		softassert.Sometimes(logger).Error("Critical error processing task, retrying.", tag.OperationCritical)
+		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
 	} else {
-		softassert.Sometimes(logger).Warn("Fail to process task")
+		logger.Warn("Fail to process task")
 	}
 
 	if e.isUnexpectedNonRetryableError(err) {
@@ -955,38 +924,11 @@ func (e *CircuitBreakerExecutable) Execute() error {
 	}()
 
 	err = e.Executable.Execute()
-	var destinationDownErr *DestinationDownError
+	var destinationDownErr *queueserrors.DestinationDownError
 	if errors.As(err, &destinationDownErr) {
 		err = destinationDownErr.Unwrap()
 	}
 
 	doneCb(destinationDownErr == nil)
 	return err
-}
-
-// DestinationDownError indicates the destination is down and wraps another error.
-// It is a useful specific error that can be used, for example, in a circuit breaker
-// to distinguish when a destination service is down and an internal error.
-type DestinationDownError struct {
-	Message string
-	err     error
-}
-
-func NewDestinationDownError(msg string, err error) *DestinationDownError {
-	return &DestinationDownError{
-		Message: "destination down: " + msg,
-		err:     err,
-	}
-}
-
-func (e *DestinationDownError) Error() string {
-	msg := e.Message
-	if e.err != nil {
-		msg += "\n" + e.err.Error()
-	}
-	return msg
-}
-
-func (e *DestinationDownError) Unwrap() error {
-	return e.err
 }

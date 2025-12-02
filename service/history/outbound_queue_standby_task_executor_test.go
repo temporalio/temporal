@@ -104,7 +104,8 @@ func (s *outboundQueueStandbyTaskExecutorSuite) SetupTest() {
 		Return(s.namespaceEntry, nil).
 		AnyTimes()
 
-	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentExecution(
+		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -150,7 +151,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 				// Setup successful workflow context loading and CHASM execution
 
 				s.mockWorkflowCache.EXPECT().
-					GetOrCreateChasmEntity(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.ArchetypeAny, gomock.Any()).
+					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
 					Return(s.mockWorkflowContext, func(error) {}, nil)
 
 				s.mockWorkflowContext.EXPECT().
@@ -174,7 +175,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 			setupMocks: func(task *tasks.ChasmTask) {
 				// Workflow context loads but mutable state fails
 				s.mockWorkflowCache.EXPECT().
-					GetOrCreateChasmEntity(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.ArchetypeAny, gomock.Any()).
+					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
 					Return(s.mockWorkflowContext, func(error) {}, nil)
 
 				s.mockWorkflowContext.EXPECT().
@@ -195,7 +196,8 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 				Category:    tasks.CategoryOutbound,
 				Destination: tv.Any().String(),
 				Info: &persistencespb.ChasmTaskInfo{
-					TypeId: tv.Any().UInt32(),
+					TypeId:      tv.Any().UInt32(),
+					ArchetypeId: tests.ArchetypeID,
 				},
 				VisibilityTimestamp: s.now,
 			}

@@ -48,7 +48,7 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert backoff task is generated
 	require.Len(t, mctx.Tasks, 1)
-	require.IsType(t, &callbackspb.InvocationTask{}, mctx.Tasks[0].Payload)
+	require.IsType(t, &callbackspb.BackoffTask{}, mctx.Tasks[0].Payload)
 
 	// Rescheduled
 	mctx = &chasm.MockMutableContext{}
@@ -86,8 +86,8 @@ func TestValidTransitions(t *testing.T) {
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
-	// Assert task is generated (success transitions also add tasks in chasm)
-	require.Len(t, mctx.Tasks, 1)
+	// Assert no task is generated on success transition
+	require.Empty(t, mctx.Tasks)
 
 	// Reset back to scheduled
 	callback = dup
@@ -107,6 +107,6 @@ func TestValidTransitions(t *testing.T) {
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
-	// Assert task is generated (failed transitions also add tasks in chasm)
-	require.Len(t, mctx.Tasks, 1)
+	// Assert task is not generated, failed is terminal
+	require.Empty(t, mctx.Tasks)
 }

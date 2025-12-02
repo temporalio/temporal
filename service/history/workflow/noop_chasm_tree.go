@@ -13,6 +13,8 @@ import (
 
 var _ historyi.ChasmTree = (*noopChasmTree)(nil)
 
+var NoopChasmTree = &noopChasmTree{}
+
 type noopChasmTree struct{}
 
 func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
@@ -77,7 +79,7 @@ func (*noopChasmTree) ComponentByPath(chasm.Context, []string) (chasm.Component,
 func (*noopChasmTree) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *chasm.Registry,
-	entityKey chasm.EntityKey,
+	executionKey chasm.ExecutionKey,
 	task *tasks.ChasmTask,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 ) error {
