@@ -30,6 +30,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+var errDefaultQueueNotInit = serviceerror.NewInternal("defaultQueue is not initializaed")
+
 const (
 	defaultTaskDispatchRPS    = 100000.0
 	defaultTaskDispatchRPSTTL = time.Minute
@@ -63,7 +65,6 @@ type (
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
 
-		autoEnable            bool
 		autoEnableRateLimiter quotas.RateLimiter
 		fairnessState         persistencespb.FairnessState // Set once on initialization and read only after
 		defaultQueueFuture    *future.FutureImpl[physicalTaskQueueManager]
@@ -128,8 +129,6 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
-var errDefaultQueueNotInit = serviceerror.NewInternal("defaultQueue is not initializaed")
-
 func (pm *taskQueuePartitionManagerImpl) initialize() {
 	unload := func(bool) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
@@ -146,10 +145,9 @@ func (pm *taskQueuePartitionManagerImpl) initialize() {
 		return
 	}
 
-	pm.autoEnable = pm.config.AutoEnable()
 	pm.fairnessState = data.GetFairnessState()
 	switch {
-	case !pm.autoEnable || pm.fairnessState == persistencespb.FAIRNESS_STATE_UNSPECIFIED:
+	case !pm.config.AutoEnableV2() || pm.fairnessState == persistencespb.FAIRNESS_STATE_UNSPECIFIED:
 		var fairness bool
 		fairness, pm.cancelFairnessSub = pm.config.EnableFairnessSub(unload)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
@@ -258,7 +256,7 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 }
 
 func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
-	if !pm.autoEnable || !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	if !pm.config.AutoEnableV2() || !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		return
 	}
 	if pm.fairnessState != persistencespb.FAIRNESS_STATE_UNSPECIFIED {
