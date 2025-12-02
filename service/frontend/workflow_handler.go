@@ -2806,6 +2806,9 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		return nil, err
 	}
 
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("QueryWorkflow"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetQuery().GetHeader().Size()))
+
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 
@@ -3146,6 +3149,11 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
+	}
+
+	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
+		metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("CreateSchedule"))
+		metrics.HeaderSize.With(metricsHandler).Record(int64(startWorkflow.GetHeader().Size()))
 	}
 
 	// size limits will be validated on history. note that the start workflow request is
@@ -4003,6 +4011,11 @@ func (wh *WorkflowHandler) updateScheduleWorkflow(
 		return nil, err
 	}
 
+	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
+		metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("UpdateSchedule"))
+		metrics.HeaderSize.With(metricsHandler).Record(int64(startWorkflow.GetHeader().Size()))
+	}
+
 	input := &schedulespb.FullUpdateRequest{
 		Schedule:         request.Schedule,
 		SearchAttributes: request.SearchAttributes,
@@ -4402,6 +4415,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("UpdateWorkflowExecution"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetRequest().GetInput().GetHeader().Size()))
 
 	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
 	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
