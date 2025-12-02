@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -914,6 +915,31 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 	s.ErrorContains(err, "cannot attach more than 10 links per request, got 11")
 }
 
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Priority() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  s.testNamespace.String(),
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		Priority: &commonpb.Priority{PriorityKey: -1},
+	}
+
+	_, err := wh.StartWorkflowExecution(context.Background(), request)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "priority key can't be negative")
+	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
+}
+
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -1009,6 +1035,32 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_Inval
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "link exceeds allowed size of 4000")
+}
+
+func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Priority() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:  s.testNamespace.String(),
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		SignalName: "signal-name",
+		Priority:   &commonpb.Priority{PriorityKey: -1},
+	}
+
+	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), request)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "priority key can't be negative")
+	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
 
 func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks() {
@@ -3957,4 +4009,53 @@ func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
 		s.NoError(err)
 		s.NotNil(resp)
 	})
+}
+
+func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	request := &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace: s.testNamespace.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+			RunId:      "run-id",
+		},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{PriorityKey: -1},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
+	}
+
+	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), request)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "priority key can't be negative")
+	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
+}
+
+func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	request := &workflowservice.UpdateActivityOptionsRequest{
+		Namespace: s.testNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+			RunId:      "run-id",
+		},
+		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{
+			Id: "activity-id",
+		},
+		ActivityOptions: &activitypb.ActivityOptions{
+			Priority: &commonpb.Priority{PriorityKey: -1},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
+	}
+
+	_, err := wh.UpdateActivityOptions(context.Background(), request)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "priority key can't be negative")
+	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
