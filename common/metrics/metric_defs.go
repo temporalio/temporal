@@ -280,14 +280,10 @@ const (
 	VisibilityPersistenceDeleteWorkflowExecutionScope = "DeleteWorkflowExecution"
 	// VisibilityPersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceListWorkflowExecutionsScope = "ListWorkflowExecutions"
-	// VisibilityPersistenceListChasmExecutionsScope tracks ListChasmExecutions calls made by service to visibility persistence layer
-	VisibilityPersistenceListChasmExecutionsScope = "ListChasmExecutions"
 	// VisibilityPersistenceScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceScanWorkflowExecutionsScope = "ScanWorkflowExecutions"
 	// VisibilityPersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceCountWorkflowExecutionsScope = "CountWorkflowExecutions"
-	// VisibilityPersistenceCountChasmExecutionsScope tracks CountChasmExecutions calls made by service to visibility persistence layer
-	VisibilityPersistenceCountChasmExecutionsScope = "CountChasmExecutions"
 	// VisibilityPersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to visibility persistence layer
 	VisibilityPersistenceGetWorkflowExecutionScope = "GetWorkflowExecution"
 	// VisibilityPersistenceAddSearchAttributesScope tracks AddSearchAttributes calls made by service to visibility persistence layer

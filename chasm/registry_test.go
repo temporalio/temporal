@@ -218,47 +218,6 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 		require.Contains(t, err.Error(), "must be struct or pointer to struct")
 	})
 
-	s.Run("duplicate search attribute alias panics", func() {
-		s.Require().PanicsWithValue("registrable component validation error: search attribute alias \"MyAlias\" is already defined",
-			func() {
-				chasm.NewRegistrableComponent[*chasm.MockComponent](
-					"Component1",
-					chasm.WithSearchAttributes(
-						chasm.NewSearchAttributeBool("MyAlias", chasm.SearchAttributeFieldBool01),
-						chasm.NewSearchAttributeInt("MyAlias", chasm.SearchAttributeFieldInt01),
-					),
-				)
-			},
-		)
-	})
-
-	s.Run("duplicate search attribute field panics", func() {
-		s.Require().PanicsWithValue("registrable component validation error: search attribute field \"TemporalBool01\" is already defined",
-			func() {
-				chasm.NewRegistrableComponent[*chasm.MockComponent](
-					"Component1",
-					chasm.WithSearchAttributes(
-						chasm.NewSearchAttributeBool("Alias1", chasm.SearchAttributeFieldBool01),
-						chasm.NewSearchAttributeBool("Alias2", chasm.SearchAttributeFieldBool01),
-					),
-				)
-			},
-		)
-	})
-
-	s.Run("valid search attributes do not panic", func() {
-		s.Require().NotPanics(func() {
-			chasm.NewRegistrableComponent[*chasm.MockComponent](
-				"Component1",
-				chasm.WithSearchAttributes(
-					chasm.NewSearchAttributeBool("Completed", chasm.SearchAttributeFieldBool01),
-					chasm.NewSearchAttributeInt("Count", chasm.SearchAttributeFieldInt01),
-					chasm.NewSearchAttributeKeyword("Status", chasm.SearchAttributeFieldKeyword01),
-				),
-			)
-		})
-	})
-
 }
 
 func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Error() {

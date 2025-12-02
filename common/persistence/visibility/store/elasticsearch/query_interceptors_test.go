@@ -37,7 +37,6 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestEsNameTypeMap(),
-		nil,
 	)
 
 	cases := []struct {
@@ -75,7 +74,6 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestEsNameTypeMap(),
-		nil,
 	)
 
 	cases := []struct {
@@ -119,7 +117,6 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestEsNameTypeMap(),
-		nil,
 	)
 
 	cases := []struct {
@@ -176,7 +173,6 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestEsNameTypeMap(),
-		nil,
 	)
 
 	values, err := vi.Values(sadefs.ScheduleID, sadefs.WorkflowID, "test-schedule-id")
@@ -199,7 +195,6 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestEsNameTypeMapWithScheduleID(),
-		nil,
 	)
 
 	values, err := vi.Values(sadefs.ScheduleID, sadefs.ScheduleID, "test-workflow-id")

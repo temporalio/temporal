@@ -13,7 +13,6 @@ import (
 type VisibilityValue interface {
 	MustEncode() *commonpb.Payload
 	Equal(VisibilityValue) bool
-	Value() any
 }
 
 type VisibilityValueInt int
@@ -32,10 +31,6 @@ func (v VisibilityValueInt) Equal(other VisibilityValue) bool {
 	return v == ov
 }
 
-func (v VisibilityValueInt) Value() any {
-	return int(v)
-}
-
 type VisibilityValueInt32 int32
 
 func (v VisibilityValueInt32) MustEncode() *commonpb.Payload {
@@ -50,10 +45,6 @@ func (v VisibilityValueInt32) Equal(other VisibilityValue) bool {
 		return false
 	}
 	return v == ov
-}
-
-func (v VisibilityValueInt32) Value() any {
-	return int32(v)
 }
 
 type VisibilityValueInt64 int64
@@ -72,10 +63,6 @@ func (v VisibilityValueInt64) Equal(other VisibilityValue) bool {
 	return v == ov
 }
 
-func (v VisibilityValueInt64) Value() any {
-	return int64(v)
-}
-
 type VisibilityValueString string
 
 func (v VisibilityValueString) MustEncode() *commonpb.Payload {
@@ -90,10 +77,6 @@ func (v VisibilityValueString) Equal(other VisibilityValue) bool {
 		return false
 	}
 	return v == ov
-}
-
-func (v VisibilityValueString) Value() any {
-	return string(v)
 }
 
 type VisibilityValueBool bool
@@ -112,10 +95,6 @@ func (v VisibilityValueBool) Equal(other VisibilityValue) bool {
 	return v == ov
 }
 
-func (v VisibilityValueBool) Value() any {
-	return bool(v)
-}
-
 type VisibilityValueFloat64 float64
 
 func (v VisibilityValueFloat64) MustEncode() *commonpb.Payload {
@@ -130,10 +109,6 @@ func (v VisibilityValueFloat64) Equal(other VisibilityValue) bool {
 		return false
 	}
 	return v == ov
-}
-
-func (v VisibilityValueFloat64) Value() any {
-	return float64(v)
 }
 
 type VisibilityValueTime time.Time
@@ -152,10 +127,6 @@ func (v VisibilityValueTime) Equal(other VisibilityValue) bool {
 	return time.Time(v).Equal(time.Time(ov))
 }
 
-func (v VisibilityValueTime) Value() any {
-	return time.Time(v)
-}
-
 type VisibilityValueByteSlice []byte
 
 func (v VisibilityValueByteSlice) MustEncode() *commonpb.Payload {
@@ -168,10 +139,6 @@ func (v VisibilityValueByteSlice) Equal(other VisibilityValue) bool {
 		return false
 	}
 	return slices.Equal(v, ov)
-}
-
-func (v VisibilityValueByteSlice) Value() any {
-	return []byte(v)
 }
 
 type VisibilityValueStringSlice []string
@@ -188,10 +155,6 @@ func (v VisibilityValueStringSlice) Equal(other VisibilityValue) bool {
 		return false
 	}
 	return slices.Equal(v, ov)
-}
-
-func (v VisibilityValueStringSlice) Value() any {
-	return []string(v)
 }
 
 func isVisibilityValueEqual(v1, v2 VisibilityValue) bool {

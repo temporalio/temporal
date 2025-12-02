@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
@@ -118,16 +116,6 @@ func (m *visibilityManagerRateLimited) ListWorkflowExecutions(
 	return m.delegate.ListWorkflowExecutions(ctx, request)
 }
 
-func (m *visibilityManagerRateLimited) ListChasmExecutions(
-	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
-) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
-	if ok := allow(ctx, "ListChasmExecutions", m.readRateLimiter); !ok {
-		return nil, persistence.ErrPersistenceSystemLimitExceeded
-	}
-	return m.delegate.ListChasmExecutions(ctx, request)
-}
-
 func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
@@ -136,16 +124,6 @@ func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.CountWorkflowExecutions(ctx, request)
-}
-
-func (m *visibilityManagerRateLimited) CountChasmExecutions(
-	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
-) (*chasm.CountExecutionsResponse, error) {
-	if ok := allow(ctx, "CountChasmExecutions", m.readRateLimiter); !ok {
-		return nil, persistence.ErrPersistenceSystemLimitExceeded
-	}
-	return m.delegate.CountChasmExecutions(ctx, request)
 }
 
 func (m *visibilityManagerRateLimited) GetWorkflowExecution(

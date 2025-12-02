@@ -397,17 +397,18 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	customSaMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
-	customSaMapper, err := customSaMapperProvider.GetMapper(namespaceEntry.Name())
+	searchattributesMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
+	searchAttributesMapper, err := searchattributesMapperProvider.GetMapper(namespaceEntry.Name())
 	if err != nil {
 		return err
 	}
 
 	searchattributes := make(map[string]*commonpb.Payload)
 
-	aliasedCustomSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
-	for alias, value := range aliasedCustomSearchAttributes {
-		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
+	aliasedSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
+
+	for alias, value := range aliasedSearchAttributes {
+		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
 			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
 			// or there are delays in propagating search attribute mappings to History.
@@ -417,34 +418,23 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		searchattributes[fieldName] = value
 	}
 
+	memo := visComponent.GetMemo(visTaskContext)
+	if memo == nil {
+		memo = make(map[string]*commonpb.Payload)
+	}
+
 	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
 	if err != nil {
 		return err
 	}
-	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
-		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
-			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
+	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
+		for _, sa := range saProvider.SearchAttributes(visTaskContext) {
+			searchattributes[sa.Field] = sa.Value.MustEncode()
 		}
-	}
-
-	combinedMemo := make(map[string]*commonpb.Payload, 2)
-	userMemoMap := visComponent.GetMemo(visTaskContext)
-	if len(userMemoMap) > 0 {
-		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
-		userMemoPayload, err := payload.Encode(userMemoProto)
-		if err != nil {
-			return err
-		}
-		combinedMemo[chasm.UserMemoKey] = userMemoPayload
 	}
 	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
-		chasmMemo := memoProvider.Memo(visTaskContext)
-		if chasmMemo != nil {
-			chasmMemoPayload, err := payload.Encode(chasmMemo)
-			if err != nil {
-				return err
-			}
-			combinedMemo[chasm.ChasmMemoKey] = chasmMemoPayload
+		for key, value := range memoProvider.Memo(visTaskContext) {
+			memo[key] = value.MustEncode()
 		}
 	}
 
@@ -452,7 +442,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		task,
 		namespaceEntry,
 		mutableState,
-		combinedMemo,
+		memo,
 		searchattributes,
 	)
 
