@@ -13,6 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 )
 
@@ -89,49 +90,49 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 	}{
 		{
 			Description:   "Empty Field",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "",
 			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeploymentName cannot be empty"),
 		},
 		{
 			Description:   "Large Field",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         strings.Repeat("s", 1000),
 			ExpectedError: serviceerror.NewInvalidArgument("size of WorkerDeploymentName larger than the maximum allowed"),
 		},
 		{
 			Description:   "Valid field",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "A",
 			ExpectedError: nil,
 		},
 		{
 			Description:   "Invalid buildID",
-			FieldName:     WorkerDeploymentBuildIDFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentBuildIDFieldName,
 			Input:         "__unversioned__",
 			ExpectedError: serviceerror.NewInvalidArgument("BuildID cannot start with '__'"),
 		},
 		{
 			Description:   "Invalid buildID",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "__my_dep",
 			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeploymentName cannot start with '__'"),
 		},
 		{
 			Description:   "Valid buildID",
-			FieldName:     WorkerDeploymentBuildIDFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentBuildIDFieldName,
 			Input:         "valid_build__id",
 			ExpectedError: nil,
 		},
 		{
 			Description:   "Invalid deploymentName",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "A/B",
 			ExpectedError: nil,
 		},
 		{
 			Description:   "Invalid deploymentName",
-			FieldName:     WorkerDeploymentNameFieldName,
+			FieldName:     worker_versioning.WorkerDeploymentNameFieldName,
 			Input:         "A.B",
 			ExpectedError: serviceerror.NewInvalidArgument("worker deployment name cannot contain '.'"),
 		},

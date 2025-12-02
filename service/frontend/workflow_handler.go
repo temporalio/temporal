@@ -15,6 +15,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -875,7 +876,8 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -991,9 +993,11 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errIdentityTooLong
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if err := wh.validateVersioningInfo(
 		request.Namespace,
 		request.WorkerVersionStamp,
+		request.DeploymentOptions,
 		request.StickyAttributes.GetWorkerTaskQueue(),
 	); err != nil {
 		return nil, err
@@ -1124,7 +1128,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -5159,7 +5164,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -5509,7 +5514,8 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, deploymentOptions *deploymentpb.WorkerDeploymentOptions, tq *taskqueuepb.TaskQueue) error {
+	// TODO: Deprecate old versioning checks
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
 		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
@@ -5522,7 +5528,47 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 		return errBuildIdTooLong
 	}
+
+	// Checks for versioning v3
+	versioningMode := deploymentOptions.GetWorkerVersioningMode()
+
+	// Validate deployment version based on the versioning mode
+	err := wh.validateDeploymentVersionWithMode(versioningMode, deploymentOptions, tq)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (wh *WorkflowHandler) validateDeploymentVersionWithMode(
+	versioningMode enumspb.WorkerVersioningMode,
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
+	tq *taskqueuepb.TaskQueue,
+) error {
+	var deploymentVersion *deploymentspb.WorkerDeploymentVersion
+	if deploymentOptions.GetDeploymentName() != "" || deploymentOptions.GetBuildId() != "" {
+		deploymentVersion = &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentOptions.GetDeploymentName(),
+			BuildId:        deploymentOptions.GetBuildId(),
+		}
+	}
+
+	// Validation checks
+	switch versioningMode {
+	case enumspb.WORKER_VERSIONING_MODE_UNVERSIONED:
+		// if deploymentVersion != nil {
+		// 	return serviceerror.NewInvalidArgument("deployment version cannot be set for unversioned worker")
+		// }
+		return nil
+	case enumspb.WORKER_VERSIONING_MODE_VERSIONED:
+		if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+			return errUseVersioningWithoutNormalName
+		}
+		return worker_versioning.ValidateDeploymentVersion(deploymentVersion, wh.config.MaxIDLengthLimit())
+	default:
+		return nil
+	}
 }
 
 //nolint:revive // cyclomatic complexity
