@@ -156,9 +156,6 @@ type (
 
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
 	// including the node n itself.
-	//
-	// TODO: Return tree size changes in NodesMutation as well. MutateState needs to
-	// track the overall size of itself and terminate workflow if it exceeds the limit.
 	NodesMutation struct {
 		UpdatedNodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
 		DeletedNodes map[string]struct{}
