@@ -89,6 +89,7 @@ type Config struct {
 	// size limit system protection
 	BlobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	ThrottledLogRPS dynamicconfig.IntPropertyFn
 
@@ -297,6 +298,7 @@ func NewConfig(
 		DisableListVisibilityByFilter:            dynamicconfig.DisableListVisibilityByFilter.Get(dc),
 		BlobSizeLimitError:                       dynamicconfig.BlobSizeLimitError.Get(dc),
 		BlobSizeLimitWarn:                        dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MemoSizeLimitError:                       dynamicconfig.MemoSizeLimitError.Get(dc),
 		ThrottledLogRPS:                          dynamicconfig.FrontendThrottledLogRPS.Get(dc),
 		ShutdownDrainDuration:                    dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
 		ShutdownFailHealthCheckDuration:          dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
