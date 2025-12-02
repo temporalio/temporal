@@ -777,6 +777,7 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 func runParallelUntilZero(ctx context.Context, n int, f func(context.Context), until func() int64) {
 	var wg sync.WaitGroup
 	workerCtx, workerCancel := context.WithCancel(ctx)
+	defer workerCancel()
 	for range n {
 		wg.Go(func() {
 			defer workerCancel()
