@@ -170,7 +170,7 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 		RunId:      runID,
 		Identity:   s.pauseIdentity,
 		Reason:     s.pauseReason,
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
 	s.NoError(err)
