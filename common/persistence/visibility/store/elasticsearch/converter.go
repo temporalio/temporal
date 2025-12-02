@@ -2,7 +2,6 @@ package elasticsearch
 
 import (
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -24,7 +23,6 @@ func NewQueryConverterLegacy(
 	fnInterceptor query.FieldNameInterceptor,
 	fvInterceptor query.FieldValuesInterceptor,
 	saNameType searchattribute.NameTypeMap,
-	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *query.ConverterLegacy {
 	if fnInterceptor == nil {
 		fnInterceptor = &query.NopFieldNameInterceptor{}
@@ -35,7 +33,7 @@ func NewQueryConverterLegacy(
 	}
 
 	rangeCond := query.NewRangeCondConverter(fnInterceptor, fvInterceptor, true)
-	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, saNameType, chasmMapper)
+	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, saNameType)
 	is := query.NewIsConverter(fnInterceptor)
 
 	whereConverter := &query.WhereConverter{

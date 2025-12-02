@@ -144,7 +144,7 @@ type (
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
 		currentSA   map[string]VisibilityValue
-		currentMemo proto.Message
+		currentMemo map[string]VisibilityValue
 
 		needsPointerResolution bool
 	}
@@ -462,7 +462,7 @@ func (n *Node) prepareComponentValue(
 				fmt.Errorf("actual attributes: %v", metadata.Attributes))
 		}
 
-		registrableComponent, ok := n.registry.ComponentByID(componentAttr.GetTypeId())
+		registrableComponent, ok := n.registry.componentByID(componentAttr.GetTypeId())
 		if !ok {
 			return softassert.UnexpectedInternalErr(
 				n.logger,
@@ -1495,7 +1495,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
 		newMemo := memoProvider.Memo(immutableContext)
-		if !proto.Equal(n.currentMemo, newMemo) {
+		if !maps.EqualFunc(n.currentMemo, newMemo, isVisibilityValueEqual) {
 			needUpdate = true
 		}
 		n.currentMemo = newMemo

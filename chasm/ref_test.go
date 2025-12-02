@@ -51,7 +51,7 @@ func (s *componentRefSuite) TestArchetypeID() {
 	archetypeID, err := ref.ArchetypeID(s.registry)
 	s.NoError(err)
 
-	rc, ok := s.registry.componentOf(reflect.TypeFor[*TestComponent]())
+	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
 
 	s.Equal(rc.componentID, archetypeID)
@@ -68,7 +68,7 @@ func (s *componentRefSuite) TestShardingKey() {
 	shardingKey, err := ref.ShardingKey(s.registry)
 	s.NoError(err)
 
-	rc, ok := s.registry.componentOf(reflect.TypeFor[*TestComponent]())
+	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
 
 	s.Equal(rc.shardingFn(executionKey), shardingKey)

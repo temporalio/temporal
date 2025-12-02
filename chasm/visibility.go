@@ -9,13 +9,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
-	UserMemoKey  = "__user__"
-	ChasmMemoKey = "__chasm__"
-
 	visibilityComponentType = "core.vis"
 	visibilityTaskType      = "core.visTask"
 )
@@ -38,7 +34,7 @@ type VisibilitySearchAttributesProvider interface {
 // a transaction, if a visibility task needs to be generated to update the
 // visibility record with the returned memo.
 type VisibilityMemoProvider interface {
-	Memo(Context) proto.Message
+	Memo(Context) map[string]VisibilityValue
 }
 
 // VisibilitySearchAttributesMapper is a mapper for CHASM search attributes.
@@ -78,19 +74,6 @@ func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.Indexe
 		return nil
 	}
 	return v.saTypeMap
-}
-
-// ValueType returns the type of a CHASM search attribute field.
-// Returns an error if the field is not found in the type map.
-func (v *VisibilitySearchAttributesMapper) ValueType(fieldName string) (enumspb.IndexedValueType, error) {
-	if v == nil {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
-	}
-	typ, ok := v.saTypeMap[fieldName]
-	if !ok {
-		return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, serviceerror.NewInvalidArgumentf("visibility search attributes mapper has no registered field %q", fieldName)
-	}
-	return typ, nil
 }
 
 type Visibility struct {

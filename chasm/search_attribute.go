@@ -65,30 +65,19 @@ var (
 )
 
 var (
+	_ SearchAttribute = (*searchAttributeDefinition)(nil)
 	_ SearchAttribute = (*SearchAttributeBool)(nil)
 	_ SearchAttribute = (*SearchAttributeDateTime)(nil)
 	_ SearchAttribute = (*SearchAttributeInt)(nil)
 	_ SearchAttribute = (*SearchAttributeDouble)(nil)
 	_ SearchAttribute = (*SearchAttributeKeyword)(nil)
 	_ SearchAttribute = (*SearchAttributeKeywordList)(nil)
-
-	_ typedSearchAttribute[bool]      = (*SearchAttributeBool)(nil)
-	_ typedSearchAttribute[time.Time] = (*SearchAttributeDateTime)(nil)
-	_ typedSearchAttribute[int64]     = (*SearchAttributeInt)(nil)
-	_ typedSearchAttribute[float64]   = (*SearchAttributeDouble)(nil)
-	_ typedSearchAttribute[string]    = (*SearchAttributeKeyword)(nil)
-	_ typedSearchAttribute[[]string]  = (*SearchAttributeKeywordList)(nil)
 )
 
 type (
 	// SearchAttribute is a shared interface for all search attribute types. Each type must embed searchAttributeDefinition.
 	SearchAttribute interface {
 		definition() searchAttributeDefinition
-	}
-
-	typedSearchAttribute[T any] interface {
-		SearchAttribute
-		typeMarker(T)
 	}
 
 	searchAttributeDefinition struct {
@@ -219,8 +208,6 @@ func (s SearchAttributeBool) Value(value bool) SearchAttributeKeyValue {
 	}
 }
 
-func (s SearchAttributeBool) typeMarker(_ bool) {}
-
 // SearchAttributeDateTime is a search attribute for a datetime value.
 type SearchAttributeDateTime struct {
 	searchAttributeDefinition
@@ -255,8 +242,6 @@ func (s SearchAttributeDateTime) Value(value time.Time) SearchAttributeKeyValue 
 		Value: VisibilityValueTime(value),
 	}
 }
-
-func (s SearchAttributeDateTime) typeMarker(_ time.Time) {}
 
 // SearchAttributeInt is a search attribute for an integer value.
 type SearchAttributeInt struct {
@@ -293,8 +278,6 @@ func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 	}
 }
 
-func (s SearchAttributeInt) typeMarker(_ int64) {}
-
 // SearchAttributeDouble is a search attribute for a double value.
 type SearchAttributeDouble struct {
 	searchAttributeDefinition
@@ -329,8 +312,6 @@ func (s SearchAttributeDouble) Value(value float64) SearchAttributeKeyValue {
 		Value: VisibilityValueFloat64(value),
 	}
 }
-
-func (s SearchAttributeDouble) typeMarker(_ float64) {}
 
 // SearchAttributeKeyword is a search attribute for a keyword value.
 type SearchAttributeKeyword struct {
@@ -367,8 +348,6 @@ func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 	}
 }
 
-func (s SearchAttributeKeyword) typeMarker(_ string) {}
-
 // SearchAttributeKeywordList is a search attribute for a keyword list value.
 type SearchAttributeKeywordList struct {
 	searchAttributeDefinition
@@ -402,39 +381,4 @@ func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValu
 		Field: s.field,
 		Value: VisibilityValueStringSlice(value),
 	}
-}
-
-func (s SearchAttributeKeywordList) typeMarker(_ []string) {}
-
-// SearchAttributesMap wraps search attribute values with type-safe access.
-type SearchAttributesMap struct {
-	values map[string]VisibilityValue
-}
-
-// NewSearchAttributesMap creates a new SearchAttributeMap from raw values.
-func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesMap {
-	return SearchAttributesMap{values: values}
-}
-
-// GetValue returns the value for a given SearchAttribute with compile-time type safety.
-// The return type T is inferred from the SearchAttribute's type parameter.
-// For example, SearchAttributeBool will return a bool value.
-// If the value is not found or the type does not match, the zero value for the type T is returned and the second return value is false.
-func GetValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
-	var zero T
-	if len(m.values) == 0 {
-		return zero, false
-	}
-
-	alias := sa.definition().alias
-	visibilityValue, exists := m.values[alias]
-	if !exists {
-		return zero, false
-	}
-
-	finalVal, ok := visibilityValue.Value().(T)
-	if !ok {
-		return zero, false
-	}
-	return finalVal, true
 }

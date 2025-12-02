@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
-	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
@@ -26,27 +28,18 @@ const (
 type ChasmTestSuite struct {
 	testcore.FunctionalTestBase
 
-	chasmEngine                 chasm.Engine
-	enableUnifiedQueryConverter bool
-}
-
-// TODO: Remove enableUnifiedQueryConverter flag once we have migrated to the unified query converter.
-// Functional tests will temporarily check both to validate all paths of chasm query implementation.
-func TestChasmTestSuiteLegacy(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &ChasmTestSuite{enableUnifiedQueryConverter: false})
+	chasmEngine chasm.Engine
 }
 
 func TestChasmTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &ChasmTestSuite{enableUnifiedQueryConverter: true})
+	suite.Run(t, new(ChasmTestSuite))
 }
 
 func (s *ChasmTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():                           true,
-			dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): s.enableUnifiedQueryConverter,
+			dynamicconfig.EnableChasm.Key(): true,
 		}),
 	)
 
@@ -221,14 +214,13 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 
 	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
 
-	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
+	var visRecord *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](engineContext, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
-				NamespaceName: string(s.Namespace()),
-				PageSize:      10,
-				Query:         visQuery,
+			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     visQuery,
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -241,26 +233,35 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
-	s.Equal(storeID, visRecord.BusinessID)
-	s.Equal(createResp.RunID, visRecord.RunID)
+	s.Equal(storeID, visRecord.Execution.WorkflowId)
+	s.Equal(createResp.RunID, visRecord.Execution.RunId)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, visRecord.Status)
 	s.NotEmpty(visRecord.StartTime)
+	s.NotEmpty(visRecord.ExecutionTime)
 	s.Empty(visRecord.StateTransitionCount)
+	s.Empty(visRecord.CloseTime)
+	s.Empty(visRecord.HistoryLength)
 
-	totalCount := visRecord.ChasmMemo.TotalCount
-	s.Equal(0, int(totalCount))
-	totalSize := visRecord.ChasmMemo.TotalSize
-	s.Equal(0, int(totalSize))
-	totalCountSA, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, tests.PayloadTotalCountSearchAttribute)
+	var intVal int
+	p, ok := visRecord.Memo.Fields[tests.TotalCountMemoFieldName]
 	s.True(ok)
-	s.Equal(0, int(totalCountSA))
-	totalSizeSA, ok := chasm.GetValue(visRecord.ChasmSearchAttributes, tests.PayloadTotalSizeSearchAttribute)
+	s.NoError(payload.Decode(p, &intVal))
+	s.Equal(0, intVal)
+	p, ok = visRecord.Memo.Fields[tests.TotalSizeMemoFieldName]
 	s.True(ok)
-	s.Equal(0, int(totalSizeSA))
+	s.NoError(payload.Decode(p, &intVal))
+	s.Equal(0, intVal)
+	var totalCount int
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalInt01"], &totalCount))
+	s.Equal(0, totalCount)
+	var totalSize int
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalInt02"], &totalSize))
+	s.Equal(0, totalSize)
 	var scheduledByID string
-	s.NoError(payload.Decode(visRecord.CustomSearchAttributes[sadefs.TemporalScheduledById], &scheduledByID))
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields["TemporalScheduledById"], &scheduledByID))
 	s.Equal(tests.TestScheduleID, scheduledByID)
 	var archetypeIDStr string
-	s.NoError(payload.Decode(visRecord.CustomSearchAttributes[sadefs.TemporalNamespaceDivision], &archetypeIDStr))
+	s.NoError(payload.Decode(visRecord.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision], &archetypeIDStr))
 	parsedArchetypeID, err := strconv.ParseUint(archetypeIDStr, 10, 32)
 	s.NoError(err)
 	s.Equal(archetypeID, chasm.ArchetypeID(parsedArchetypeID))
@@ -278,11 +279,10 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 
 	s.Eventually(
 		func() bool {
-			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](engineContext, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
-				NamespaceName: string(s.Namespace()),
-				PageSize:      10,
-				Query:         visQuery,
+			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     visQuery,
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -290,13 +290,18 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 			}
 
 			visRecord = resp.Executions[0]
-			return visRecord.ChasmMemo.TotalCount == addPayloadResp.State.TotalCount
+			var intVal int
+			s.NoError(payload.Decode(visRecord.GetMemo().GetFields()[tests.TotalCountMemoFieldName], &intVal))
+			return intVal == int(addPayloadResp.State.TotalCount)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	// We validated Count memo field above, just checking for size here.
-	s.Equal(addPayloadResp.State.TotalSize, visRecord.ChasmMemo.TotalSize)
+	p, ok = visRecord.Memo.Fields[tests.TotalSizeMemoFieldName]
+	s.True(ok)
+	s.NoError(payload.Decode(p, &intVal))
+	s.Equal(addPayloadResp.State.TotalSize, int64(intVal))
 
 	_, err = tests.ClosePayloadStoreHandler(
 		engineContext,
@@ -309,11 +314,10 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 
 	s.Eventually(
 		func() bool {
-			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](engineContext, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
-				NamespaceName: string(s.Namespace()),
-				PageSize:      10,
-				Query:         visQuery + " AND ExecutionStatus = 'Completed'",
+			resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     visQuery + " AND ExecutionStatus = 'Completed'",
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -326,8 +330,10 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, visRecord.Status)
 	s.Equal(int64(3), visRecord.StateTransitionCount)
 	s.NotEmpty(visRecord.CloseTime)
+	s.NotEmpty(visRecord.ExecutionDuration)
 	s.Empty(visRecord.HistoryLength)
 }
 

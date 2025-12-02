@@ -21,6 +21,10 @@ func (r *Registry) ComponentOf(componentGoType reflect.Type) (*RegistrableCompon
 	return r.componentOf(componentGoType)
 }
 
+func (r *Registry) ComponentByID(id uint32) (*RegistrableComponent, bool) {
+	return r.componentByID(id)
+}
+
 func (r *Registry) TaskFor(taskInstance any) (*RegistrableTask, bool) {
 	return r.taskFor(taskInstance)
 }

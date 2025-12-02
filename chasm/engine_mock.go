@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	common "go.temporal.io/api/common/v1"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -39,36 +38,6 @@ func NewMockEngine(ctrl *gomock.Controller) *MockEngine {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
-}
-
-// CountExecutions mocks base method.
-func (m *MockEngine) CountExecutions(arg0 context.Context, arg1 reflect.Type, arg2 *CountExecutionsRequest) (*CountExecutionsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CountExecutions", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*CountExecutionsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CountExecutions indicates an expected call of CountExecutions.
-func (mr *MockEngineMockRecorder) CountExecutions(arg0, arg1, arg2 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountExecutions", reflect.TypeOf((*MockEngine)(nil).CountExecutions), arg0, arg1, arg2)
-}
-
-// ListExecutions mocks base method.
-func (m *MockEngine) ListExecutions(arg0 context.Context, arg1 reflect.Type, arg2 *ListExecutionsRequest) (*ListExecutionsResponse[*common.Payload], error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListExecutions", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*ListExecutionsResponse[*common.Payload])
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListExecutions indicates an expected call of ListExecutions.
-func (mr *MockEngineMockRecorder) ListExecutions(arg0, arg1, arg2 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutions", reflect.TypeOf((*MockEngine)(nil).ListExecutions), arg0, arg1, arg2)
 }
 
 // NewExecution mocks base method.

@@ -2,12 +2,10 @@ package elasticsearch
 
 import (
 	"fmt"
-	"maps"
 	"strconv"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
@@ -21,13 +19,11 @@ type (
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		seenNamespaceDivision          bool
-		chasmMapper                    *chasm.VisibilitySearchAttributesMapper
 	}
 
 	valuesInterceptor struct {
-		namespace   namespace.Name
-		saTypeMap   searchattribute.NameTypeMap
-		chasmMapper *chasm.VisibilitySearchAttributesMapper
+		namespace               namespace.Name
+		searchAttributesTypeMap searchattribute.NameTypeMap
 	}
 )
 
@@ -35,30 +31,21 @@ func NewNameInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
-	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      namespaceName,
 		searchAttributesTypeMap:        saTypeMap,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
-		seenNamespaceDivision:          false,
-		chasmMapper:                    chasmMapper,
 	}
 }
 
 func NewValuesInterceptor(
 	namespaceName namespace.Name,
-	csaTypeMap searchattribute.NameTypeMap,
-	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	saTypeMap searchattribute.NameTypeMap,
 ) *valuesInterceptor {
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, csaTypeMap.Custom())
-	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
-	saTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
 	return &valuesInterceptor{
-		namespace:   namespaceName,
-		saTypeMap:   saTypeMap,
-		chasmMapper: chasmMapper,
+		namespace:               namespaceName,
+		searchAttributesTypeMap: saTypeMap,
 	}
 }
 
@@ -68,8 +55,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	if err != nil {
 		return "", err
 	}
-	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper,
-		ni.searchAttributesTypeMap, ni.chasmMapper)
+	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper, ni.searchAttributesTypeMap)
 	if err != nil {
 		return "", err
 	}
@@ -100,10 +86,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 }
 
 func (vi *valuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
-	var fieldType enumspb.IndexedValueType
-	var err error
-
-	fieldType, err = vi.saTypeMap.GetType(fieldName)
+	fieldType, err := vi.searchAttributesTypeMap.GetType(fieldName)
 	if err != nil {
 		return nil, query.NewConverterError("invalid search attribute: %s", name)
 	}

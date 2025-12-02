@@ -10,7 +10,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -119,8 +118,10 @@ func (tc *TestComponent) SearchAttributes(_ Context) []SearchAttributeKeyValue {
 }
 
 // Memo implements VisibilityMemoProvider interface.
-func (tc *TestComponent) Memo(_ Context) proto.Message {
-	return tc.ComponentData
+func (tc *TestComponent) Memo(_ Context) map[string]VisibilityValue {
+	return map[string]VisibilityValue{
+		TestComponentStartTimeMemoKey: VisibilityValueTime(tc.ComponentData.GetStartTime().AsTime()),
+	}
 }
 
 func (tsc1 *TestSubComponent1) LifecycleState(_ Context) LifecycleState {
