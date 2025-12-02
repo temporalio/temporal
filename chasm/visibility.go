@@ -102,7 +102,7 @@ func NewVisibilityWithData(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 	customMemo map[string]*commonpb.Payload,
-) (*Visibility, error) {
+) *Visibility {
 	visibility := &Visibility{
 		Data: &persistencespb.ChasmVisibilityData{
 			TransitionCount: 0,
@@ -118,7 +118,7 @@ func NewVisibilityWithData(
 	}
 
 	visibility.generateTask(mutableContext)
-	return visibility, nil
+	return visibility
 }
 
 func (v *Visibility) LifecycleState(_ Context) LifecycleState {

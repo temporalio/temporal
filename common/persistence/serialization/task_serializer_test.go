@@ -141,6 +141,7 @@ func (s *taskSerializerSuite) TestTransferChasmTask() {
 			Data: &commonpb.DataBlob{
 				Data: []byte("some-data"),
 			},
+			ArchetypeId: rand.Uint32(),
 		},
 	}
 
@@ -261,6 +262,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		BranchToken:         []byte{123},
+		ArchetypeID:         rand.Uint32(),
 	}
 	s.assertEqualTasks(workflowCleanupTimer)
 }
@@ -297,15 +299,17 @@ func (s *taskSerializerSuite) TestVisibilityCloseTask() {
 	s.assertEqualTasks(visibilityClose)
 }
 
-func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
-	visibilityDelete := &tasks.CloseExecutionVisibilityTask{
-		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
-		TaskID:              rand.Int63(),
-		Version:             rand.Int63(),
+func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
+	deleteExecutionVisibilityTask := &tasks.DeleteExecutionVisibilityTask{
+		WorkflowKey:                    s.workflowKey,
+		VisibilityTimestamp:            time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:                         rand.Int63(),
+		ArchetypeID:                    rand.Uint32(),
+		CloseExecutionVisibilityTaskID: rand.Int63(),
+		CloseTime:                      time.Unix(0, 0).UTC(),
 	}
 
-	s.assertEqualTasks(visibilityDelete)
+	s.assertEqualTasks(deleteExecutionVisibilityTask)
 }
 
 func (s *taskSerializerSuite) TestVisibilityChasmTask() {
@@ -318,6 +322,7 @@ func (s *taskSerializerSuite) TestVisibilityChasmTask() {
 			Data: &commonpb.DataBlob{
 				Data: []byte("some-data"),
 			},
+			ArchetypeId: rand.Uint32(),
 		},
 	}
 
@@ -366,6 +371,7 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
+		ArchetypeID:         rand.Uint32(),
 		FirstEventID:        rand.Int63(),
 		NextEventID:         rand.Int63(),
 		NewRunID:            uuid.New().String(),
@@ -405,23 +411,12 @@ func (s *taskSerializerSuite) TestSyncWorkflowStateTask() {
 	s.assertEqualTasks(syncWorkflowStateTask)
 }
 
-func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
-	deleteExecutionVisibilityTask := &tasks.DeleteExecutionVisibilityTask{
-		WorkflowKey:                    s.workflowKey,
-		VisibilityTimestamp:            time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
-		TaskID:                         rand.Int63(),
-		CloseExecutionVisibilityTaskID: rand.Int63(),
-		CloseTime:                      time.Unix(0, 0).UTC(),
-	}
-
-	s.assertEqualTasks(deleteExecutionVisibilityTask)
-}
-
 func (s *taskSerializerSuite) TestDeleteExecutionTask() {
 	deleteExecutionTask := &tasks.DeleteExecutionTask{
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
+		ArchetypeID:         rand.Uint32(),
 	}
 
 	s.assertEqualTasks(deleteExecutionTask)
@@ -450,6 +445,7 @@ func (s *taskSerializerSuite) TestOutboundChasmTask() {
 			Data: &commonpb.DataBlob{
 				Data: []byte("some-data"),
 			},
+			ArchetypeId: rand.Uint32(),
 		},
 		Destination: "somewhere",
 	}
@@ -517,6 +513,7 @@ func (s *taskSerializerSuite) TestTimerChasmTask() {
 			Data: &commonpb.DataBlob{
 				Data: []byte("some-data"),
 			},
+			ArchetypeId: rand.Uint32(),
 		},
 	}
 
@@ -528,7 +525,7 @@ func (s *taskSerializerSuite) TestTimerChasmPureTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
-		Category:            tasks.CategoryTimer,
+		ArchetypeID:         rand.Uint32(),
 	}
 
 	s.assertEqualTasks(task)

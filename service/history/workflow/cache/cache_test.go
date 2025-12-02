@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -411,11 +412,12 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	ctx := metrics.AddMetricsContext(context.Background())
-	currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+	currentRelease, err := s.cache.GetOrCreateCurrentExecution(
 		ctx,
 		s.mockShard,
 		tests.NamespaceID,
 		tests.WorkflowID,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -450,11 +452,12 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	s.mockShard.SetMetricsHandler(metricsHandler)
 	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metricsHandler)
 
-	release1, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+	release1, err := s.cache.GetOrCreateCurrentExecution(
 		context.Background(),
 		s.mockShard,
 		tests.NamespaceID,
 		tests.WorkflowID,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -466,11 +469,12 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	}, 150*time.Millisecond, 100*time.Millisecond)
 
 	capture = metricsHandler.StartCapture()
-	release2, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+	release2, err := s.cache.GetOrCreateCurrentExecution(
 		context.Background(),
 		s.mockShard,
 		tests.NamespaceID,
 		tests.WorkflowID,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
@@ -535,9 +539,17 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 			}
 			cacheKey := Key{
 				WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+				ArchetypeID: chasm.WorkflowArchetypeID,
 				ShardUUID:   uuid.NewString(),
 			}
-			workflowCtx := workflow.NewContext(s.mockShard.GetConfig(), cacheKey.WorkflowKey, s.mockShard.GetLogger(), s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler())
+			workflowCtx := workflow.NewContext(
+				s.mockShard.GetConfig(),
+				cacheKey.WorkflowKey,
+				chasm.WorkflowArchetypeID,
+				s.mockShard.GetLogger(),
+				s.mockShard.GetThrottledLogger(),
+				s.mockShard.GetMetricsHandler(),
+			)
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
@@ -819,6 +831,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{
 		StartRequestID: uuid.NewString(),
 		RunID:          currentRunID,
@@ -853,6 +866,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, serviceerror.NewNotFound("current worflow not found")).Times(1)
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(

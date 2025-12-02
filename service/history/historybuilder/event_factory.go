@@ -69,7 +69,8 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		Priority:                        req.GetPriority(),
 		InheritedPinnedVersion:          request.InheritedPinnedVersion,
 		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
-		EagerExecutionAccepted: req.GetRequestEagerExecution(),
+		EagerExecutionAccepted:   req.GetRequestEagerExecution(),
+		InheritedAutoUpgradeInfo: request.InheritedAutoUpgradeInfo,
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -384,6 +385,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
 	identity string,
+	priority *commonpb.Priority,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -393,6 +395,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			AttachedRequestId:           attachRequestID,
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
 			Identity:                    identity,
+			Priority:                    priority,
 		},
 	}
 	event.Links = links

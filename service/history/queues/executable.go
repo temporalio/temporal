@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
@@ -44,7 +43,6 @@ type (
 		ctasks.Task
 		tasks.Task
 
-		Attempt() int
 		GetTask() tasks.Task
 		GetPriority() ctasks.Priority
 		GetScheduledTime() time.Time
@@ -112,10 +110,7 @@ type (
 		tasks.Task
 
 		sync.Mutex
-		state          ctasks.State
-		priority       ctasks.Priority // priority for the current attempt
-		lowestPriority ctasks.Priority // priority for emitting metrics across multiple attempts
-		attempt        int
+		state ctasks.State
 
 		executor            Executor
 		scheduler           Scheduler
@@ -132,6 +127,8 @@ type (
 		dlqWriter           *DLQWriter
 
 		readerID                   int64
+		attempt                    int
+		priority                   ctasks.Priority
 		scheduledTime              time.Time
 		scheduleLatency            time.Duration
 		attemptNoUserLatency       time.Duration
@@ -194,8 +191,9 @@ func NewExecutable(
 		opt(&params)
 	}
 	e := &executableImpl{
-		Task:                task,
-		state:               ctasks.TaskStatePending,
+		Task:  task,
+		state: ctasks.TaskStatePending,
+
 		attempt:             1,
 		executor:            executor,
 		scheduler:           scheduler,
@@ -227,13 +225,13 @@ func NewExecutable(
 		dlqInternalErrors:          params.DLQInternalErrors,
 		dlqErrorPattern:            params.DLQErrorPattern,
 	}
+	e.priority = priorityAssigner.Assign(e)
 
 	loadTime := util.MaxTime(timeSource.Now(), task.GetKey().FireTime)
 	metrics.TaskLoadLatency.With(e.metricsHandler).Record(
 		loadTime.Sub(task.GetVisibilityTime()),
 		metrics.QueueReaderIDTag(readerID),
 	)
-	e.updatePriority()
 	return e
 }
 
@@ -361,7 +359,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	if resp.ExecutedAsActive != e.lastActiveness {
 		// namespace did a failover,
 		// reset task attempt since the execution logic used will change
-		e.resetAttempt()
+		e.attempt = 1
 	}
 	e.lastActiveness = resp.ExecutedAsActive
 
@@ -449,7 +447,6 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 	if errors.As(err, &resourceExhaustedErr) {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
-			softassert.Sometimes(e.logger).Debug("task throttled due to busy workflow", tag.TaskType(e.GetType()))
 			err = consts.ErrResourceExhaustedBusyWorkflow
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
 			err = consts.ErrResourceExhaustedAPSLimit
@@ -492,14 +489,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	var terr MaybeTerminalTaskError
 	if errors.As(err, &terr) {
-		isTerminal := terr.IsTerminalTaskError()
-		if isTerminal {
-			softassert.Sometimes(e.logger).Debug("terminal task error detected",
-				tag.TaskType(e.GetType()),
-				tag.Error(err),
-			)
-		}
-		return isTerminal
+		return terr.IsTerminalTaskError()
 	}
 
 	if _, isDataLoss := err.(*serviceerror.DataLoss); isDataLoss {
@@ -509,10 +499,6 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
 		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1)
-		softassert.Sometimes(e.logger).Debug("internal non-retryable task processing error",
-			tag.TaskType(e.GetType()),
-			tag.Error(err),
-		)
 		// Only DQL/drop when configured to
 		shouldDLQ := e.dlqInternalErrors()
 		return shouldDLQ
@@ -544,7 +530,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if e.isInvalidTaskError(err) {
 		// only consider task invalid if it's the first attempt
 		// otherwise we have no idea if it's invalid due to the (failed) write operation in previous attempts.
-		e.invalidTask = e.Attempt() == 1
+		e.invalidTask = e.attempt == 1
 		return nil
 	}
 
@@ -552,7 +538,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	attempt := e.incAttempt()
+	e.incAttempt()
 
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
 		return rewrittenErr
@@ -564,15 +550,15 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	logger := log.With(e.logger,
 		tag.Error(err),
 		tag.ErrorType(err),
-		tag.Attempt(int32(attempt)),
+		tag.Attempt(int32(e.attempt)),
 		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
 		tag.LifeCycleProcessingFailed,
 		tag.NewStringTag("task-category", e.GetCategory().Name()),
 	)
-	if attempt > taskCriticalLogMetricAttempts {
-		softassert.Sometimes(logger).Error("Critical error processing task, retrying.", tag.OperationCritical)
+	if e.attempt > taskCriticalLogMetricAttempts {
+		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
 	} else {
-		softassert.Sometimes(logger).Warn("Fail to process task")
+		logger.Warn("Fail to process task")
 	}
 
 	if e.isUnexpectedNonRetryableError(err) {
@@ -678,7 +664,7 @@ func (e *executableImpl) Ack() {
 
 	metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
 
-	priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
+	priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
 	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
 		Record(time.Since(e.GetVisibilityTime()))
@@ -690,10 +676,8 @@ func (e *executableImpl) Nack(err error) {
 		return
 	}
 
-	e.updatePriority()
-
 	submitted := false
-	if e.shouldResubmitOnNack(e.Attempt(), err) {
+	if e.shouldResubmitOnNack(err) {
 		// we do not need to know if there any error during submission
 		// as long as it's not submitted, the execuable should be add
 		// to the rescheduler
@@ -702,7 +686,7 @@ func (e *executableImpl) Nack(err error) {
 	}
 
 	if !submitted {
-		backoffDuration := e.backoffDuration(err, e.Attempt())
+		backoffDuration := e.backoffDuration(err)
 		// If err is due to user error, do not take any latency related to this attempt into account
 		if !e.isUserError(err) {
 			e.inMemoryNoUserLatency += backoffDuration
@@ -718,9 +702,7 @@ func (e *executableImpl) Reschedule() {
 		return
 	}
 
-	e.updatePriority()
-
-	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil, e.Attempt())))
+	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil)))
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -731,17 +713,7 @@ func (e *executableImpl) State() ctasks.State {
 }
 
 func (e *executableImpl) GetPriority() ctasks.Priority {
-	e.Lock()
-	defer e.Unlock()
-
 	return e.priority
-}
-
-func (e *executableImpl) Attempt() int {
-	e.Lock()
-	defer e.Unlock()
-
-	return e.attempt
 }
 
 func (e *executableImpl) GetTask() tasks.Task {
@@ -772,11 +744,11 @@ func (e *executableImpl) StateMachineTaskType() string {
 	return ""
 }
 
-func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
+func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner.
 	// this is useful for errors like workflow busy, which doesn't have to wait for
 	// the longer rescheduling backoff.
-	if attempt > resubmitMaxAttempts {
+	if e.attempt > resubmitMaxAttempts {
 		return false
 	}
 
@@ -801,7 +773,6 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 
 func (e *executableImpl) backoffDuration(
 	err error,
-	attempt int,
 ) time.Duration {
 	// elapsedTime, the first parameter in ComputeNextDelay is not relevant here
 	// since reschedule policy has no expiration interval.
@@ -811,14 +782,14 @@ func (e *executableImpl) backoffDuration(
 		common.IsInternalError(err) {
 		// using a different reschedule policy to slow down retry
 		// as immediate retry typically won't resolve the issue.
-		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt, err)
+		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, e.attempt, err)
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt, err)
+		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, e.attempt, err)
 	}
 
-	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt, err)
+	backoffDuration := reschedulePolicy.ComputeNextDelay(0, e.attempt, err)
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon system resource exhausted error and pick the longer backoff duration
@@ -831,35 +802,12 @@ func (e *executableImpl) backoffDuration(
 	return backoffDuration
 }
 
-func (e *executableImpl) updatePriority() {
-	// do NOT invoke Assign while holding the lock
-	newPriority := e.priorityAssigner.Assign(e)
-
-	e.Lock()
-	defer e.Unlock()
-	e.priority = newPriority
-	if e.priority > e.lowestPriority {
-		e.lowestPriority = e.priority
-	}
-}
-
-func (e *executableImpl) incAttempt() int {
-	e.Lock()
+func (e *executableImpl) incAttempt() {
 	e.attempt++
-	attempt := e.attempt
-	e.Unlock()
 
-	if attempt > taskCriticalLogMetricAttempts {
-		metrics.TaskAttempt.With(e.metricsHandler).Record(int64(attempt))
+	if e.attempt > taskCriticalLogMetricAttempts {
+		metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
 	}
-	return attempt
-}
-
-func (e *executableImpl) resetAttempt() {
-	e.Lock()
-	defer e.Unlock()
-
-	e.attempt = 1
 }
 
 func estimateTaskMetricTags(

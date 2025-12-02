@@ -3,9 +3,6 @@ package history
 import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
-	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -82,9 +79,6 @@ var Module = fx.Options(
 	callbacks.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
-	chasmscheduler.Module,
-	chasmcallback.Module,
-	chasmworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -126,6 +120,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 		chasmEngine:                  args.ChasmEngine,
+		chasmRegistry:                args.ChasmRegistry,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
