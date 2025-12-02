@@ -3355,12 +3355,9 @@ func (e *matchingEngineImpl) EnablePriorityAndFairness(
 	if partition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL {
 		return nil, serviceerror.NewUnimplemented("fairness and priority not implemented for non-normal queues")
 	}
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseAutoEnable)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
-	}
-	if pm == nil {
-		return nil, serviceerror.NewInvalidArgument("task queue provided does not exist")
 	}
 
 	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
