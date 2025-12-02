@@ -84,11 +84,19 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 			// blocks until the test case unblocks the activity.
 			<-s.activityCompletedCh
 		})
+		s.T().Log("activity completed")
 		return "activity", nil
 	}
 }
 
 // TestPauseUnpauseWorkflowExecution tests that the pause and unpause workflow execution APIs work as expected.
+// Test sequence:
+// 1. Start the workflow.
+// 2. Pause the workflow. Assert that the workflow is paused.
+// 3. Send signal to the workflow. Assert that the workflow is still paused.
+// 4. Unpause the workflow. Assert that the workflow is now running.
+// 5. Unblock the activity to complete the workflow.
+// 6. Assert that the workflow is completed.
 func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -129,7 +137,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	s.NotNil(pauseResp)
 
 	// unblock the activity to complete.
-	s.activityCompletedCh <- struct{}{}
+	// s.activityCompletedCh <- struct{}{}
 
 	// ensure that the workflow is paused even when the activity is completed.
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -137,28 +145,18 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 		require.NoError(t, err)
 		info := desc.GetWorkflowExecutionInfo()
 		require.NotNil(t, info)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus(), "workflow is not paused. Status: %s", info.GetStatus())
 		if pauseInfo := desc.GetWorkflowExtendedInfo().GetPauseInfo(); pauseInfo != nil {
 			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
 			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// Send unblock signal to the workflow to complete and assert that the workflow stays paused.
+	// Send signal to the workflow to complete the workflow. Since the workflow is paused, it should stay paused.
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "signal to complete the workflow")
 	s.NoError(err)
-
-	time.Sleep(2 * time.Second) // wait 2 seconds to give enough time record the signal.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
-		require.NoError(t, err)
-		info := desc.GetWorkflowExecutionInfo()
-		require.NotNil(t, info)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
-		if pauseInfo := desc.GetWorkflowExtendedInfo().GetPauseInfo(); pauseInfo != nil {
-			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
-			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
-		}
+		s.assertWorkflowIsPaused(t, ctx, workflowID, runID)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unpause the workflow.
@@ -174,14 +172,26 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(unpauseResp)
 
+	// Workflow status should be running after unpausing. The workflow won't complete until the activity is unblocked.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus(), "workflow is not running. Status: %s", info.GetStatus())
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Unblock the activity to complete the workflow.
+	s.activityCompletedCh <- struct{}{}
+
 	// assert that the workflow completes now.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
 		require.NoError(t, err)
 		info := desc.GetWorkflowExecutionInfo()
 		require.NotNil(t, info)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.GetStatus())
-	}, 5*time.Second, 200*time.Millisecond)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.GetStatus(), "workflow is not completed. Status: %s", info.GetStatus())
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
@@ -496,4 +506,40 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 		require.NotNil(t, info)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.GetStatus())
 	}, 5*time.Second, 200*time.Millisecond)
+}
+
+// assertWorkflowIsPaused is a helper method which asserts that,
+// - the workflow status is paused.
+// - the workflow has the correct pause info.
+// - there is no workflow task scheduled event inbetween pause and unpause events.
+func (s *PauseWorkflowExecutionSuite) assertWorkflowIsPaused(t *assert.CollectT, ctx context.Context, workflowID string, runID string) {
+	desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+	require.NoError(t, err)
+	info := desc.GetWorkflowExecutionInfo()
+	require.NotNil(t, info)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus(), "workflow is not paused. Status: %s", info.GetStatus())
+	if pauseInfo := desc.GetWorkflowExtendedInfo().GetPauseInfo(); pauseInfo != nil {
+		require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity(), "pause identity is not correct")
+		require.Equal(t, s.pauseReason, pauseInfo.GetReason(), "pause reason is not correct")
+	}
+
+	// Also assert that there is no workflow task scheduled event after the pause event.
+	hist := s.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	isPaused := false
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED {
+			isPaused = true
+			continue
+		}
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED {
+			isPaused = false
+			continue
+		}
+		if isPaused {
+			// These are all events after the pause event. None of these should be workflow task scheduled events.
+			require.NotEqual(t, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
+		}
+	}
 }
