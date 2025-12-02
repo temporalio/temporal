@@ -499,6 +499,45 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 	}
 }
 
+func (s *standaloneActivityTestSuite) TestRequestCancellation_FailsValidation() {
+	testCases := []struct {
+		name   string
+		reqID  string
+		reason string
+	}{
+		{
+			name:   "request ID too long",
+			reqID:  string(make([]byte, 1001)), // dynamic config default is 1000
+			reason: "",
+		},
+		{
+			name:   "reason too long",
+			reqID:  "",
+			reason: string(make([]byte, 1001)), // dynamic config default is 1000
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: s.tv.ActivityID(),
+				RunId:      "run-id",
+				Identity:   "cancelling-worker",
+				RequestId:  tc.reqID,
+				Reason:     tc.reason,
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+		})
+	}
+}
+
 // TODO running into "unable to change workflow state from Created to Completed, status Failed from the chasm engine"
 // This should be re-enabled after its addressed from the chasm engine and we implement the search attributes interface.
 func (s *standaloneActivityTestSuite) TestActivityImmediatelyCancelled_WhenInScheduledState() {

@@ -146,12 +146,18 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
 
+	maxIDLen := dynamicconfig.MaxIDLengthLimit.Get(h.dc)()
+
+	if len(req.GetRequestId()) > maxIDLen {
+		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	}
+
 	if req.GetRequestId() == "" {
 		req.RequestId = uuid.NewString()
 	}
 
-	if len(req.GetRequestId()) > dynamicconfig.MaxIDLengthLimit.Get(h.dc)() {
-		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	if len(req.GetReason()) > maxIDLen {
+		return nil, serviceerror.NewInvalidArgument("Reason length exceeds limit.")
 	}
 
 	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
