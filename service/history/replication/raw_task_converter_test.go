@@ -179,7 +179,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
@@ -214,7 +214,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
@@ -250,7 +250,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
@@ -287,7 +287,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 
@@ -397,7 +397,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 
@@ -506,7 +506,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
@@ -540,7 +540,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
@@ -929,7 +929,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowMissing() {
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
@@ -961,7 +961,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
@@ -1054,7 +1054,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.WorkflowArchetype,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
@@ -1098,6 +1098,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		),
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
+		ArchetypeID:         chasm.WorkflowArchetypeID,
 		FirstEventID:        firstEventID,
 		FirstEventVersion:   version,
 		NextEventID:         nextEventID,
@@ -1142,7 +1143,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil).Times(1)
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
@@ -1276,6 +1277,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTask
 		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              taskID,
+		ArchetypeID:         chasm.WorkflowArchetypeID,
 		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: version,
 			TransitionCount:          165,
@@ -1296,13 +1298,14 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTask
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil).Times(1)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: nil,
 	}).Times(1)
+	s.mutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
 	expectedReplicationTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		SourceTaskId: taskID,
@@ -1362,6 +1365,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_AddTaskEqui
 		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              taskID,
+		ArchetypeID:         chasm.WorkflowArchetypeID,
 		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: version,
 			TransitionCount:          165,
@@ -1376,13 +1380,14 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_AddTaskEqui
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil).Times(1)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: nil,
 	}).Times(1)
+	s.mutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
 	mockExecutionManager := s.shardContext.Resource.ExecutionMgr
 	mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.AddHistoryTasksRequest) error {
@@ -1423,6 +1428,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		),
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
+		ArchetypeID:         chasm.WorkflowArchetypeID,
 		FirstEventID:        firstEventID,
 		NextEventID:         nextEventID,
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -1461,7 +1467,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
@@ -1532,6 +1538,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 				NamespaceId: s.namespaceID,
 				WorkflowId:  s.workflowID,
 				RunId:       s.runID,
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: task.VersionedTransition,
@@ -1555,6 +1562,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask
 		),
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
+		ArchetypeID:         chasm.WorkflowArchetypeID,
 		FirstEventID:        firstEventID,
 		NextEventID:         nextEventID,
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -1594,7 +1602,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
@@ -1664,6 +1672,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask
 				NamespaceId: s.namespaceID,
 				WorkflowId:  s.workflowID,
 				RunId:       s.runID,
+				ArchetypeId: chasm.WorkflowArchetypeID,
 			},
 		},
 		VersionedTransition: task.VersionedTransition,
@@ -1687,6 +1696,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_HasBuffer
 		),
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
+		ArchetypeID:         chasm.WorkflowArchetypeID,
 		FirstEventID:        firstEventID,
 		NextEventID:         nextEventID,
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -1707,7 +1717,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_HasBuffer
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		chasm.ArchetypeAny,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)

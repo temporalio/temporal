@@ -162,7 +162,7 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 			task,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -191,8 +191,7 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 			task,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
-			// TODO - replace this with a method for CHASM components
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -241,7 +240,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -347,7 +346,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -450,7 +449,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -492,7 +491,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -527,7 +526,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -562,7 +561,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowExecutionTimeoutTask(
 			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -626,7 +625,7 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 			timerTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -744,7 +743,7 @@ func (t *timerQueueStandbyTaskExecutor) getCurrentTime() time.Time {
 	return t.shardContext.GetCurrentTime(t.clusterName)
 }
 
-func (t *timerQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBeforeDiscard(
+func (t *timerQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBeforeDiscard(
 	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
@@ -753,7 +752,16 @@ func (t *timerQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBeforeDis
 	if postActionInfo == nil {
 		return nil
 	}
-	if !isWorkflowExistOnSource(ctx, taskWorkflowKey(taskInfo), logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+	if !executionExistsOnSource(
+		ctx,
+		taskWorkflowKey(taskInfo),
+		getTaskArchetypeID(taskInfo),
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
+		t.shardContext.ChasmRegistry(),
+	) {
 		return standbyTimerTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
 	return standbyTimerTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)

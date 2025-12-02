@@ -21,6 +21,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
@@ -140,9 +143,15 @@ var (
 		dynamicconfig.Module,
 		pprof.Module,
 		TraceExportModule,
-		chasm.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
+	)
+
+	ChasmLibraryOptions = fx.Options(
+		chasm.Module,
+		chasmworkflow.Module,
+		chasmscheduler.Module,
+		chasmcallback.Module,
 	)
 )
 
@@ -356,7 +365,6 @@ type (
 		InstanceID                 resource.InstanceID                     `optional:"true"`
 		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
-		ChasmRegistry              *chasm.Registry
 	}
 )
 
@@ -429,14 +437,12 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() tasks.TaskCategoryRegistry {
 				return params.TaskCategoryRegistry
 			},
-			func() *chasm.Registry {
-				return params.ChasmRegistry
-			},
 		),
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
+		ChasmLibraryOptions,
 	)
 }
 

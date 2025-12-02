@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -4254,6 +4255,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 	}
 	expectedTask := &tasks.SyncVersionedTransitionTask{
 		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		ArchetypeID:         chasm.WorkflowArchetypeID,
 		VisibilityTimestamp: now,
 		Priority:            enumsspb.TASK_PRIORITY_HIGH,
 		VersionedTransition: transitionHistory[0],
@@ -4265,6 +4267,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 	s.True(ok)
 	s.Equal(expectedTask.WorkflowKey, actualTask.WorkflowKey)
 	s.Equal(expectedTask.VersionedTransition, actualTask.VersionedTransition)
+	s.Equal(expectedTask.ArchetypeID, actualTask.ArchetypeID)
 	s.Equal(3, len(actualTask.TaskEquivalents))
 	s.Equal(historyTasks[0], actualTask.TaskEquivalents[0])
 	s.Equal(historyTasks[1], actualTask.TaskEquivalents[1])
@@ -4802,7 +4805,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 	s.Equal(int64(1), tombstoneBatches[0].VersionedTransition.TransitionCount)
 }
 
-func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
+func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workflow() {
 	dbState := s.buildWorkflowMutableState()
 
 	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
@@ -4820,20 +4823,38 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask() {
 
 	// Is workflow, should not generate retention task
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).Times(1)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
 	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
+}
 
-	// Now make the mutable state non-workflow.
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).Times(2) // One time for each CloseTransactionAsMutation call
+func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWorkflow() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	// Switch to a mock CHASM tree
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+
+	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	)
 	s.NoError(err)
-	mutation, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	mutation, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Len(mutation.Tasks[tasks.CategoryTimer], 1)
 	s.Equal(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, mutation.Tasks[tasks.CategoryTimer][0].GetType())
@@ -5813,7 +5834,6 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	for i := 0; i < totalTasks; i++ {
 		task := &tasks.ChasmTaskPure{
 			VisibilityTimestamp: visTimestamp,
-			Category:            tasks.CategoryTimer,
 		}
 		s.mutableState.AddTasks(task)
 		s.LessOrEqual(len(s.mutableState.chasmPureTasks), s.mockConfig.ChasmMaxInMemoryPureTasks())
@@ -5824,7 +5844,6 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(2)
 	s.mutableState.AddTasks(&tasks.ChasmTaskPure{
 		VisibilityTimestamp: visTimestamp,
-		Category:            tasks.CategoryTimer,
 	})
 	s.Len(s.mutableState.chasmPureTasks, 2)
 }
@@ -5859,15 +5878,12 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			s.mutableState.chasmPureTasks = []*tasks.ChasmTaskPure{
 				{
 					VisibilityTimestamp: now.Add(3 * time.Minute),
-					Category:            tasks.CategoryTimer,
 				},
 				{
 					VisibilityTimestamp: now.Add(2 * time.Minute),
-					Category:            tasks.CategoryTimer,
 				},
 				{
 					VisibilityTimestamp: now.Add(time.Minute),
-					Category:            tasks.CategoryTimer,
 				},
 			}
 			s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
@@ -5882,4 +5898,68 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
 		})
 	}
+}
+
+func (s *mutableStateSuite) TestCHASMNodeSize() {
+	dbState := s.buildWorkflowMutableState()
+	dbState = &persistencespb.WorkflowMutableState{
+		ExecutionInfo:  dbState.ExecutionInfo,
+		ExecutionState: dbState.ExecutionState,
+		ChasmNodes:     dbState.ChasmNodes,
+	}
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	chasmNodesSize := 0
+	for key, node := range dbState.ChasmNodes {
+		chasmNodesSize += len(key) + node.Size()
+	}
+	expectedTotalSize := chasmNodesSize + dbState.ExecutionInfo.Size() + dbState.ExecutionState.Size()
+	s.Equal(expectedTotalSize, mutableState.GetApproximatePersistedSize())
+
+	// Switch to a mock CHASM tree
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+
+	var nodeKeyToDelete string
+	for nodeKeyToDelete = range dbState.ChasmNodes {
+		break
+	}
+
+	var nodeKeyToUpdate string
+	for nodeKeyToUpdate = range dbState.ChasmNodes {
+		if nodeKeyToUpdate != nodeKeyToDelete {
+			break
+		}
+	}
+	var updateNode persistencespb.ChasmNode
+	_ = fakedata.FakeStruct(&updateNode)
+
+	newNodeKey := "new-node-path"
+	var newNode persistencespb.ChasmNode
+	_ = fakedata.FakeStruct(&newNode)
+
+	mockChasmTree.EXPECT().IsDirty().Return(false).Times(1)
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+
+	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
+			nodeKeyToUpdate: &updateNode,
+			newNodeKey:      &newNode,
+		},
+		DeletedNodes: map[string]struct{}{
+			nodeKeyToDelete: {},
+		},
+	}, nil).Times(1)
+	_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	expectedTotalSize -= len(nodeKeyToDelete) + dbState.ChasmNodes[nodeKeyToDelete].Size()
+	expectedTotalSize += updateNode.Size() - dbState.ChasmNodes[nodeKeyToUpdate].Size()
+	expectedTotalSize += len(newNodeKey) + newNode.Size()
+	s.Equal(expectedTotalSize, mutableState.GetApproximatePersistedSize())
 }

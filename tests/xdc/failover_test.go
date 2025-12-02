@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
@@ -2391,6 +2392,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: wfID,
 			},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		s.NoError(err)
 		s.Equal(expectedRunID, desc1.DatabaseMutableState.ExecutionState.RunId)

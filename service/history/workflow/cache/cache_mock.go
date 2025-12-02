@@ -46,9 +46,9 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // GetOrCreateChasmExecution mocks base method.
-func (m *MockCache) GetOrCreateChasmExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, execution *common.WorkflowExecution, archetype chasm.Archetype, lockPriority locks.Priority) (interfaces.WorkflowContext, interfaces.ReleaseWorkflowContextFunc, error) {
+func (m *MockCache) GetOrCreateChasmExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, execution *common.WorkflowExecution, archetypeID chasm.ArchetypeID, lockPriority locks.Priority) (interfaces.WorkflowContext, interfaces.ReleaseWorkflowContextFunc, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOrCreateChasmExecution", ctx, shardContext, namespaceID, execution, archetype, lockPriority)
+	ret := m.ctrl.Call(m, "GetOrCreateChasmExecution", ctx, shardContext, namespaceID, execution, archetypeID, lockPriority)
 	ret0, _ := ret[0].(interfaces.WorkflowContext)
 	ret1, _ := ret[1].(interfaces.ReleaseWorkflowContextFunc)
 	ret2, _ := ret[2].(error)
@@ -56,24 +56,24 @@ func (m *MockCache) GetOrCreateChasmExecution(ctx context.Context, shardContext 
 }
 
 // GetOrCreateChasmExecution indicates an expected call of GetOrCreateChasmExecution.
-func (mr *MockCacheMockRecorder) GetOrCreateChasmExecution(ctx, shardContext, namespaceID, execution, archetype, lockPriority any) *gomock.Call {
+func (mr *MockCacheMockRecorder) GetOrCreateChasmExecution(ctx, shardContext, namespaceID, execution, archetypeID, lockPriority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateChasmExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateChasmExecution), ctx, shardContext, namespaceID, execution, archetype, lockPriority)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateChasmExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateChasmExecution), ctx, shardContext, namespaceID, execution, archetypeID, lockPriority)
 }
 
-// GetOrCreateCurrentWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (interfaces.ReleaseWorkflowContextFunc, error) {
+// GetOrCreateCurrentExecution mocks base method.
+func (m *MockCache) GetOrCreateCurrentExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, workflowID string, archetypeID chasm.ArchetypeID, lockPriority locks.Priority) (interfaces.ReleaseWorkflowContextFunc, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOrCreateCurrentWorkflowExecution", ctx, shardContext, namespaceID, workflowID, lockPriority)
+	ret := m.ctrl.Call(m, "GetOrCreateCurrentExecution", ctx, shardContext, namespaceID, workflowID, archetypeID, lockPriority)
 	ret0, _ := ret[0].(interfaces.ReleaseWorkflowContextFunc)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetOrCreateCurrentWorkflowExecution indicates an expected call of GetOrCreateCurrentWorkflowExecution.
-func (mr *MockCacheMockRecorder) GetOrCreateCurrentWorkflowExecution(ctx, shardContext, namespaceID, workflowID, lockPriority any) *gomock.Call {
+// GetOrCreateCurrentExecution indicates an expected call of GetOrCreateCurrentExecution.
+func (mr *MockCacheMockRecorder) GetOrCreateCurrentExecution(ctx, shardContext, namespaceID, workflowID, archetypeID, lockPriority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateCurrentWorkflowExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateCurrentWorkflowExecution), ctx, shardContext, namespaceID, workflowID, lockPriority)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateCurrentExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateCurrentExecution), ctx, shardContext, namespaceID, workflowID, archetypeID, lockPriority)
 }
 
 // GetOrCreateWorkflowExecution mocks base method.
