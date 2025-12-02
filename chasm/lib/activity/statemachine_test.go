@@ -89,8 +89,8 @@ func TestTransitionScheduled(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
 				},
-				Attempt: chasm.NewDataField(ctx, attemptState),
-				Outcome: chasm.NewDataField(ctx, outcome),
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, outcome),
 			}
 
 			err := TransitionScheduled.Apply(activity, ctx, nil)
@@ -180,8 +180,8 @@ func TestTransitionRescheduled(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 				},
-				Attempt: chasm.NewDataField(ctx, attemptState),
-				Outcome: chasm.NewDataField(ctx, outcome),
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, outcome),
 			}
 
 			err := TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
@@ -237,8 +237,8 @@ func TestTransitionStarted(t *testing.T) {
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		},
-		Attempt: chasm.NewDataField(ctx, attemptState),
-		Outcome: chasm.NewDataField(ctx, outcome),
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
 	err := TransitionStarted.Apply(activity, ctx, nil)
@@ -300,8 +300,8 @@ func TestTransitionTimedout(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 tc.startStatus,
 				},
-				Attempt: chasm.NewDataField(ctx, attemptState),
-				Outcome: chasm.NewDataField(ctx, outcome),
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, outcome),
 			}
 
 			err := TransitionTimedOut.Apply(activity, ctx, tc.timeoutType)
@@ -352,8 +352,8 @@ func TestTransitionCompleted(t *testing.T) {
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		},
-		Attempt: chasm.NewDataField(ctx, attemptState),
-		Outcome: chasm.NewDataField(ctx, outcome),
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
 	payload := payloads.EncodeString("Done")
@@ -387,7 +387,7 @@ func TestTransitionFailed(t *testing.T) {
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		},
-		Attempt:       chasm.NewDataField(ctx, attemptState),
+		LastAttempt:   chasm.NewDataField(ctx, attemptState),
 		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
 		Outcome:       chasm.NewDataField(ctx, outcome),
 	}
