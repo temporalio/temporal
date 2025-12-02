@@ -162,6 +162,7 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
+		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -318,6 +319,7 @@ func NewMutableState(
 		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
+		chasmNodeSizes:               make(map[string]int),
 		totalTombstones:              0,
 		currentVersion:               namespaceEntry.FailoverVersion(),
 		bufferEventsInDB:             nil,
@@ -530,6 +532,16 @@ func NewMutableStateFromDB(
 
 	mutableState.mustInitHSM()
 
+	// Track chasm node size even if chasm is not enabled,
+	// because those nodes are still stored in the mutable state,
+	// and should be taken into account when deciding if execution
+	// should be terminated based on mutable state size.
+	for key, node := range dbRecord.ChasmNodes {
+		nodeSize := len(key) + node.Size()
+		mutableState.approximateSize += nodeSize
+		mutableState.chasmNodeSizes[key] = nodeSize
+	}
+
 	if shard.GetConfig().EnableChasm() {
 		var err error
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
@@ -542,9 +554,6 @@ func NewMutableStateFromDB(
 		)
 		if err != nil {
 			return nil, err
-		}
-		for key, node := range dbRecord.ChasmNodes {
-			mutableState.approximateSize += len(key) + node.Size()
 		}
 	}
 
@@ -6789,11 +6798,18 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
-	//
-	// TODO: update approximateSize once chasm.NodesMutation returns size change as well.
 	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
 	if err != nil {
 		return closeTransactionResult{}, err
+	}
+	for nodePath := range chasmNodesMutation.DeletedNodes {
+		ms.approximateSize -= ms.chasmNodeSizes[nodePath]
+		delete(ms.chasmNodeSizes, nodePath)
+	}
+	for nodePath, node := range chasmNodesMutation.UpdatedNodes {
+		newSize := len(nodePath) + node.Size()
+		ms.approximateSize += newSize - ms.chasmNodeSizes[nodePath]
+		ms.chasmNodeSizes[nodePath] = newSize
 	}
 
 	if isStateDirty {
