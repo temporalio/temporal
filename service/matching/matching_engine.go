@@ -3365,7 +3365,15 @@ func (e *matchingEngineImpl) EnablePriorityAndFairness(
 
 	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		data := common.CloneProto(old)
-		perType := data.GetPerType()[int32(pm.Partition().TaskType())]
+		if data.PerType == nil {
+			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+		}
+		typ := int32(pm.Partition().TaskType())
+		perType := data.PerType[typ]
+		if perType == nil {
+			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
+			perType = data.PerType[typ]
+		}
 		perType.FairnessState = persistencespb.FAIRNESS_STATE_V2
 		return data, true, nil
 	}
