@@ -185,9 +185,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() {
 }
 
 func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	queue, err := pm.defaultQueueFuture.Get(ctx)
+	queue, err := pm.defaultQueueFuture.GetIfReady()
 	if err != nil {
 		softassert.Fail(pm.logger, "defaultQueue used but not initialized or initialization failed", tag.Error(err))
 	}
@@ -1445,9 +1443,9 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.Vers
 	// Update rateLimits if any change is userData.
 	pm.rateLimitManager.UserDataChanged()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	defaultQ, err := pm.defaultQueueFuture.Get(ctx)
+	// Do not use defaultQueue() because that treats
+	// not being ready as an error, which is expected during bringup here.
+	defaultQ, err := pm.defaultQueueFuture.GetIfReady()
 	// Initialization error or not ready yet
 	if err != nil {
 		return
