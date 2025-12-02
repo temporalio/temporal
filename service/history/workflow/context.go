@@ -882,7 +882,7 @@ func (c *ContextImpl) ReapplyEvents(
 		return err
 	}
 
-	activeCluster := namespaceEntry.ActiveClusterName()
+	activeCluster := namespaceEntry.ActiveClusterName(workflowID)
 	if activeCluster == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 		engine, err := shardContext.GetEngine(ctx)
 		if err != nil {

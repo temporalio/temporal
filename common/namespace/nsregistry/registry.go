@@ -585,6 +585,6 @@ func namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) b
 	return old == nil ||
 		old.State() != new.State() ||
 		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
-		old.ActiveClusterName() != new.ActiveClusterName() ||
+		old.ActiveClusterName(namespace.EmptyWorkflowId) != new.ActiveClusterName(namespace.EmptyWorkflowId) ||
 		old.ReplicationState() != new.ReplicationState()
 }

@@ -169,7 +169,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	}
 
 	if policy.enableForAllAPIs {
-		return namespaceEntry.ActiveClusterName(), true
+		return namespaceEntry.ActiveClusterName(namespace.EmptyWorkflowId), true
 	}
 
 	_, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]
@@ -178,5 +178,5 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	return namespaceEntry.ActiveClusterName(), true
+	return namespaceEntry.ActiveClusterName(""), true
 }

@@ -56,12 +56,6 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	ns := namespaceEntry.Name().String()
-
 	if len(req.Operations) != 2 {
 		return nil, serviceerror.NewInvalidArgument("expected exactly 2 operations")
 	}
@@ -75,6 +69,12 @@ func Invoke(
 	if startReq == nil {
 		return nil, serviceerror.NewInvalidArgument("expected first operation to be Start Workflow")
 	}
+
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), startReq.StartRequest.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+	ns := namespaceEntry.Name().String()
 
 	newUpdateWithStart := func() (*updateWithStart, error) {
 		uws := &updateWithStart{
