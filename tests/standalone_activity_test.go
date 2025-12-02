@@ -397,55 +397,60 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_DeadlineExceeded
 	// Case 1: due to the caller's deadline expiring (caller gets DeadlineExceeded error)
 	// Case 2: due to the internal long-poll timeout (caller does not get an error).
 
-	// We first verify case 1. To do so the caller must set a deadline that comes before the
-	// internal deadline, so we override the internal long-poll timeout to something large, and poll
-	// with a short caller deadline.
-	cleanup := s.OverrideDynamicConfig(
-		dynamicconfig.HistoryLongPollExpirationInterval,
-		9999*time.Millisecond,
-	)
-	defer cleanup()
-	ctx, cancel := context.WithTimeout(originalCtx, 10*time.Millisecond)
-	defer cancel()
-	_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      startResp.RunId,
-		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-				LongPollToken: pollResp.StateChangeLongPollToken,
+	t.Run("CallerDeadlineExceeded", func(t *testing.T) {
+		// We first verify case 1. To do so the caller must set a deadline that comes before the
+		// internal deadline, so we override the internal long-poll timeout to something large, and poll
+		// with a short caller deadline.
+		cleanup := s.OverrideDynamicConfig(
+			dynamicconfig.HistoryLongPollExpirationInterval,
+			9999*time.Millisecond,
+		)
+		defer cleanup()
+		ctx, cancel := context.WithTimeout(originalCtx, 10*time.Millisecond)
+		defer cancel()
+		_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					LongPollToken: pollResp.StateChangeLongPollToken,
+				},
 			},
-		},
+		})
+		require.Error(t, err)
+		statusErr := serviceerror.ToStatus(err)
+		require.NotNil(t, statusErr)
+		require.Equal(t, codes.DeadlineExceeded, statusErr.Code(),
+			"expected DeadlineExceeded, got %s", statusErr.Code())
 	})
-	require.Error(t, err)
-	statusErr := serviceerror.ToStatus(err)
-	require.NotNil(t, statusErr)
-	require.Equal(t, codes.DeadlineExceeded, statusErr.Code())
 
-	// Next we verify case 2. We set the internal long-poll timeout to something small and poll with
-	// a large caller deadline.
-	cleanup = s.OverrideDynamicConfig(
-		dynamicconfig.HistoryLongPollExpirationInterval,
-		10*time.Millisecond,
-	)
-	defer cleanup()
-	ctx, cancel = context.WithTimeout(originalCtx, 9999*time.Millisecond)
-	defer cancel()
-	pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-		Namespace:   s.Namespace().String(),
-		ActivityId:  activityID,
-		RunId:       startResp.RunId,
-		IncludeInfo: true,
-		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-				LongPollToken: pollResp.StateChangeLongPollToken,
+	t.Run("ServerLongPollDeadlineExceeded", func(t *testing.T) {
+		// Next we verify case 2. We set the internal long-poll timeout to something small and poll with
+		// a large caller deadline.
+		cleanup := s.OverrideDynamicConfig(
+			dynamicconfig.HistoryLongPollExpirationInterval,
+			10*time.Millisecond,
+		)
+		defer cleanup()
+		ctx, cancel := context.WithTimeout(originalCtx, 9999*time.Millisecond)
+		defer cancel()
+		pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			ActivityId:  activityID,
+			RunId:       startResp.RunId,
+			IncludeInfo: true,
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					LongPollToken: pollResp.StateChangeLongPollToken,
+				},
 			},
-		},
+		})
+		// The server uses an empty non-error response to indicate to the caller that it should resubmit
+		// its long-poll.
+		require.NoError(t, err)
+		require.Empty(t, pollResp.GetInfo())
 	})
-	// The server uses an empty non-error response to indicate to the caller that it should resubmit
-	// its long-poll.
-	require.NoError(t, err)
-	require.Empty(t, pollResp.GetInfo())
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
