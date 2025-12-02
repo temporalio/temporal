@@ -528,50 +528,6 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
-func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
-	if override == nil {
-		return nil
-	}
-
-	if override.GetAutoUpgrade() { // v0.32
-		return nil
-	} else if p := override.GetPinned(); p != nil {
-		if p.GetVersion() == nil {
-			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
-		}
-		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
-			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
-		}
-		return nil
-	}
-
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	switch override.GetBehavior() {
-	case enumspb.VERSIONING_BEHAVIOR_PINNED:
-		if override.GetDeployment() != nil {
-			return ValidateDeployment(override.GetDeployment())
-		} else if override.GetPinnedVersion() != "" {
-			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
-			return err
-		} else {
-			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
-		}
-	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
-		if override.GetDeployment() != nil {
-			return serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
-		}
-		if override.GetPinnedVersion() != "" {
-			return serviceerror.NewInvalidArgument("only provide pinned version if behavior is 'PINNED'")
-		}
-	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
-		return serviceerror.NewInvalidArgument("override behavior is required")
-	default:
-		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
-		return serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
-	}
-	return nil
-}
-
 // FindTargetDeploymentVersionAndRevisionNumberForWorkflowID returns the deployment version and revision number (if applicable) for
 // the particular workflow ID based on the versioning info of the task queue. Nil means unversioned.
 func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
