@@ -271,11 +271,10 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
 
 func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	const (
-		workerSetRPS      = 2.0 // Worker rate limit for activities
-		apiSetRPS         = 4.0 // API rate limit for activities set to half of workerSetRPS to test override behavior
-		taskCount         = 36  // Number of tasks to launch
-		activityTaskQueue = "RateLimitTest_Update"
-		drainTimeout      = 35 * time.Second // 5 second additional buffer to prevent flakiness
+		workerSetRPS = 2.0              // Worker rate limit for activities
+		apiSetRPS    = 4.0              // API rate limit for activities set to half of workerSetRPS to test override behavior
+		taskCount    = 36               // Number of tasks to launch
+		drainTimeout = 35 * time.Second // 5 second additional buffer to prevent flakiness
 	)
 
 	tv := testvars.New(s.T())
@@ -330,7 +329,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 
 	// Measure duration with workerSetRPS config
 	mu.Lock()
-	avgRateInitial := getAvgRate(runTimes, workerSetRPS)
+	s.InEpsilon(workerSetRPS, getAvgRate(runTimes, workerSetRPS), 0.2, "rate not close to worker set rps")
 
 	// Reset for API override phase
 	runTimes = nil
@@ -374,14 +373,10 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 		return len(runTimes) == taskCount
 	}, drainTimeout, 100*time.Millisecond, "timeout waiting for activities to complete")
 
-	// Measure duration with API override
 	mu.Lock()
-	avgRateOverride := getAvgRate(runTimes, apiSetRPS)
+	// Measure duration with API override
+	s.InEpsilon(apiSetRPS, getAvgRate(runTimes, apiSetRPS), 0.2, "rate not close to api set rps")
 	mu.Unlock()
-	s.T().Log("avg rates", avgRateInitial, avgRateOverride)
-
-	// initial rate should be twice as high as the effective RPS is doubled
-	s.InEpsilon(workerSetRPS/apiSetRPS, avgRateInitial/avgRateOverride, 0.2, "ratio should be similar")
 }
 
 func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced() {
