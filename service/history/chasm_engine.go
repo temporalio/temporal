@@ -276,7 +276,7 @@ func (e *ChasmEngine) PollComponent(
 		}
 	}()
 
-	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
+	_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 	if err != nil {
 		// E.g. requestRef VT inconsistent with execution VT ('stale reference')
 		return nil, err
@@ -297,17 +297,6 @@ func (e *ChasmEngine) PollComponent(
 	}
 
 	// Wait condition not satisfied; long-poll
-
-	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
-		namespace.ID(requestRef.EntityKey.NamespaceID),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
-	defer cancel()
 
 	// PollComponent subscribes to execution-level notifications. Suppose that an execution consists
 	// of one component A, and A has subcomponent B. Subscribers interested only in component B may

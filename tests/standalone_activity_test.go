@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
@@ -402,7 +403,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_DeadlineExceeded
 		// internal deadline, so we override the internal long-poll timeout to something large, and poll
 		// with a short caller deadline.
 		cleanup := s.OverrideDynamicConfig(
-			dynamicconfig.HistoryLongPollExpirationInterval,
+			activity.LongPollTimeout,
 			9999*time.Millisecond,
 		)
 		defer cleanup()
@@ -429,7 +430,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_DeadlineExceeded
 		// Next we verify case 2. We set the internal long-poll timeout to something small and poll with
 		// a large caller deadline.
 		cleanup := s.OverrideDynamicConfig(
-			dynamicconfig.HistoryLongPollExpirationInterval,
+			activity.LongPollTimeout,
 			10*time.Millisecond,
 		)
 		defer cleanup()

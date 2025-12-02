@@ -3,20 +3,23 @@ package activity
 import (
 	"context"
 	"errors"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/contextutil"
 )
 
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
+	config *Config
 }
 
-func newHandler() *handler {
-	return &handler{}
+func newHandler(config *Config) *handler {
+	return &handler{
+		config: config,
+	}
 }
 
 func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.StartActivityExecutionRequest) (*activitypb.StartActivityExecutionResponse, error) {
@@ -85,12 +88,18 @@ func (h *handler) PollActivityExecution(
 		return chasm.ReadComponent(ctx, ref, (*Activity).buildPollActivityExecutionResponse, req, nil)
 	}
 
-	// Do not allow long-poll to use all remaining time
-	childCtx := ctx
-	if deadline, ok := ctx.Deadline(); ok {
-		var cancel context.CancelFunc
-		childCtx, cancel = context.WithDeadline(ctx, deadline.Add(-time.Second))
-		defer cancel()
+	namespace := req.GetFrontendRequest().GetNamespace()
+	ctx, cancel := contextutil.WithDeadlineBuffer(
+		ctx,
+		h.config.LongPollTimeout(namespace),
+		h.config.LongPollBuffer(namespace),
+	)
+	defer cancel()
+
+	if ctx.Err() != nil {
+		// The caller's deadline didn't allow time for our buffer. The caller should receive a
+		// DeadlineExceeded in this case, as opposed to the empty success response we return below.
+		return nil, ctx.Err()
 	}
 
 	switch waitPolicy.(type) {
@@ -101,7 +110,7 @@ func (h *handler) PollActivityExecution(
 		if len(token) == 0 {
 			return chasm.ReadComponent(ctx, ref, (*Activity).buildPollActivityExecutionResponse, req, nil)
 		}
-		response, _, err = chasm.PollComponent(childCtx, ref, func(
+		response, _, err = chasm.PollComponent(ctx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
@@ -125,7 +134,7 @@ func (h *handler) PollActivityExecution(
 		}, req)
 	case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
 		// TODO(dan): add functional test when RecordActivityTaskCompleted is implemented
-		response, _, err = chasm.PollComponent(childCtx, ref, func(
+		response, _, err = chasm.PollComponent(ctx, ref, func(
 			a *Activity,
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
@@ -146,13 +155,9 @@ func (h *handler) PollActivityExecution(
 		return nil, serviceerror.NewInvalidArgumentf("unexpected wait policy type: %T", waitPolicy)
 	}
 
-	if childCtx.Err() != nil {
-		// Caller deadline exceeded
-		return nil, childCtx.Err()
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		// Server-imposed long-poll deadline exceeded. Communicate this to callers by returning a
-		// non-error empty response.
+	if ctx.Err() != nil {
+		// Server-imposed long-poll timeout. Caller still has time (buffer) remaining.
+		// Return empty response to signal "nothing changed, please retry".
 
 		// TODO(dan): the definition of "empty" is unclear, since callers can currently choose to
 		// exclude info, outcome, and input from the result. Currently, a caller can infer that the
