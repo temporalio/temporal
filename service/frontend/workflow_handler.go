@@ -5305,11 +5305,6 @@ func (wh *WorkflowHandler) validateDeploymentVersionWithMode(
 
 	// Validation checks
 	switch versioningMode {
-	case enumspb.WORKER_VERSIONING_MODE_UNVERSIONED:
-		// if deploymentVersion != nil {
-		// 	return serviceerror.NewInvalidArgument("deployment version cannot be set for unversioned worker")
-		// }
-		return nil
 	case enumspb.WORKER_VERSIONING_MODE_VERSIONED:
 		if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
 			return errUseVersioningWithoutNormalName
