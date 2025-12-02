@@ -5337,11 +5337,11 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 		return response, err
 	})
 	s.NoError(err)
-	s.Len(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events, 3)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[0].EventType)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[1].EventType)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[2].EventType)
-	s.Empty(recordedTasks)
+	s.Equal(len(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events), 3)
+	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[0].EventType, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[1].EventType, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[2].EventType, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.Equal(len(recordedTasks), 0)
 }
 
 func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
