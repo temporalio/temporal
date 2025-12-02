@@ -168,6 +168,9 @@ type Config struct {
 	// Enable deployment version RPCs
 	EnableDeploymentVersions dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable worker version existence cache TTL
+	FrontendWorkerVersionExistsCacheTTL dynamicconfig.DurationPropertyFn
+
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
@@ -332,8 +335,9 @@ func NewConfig(
 		EnableCHASMSchedulerCreation: dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 
 		// [cleanup-wv-pre-release]
-		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
-		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
+		EnableDeployments:                   dynamicconfig.EnableDeployments.Get(dc),
+		EnableDeploymentVersions:            dynamicconfig.EnableDeploymentVersions.Get(dc),
+		FrontendWorkerVersionExistsCacheTTL: dynamicconfig.FrontendWorkerVersionExistsCacheTTL.Get(dc),
 
 		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:     dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),

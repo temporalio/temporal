@@ -887,6 +887,12 @@ and deployment interaction in matching and history.`,
 including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
 	)
+	FrontendWorkerVersionExistsCacheTTL = NewGlobalDurationSetting(
+		"frontend.workerVersionExistsCacheTTL",
+		time.Second,
+		`FrontendWorkerVersionExistsCacheTTL is the TTL for caching worker version existence checks
+when validating versioning overrides.`,
+	)
 	UseRevisionNumberForWorkerVersioning = NewNamespaceBoolSetting(
 		"system.useRevisionNumberForWorkerVersioning",
 		false,

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -146,6 +147,7 @@ type (
 		scheduleSpecBuilder             *scheduler.SpecBuilder
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
+		cache                           cache.Cache
 	}
 )
 
@@ -232,6 +234,11 @@ func NewWorkflowHandler(
 		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
 		httpEnabled:         httpEnabled,
 	}
+
+	// Initializing the cache
+	handler.cache = cache.New(10000, &cache.Options{
+		TTL: config.FrontendWorkerVersionExistsCacheTTL(),
+	})
 
 	return handler
 }
@@ -6148,12 +6155,31 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	}, nil
 }
 
-func (wh *WorkflowHandler) checkIfPinnedVersionExists(ctx context.Context, namespaceEntry *namespace.Namespace, version *deploymentpb.WorkerDeploymentVersion) error {
-	// TODO (Shivam): Need a cache here please.
-	_, _, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, version.GetBuildId(), false)
+func (wh *WorkflowHandler) verifyPinnedVersionExists(ctx context.Context, namespaceEntry *namespace.Namespace, version *deploymentpb.WorkerDeploymentVersion) error {
+	deploymentVersionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(version)
+	cacheKey := fmt.Sprintf("%s-%s", namespaceEntry.ID().String(), deploymentVersionStr)
+
+	exists := wh.GetCache(cacheKey)
+	if exists != nil {
+		return nil
+	}
+
+	_, err := wh.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace:         namespaceEntry.Name().String(),
+		DeploymentVersion: version,
+	})
+
+	if err == nil {
+		// Add the key to the cache
+		wh.PutCache(cacheKey, true)
+		return nil
+	}
+
+	// Either the version does not exist or there was some other error
 	return err
 }
 
+// TODO (Shivam): Ponder later if we wanna move this back to worker-versioning package or not
 func (wh *WorkflowHandler) validateVersioningOverride(ctx context.Context, namespaceEntry *namespace.Namespace, override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
@@ -6168,7 +6194,7 @@ func (wh *WorkflowHandler) validateVersioningOverride(ctx context.Context, names
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return wh.checkIfPinnedVersionExists(ctx, namespaceEntry, p.GetVersion())
+		return wh.verifyPinnedVersionExists(ctx, namespaceEntry, p.GetVersion())
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -6662,4 +6688,12 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 	}
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) PutCache(key any, value any) {
+	wh.cache.Put(key, value)
+}
+
+func (wh *WorkflowHandler) GetCache(key any) any {
+	return wh.cache.Get(key)
 }

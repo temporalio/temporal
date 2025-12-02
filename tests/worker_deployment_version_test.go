@@ -58,11 +58,11 @@ var (
 
 func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
-	t.Run("v0", func(t *testing.T) {
-		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion})
+	t.Run("sync", func(t *testing.T) {
+		suite.Run(t, &DeploymentVersionSuite{useV32: true, workflowVersion: workerdeployment.InitialVersion})
 	})
-	t.Run("v1", func(t *testing.T) {
-		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	t.Run("async", func(t *testing.T) {
+		suite.Run(t, &DeploymentVersionSuite{useV32: true, workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
 	})
 }
 
