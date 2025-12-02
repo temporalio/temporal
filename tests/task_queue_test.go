@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -710,11 +711,9 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	}
 
 	// Drain workflow tasks -> schedule activities with Priority.FairnessKey.
-	wfHandled := 0
-	for wfHandled < total {
-		if err := ctx.Err(); err != nil {
-			s.T().Fatalf("context deadline while draining workflow tasks: handled=%d/%d: %v", wfHandled, total, err)
-		}
+	var remaining atomic.Int64
+	remaining.Store(int64(total))
+	runParallelUntilZero(ctx, 10, func(ctx context.Context) {
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(
 			tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -736,27 +735,26 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 			taskpoller.WithContext(ctx),
 		)
 		if err == nil {
-			wfHandled++
+			remaining.Add(-1)
 		}
-	}
-	s.Equal(total, wfHandled)
+	}, remaining.Load)
 
 	// Drain activity tasks, recording times.
+	var mu sync.Mutex
 	perKeyTimes := make(map[string][]time.Time)
 	allTimes := make([]time.Time, 0, total)
+	remaining.Store(int64(total))
 
-	actsHandled := 0
-	for actsHandled < total {
-		if err := ctx.Err(); err != nil {
-			s.T().Fatalf("context deadline while draining activity tasks: handled=%d/%d: %v", actsHandled, total, err)
-		}
+	runParallelUntilZero(ctx, 10, func(ctx context.Context) {
 		_, err := s.TaskPoller().PollAndHandleActivityTask(
 			tv,
 			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 				key := task.Priority.FairnessKey
 				now := time.Now()
+				mu.Lock()
 				perKeyTimes[key] = append(perKeyTimes[key], now)
 				allTimes = append(allTimes, now)
+				mu.Unlock()
 				nothing, encErr := payloads.Encode()
 				s.NoError(encErr)
 				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
@@ -764,12 +762,28 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 			taskpoller.WithContext(ctx),
 		)
 		if err == nil {
-			actsHandled++
+			remaining.Add(-1)
 		}
-	}
-	s.Equal(total, actsHandled)
+	}, remaining.Load)
+	s.NoError(ctx.Err(), "context deadline while draining activity tasks: remaining %d/%d", remaining.Load(), total)
 
 	// perKeyTimes : Used to verify that each key's activities are throttled correctly.
 	// allTimes : Used to verify the overall throughput of the task queue.
 	return perKeyTimes, allTimes
+}
+
+// runParallelUntilZero runs n copies of f in a loop, until ctx is done or until() returns zero.
+// f must abort if the context given to it is canceled.
+func runParallelUntilZero(ctx context.Context, n int, f func(context.Context), until func() int64) {
+	var wg sync.WaitGroup
+	workerCtx, workerCancel := context.WithCancel(ctx)
+	for range n {
+		wg.Go(func() {
+			defer workerCancel()
+			for workerCtx.Err() == nil && until() > 0 {
+				f(workerCtx)
+			}
+		})
+	}
+	wg.Wait()
 }
