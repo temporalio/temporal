@@ -1207,7 +1207,6 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 // chooseTargetQueueByFlag picks the target queue and dispatch revision number.
 // If UseRevisionNumberForWorkerVersioning is enabled, it uses the revision
 // comparison; otherwise it always chooses targetDeployment.
-// TODO (Shivam): This function can be simplified to literally one if check.
 func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 	ctx context.Context,
 	taskDeployment *deploymentpb.Deployment,
@@ -1215,6 +1214,7 @@ func (pm *taskQueuePartitionManagerImpl) chooseTargetQueueByFlag(
 	targetDeploymentRevisionNumber int64,
 	taskDirectiveRevisionNumber int64,
 ) (physicalTaskQueueManager, int64, error) {
+
 	if pm.engine != nil && pm.engine.config.UseRevisionNumberForWorkerVersioning(pm.Namespace().Name().String()) {
 		if targetDeployment.GetSeriesName() != taskDeployment.GetSeriesName() || targetDeploymentRevisionNumber >= taskDirectiveRevisionNumber {
 			q, err := pm.getVersionedQueue(ctx, "", "", targetDeployment, true)

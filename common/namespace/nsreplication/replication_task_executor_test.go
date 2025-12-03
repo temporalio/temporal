@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -61,7 +61,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TearDownTest() {
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_NameUUIDCollision() {
 	operation := enumsspb.NAMESPACE_OPERATION_CREATE
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "some random namespace test name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "some random test description"
@@ -113,10 +113,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		Name: name,
 	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
-			Id: uuid.New(),
+			Id: uuid.NewString(),
 		},
 	}}, nil)
-	task.Id = uuid.New()
+	task.Id = uuid.NewString()
 	task.Info.Name = name
 	err := s.namespaceReplicator.Execute(context.Background(), task)
 	s.NotNil(err)
@@ -130,7 +130,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	}).DoAndReturn(func(_ context.Context, request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 		nsID := id
 		if count != 0 {
-			nsID = uuid.New()
+			nsID = uuid.NewString()
 		}
 		count++
 		return &persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
@@ -147,7 +147,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_Success() {
 	operation := enumsspb.NAMESPACE_OPERATION_CREATE
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "some random namespace test name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "some random test description"
@@ -251,8 +251,8 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_Duplicate() {
-	name := uuid.New()
-	id := uuid.New()
+	name := uuid.NewString()
+	id := uuid.NewString()
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
 	clusters := []*replicationpb.ClusterReplicationConfig{
@@ -297,7 +297,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NamespaceNotExist() {
 	operation := enumsspb.NAMESPACE_OPERATION_UPDATE
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "some random namespace test name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "some random test description"
@@ -381,7 +381,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_UpdateActiveCluster() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "some random namespace test name"
 	updateOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
 	updateState := enumspb.NAMESPACE_STATE_DEPRECATED
@@ -484,7 +484,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_NoUpdateActiveCluster() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "some random namespace test name"
 	updateOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
 	updateState := enumspb.NAMESPACE_STATE_DEPRECATED
@@ -578,7 +578,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_UpdateActiveCluster() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "some random namespace test name"
 	updateOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
 	updateState := enumspb.NAMESPACE_STATE_DEPRECATED
@@ -660,7 +660,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_NoUpdateActiveCluster() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "some random namespace test name"
 	updateOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
 	updateState := enumspb.NAMESPACE_STATE_DEPRECATED

@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -72,6 +73,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		s.NoError(err)
 		if response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount == 3 {
@@ -95,6 +97,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
@@ -62,8 +62,8 @@ func (s *mutableStateMapperSuite) TearDownSuite() {
 
 func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_NoDedupe() {
 	workflowKey := definition.WorkflowKey{
-		WorkflowID: uuid.New(),
-		RunID:      uuid.New(),
+		WorkflowID: uuid.NewString(),
+		RunID:      uuid.NewString(),
 	}
 	eventSlices := [][]*historypb.HistoryEvent{
 		{
@@ -107,8 +107,8 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_N
 
 func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_FirstBatchDedupe() {
 	workflowKey := definition.WorkflowKey{
-		WorkflowID: uuid.New(),
-		RunID:      uuid.New(),
+		WorkflowID: uuid.NewString(),
+		RunID:      uuid.NewString(),
 	}
 	eventSlices := [][]*historypb.HistoryEvent{
 		{
@@ -153,8 +153,8 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_F
 
 func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_AllBatchDedupe() {
 	workflowKey := definition.WorkflowKey{
-		WorkflowID: uuid.New(),
-		RunID:      uuid.New(),
+		WorkflowID: uuid.NewString(),
+		RunID:      uuid.NewString(),
 	}
 	eventSlices := [][]*historypb.HistoryEvent{
 		{

@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
@@ -105,6 +106,7 @@ type (
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
+		chasmRegistry              *chasm.Registry
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -139,6 +141,7 @@ type (
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
+		ChasmRegistry                       *chasm.Registry
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -149,8 +152,6 @@ type (
 
 var (
 	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
-
-	resendStartEventID = int64(0)
 )
 
 // NewAdminHandler creates a gRPC handler for the adminservice
@@ -225,6 +226,7 @@ func NewAdminHandler(
 		historyHealthChecker: historyHealthChecker,
 		taskCategoryRegistry: args.CategoryRegistry,
 		matchingClient:       args.matchingClient,
+		chasmRegistry:        args.ChasmRegistry,
 	}
 }
 
@@ -773,6 +775,11 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		return nil, err
 	}
 
+	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	if err != nil {
+		return nil, err
+	}
+
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
 
@@ -786,10 +793,12 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 	}
 
 	historyAddr := historyHost.GetAddress()
+
 	historyResponse, err := adh.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		NamespaceId:     namespaceID.String(),
 		Execution:       request.Execution,
 		SkipForceReload: request.GetSkipForceReload(),
+		ArchetypeId:     archetypeID,
 	})
 
 	if err != nil {
@@ -974,7 +983,7 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
 	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
-	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+	if execution.GetRunId() == "" || uuid.Validate(execution.GetRunId()) != nil {
 		return errInvalidRunID
 	}
 
@@ -1130,11 +1139,19 @@ func (adh *AdminHandler) ListClusterMembers(
 	if startedTimeRef != nil {
 		startedTime = startedTimeRef.AsTime()
 	}
+	hostIDEqual, err := uuid.Parse(request.GetHostId())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
+	}
+	hostIDEqualBytes, err := hostIDEqual.MarshalBinary()
+	if err != nil {
+		return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
 		LastHeartbeatWithin: heartbit,
 		RPCAddressEquals:    net.ParseIP(request.GetRpcAddress()),
-		HostIDEquals:        uuid.Parse(request.GetHostId()),
+		HostIDEquals:        hostIDEqualBytes,
 		RoleEquals:          persistence.ServiceType(request.GetRole()),
 		SessionStartedAfter: startedTime,
 		PageSize:            int(request.GetPageSize()),
@@ -1146,9 +1163,13 @@ func (adh *AdminHandler) ListClusterMembers(
 
 	var activeMembers []*clusterspb.ClusterMember
 	for _, member := range resp.ActiveMembers {
+		u, err := uuid.FromBytes(member.HostID)
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to parse host ID bytes to UUID: %v", err)
+		}
 		activeMembers = append(activeMembers, &clusterspb.ClusterMember{
 			Role:             enumsspb.ClusterMemberRole(member.Role),
-			HostId:           member.HostID.String(),
+			HostId:           u.String(),
 			RpcAddress:       member.RPCAddress.String(),
 			RpcPort:          int32(member.RPCPort),
 			SessionStartTime: timestamppb.New(member.SessionStart),
@@ -1214,7 +1235,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
-			IsReplicationEnabled:     request.GetIsReplicationEnabled(),
+			IsReplicationEnabled:     request.GetEnableReplication(),
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
@@ -1531,8 +1552,14 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, err
 	}
 
+	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	if err != nil {
+		return nil, err
+	}
+
 	_, err = adh.historyClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
 		NamespaceId: namespaceEntry.ID().String(),
+		ArchetypeId: archetypeID,
 		Request:     request,
 	})
 	if err != nil {
@@ -1689,9 +1716,15 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
+	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	if err != nil {
+		return nil, err
+	}
+
 	response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
 		&historyservice.ForceDeleteWorkflowExecutionRequest{
 			NamespaceId: namespaceID.String(),
+			ArchetypeId: archetypeID,
 			Request:     request,
 		})
 	if err != nil {
@@ -2119,6 +2152,7 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 		VersionHistories:    request.VersionHistories,
 		VersionedTransition: request.VersionedTransition,
 		TargetClusterId:     request.TargetClusterId,
+		ArchetypeId:         request.ArchetypeId,
 	})
 	if err != nil {
 		return nil, err
@@ -2147,12 +2181,18 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
+	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
 		ctx,
 		&historyservice.GenerateLastHistoryReplicationTasksRequest{
 			NamespaceId:    namespaceEntry.ID().String(),
 			Execution:      request.Execution,
 			TargetClusters: request.TargetClusters,
+			ArchetypeId:    archetypeID,
 		},
 	)
 	if err != nil {
@@ -2175,6 +2215,19 @@ func (adh *AdminHandler) getDLQWorkflowID(
 			key.TargetCluster,
 		),
 	)
+}
+
+func (adh *AdminHandler) archetypeNameToID(archetype chasm.Archetype) (chasm.ArchetypeID, error) {
+	if len(archetype) == 0 {
+		// For backwards compatibility, default to Workflow
+		return chasm.WorkflowArchetypeID, nil
+	}
+
+	archetypeID, ok := adh.chasmRegistry.ComponentIDByFqn(archetype)
+	if !ok {
+		return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf("unknown archetype: %s", archetype)
+	}
+	return archetypeID, nil
 }
 
 func validateHistoryDLQKey(

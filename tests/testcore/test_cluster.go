@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
@@ -287,7 +286,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
 	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
 		clusterInfo.ShardCount = clusterConfig.HistoryConfig.NumHistoryShards
-		clusterInfo.ClusterID = uuid.New()
+		clusterInfo.ClusterID = uuid.NewString()
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -326,11 +325,6 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		}
 	}
 
-	chasmRegistry := chasm.NewRegistry(logger)
-	if err := chasmRegistry.Register(&chasm.CoreLibrary{}); err != nil {
-		return nil, err
-	}
-
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
 		PersistenceConfig:                pConfig,
@@ -357,7 +351,6 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
 		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
-		ChasmRegistry:                    chasmRegistry,
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 	}

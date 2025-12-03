@@ -7,7 +7,7 @@ package workflow
 import (
 	"context"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -447,7 +447,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				event,
 				// create a new request ID which is used by transfer queue processor
 				// if namespace is failed over at this point
-				uuid.New(),
+				uuid.NewString(),
 			); err != nil {
 				return nil, err
 			}
@@ -474,7 +474,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 		case enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
 			// Create a new request ID which is used by transfer queue processor if namespace is failed over at this point
-			signalRequestID := uuid.New()
+			signalRequestID := uuid.NewString()
 			if _, err := b.mutableState.ApplySignalExternalWorkflowExecutionInitiatedEvent(
 				firstEvent.GetEventId(),
 				event,
@@ -751,7 +751,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 	_, err = newRunStateBuilder.ApplyEvents(
 		ctx,
 		namespaceID,
-		uuid.New(),
+		uuid.NewString(),
 		newExecution,
 		[][]*historypb.HistoryEvent{newRunHistory},
 		nil,

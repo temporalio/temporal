@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -101,7 +101,7 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
@@ -274,7 +274,7 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
@@ -430,7 +430,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,

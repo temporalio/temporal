@@ -43,8 +43,8 @@ func (s *cachingRedirectorSuite) SetupTest() {
 	s.connections = &mockConnectionPool[historyservice.HistoryServiceClient]{}
 	s.logger = log.NewNoopLogger()
 	s.resolver = membership.NewMockServiceResolver(s.controller)
-	s.resolver.EXPECT().AddListener(cachingRedirectorListener, gomock.Any()).Return(nil).AnyTimes()
-	s.resolver.EXPECT().RemoveListener(cachingRedirectorListener).Return(nil).AnyTimes()
+	s.resolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.resolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
 }
 
 func (s *cachingRedirectorSuite) TearDownTest() {

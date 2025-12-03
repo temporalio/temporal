@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -89,7 +89,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	client1 := s.clusters[1].FrontendClient() // standby
 
 	// start a workflow
-	id := "xdc-search-attr-test-" + uuid.New()
+	id := "xdc-search-attr-test-" + uuid.NewString()
 	wt := "xdc-search-attr-test-type"
 	tl := "xdc-search-attr-test-taskqueue"
 	identity := "worker1"
@@ -101,7 +101,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,

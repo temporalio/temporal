@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -409,7 +410,10 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	for alias, value := range aliasedSearchAttributes {
 		fieldName, err := searchAttributesMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
-			return err
+			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
+			// or there are delays in propagating search attribute mappings to History.
+			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
+			continue
 		}
 		searchattributes[fieldName] = value
 	}

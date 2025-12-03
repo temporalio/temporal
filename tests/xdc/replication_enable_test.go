@@ -155,7 +155,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 			FrontendAddress:               standbyCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           standbyCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
-			IsReplicationEnabled:          false,
+			EnableReplication:             false,
 		})
 	s.Require().NoError(err)
 
@@ -165,7 +165,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 			FrontendAddress:               activeCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           activeCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
-			IsReplicationEnabled:          false,
+			EnableReplication:             false,
 		})
 	s.Require().NoError(err)
 
@@ -254,7 +254,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 			FrontendAddress:               standbyCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           standbyCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
-			IsReplicationEnabled:          true, // NOW enable replication
+			EnableReplication:             true, // NOW enable replication
 		})
 	s.Require().NoError(err)
 
@@ -265,7 +265,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 			FrontendAddress:               activeCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           activeCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
-			IsReplicationEnabled:          true, // NOW enable replication
+			EnableReplication:             true, // NOW enable replication
 		})
 	s.Require().NoError(err)
 
@@ -302,7 +302,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 			FrontendAddress:               standbyCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           standbyCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
-			IsReplicationEnabled:          false, // Disable replication
+			EnableReplication:             false, // Disable replication
 		})
 	s.Require().NoError(err)
 
@@ -313,7 +313,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 			FrontendAddress:               activeCluster.Host().RemoteFrontendGRPCAddress(),
 			FrontendHttpAddress:           activeCluster.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
-			IsReplicationEnabled:          false, // Disable replication
+			EnableReplication:             false, // Disable replication
 		})
 	s.Require().NoError(err)
 
