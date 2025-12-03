@@ -22,4 +22,5 @@ RUN addgroup -g 1000 temporal && \
 USER temporal
 WORKDIR /etc/temporal
 
-ENTRYPOINT ["tini", "--", "sleep", "infinity"]
+ENTRYPOINT ["tini", "--"]
+CMD ["sleep", "infinity"]
