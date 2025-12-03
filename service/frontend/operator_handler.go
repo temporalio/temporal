@@ -655,6 +655,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
+			IsReplicationEnabled:     request.GetEnableReplication(),
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
