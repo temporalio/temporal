@@ -149,9 +149,6 @@ func (e *taskExecutorImpl) handleActivityTask(
 	// This might be extra cost if the workflow belongs to local shard.
 	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 	_, err = e.shardContext.GetHistoryClient().SyncActivity(ctx, request)
-	if errors.Is(err, consts.ErrDuplicate) {
-		return nil
-	}
 	switch retryErr := err.(type) {
 	case nil:
 		return nil
@@ -200,6 +197,9 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return err
 
 	default:
+		if errors.Is(err, consts.ErrDuplicate) {
+			return nil
+		}
 		return err
 	}
 }
@@ -244,9 +244,6 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	// This might be extra cost if the workflow belongs to local shard.
 	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 	_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, request)
-	if errors.Is(err, consts.ErrDuplicate) {
-		return nil
-	}
 	switch retryErr := err.(type) {
 	case nil:
 		return nil
@@ -295,6 +292,9 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, request)
 		return err
 	default:
+		if errors.Is(err, consts.ErrDuplicate) {
+			return nil
+		}
 		return err
 	}
 }
@@ -326,9 +326,6 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		RemoteCluster: e.remoteCluster,
 	}
 	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
-	if errors.Is(err, consts.ErrDuplicate) {
-		return nil
-	}
 	switch retryErr := err.(type) {
 	case nil:
 		return nil
@@ -356,6 +353,9 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 			return err
 		}
 	default:
+		if errors.Is(err, consts.ErrDuplicate) {
+			return nil
+		}
 		return err
 	}
 }
