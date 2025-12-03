@@ -2634,7 +2634,7 @@ that task will be sent to DLQ.`,
 		"Enable generating request ID reference links",
 	)
 
-	EnableChasm = NewGlobalBoolSetting(
+	EnableChasm = NewNamespaceBoolSetting(
 		"history.enableChasm",
 		false,
 		"Use real chasm tree implementation instead of the noop one",
