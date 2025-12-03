@@ -397,7 +397,7 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
-	if s.config.EnableChasm() {
+	if s.config.EnableChasm(namespaceEntry.Name().String()) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
 			shard.GetTimeSource(),
@@ -542,7 +542,7 @@ func NewMutableStateFromDB(
 		mutableState.chasmNodeSizes[key] = nodeSize
 	}
 
-	if shard.GetConfig().EnableChasm() {
+	if shard.GetConfig().EnableChasm(namespaceEntry.Name().String()) {
 		var err error
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
