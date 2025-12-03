@@ -63,33 +63,6 @@ target "admin-tools" {
   }
 }
 
-target "legacy-admin-tools" {
-  dockerfile = "targets/legacy-admin-tools.Dockerfile"
-  target = "temporal-admin-tools"
-  tags = compact([
-    "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}",
-    "${IMAGE_REPO}/admin-tools:${SAFE_IMAGE_BRANCH_TAG}",
-    TAG_LATEST ? "${IMAGE_REPO}/admin-tools:latest" : "",
-  ])
-  platforms = ["linux/amd64", "linux/arm64"]
-  args = {
-    ALPINE_IMAGE = "${ALPINE_IMAGE}"
-  }
-  labels = {
-    "org.opencontainers.image.title" = "admin-tools"
-    "org.opencontainers.image.description" = "Temporal admin tools with database clients"
-    "org.opencontainers.image.url" = "https://github.com/temporalio/temporal"
-    "org.opencontainers.image.source" = "https://github.com/temporalio/temporal"
-    "org.opencontainers.image.licenses" = "MIT"
-    "org.opencontainers.image.version" = "${SERVER_VERSION}"
-    "org.opencontainers.image.revision" = "${TEMPORAL_SHA}"
-    "org.opencontainers.image.created" = timestamp()
-    "com.temporal.server.version" = "${SERVER_VERSION}"
-    "com.temporal.cli.version" = "${CLI_VERSION}"
-    "com.temporal.tctl.version" = "${TCTL_VERSION}"
-  }
-}
-
 target "server" {
   dockerfile = "targets/server.Dockerfile"
   tags = compact([
@@ -111,33 +84,5 @@ target "server" {
     "org.opencontainers.image.revision" = "${TEMPORAL_SHA}"
     "org.opencontainers.image.created" = timestamp()
     "com.temporal.server.version" = "${SERVER_VERSION}"
-  }
-}
-
-target "legacy-server" {
-  dockerfile = "targets/legacy-server.Dockerfile"
-  tags = compact([
-    "${IMAGE_REPO}/server:${IMAGE_SHA_TAG}",
-    "${IMAGE_REPO}/server:${SAFE_IMAGE_BRANCH_TAG}",
-    TAG_LATEST ? "${IMAGE_REPO}/server:latest" : "",
-  ])
-  platforms = ["linux/amd64", "linux/arm64"]
-  args = {
-    ALPINE_IMAGE = "${ALPINE_IMAGE}"
-    TEMPORAL_VERSION = "${SERVER_VERSION}"
-    TEMPORAL_SHA = "${TEMPORAL_SHA}"
-  }
-  labels = {
-    "org.opencontainers.image.title" = "server"
-    "org.opencontainers.image.description" = "Temporal Server with tctl"
-    "org.opencontainers.image.url" = "https://github.com/temporalio/temporal"
-    "org.opencontainers.image.source" = "https://github.com/temporalio/temporal"
-    "org.opencontainers.image.licenses" = "MIT"
-    "org.opencontainers.image.version" = "${SERVER_VERSION}"
-    "org.opencontainers.image.revision" = "${TEMPORAL_SHA}"
-    "org.opencontainers.image.created" = timestamp()
-    "com.temporal.server.version" = "${SERVER_VERSION}"
-    "com.temporal.cli.version" = "${CLI_VERSION}"
-    "com.temporal.tctl.version" = "${TCTL_VERSION}"
   }
 }
