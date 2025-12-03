@@ -8,7 +8,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-var ErrEmptyComponentRef = errors.New("empty chasm component ref")
+// ErrMalformedComponentRef is returned when component ref bytes cannot be deserialized.
+var ErrMalformedComponentRef = errors.New("malformed component ref")
+
+// ErrInvalidComponentRef is returned when component ref bytes deserialize to an invalid component ref.
+var ErrInvalidComponentRef = errors.New("invalid component ref")
+
 var defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
 
 // EntityKey uniquely identifies a CHASM execution in the system.
@@ -132,14 +137,18 @@ func (r *ComponentRef) Serialize(
 // Provides caller the access to information including EntityKey, Archetype, and ShardingKey.
 func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 	if len(data) == 0 {
-		return ComponentRef{}, ErrEmptyComponentRef
+		return ComponentRef{}, ErrInvalidComponentRef
 	}
 	var pRef persistencespb.ChasmComponentRef
 	if err := pRef.Unmarshal(data); err != nil {
 		return ComponentRef{}, err
 	}
 
-	return ProtoRefToComponentRef(&pRef), nil
+	ref := ProtoRefToComponentRef(&pRef)
+	if ref.BusinessID == "" || ref.NamespaceID == "" {
+		return ComponentRef{}, ErrInvalidComponentRef
+	}
+	return ref, nil
 }
 
 // ProtoRefToComponentRef converts a persistence ChasmComponentRef reference to a
