@@ -302,7 +302,8 @@ func (e *ChasmEngine) PollComponent(
 	// of one component A, and A has subcomponent B. Subscribers interested only in component B may
 	// be woken up unnecessarily (and thus evaluate the predicate unnecessarily) due to changes in
 	// parts of A that do not also belong to B.
-	ch := e.notifier.Subscribe(requestRef.EntityKey)
+	ch, unsubscribe := e.notifier.Subscribe(requestRef.EntityKey)
+	defer func() { unsubscribe() }()
 	executionLease.GetReleaseFn()(nil)
 
 	for {
@@ -315,11 +316,12 @@ func (e *ChasmEngine) PollComponent(
 			if err != nil {
 				return nil, err
 			}
+			// Check the predicate, resubscribe if it's still not satisfied, and release the lock.
 			func() {
 				defer executionLease.GetReleaseFn()(nil)
 				satisfiedRef, err = e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
 				if err == nil && satisfiedRef == nil {
-					ch = e.notifier.Subscribe(requestRef.EntityKey)
+					ch, unsubscribe = e.notifier.Subscribe(requestRef.EntityKey)
 				}
 			}()
 			if err != nil {

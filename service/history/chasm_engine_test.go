@@ -115,7 +115,7 @@ func (s *chasmEngineSuite) SetupTest() {
 		s.entityCache,
 		s.registry,
 		s.config,
-		NewChasmNotifier(metrics.NoopMetricsHandler),
+		NewChasmNotifier(),
 	)
 	s.engine.SetShardController(s.mockShardController)
 }
