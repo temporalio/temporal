@@ -5193,6 +5193,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
 	identity string,
+	priority *commonpb.Priority,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
@@ -5204,6 +5205,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		attachCompletionCallbacks,
 		links,
 		identity,
+		priority,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	prevEffectiveDeployment := ms.GetEffectiveDeployment()
@@ -5254,6 +5256,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		attributes.GetAttachedCompletionCallbacks(),
 	); err != nil {
 		return err
+	}
+
+	// Update priority.
+	if attributes.GetPriority() != nil {
+		if !proto.Equal(ms.executionInfo.Priority, attributes.GetPriority()) {
+			requestReschedulePendingWorkflowTask = true
+		}
+		ms.executionInfo.Priority = attributes.GetPriority()
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
