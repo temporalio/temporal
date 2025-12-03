@@ -259,11 +259,16 @@ func (e *ChasmEngine) ReadComponent(
 // PollComponent waits until the supplied predicate is satisfied when evaluated against the
 // component identified by the supplied component reference. If there is no error, it returns (ref,
 // nil) where ref is a component reference identifying the state at which the predicate was
-// satisfied. The predicate must be monotonic: if it returns true at execution state transition s it
-// must return true at all transitions t > s. It is an error if execution transition history is
-// (after reloading from persistence) behind the requested ref, or if the ref is inconsistent with
-// execution transition history. Thus when the predicate function is evaluated, it is guaranteed
-// that the execution VT >= requestRef VT. opts are currently ignored.
+// satisfied. It's possible that multiple state transitions (multiple notifications) occur between
+// predicate checks, therefore the predicate must be monotonic: if it returns true at execution
+// state transition s it must return true at all transitions t > s. It is an error if execution
+// transition history is (after reloading from persistence) behind the requested ref, or if the ref
+// is inconsistent with execution transition history. Thus when the predicate function is evaluated,
+// it is guaranteed that the execution VT >= requestRef VT. opts are currently ignored.
+// PollComponent subscribes to execution-level notifications. Suppose that an execution consists of
+// one component A, and A has subcomponent B. Subscribers interested only in component B may be
+// woken up unnecessarily (and thus evaluate the predicate unnecessarily) due to changes in parts of
+// A that do not also belong to B.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
@@ -276,60 +281,33 @@ func (e *ChasmEngine) PollComponent(
 		}
 	}()
 
-	_, executionLease, err := e.getExecutionLease(ctx, requestRef)
-	if err != nil {
-		// E.g. requestRef VT inconsistent with execution VT ('stale reference')
-		return nil, err
-	}
-	defer executionLease.GetReleaseFn()(nil)
-
-	// At this point it's possible that execution VT < requestRef VT (getExecutionLease does not
-	// guarantee that returned execution state is non-stale w.r.t. requestRef).
-	satisfiedRef, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
-	if err != nil {
-		return nil, err
-	}
-	// execution VT >= requestRef VT (enforced by predicateSatisfied)
-
-	if satisfiedRef != nil {
-		// wait condition was satisfied
-		return satisfiedRef, nil
-	}
-
-	// Wait condition not satisfied; long-poll
-
-	// PollComponent subscribes to execution-level notifications. Suppose that an execution consists
-	// of one component A, and A has subcomponent B. Subscribers interested only in component B may
-	// be woken up unnecessarily (and thus evaluate the predicate unnecessarily) due to changes in
-	// parts of A that do not also belong to B.
-	ch, unsubscribe := e.notifier.Subscribe(requestRef.EntityKey)
+	closedCh := make(chan struct{})
+	close(closedCh)
+	var ch <-chan struct{} = closedCh
+	unsubscribe := func() {}
 	defer func() { unsubscribe() }()
-	executionLease.GetReleaseFn()(nil)
 
 	for {
 		select {
-		// It is possible that multiple state transitions (multiple notifications) occur between
-		// predicate checks, therefore the predicate must be monotonic: if it returns true at
-		// execution state transition s then it must return true at all transitions t > s.
 		case <-ch:
 			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 			if err != nil {
 				return nil, err
 			}
-			// Check the predicate, resubscribe if it's still not satisfied, and release the lock.
-			func() {
-				defer executionLease.GetReleaseFn()(nil)
-				satisfiedRef, err = e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
-				if err == nil && satisfiedRef == nil {
-					ch, unsubscribe = e.notifier.Subscribe(requestRef.EntityKey)
-				}
-			}()
+			satisfiedRef, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
 			if err != nil {
+				executionLease.GetReleaseFn()(nil)
 				return nil, err
 			}
 			if satisfiedRef != nil {
+				executionLease.GetReleaseFn()(nil)
 				return satisfiedRef, nil
 			}
+			// Predicate not satisfied; subscribe before releasing the lock.
+			func() {
+				defer executionLease.GetReleaseFn()(nil)
+				ch, unsubscribe = e.notifier.Subscribe(requestRef.EntityKey)
+			}()
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -356,7 +334,8 @@ func (e *ChasmEngine) predicateSatisfied(
 	// It is not acceptable to declare the predicate to be satisfied against execution state that is
 	// behind the requested reference. However, getExecutionLease does not currently guarantee that
 	// execution VT >= ref VT, therefore we call IsStale() again here and return any error (which at
-	// this point must be ErrStaleState; ErrStaleReference has already been eliminated).
+	// this point must be ErrStaleState; ErrStaleReference would have been returned as an error from
+	// getExecutionLease).
 	err := chasmTree.IsStale(ref)
 	if err != nil {
 		// ErrStaleState
