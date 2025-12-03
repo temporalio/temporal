@@ -100,7 +100,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	config := tests.NewDynamicConfig()
-	config.EnableChasm = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
