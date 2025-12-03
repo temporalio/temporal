@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -375,14 +374,14 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_WaitCompletion()
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_DeadlineExceeded() {
 	t := s.T()
-	originalCtx := testcore.NewContext()
+	ctx := testcore.NewContext()
 
 	// Start an activity and get initial long-poll state token
 	activityID := "test-activity-" + t.Name()
 	taskQueue := "test-task-queue-" + t.Name()
-	startResp, err := s.startActivity(originalCtx, activityID, taskQueue)
+	startResp, err := s.startActivity(ctx, activityID, taskQueue)
 	require.NoError(t, err)
-	pollResp, err := s.FrontendClient().PollActivityExecution(originalCtx, &workflowservice.PollActivityExecutionRequest{
+	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
 		RunId:      startResp.RunId,
@@ -393,49 +392,22 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_DeadlineExceeded
 	require.NoError(t, err)
 
 	// The PollActivityExecution calls below use a long-poll token and will necessarily time out,
-	// because the activity undergoes no further state transitions. There are two ways in which they
-	// can time out:
-	// Case 1: due to the caller's deadline expiring (caller gets DeadlineExceeded error)
-	// Case 2: due to the internal long-poll timeout (caller does not get an error).
+	// because the activity undergoes no further state transitions.
 
-	t.Run("CallerDeadlineExceeded", func(t *testing.T) {
-		// We first verify case 1. To do so the caller must set a deadline that comes before the
-		// internal deadline, so we override the internal long-poll timeout to something large, and poll
-		// with a short caller deadline.
-		cleanup := s.OverrideDynamicConfig(
-			activity.LongPollTimeout,
-			9999*time.Millisecond,
-		)
-		defer cleanup()
-		ctx, cancel := context.WithTimeout(originalCtx, 10*time.Millisecond)
-		defer cancel()
-		_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-					LongPollToken: pollResp.StateChangeLongPollToken,
-				},
-			},
-		})
-		require.Error(t, err)
-		statusErr := serviceerror.ToStatus(err)
-		require.NotNil(t, statusErr)
-		require.Equal(t, codes.DeadlineExceeded, statusErr.Code(),
-			"expected DeadlineExceeded, got %s", statusErr.Code())
-	})
+	// The timeout imposed by the server is essentially
+	// Min(CallerTimeout - LongPollBuffer, LongPollTimeout)
 
-	t.Run("ServerLongPollDeadlineExceeded", func(t *testing.T) {
-		// Next we verify case 2. We set the internal long-poll timeout to something small and poll with
-		// a large caller deadline.
-		cleanup := s.OverrideDynamicConfig(
-			activity.LongPollTimeout,
-			10*time.Millisecond,
-		)
-		defer cleanup()
-		ctx, cancel := context.WithTimeout(originalCtx, 9999*time.Millisecond)
+	// Case 1: Caller sets a deadline which has room for the buffer. History returns empty success
+	// result with at least buffer remaining before the caller deadline.
+	t.Run("CallerDeadlineNotExceeded", func(t *testing.T) {
+		// CallerTimeout - LongPollBuffer is far in the future
+		s.OverrideDynamicConfig(activity.LongPollBuffer, 1*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 9999*time.Millisecond)
 		defer cancel()
+
+		// PollActivityExecution will return when this long poll timeout expires.
+		s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+
 		pollResp, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 			Namespace:   s.Namespace().String(),
 			ActivityId:  activityID,
@@ -452,6 +424,36 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_DeadlineExceeded
 		require.NoError(t, err)
 		require.Empty(t, pollResp.GetInfo())
 	})
+
+	// Case 2: caller does not set a deadline. In practice this is equivalent to them setting a 30s
+	// deadline since that is what Histry receives. In this case History times out the wait at
+	// LongPollTimeout and the caller gets an empty response.
+	t.Run("NoCallerDeadline", func(t *testing.T) {
+		// The caller sets no deadline. However, the ctx received by the history service handler
+		// will have a 30s deadline that was applied by one of the upstream server layers, so we
+		// still must use a buffer < 30s.
+		ctx := context.Background()
+		s.OverrideDynamicConfig(activity.LongPollBuffer, 29*time.Second)
+		// PollActivityExecution will return when this long poll timeout expires.
+		s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+
+		_, err = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+					LongPollToken: pollResp.StateChangeLongPollToken,
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Empty(t, pollResp.GetInfo())
+	})
+
+	// Case 3: caller sets a deadline that is < the buffer. In this case PollActivityExecution will
+	// return an empty result immediately, and there is a race between caller receiving that and
+	// caller's client timing out the request. Therefore we do not test this.
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
