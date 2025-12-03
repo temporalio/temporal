@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -161,6 +162,7 @@ func VisibilityManagerProvider(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -170,6 +172,7 @@ func VisibilityManagerProvider(
 		saProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,

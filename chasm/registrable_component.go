@@ -115,6 +115,11 @@ func (rc *RegistrableComponent) registerToLibrary(
 	return fqn, rc.componentID, nil
 }
 
+// SearchAttributesMapper returns the search attributes mapper for this component.
+func (rc *RegistrableComponent) SearchAttributesMapper() *VisibilitySearchAttributesMapper {
+	return rc.searchAttributesMapper
+}
+
 // fqType returns the fully qualified name of the component, which is a combination of
 // the library name and the component type. This is used to uniquely identify
 // the component in the registry.

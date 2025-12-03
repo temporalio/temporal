@@ -120,6 +120,7 @@ func (s *chasmEngineSuite) SetupTest() {
 		s.executionCache,
 		s.registry,
 		s.config,
+		s.mockShard.Resource.VisibilityManager,
 	)
 	s.engine.SetShardController(s.mockShardController)
 }
@@ -724,9 +725,9 @@ func (l *testComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttribut
 	}
 }
 
-func (l *testComponent) Memo(_ chasm.Context) map[string]chasm.VisibilityValue {
-	return map[string]chasm.VisibilityValue{
-		testComponentPausedMemoName: chasm.VisibilityValueBool(l.ActivityInfo.Paused),
+func (l *testComponent) Memo(_ chasm.Context) proto.Message {
+	return &persistencespb.WorkflowExecutionState{
+		RunId: l.ActivityInfo.ActivityId,
 	}
 }
 
