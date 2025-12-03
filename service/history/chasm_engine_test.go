@@ -68,7 +68,7 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockEngine = historyi.NewMockEngine(s.controller)
 
 	s.config = tests.NewDynamicConfig()
-	s.config.EnableChasm = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
