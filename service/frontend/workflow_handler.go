@@ -147,7 +147,7 @@ type (
 		scheduleSpecBuilder             *scheduler.SpecBuilder
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
-		cache                           cache.Cache
+		versionExistenceCache           cache.Cache
 	}
 )
 
@@ -236,7 +236,7 @@ func NewWorkflowHandler(
 	}
 
 	// Initializing the cache
-	handler.cache = cache.New(10000, &cache.Options{
+	handler.versionExistenceCache = cache.New(10000, &cache.Options{
 		TTL: config.FrontendWorkerVersionExistsCacheTTL(),
 	})
 
@@ -6159,7 +6159,7 @@ func (wh *WorkflowHandler) verifyPinnedVersionExists(ctx context.Context, namesp
 	deploymentVersionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(version)
 	cacheKey := fmt.Sprintf("%s-%s", namespaceEntry.ID().String(), deploymentVersionStr)
 
-	exists := wh.GetCache(cacheKey)
+	exists := wh.versionExistenceCache.Get(cacheKey)
 	if exists != nil {
 		return nil
 	}
@@ -6171,11 +6171,15 @@ func (wh *WorkflowHandler) verifyPinnedVersionExists(ctx context.Context, namesp
 
 	if err == nil {
 		// Add the key to the cache
-		wh.PutCache(cacheKey, true)
+		wh.versionExistenceCache.Put(cacheKey, true)
 		return nil
 	}
 
 	// Either the version does not exist or there was some other error
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
+		return serviceerror.NewNotFound("Worker Deployment Version not found. Worker Deployment Version must exist before it can be set as a pinned override.")
+	}
 	return err
 }
 
@@ -6688,12 +6692,4 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 	}
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
-}
-
-func (wh *WorkflowHandler) PutCache(key any, value any) {
-	wh.cache.Put(key, value)
-}
-
-func (wh *WorkflowHandler) GetCache(key any) any {
-	return wh.cache.Get(key)
 }

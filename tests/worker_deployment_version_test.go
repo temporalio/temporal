@@ -84,6 +84,8 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 
 		dynamicconfig.VersionDrainageStatusRefreshInterval.Key():       testVersionDrainageRefreshInterval,
 		dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Key(): testVersionDrainageVisibilityGracePeriod,
+
+		dynamicconfig.FrontendWorkerVersionExistsCacheTTL.Key(): 10 * time.Second,
 	}))
 }
 
@@ -1306,6 +1308,29 @@ func (s *DeploymentVersionSuite) setAndCheckOverride(ctx context.Context, tv *te
 	s.checkWorkflowUpdateOptionsEventIdentity(ctx, tv.WorkflowExecution(), tv.ClientIdentity())
 }
 
+// The following tests test the VersioningOverride functionality when passed via the UpdateWorkflowExecutionOptions API.
+func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_VersionDoesNotExist() {
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// start an unversioned workflow
+	s.startWorkflow(tv, nil)
+
+	opts := &workflowpb.WorkflowExecutionOptions{VersioningOverride: s.makePinnedOverride(tv)}
+
+	// Setting a pinned override should fail since the version does not exist
+	resp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace().String(),
+		WorkflowExecution:        tv.WorkflowExecution(),
+		WorkflowExecutionOptions: opts,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+		Identity:                 tv.ClientIdentity(),
+	})
+	s.Error(err)
+	s.Nil(resp)
+}
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -1326,6 +1351,9 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThe
 	defer cancel()
 	tv := testvars.New(s)
 
+	// Start a versioned poller which shall create a version
+	s.startVersionWorkflow(ctx, tv)
+
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
 
@@ -1340,6 +1368,9 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_EmptyFields(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	tv := testvars.New(s)
+
+	// Start a versioned poller which shall create a version
+	s.startVersionWorkflow(ctx, tv)
 
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
@@ -1364,6 +1395,10 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSet
 	tv := testvars.New(s)
 	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv.WithBuildIDNumber(2)
+
+	// Start two versioned pollers which shall create two versions
+	s.startVersionWorkflow(ctx, tv1)
+	s.startVersionWorkflow(ctx, tv2)
 
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
@@ -1395,6 +1430,9 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedS
 	defer cancel()
 	tv := testvars.New(s)
 
+	// Start a versioned poller which shall create a version
+	s.startVersionWorkflow(ctx, tv)
+
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
 
@@ -1410,6 +1448,9 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSet
 	defer cancel()
 	tv := testvars.New(s)
 
+	// Start a versioned poller which shall create a version
+	s.startVersionWorkflow(ctx, tv)
+
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
 
@@ -1420,7 +1461,16 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSet
 	s.setAndCheckOverride(ctx, tv, s.makeAutoUpgradeOverride())
 }
 
+// The following tests test the VersioningOverride functionality when passed via the BatchUpdateWorkflowExecutionOptions API.
+func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinned_VersionDoesNotExist() {
+	s.runBatchUpdateWorkflowExecutionOptionsTest(false)
+}
+
 func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
+	s.runBatchUpdateWorkflowExecutionOptionsTest(true)
+}
+
+func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(createVersionFirst bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -1437,11 +1487,15 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 		})
 	}
 
-	// start batch update-options operation
 	pinnedOverride := s.makePinnedOverride(tv)
 	batchJobID := uuid.NewString()
 
-	// unpause the activities in both workflows with batch unpause
+	if createVersionFirst {
+		// Start a versioned poller which shall create a version
+		s.startVersionWorkflow(ctx, tv)
+	}
+
+	// start batch update-options operation
 	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
@@ -1455,6 +1509,12 @@ func (s *DeploymentVersionSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinn
 		JobId:      batchJobID,
 		Reason:     "test",
 	})
+
+	if !createVersionFirst {
+		// version doesn't exist, expect error
+		s.Error(err)
+		return
+	}
 	s.NoError(err)
 
 	// wait til batch completes
@@ -1554,10 +1614,34 @@ func (s *DeploymentVersionSuite) makeAutoUpgradeOverride() *workflowpb.Versionin
 	return &workflowpb.VersioningOverride{Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE} //nolint:staticcheck // SA1019: worker versioning v0.31
 }
 
+// The following tests test the VersioningOverride functionality when passed via the StartWorkflowExecution API.
+func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_VersionDoesNotExist() {
+	tv := testvars.New(s)
+
+	override := s.makePinnedOverride(tv)
+
+	// Start a workflow execution
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          tv.Any().String(),
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         tv.WorkflowID(),
+		WorkflowType:       tv.WorkflowType(),
+		TaskQueue:          tv.TaskQueue(),
+		Identity:           tv.WorkerIdentity(),
+		VersioningOverride: override,
+	}
+
+	_, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.Error(err0)
+}
+
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	tv := testvars.New(s)
+
+	// Start a versioned poller which shall create a version. A version must exist before a pinned override on it can be set.
+	s.startVersionWorkflow(ctx, tv)
 
 	override := s.makePinnedOverride(tv)
 	wf := &commonpb.WorkflowExecution{
@@ -1580,11 +1664,35 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithUnpinnedOverride
 	s.checkDescribeWorkflowAfterOverride(ctx, wf, override)
 }
 
+func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride_VersionDoesNotExist() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Start a versioned poller which shall create a version. A version must exist before a pinned override on it can be set.
+	override := s.makePinnedOverride(tv)
+
+	_, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         tv.WorkflowID(),
+		WorkflowType:       tv.WorkflowType(),
+		TaskQueue:          tv.TaskQueue(),
+		Identity:           tv.ClientIdentity(),
+		RequestId:          tv.RequestID(),
+		SignalName:         "test-signal",
+		SignalInput:        nil,
+		VersioningOverride: override,
+	})
+	s.Error(err)
+}
+
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	tv := testvars.New(s)
 
+	// Start a versioned poller which shall create a version. A version must exist before a pinned override on it can be set.
+	s.startVersionWorkflow(ctx, tv)
 	override := s.makePinnedOverride(tv)
 
 	resp, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1634,4 +1742,41 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithUnpinn
 		RunId:      resp.GetRunId(),
 	}
 	s.checkDescribeWorkflowAfterOverride(ctx, wf, override)
+}
+
+// The following tests test the cache during pinned version existence checks.
+func (s *DeploymentVersionSuite) TestCache_PinnedVersionExistsInCacheAfterDeletion() {
+	// Overriding the dynamic config cache value
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+
+	tv := testvars.New(s)
+	tv2 := tv.WithWorkflowIDNumber(2)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	// Starting a versioned poller which shall create a version
+	s.startVersionWorkflow(ctx, tv)
+
+	// Creating a pinned override
+	override := s.makePinnedOverride(tv)
+
+	// Starting a workflow execution using the pinned override. This should succeed since the pinned version exists.
+	wf := &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      s.startWorkflow(tv, override),
+	}
+	s.checkDescribeWorkflowAfterOverride(ctx, wf, override)
+
+	// Deleting the version from the deployment
+	s.waitForNoPollers(ctx, tv)
+	s.tryDeleteVersion(ctx, tv, "", true)
+
+	// Start another workflow execution using the same pinned override. This should succeed since the version exists in the cache and
+	// the cache TTL (overriden to 10 seconds) is not expired.
+	wf2 := &commonpb.WorkflowExecution{
+		WorkflowId: tv2.WorkflowID(),
+		RunId:      s.startWorkflow(tv2, override),
+	}
+	s.checkDescribeWorkflowAfterOverride(ctx, wf2, override)
 }
