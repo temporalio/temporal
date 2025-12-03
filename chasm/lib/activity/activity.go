@@ -1,7 +1,6 @@
 package activity
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -317,10 +316,6 @@ func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.P
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.ActivityExecutionInfo, error) {
-	if a.ActivityState == nil {
-		return nil, errors.New("activity state is nil")
-	}
-
 	// TODO(dan): support pause states
 	var status enumspb.ActivityExecutionStatus
 	var runState enumspb.PendingActivityState
