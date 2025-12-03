@@ -4,6 +4,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication/eventhandler"
@@ -147,6 +149,9 @@ func (e *taskExecutorImpl) handleActivityTask(
 	// This might be extra cost if the workflow belongs to local shard.
 	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 	_, err = e.shardContext.GetHistoryClient().SyncActivity(ctx, request)
+	if errors.Is(err, consts.ErrDuplicate) {
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil:
 		return nil
@@ -239,6 +244,9 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	// This might be extra cost if the workflow belongs to local shard.
 	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 	_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, request)
+	if errors.Is(err, consts.ErrDuplicate) {
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil:
 		return nil
@@ -286,7 +294,6 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 		_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, request)
 		return err
-
 	default:
 		return err
 	}
@@ -319,6 +326,9 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		RemoteCluster: e.remoteCluster,
 	}
 	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
+	if errors.Is(err, consts.ErrDuplicate) {
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil:
 		return nil
