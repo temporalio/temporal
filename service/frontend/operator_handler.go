@@ -725,6 +725,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 			InitialFailoverVersion: clusterResp.GetInitialFailoverVersion(),
 			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
 			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),
+			IsReplicationEnabled:   clusterResp.GetIsReplicationEnabled(),
 		})
 	}
 	return &operatorservice.ListClustersResponse{
