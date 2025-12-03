@@ -3496,6 +3496,11 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		}
 	}
 
+	if versionStr == worker_versioning.UnversionedVersionId && request.GetPercentage() == 0 && request.GetBuildId() == "" {
+		// GoSDK SDK seems to be sending __unversioned__ as the version string in case of unset ramp. empty that so the workflow is not confused.
+		versionStr = ""
+	}
+
 	if request.GetPercentage() < 0 || request.GetPercentage() > 100 {
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
