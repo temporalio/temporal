@@ -21,7 +21,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -157,7 +156,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive
 		if errors.As(err, &notActiveErr) {
-			return h.forwardCompleteOperation(ctx, r, rCtx, completion)
+			return h.forwardCompleteOperation(ctx, r, rCtx)
 		}
 		return err
 	}
@@ -243,16 +242,16 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	return nil
 }
 
-func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext, completion *tokenspb.NexusOperationCompletion) error {
-	client, err := h.ForwardingClients.Get(rCtx.namespace.ActiveClusterName(completion.GetWorkflowId()))
+func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
+	client, err := h.ForwardingClients.Get(rCtx.namespace.ActiveClusterName(rCtx.workflowID))
 	if err != nil {
-		h.Logger.Error("unable to get HTTP client for forward request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(rCtx.namespace.ActiveClusterName(completion.GetWorkflowId())))
+		h.Logger.Error("unable to get HTTP client for forward request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(rCtx.namespace.ActiveClusterName(rCtx.workflowID)))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
 	forwardURL, err := url.JoinPath(client.BaseURL(), commonnexus.RouteCompletionCallback.Path(rCtx.namespace.Name().String()))
 	if err != nil {
-		h.Logger.Error("failed to construct forwarding request URL", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.TargetCluster(rCtx.namespace.ActiveClusterName(completion.GetWorkflowId())))
+		h.Logger.Error("failed to construct forwarding request URL", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.TargetCluster(rCtx.namespace.ActiveClusterName(rCtx.workflowID)))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
@@ -262,7 +261,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 			tag.WorkflowNamespace(rCtx.namespace.Name().String()),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
-			tag.TargetCluster(rCtx.namespace.ActiveClusterName(completion.GetWorkflowId())),
+			tag.TargetCluster(rCtx.namespace.ActiveClusterName(rCtx.workflowID)),
 		)
 		if trace := h.HTTPTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
