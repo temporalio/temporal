@@ -4754,15 +4754,15 @@ func (x *DescribeWorkerResponse) GetWorkerInfo() *v114.WorkerInfo {
 
 // (-- api-linter: core::0134::request-resource-required=disabled
 //
-//	aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+//	aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
 //
 // (-- api-linter: core::0134::request-mask-required=disabled
 //
-//	aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+//	aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
 //
 // (-- api-linter: core::0134::method-signature=disabled
 //
-//	aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
+//	aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
 type UpdateFairnessStateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
