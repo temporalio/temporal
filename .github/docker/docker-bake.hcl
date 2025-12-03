@@ -1,17 +1,9 @@
 variable "SERVER_VERSION" {
   default = "1.29.1"
 }
-variable "ALPINE_IMAGE" {
-  default = "alpine:3.22@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412"
-}
-
 
 variable "CLI_VERSION" {
   default = "1.5.0"
-}
-
-variable "TCTL_VERSION" {
-  default = "1.18.4"
 }
 
 variable "IMAGE_REPO" {
@@ -46,9 +38,6 @@ target "admin-tools" {
     TAG_LATEST ? "${IMAGE_REPO}/admin-tools:latest" : "",
   ])
   platforms = ["linux/amd64", "linux/arm64"]
-  args = {
-    ALPINE_IMAGE = "${ALPINE_IMAGE}"
-  }
   labels = {
     "org.opencontainers.image.title" = "admin-tools"
     "org.opencontainers.image.description" = "Temporal admin tools"
@@ -71,9 +60,6 @@ target "server" {
     TAG_LATEST ? "${IMAGE_REPO}/server:latest" : "",
   ])
   platforms = ["linux/amd64", "linux/arm64"]
-  args = {
-    ALPINE_IMAGE = "${ALPINE_IMAGE}"
-  }
   labels = {
     "org.opencontainers.image.title" = "server"
     "org.opencontainers.image.description" = "Temporal Server"
