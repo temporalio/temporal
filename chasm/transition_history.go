@@ -13,19 +13,13 @@ func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) (bool, err
 	if err != nil {
 		return false, ErrMalformedComponentRef
 	}
-	currentRefBytes, err := ctx.Ref(c)
+	currentRef, err := ctx.structuredRef(c)
 	if err != nil {
 		return false, err
 	}
-	currentRef, err := DeserializeComponentRef(currentRefBytes)
-	if err != nil {
-		return false, err
-	}
-
 	if ref.EntityKey != currentRef.EntityKey {
 		return false, ErrInvalidComponentRef
 	}
-
 	switch transitionhistory.Compare(ref.entityLastUpdateVT, currentRef.entityLastUpdateVT) {
 	case -1:
 		// Execution state has advanced beyond submitted ref

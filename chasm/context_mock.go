@@ -8,9 +8,10 @@ import (
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
-	HandleExecutionKey func() EntityKey
-	HandleNow          func(component Component) time.Time
-	HandleRef          func(component Component) ([]byte, error)
+	HandleExecutionKey  func() EntityKey
+	HandleNow           func(component Component) time.Time
+	HandleRef           func(component Component) ([]byte, error)
+	HandleStructuredRef func(component Component) (ComponentRef, error)
 }
 
 func (c *MockContext) getContext() context.Context {
@@ -29,6 +30,13 @@ func (c *MockContext) Ref(cmp Component) ([]byte, error) {
 		return c.HandleRef(cmp)
 	}
 	return nil, nil
+}
+
+func (c *MockContext) structuredRef(cmp Component) (ComponentRef, error) {
+	if c.HandleStructuredRef != nil {
+		return c.HandleStructuredRef(cmp)
+	}
+	return ComponentRef{}, nil
 }
 
 func (c *MockContext) ExecutionKey() EntityKey {
