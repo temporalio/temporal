@@ -96,12 +96,6 @@ func (h *handler) PollActivityExecution(
 	)
 	defer cancel()
 
-	if ctx.Err() != nil {
-		// The caller's deadline didn't allow time for our buffer. The caller should receive a
-		// DeadlineExceeded in this case, as opposed to the empty success response we return below.
-		return nil, ctx.Err()
-	}
-
 	switch waitPolicy.(type) {
 	case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
 		token := req.GetFrontendRequest().
