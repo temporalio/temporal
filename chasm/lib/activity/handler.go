@@ -62,7 +62,12 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 // PollActivityExecution handles PollActivityExecutionRequest from frontend. This method supports
 // querying current activity state, optionally as a long-poll that waits for certain state changes.
-// It is used by clients to poll for activity state and/or result.
+// It is used by clients to poll for activity state and/or result. When used to long-poll, it
+// returns an empty non-error response on context deadline expiry, to indicate that the state being
+// waited for was not reached. Callers should interpret this as an invitation to resubmit their
+// long-poll request. This response is sent before the caller's deadline (see
+// chasm.activity.longPollBuffer) so that it is likely that the caller does indeed receive the
+// non-error response.
 func (h *handler) PollActivityExecution(
 	ctx context.Context,
 	req *activitypb.PollActivityExecutionRequest,
@@ -88,6 +93,10 @@ func (h *handler) PollActivityExecution(
 		return chasm.ReadComponent(ctx, ref, (*Activity).buildPollActivityExecutionResponse, req, nil)
 	}
 
+	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
+	// deadline that causes us to send that response before the caller's own deadline (see
+	// chasm.activity.longPollBuffer). We also cap the caller's deadline at
+	// chasm.activity.longPollTimeout.
 	namespace := req.GetFrontendRequest().GetNamespace()
 	ctx, cancel := contextutil.WithDeadlineBuffer(
 		ctx,
@@ -150,8 +159,8 @@ func (h *handler) PollActivityExecution(
 	}
 
 	if ctx.Err() != nil {
-		// Server-imposed long-poll timeout. Caller still has time (buffer) remaining.
-		// Return empty response to signal "nothing changed, please retry".
+		// We send an empty non-error response on deadline expiry as an invitation to the caller to
+		// resubmit their long-poll.
 
 		// TODO(dan): the definition of "empty" is unclear, since callers can currently choose to
 		// exclude info, outcome, and input from the result. Currently, a caller can infer that the
@@ -159,8 +168,6 @@ func (h *handler) PollActivityExecution(
 		// token. However, this is not a clear API. We are considering splitting the public API into
 		// two methods: one that returns info (optionally with input), and one that returns result,
 		// both with long-poll options. An empty response will then be more obvious to the caller.
-		// However, we may want to consider a more explicit way of saying to the caller "timed out
-		// due to internal long-poll timeout; please resubmit your long-poll request".
 		return &activitypb.PollActivityExecutionResponse{
 			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
 		}, nil
