@@ -89,7 +89,7 @@ func buildCLI() *cli.App {
 					if err != nil {
 						return err
 					}
-					result := dynamicconfig.ValidateFile(contents)
+					result := dynamicconfig.LoadYamlFile(contents)
 					total += len(result.Errors)
 					fmt.Println(fileName)
 					t := template.Must(template.New("").Parse(
