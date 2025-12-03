@@ -192,7 +192,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 
 	ctorName := fmt.Sprintf("New%s", structName)
 	w.println("// %s initializes a new %s.", ctorName, structName)
-	w.println("func New%s(", ctorName)
+	w.println("func %s(", ctorName)
 	w.indent()
 	w.println("dc *dynamicconfig.Collection,")
 	w.println("rpcFactory     common.RPCFactory,")
@@ -201,7 +201,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("logger         log.Logger,")
 	w.println("metricsHandler metrics.Handler,")
 	w.unindent()
-	w.println(") (*%s, error) {", structName)
+	w.println(") (%sClient, error) {", svc.GoName)
 	w.indent() // start ctor body
 	w.println("resolver, err := monitor.GetResolver(primitives.HistoryService)")
 	w.println("if err != nil {")

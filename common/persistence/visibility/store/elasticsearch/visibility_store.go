@@ -705,9 +705,7 @@ func (s *VisibilityStore) GetListFieldSorter(fieldSorts []elastic.Sorter) ([]ela
 		return defaultSorter, nil
 	}
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
-	for i, fs := range fieldSorts {
-		res[i] = fs
-	}
+	copy(res, fieldSorts)
 	// RunID is explicit tiebreaker.
 	res[len(res)-1] = elastic.NewFieldSort(sadefs.RunID).Desc()
 
@@ -1052,9 +1050,7 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 				return fmt.Errorf("unable to parse 'doc_count' field: %w", err)
 			}
 			groupValues := make([]*commonpb.Payload, len(groupByFields))
-			for i := range bucketValues {
-				groupValues[i] = bucketValues[i]
-			}
+			copy(groupValues, bucketValues)
 			response.Groups = append(
 				response.Groups,
 				&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{

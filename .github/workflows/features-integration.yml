@@ -14,6 +14,9 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
 
 jobs:
   build-docker-image:
+    permissions:
+      actions: write
+      contents: read
     uses: temporalio/docker-builds/.github/workflows/docker-build-only.yml@main
     with:
       temporal-server-repo-path: ${{github.event.pull_request.head.repo.full_name}}

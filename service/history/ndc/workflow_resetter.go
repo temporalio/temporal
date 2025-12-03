@@ -954,6 +954,7 @@ func reapplyEvents(
 				callbacks,
 				event.Links,
 				attr.GetIdentity(),
+				attr.GetPriority(),
 			); err != nil {
 				return reappliedEvents, err
 			}

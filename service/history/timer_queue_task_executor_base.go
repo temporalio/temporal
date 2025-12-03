@@ -172,7 +172,6 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	taskShouldTriggerAt := expirationTime.AsTime()
 	expired := queues.IsTimeExpired(task, now, taskShouldTriggerAt)
 	return expired
-
 }
 
 func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(

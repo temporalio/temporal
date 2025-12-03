@@ -96,6 +96,16 @@ func Invoke(
 			}, nil
 		}
 	}
+	// If workflow is paused, return query rejected with PAUSED status.
+	if mutableStateStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		return &historyservice.QueryWorkflowResponse{
+			Response: &workflowservice.QueryWorkflowResponse{
+				QueryRejected: &querypb.QueryRejected{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+				},
+			},
+		}, nil
+	}
 
 	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() && !mutableState.HasCompletedAnyWorkflowTask() {

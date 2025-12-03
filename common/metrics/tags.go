@@ -471,3 +471,7 @@ var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
 func PersistenceDBKindTag(kind string) Tag {
 	return Tag{Key: PersistenceDBKindTagName, Value: kind}
 }
+
+func HeaderCallsiteTag(kind string) Tag {
+	return Tag{Key: headerCallsiteTagName, Value: kind}
+}

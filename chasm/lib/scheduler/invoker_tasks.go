@@ -543,6 +543,10 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	var lcr []*commonpb.Payload
+	if lastCompletionState.Success != nil {
+		lcr = append(lcr, lastCompletionState.Success)
+	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		CompletionCallbacks:      []*commonpb.Callback{callback},
 		Header:                   requestSpec.Header,
@@ -562,16 +566,10 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
 		Priority:                 requestSpec.Priority,
-	}
-
-	// Set last completion result payload.
-	switch outcome := lastCompletionState.Outcome.(type) {
-	case *schedulerpb.LastCompletionResult_Failure:
-		request.ContinuedFailure = outcome.Failure
-	case *schedulerpb.LastCompletionResult_Success:
-		request.LastCompletionResult = &commonpb.Payloads{
-			Payloads: []*commonpb.Payload{outcome.Success},
-		}
+		ContinuedFailure:         lastCompletionState.Failure,
+		LastCompletionResult: &commonpb.Payloads{
+			Payloads: lcr,
+		},
 	}
 
 	result, err := e.frontendClient.StartWorkflowExecution(ctx, request)

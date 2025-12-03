@@ -1021,6 +1021,17 @@ func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 	s.Logger.Info("PollWorkflowTaskQueue", tag.Error(err))
 	s.NoError(err)
 
+	// send a signal to test buffered event case.
+	_, err = s.FrontendClient().SignalWorkflowExecution(testContext, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tv.WorkflowID(),
+			RunId:      we.RunId,
+		},
+		SignalName: "buffered-signal",
+	})
+	s.NoError(err)
+
 	// respond workflow task as failed with grpc message too large error
 	_, err = s.FrontendClient().RespondWorkflowTaskFailed(testContext, &workflowservice.RespondWorkflowTaskFailedRequest{
 		Namespace: s.Namespace().String(),
@@ -1034,12 +1045,14 @@ func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 		RunId:      we.RunId,
 	})
 
+	// verify that workflow is terminated and buffered signal is flushed
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionTerminated`, // verify that workflow is terminated
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionTerminated`,
 		historyEvents)
 }
 

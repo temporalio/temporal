@@ -285,8 +285,8 @@ message AddOrUpdateRemoteClusterRequest {
   string frontend_address = 1;
   bool enable_remote_cluster_connection = 2;
   string frontend_http_address = 3 [deprecated = true];
-  // is_replication_enabled controls whether replication streams are active.
-  bool is_replication_enabled = 4;
+  // enable_replication controls whether replication streams are active.
+  bool enable_replication = 4;
 }
 
 message AddOrUpdateRemoteClusterResponse {

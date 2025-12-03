@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -125,6 +127,86 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 
 	// TODO: currently pause workflow execution does not intercept workflow creation. Fix the reset of this test when that is implemented.
 	// For now sending this signal will complete the workflow and finish the test.
+	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.GetStatus())
+	}, 5*time.Second, 200*time.Millisecond)
+}
+
+func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.Worker().RegisterWorkflow(s.workflowFn)
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
+	}
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// Pause the workflow.
+	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	pauseResp, err := s.FrontendClient().PauseWorkflowExecution(ctx, pauseRequest)
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	// Wait until paused.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
+		require.NoError(t, err)
+		info := desc.GetWorkflowExecutionInfo()
+		require.NotNil(t, info)
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
+		if pauseInfo := desc.GetWorkflowExtendedInfo().GetPauseInfo(); pauseInfo != nil {
+			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
+			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
+		}
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Issue a query to the paused workflow. It should return QueryRejected with WORKFLOW_EXECUTION_STATUS_PAUSED status.
+	queryReq := &workflowservice.QueryWorkflowRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		Query: &querypb.WorkflowQuery{
+			QueryType: "__stack_trace",
+		},
+	}
+	queryResp, err := s.FrontendClient().QueryWorkflow(ctx, queryReq)
+	s.NoError(err)
+	s.NotNil(queryResp)
+	s.NotNil(queryResp.GetQueryRejected())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, queryResp.GetQueryRejected().GetStatus())
+
+	// Complete the workflow to finish the test.
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
 	s.NoError(err)
 

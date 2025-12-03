@@ -3,13 +3,13 @@ package updateworkflowoptions
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -30,11 +30,6 @@ func Invoke(
 	req := request.GetUpdateRequest()
 	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
 
-	opts := req.GetWorkflowExecutionOptions()
-	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
-
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
@@ -51,7 +46,7 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			mergedOpts, hasChanges, err := MergeAndApply(mutableState, opts, req.GetUpdateMask(), req.GetIdentity())
+			mergedOpts, hasChanges, err := MergeAndApply(mutableState, req.GetWorkflowExecutionOptions(), req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -110,7 +105,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity)
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority())
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -125,6 +120,11 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 			return nil
 		}
 		opts.VersioningOverride = override
+	}
+	if priority := ms.GetExecutionInfo().GetPriority(); priority != nil {
+		if cloned, ok := proto.Clone(priority).(*commonpb.Priority); ok {
+			opts.Priority = cloned
+		}
 	}
 	return opts
 }
@@ -156,5 +156,33 @@ func mergeWorkflowExecutionOptions(
 		}
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
+
+	// ==== Priority
+
+	if _, ok := updateFields["priority"]; ok {
+		mergeInto.Priority = mergeFrom.GetPriority()
+	}
+
+	if _, ok := updateFields["priority.priorityKey"]; ok {
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.PriorityKey = mergeFrom.GetPriority().GetPriorityKey()
+	}
+
+	if _, ok := updateFields["priority.fairnessKey"]; ok {
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.FairnessKey = mergeFrom.Priority.GetFairnessKey()
+	}
+
+	if _, ok := updateFields["priority.fairnessWeight"]; ok {
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
+	}
+
 	return mergeInto, nil
 }

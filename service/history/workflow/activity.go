@@ -224,6 +224,7 @@ func GetPendingActivityInfo(
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		StartToCloseTimeout:    ai.StartToCloseTimeout,
 		HeartbeatTimeout:       ai.HeartbeatTimeout,
+		Priority:               ai.Priority,
 
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:    ai.RetryInitialInterval,

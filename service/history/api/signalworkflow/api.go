@@ -57,6 +57,7 @@ func Invoke(
 				shard,
 				mutableState,
 				request.GetInput().Size(),
+				request.GetHeader().Size(),
 				"SignalWorkflowExecution",
 			); err != nil {
 				releaseFn(nil)
