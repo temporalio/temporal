@@ -25,7 +25,7 @@ var File_temporal_server_api_matchingservice_v1_service_proto protoreflect.FileD
 
 const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\xc03\n" +
+	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\xae3\n" +
 	"\x0fMatchingService\x12\xa6\x01\n" +
 	"\x15PollWorkflowTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse\"\x00\x12\xa6\x01\n" +
 	"\x15PollActivityTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse\"\x00\x12\x94\x01\n" +
@@ -63,8 +63,8 @@ const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\x15RecordWorkerHeartbeat\x12D.temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest\x1aE.temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse\"\x00\x12\x88\x01\n" +
 	"\vListWorkers\x12:.temporal.server.api.matchingservice.v1.ListWorkersRequest\x1a;.temporal.server.api.matchingservice.v1.ListWorkersResponse\"\x00\x12\xa6\x01\n" +
 	"\x15UpdateTaskQueueConfig\x12D.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest\x1aE.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse\"\x00\x12\x91\x01\n" +
-	"\x0eDescribeWorker\x12=.temporal.server.api.matchingservice.v1.DescribeWorkerRequest\x1a>.temporal.server.api.matchingservice.v1.DescribeWorkerResponse\"\x00\x12\xb2\x01\n" +
-	"\x19EnablePriorityAndFairness\x12H.temporal.server.api.matchingservice.v1.EnablePriorityAndFairnessRequest\x1aI.temporal.server.api.matchingservice.v1.EnablePriorityAndFairnessResponse\"\x00B>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
+	"\x0eDescribeWorker\x12=.temporal.server.api.matchingservice.v1.DescribeWorkerRequest\x1a>.temporal.server.api.matchingservice.v1.DescribeWorkerResponse\"\x00\x12\xa0\x01\n" +
+	"\x13UpdateFairnessState\x12B.temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest\x1aC.temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse\"\x00B>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
 
 var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{
 	(*PollWorkflowTaskQueueRequest)(nil),                   // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
@@ -104,7 +104,7 @@ var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{
 	(*ListWorkersRequest)(nil),                             // 34: temporal.server.api.matchingservice.v1.ListWorkersRequest
 	(*UpdateTaskQueueConfigRequest)(nil),                   // 35: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest
 	(*DescribeWorkerRequest)(nil),                          // 36: temporal.server.api.matchingservice.v1.DescribeWorkerRequest
-	(*EnablePriorityAndFairnessRequest)(nil),               // 37: temporal.server.api.matchingservice.v1.EnablePriorityAndFairnessRequest
+	(*UpdateFairnessStateRequest)(nil),                     // 37: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest
 	(*PollWorkflowTaskQueueResponse)(nil),                  // 38: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
 	(*PollActivityTaskQueueResponse)(nil),                  // 39: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
 	(*AddWorkflowTaskResponse)(nil),                        // 40: temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
@@ -142,7 +142,7 @@ var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{
 	(*ListWorkersResponse)(nil),                            // 72: temporal.server.api.matchingservice.v1.ListWorkersResponse
 	(*UpdateTaskQueueConfigResponse)(nil),                  // 73: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse
 	(*DescribeWorkerResponse)(nil),                         // 74: temporal.server.api.matchingservice.v1.DescribeWorkerResponse
-	(*EnablePriorityAndFairnessResponse)(nil),              // 75: temporal.server.api.matchingservice.v1.EnablePriorityAndFairnessResponse
+	(*UpdateFairnessStateResponse)(nil),                    // 75: temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse
 }
 var file_temporal_server_api_matchingservice_v1_service_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.api.matchingservice.v1.MatchingService.PollWorkflowTaskQueue:input_type -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
@@ -182,7 +182,7 @@ var file_temporal_server_api_matchingservice_v1_service_proto_depIdxs = []int32{
 	34, // 34: temporal.server.api.matchingservice.v1.MatchingService.ListWorkers:input_type -> temporal.server.api.matchingservice.v1.ListWorkersRequest
 	35, // 35: temporal.server.api.matchingservice.v1.MatchingService.UpdateTaskQueueConfig:input_type -> temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest
 	36, // 36: temporal.server.api.matchingservice.v1.MatchingService.DescribeWorker:input_type -> temporal.server.api.matchingservice.v1.DescribeWorkerRequest
-	37, // 37: temporal.server.api.matchingservice.v1.MatchingService.EnablePriorityAndFairness:input_type -> temporal.server.api.matchingservice.v1.EnablePriorityAndFairnessRequest
+	37, // 37: temporal.server.api.matchingservice.v1.MatchingService.UpdateFairnessState:input_type -> temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest
 	38, // 38: temporal.server.api.matchingservice.v1.MatchingService.PollWorkflowTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
 	39, // 39: temporal.server.api.matchingservice.v1.MatchingService.PollActivityTaskQueue:output_type -> temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse
 	40, // 40: temporal.server.api.matchingservice.v1.MatchingService.AddWorkflowTask:output_type -> temporal.server.api.matchingservice.v1.AddWorkflowTaskResponse
@@ -220,7 +220,7 @@ var file_temporal_server_api_matchingservice_v1_service_proto_depIdxs = []int32{
 	72, // 72: temporal.server.api.matchingservice.v1.MatchingService.ListWorkers:output_type -> temporal.server.api.matchingservice.v1.ListWorkersResponse
 	73, // 73: temporal.server.api.matchingservice.v1.MatchingService.UpdateTaskQueueConfig:output_type -> temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse
 	74, // 74: temporal.server.api.matchingservice.v1.MatchingService.DescribeWorker:output_type -> temporal.server.api.matchingservice.v1.DescribeWorkerResponse
-	75, // 75: temporal.server.api.matchingservice.v1.MatchingService.EnablePriorityAndFairness:output_type -> temporal.server.api.matchingservice.v1.EnablePriorityAndFairnessResponse
+	75, // 75: temporal.server.api.matchingservice.v1.MatchingService.UpdateFairnessState:output_type -> temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse
 	38, // [38:76] is the sub-list for method output_type
 	0,  // [0:38] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name

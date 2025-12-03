@@ -266,14 +266,15 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 	if !pm.autoEnableRateLimiter.Allow() {
 		return
 	}
-	req := &matchingservice.EnablePriorityAndFairnessRequest{
+	req := &matchingservice.UpdateFairnessStateRequest{
 		NamespaceId: pm.Namespace().ID().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Kind: pm.Partition().Kind(),
 			Name: pm.Partition().RpcName(),
 		},
+		FairnessState: persistencespb.FAIRNESS_STATE_V2,
 	}
-	_, err := pm.matchingClient.EnablePriorityAndFairness(ctx, req)
+	_, err := pm.matchingClient.UpdateFairnessState(ctx, req)
 	if err != nil {
 		pm.logger.Error("could not update userdata for autoenable", tag.Error(err))
 	}

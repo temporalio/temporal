@@ -282,26 +282,6 @@ func (mr *MockMatchingServiceClientMockRecorder) DispatchNexusTask(ctx, in any, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockMatchingServiceClient)(nil).DispatchNexusTask), varargs...)
 }
 
-// EnablePriorityAndFairness mocks base method.
-func (m *MockMatchingServiceClient) EnablePriorityAndFairness(ctx context.Context, in *matchingservice.EnablePriorityAndFairnessRequest, opts ...grpc.CallOption) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "EnablePriorityAndFairness", varargs...)
-	ret0, _ := ret[0].(*matchingservice.EnablePriorityAndFairnessResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// EnablePriorityAndFairness indicates an expected call of EnablePriorityAndFairness.
-func (mr *MockMatchingServiceClientMockRecorder) EnablePriorityAndFairness(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnablePriorityAndFairness", reflect.TypeOf((*MockMatchingServiceClient)(nil).EnablePriorityAndFairness), varargs...)
-}
-
 // ForceLoadTaskQueuePartition mocks base method.
 func (m *MockMatchingServiceClient) ForceLoadTaskQueuePartition(ctx context.Context, in *matchingservice.ForceLoadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
 	m.ctrl.T.Helper()
@@ -702,6 +682,26 @@ func (mr *MockMatchingServiceClientMockRecorder) SyncDeploymentUserData(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDeploymentUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).SyncDeploymentUserData), varargs...)
 }
 
+// UpdateFairnessState mocks base method.
+func (m *MockMatchingServiceClient) UpdateFairnessState(ctx context.Context, in *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateFairnessState", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateFairnessStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFairnessState indicates an expected call of UpdateFairnessState.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateFairnessState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFairnessState", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateFairnessState), varargs...)
+}
+
 // UpdateNexusEndpoint mocks base method.
 func (m *MockMatchingServiceClient) UpdateNexusEndpoint(ctx context.Context, in *matchingservice.UpdateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.UpdateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
@@ -1006,21 +1006,6 @@ func (mr *MockMatchingServiceServerMockRecorder) DispatchNexusTask(arg0, arg1 an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockMatchingServiceServer)(nil).DispatchNexusTask), arg0, arg1)
 }
 
-// EnablePriorityAndFairness mocks base method.
-func (m *MockMatchingServiceServer) EnablePriorityAndFairness(arg0 context.Context, arg1 *matchingservice.EnablePriorityAndFairnessRequest) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EnablePriorityAndFairness", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.EnablePriorityAndFairnessResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// EnablePriorityAndFairness indicates an expected call of EnablePriorityAndFairness.
-func (mr *MockMatchingServiceServerMockRecorder) EnablePriorityAndFairness(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnablePriorityAndFairness", reflect.TypeOf((*MockMatchingServiceServer)(nil).EnablePriorityAndFairness), arg0, arg1)
-}
-
 // ForceLoadTaskQueuePartition mocks base method.
 func (m *MockMatchingServiceServer) ForceLoadTaskQueuePartition(arg0 context.Context, arg1 *matchingservice.ForceLoadTaskQueuePartitionRequest) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1319,6 +1304,21 @@ func (m *MockMatchingServiceServer) SyncDeploymentUserData(arg0 context.Context,
 func (mr *MockMatchingServiceServerMockRecorder) SyncDeploymentUserData(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDeploymentUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).SyncDeploymentUserData), arg0, arg1)
+}
+
+// UpdateFairnessState mocks base method.
+func (m *MockMatchingServiceServer) UpdateFairnessState(arg0 context.Context, arg1 *matchingservice.UpdateFairnessStateRequest) (*matchingservice.UpdateFairnessStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateFairnessState", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateFairnessStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFairnessState indicates an expected call of UpdateFairnessState.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateFairnessState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFairnessState", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateFairnessState), arg0, arg1)
 }
 
 // UpdateNexusEndpoint mocks base method.

@@ -2743,35 +2743,35 @@ func (this *DescribeWorkerResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type EnablePriorityAndFairnessRequest to the protobuf v3 wire format
-func (val *EnablePriorityAndFairnessRequest) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateFairnessStateRequest to the protobuf v3 wire format
+func (val *UpdateFairnessStateRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type EnablePriorityAndFairnessRequest from the protobuf v3 wire format
-func (val *EnablePriorityAndFairnessRequest) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateFairnessStateRequest from the protobuf v3 wire format
+func (val *UpdateFairnessStateRequest) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *EnablePriorityAndFairnessRequest) Size() int {
+func (val *UpdateFairnessStateRequest) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two EnablePriorityAndFairnessRequest values are equivalent by recursively
+// Equal returns whether two UpdateFairnessStateRequest values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *EnablePriorityAndFairnessRequest) Equal(that interface{}) bool {
+func (this *UpdateFairnessStateRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *EnablePriorityAndFairnessRequest
+	var that1 *UpdateFairnessStateRequest
 	switch t := that.(type) {
-	case *EnablePriorityAndFairnessRequest:
+	case *UpdateFairnessStateRequest:
 		that1 = t
-	case EnablePriorityAndFairnessRequest:
+	case UpdateFairnessStateRequest:
 		that1 = &t
 	default:
 		return false
@@ -2780,35 +2780,35 @@ func (this *EnablePriorityAndFairnessRequest) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type EnablePriorityAndFairnessResponse to the protobuf v3 wire format
-func (val *EnablePriorityAndFairnessResponse) Marshal() ([]byte, error) {
+// Marshal an object of type UpdateFairnessStateResponse to the protobuf v3 wire format
+func (val *UpdateFairnessStateResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type EnablePriorityAndFairnessResponse from the protobuf v3 wire format
-func (val *EnablePriorityAndFairnessResponse) Unmarshal(buf []byte) error {
+// Unmarshal an object of type UpdateFairnessStateResponse from the protobuf v3 wire format
+func (val *UpdateFairnessStateResponse) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *EnablePriorityAndFairnessResponse) Size() int {
+func (val *UpdateFairnessStateResponse) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two EnablePriorityAndFairnessResponse values are equivalent by recursively
+// Equal returns whether two UpdateFairnessStateResponse values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *EnablePriorityAndFairnessResponse) Equal(that interface{}) bool {
+func (this *UpdateFairnessStateResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *EnablePriorityAndFairnessResponse
+	var that1 *UpdateFairnessStateResponse
 	switch t := that.(type) {
-	case *EnablePriorityAndFairnessResponse:
+	case *UpdateFairnessStateResponse:
 		that1 = t
-	case EnablePriorityAndFairnessResponse:
+	case UpdateFairnessStateResponse:
 		that1 = &t
 	default:
 		return false

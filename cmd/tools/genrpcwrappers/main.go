@@ -89,12 +89,11 @@ var (
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
 
 		// these need to pick a partition. too complicated.
-		"client.matching.AddActivityTask":           true,
-		"client.matching.AddWorkflowTask":           true,
-		"client.matching.PollActivityTaskQueue":     true,
-		"client.matching.PollWorkflowTaskQueue":     true,
-		"client.matching.QueryWorkflow":             true,
-		"client.matching.EnablePriorityAndFairness": true,
+		"client.matching.AddActivityTask":       true,
+		"client.matching.AddWorkflowTask":       true,
+		"client.matching.PollActivityTaskQueue": true,
+		"client.matching.PollWorkflowTaskQueue": true,
+		"client.matching.QueryWorkflow":         true,
 		// these do forwarding stats. too complicated.
 		"metricsClient.matching.AddActivityTask":       true,
 		"metricsClient.matching.AddWorkflowTask":       true,
@@ -322,7 +321,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ApplyTaskQueueUserDataReplicationEventRequest",
 		"GetWorkerVersioningRulesRequest",
 		"UpdateWorkerVersioningRulesRequest",
-		"UpdateTaskQueueConfigRequest":
+		"UpdateTaskQueueConfigRequest",
+		"UpdateFairnessStateRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)

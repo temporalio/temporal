@@ -153,24 +153,6 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 	return client.QueryWorkflow(ctx, request, opts...)
 }
 
-func (c *clientImpl) EnablePriorityAndFairness(
-	ctx context.Context,
-	request *matchingservice.EnablePriorityAndFairnessRequest,
-	opts ...grpc.CallOption) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
-	request = common.CloneProto(request)
-	client, err := c.pickClientForWrite(
-		request.GetTaskQueue(),
-		request.GetNamespaceId(),
-		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		"")
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.EnablePriorityAndFairness(ctx, request, opts...)
-}
-
 // processInputPartition returns a partition in certain cases that load balancer involvement is not necessary,
 // otherwise, returns a task queue to pass down to the load balancer.
 func (c *clientImpl) processInputPartition(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (tqid.Partition, *tqid.TaskQueue) {

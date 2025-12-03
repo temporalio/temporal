@@ -3224,10 +3224,10 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	}, nil
 }
 
-func (e *matchingEngineImpl) EnablePriorityAndFairness(
+func (e *matchingEngineImpl) UpdateFairnessState(
 	ctx context.Context,
-	req *matchingservice.EnablePriorityAndFairnessRequest,
-) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
+	req *matchingservice.UpdateFairnessStateRequest,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
 	partition, err := tqid.PartitionFromProto(req.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
@@ -3252,14 +3252,14 @@ func (e *matchingEngineImpl) EnablePriorityAndFairness(
 			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
 			perType = data.PerType[typ]
 		}
-		perType.FairnessState = persistencespb.FAIRNESS_STATE_V2
+		perType.FairnessState = req.FairnessState
 		return data, true, nil
 	}
 	_, err = pm.GetUserDataManager().UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.EnablePriorityAndFairnessResponse{}, nil
+	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
 // migrateOldFormatVersions moves versions present in the given deployment from the

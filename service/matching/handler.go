@@ -579,10 +579,10 @@ func (h *Handler) ListWorkers(
 	}, nil
 }
 
-func (h *Handler) EnablePriorityAndFairness(
-	ctx context.Context, request *matchingservice.EnablePriorityAndFairnessRequest,
-) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
-	return h.engine.EnablePriorityAndFairness(ctx, request)
+func (h *Handler) UpdateFairnessState(
+	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	return h.engine.UpdateFairnessState(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

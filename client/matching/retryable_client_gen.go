@@ -191,21 +191,6 @@ func (c *retryableClient) DispatchNexusTask(
 	return resp, err
 }
 
-func (c *retryableClient) EnablePriorityAndFairness(
-	ctx context.Context,
-	request *matchingservice.EnablePriorityAndFairnessRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.EnablePriorityAndFairnessResponse, error) {
-	var resp *matchingservice.EnablePriorityAndFairnessResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.EnablePriorityAndFairness(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,
@@ -500,6 +485,21 @@ func (c *retryableClient) SyncDeploymentUserData(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.SyncDeploymentUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	var resp *matchingservice.UpdateFairnessStateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateFairnessState(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

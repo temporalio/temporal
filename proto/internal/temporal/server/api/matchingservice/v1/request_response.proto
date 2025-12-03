@@ -642,10 +642,17 @@ message DescribeWorkerResponse {
     temporal.api.worker.v1.WorkerInfo worker_info = 1;
 }
 
-message EnablePriorityAndFairnessRequest {
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::method-signature=disabled
+//     aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
+message UpdateFairnessStateRequest {
     string namespace_id = 1;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    temporal.server.api.persistence.v1.FairnessState fairness_state = 3;
 }
 
-message EnablePriorityAndFairnessResponse {
+message UpdateFairnessStateResponse {
 }
