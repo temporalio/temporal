@@ -35,7 +35,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	namespace := namespaceEntry.Name()
+	namespaceName := namespaceEntry.Name()
 	if err := api.SetActivityTaskRunID(ctx, token, workflowConsistencyChecker); err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func Invoke(
 		}
 
 		workflow.RecordActivityCompletionMetrics(shard,
-			namespace,
+			namespaceName,
 			taskQueue,
 			completionMetrics,
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),

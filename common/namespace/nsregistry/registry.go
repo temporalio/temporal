@@ -586,6 +586,6 @@ func namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) b
 		old.State() != new.State() ||
 		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
 		// TODO: Refactor to use ns.ActiveInCluster() api
-		old.ActiveClusterName(namespace.EmptyWorkflowId) != new.ActiveClusterName(namespace.EmptyWorkflowId) ||
+		old.ActiveClusterName(namespace.EmptyWorkflowID) != new.ActiveClusterName(namespace.EmptyWorkflowID) ||
 		old.ReplicationState() != new.ReplicationState()
 }

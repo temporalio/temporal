@@ -65,7 +65,7 @@ type (
 const (
 	EmptyName       Name = ""
 	EmptyID         ID   = ""
-	EmptyWorkflowId      = ""
+	EmptyWorkflowID      = ""
 
 	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
 	// applicable to local namespace & global namespace with one cluster
@@ -182,7 +182,7 @@ func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
 
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
-func (ns *Namespace) ActiveClusterName(workflowId string) string {
+func (ns *Namespace) ActiveClusterName(workflowID string) string {
 	if ns.replicationConfig == nil {
 		return ""
 	}
@@ -243,7 +243,7 @@ func (ns *Namespace) ActiveInCluster(clusterName string) bool {
 		// "active" within each cluster
 		return true
 	}
-	return clusterName == ns.ActiveClusterName(EmptyWorkflowId)
+	return clusterName == ns.ActiveClusterName(EmptyWorkflowID)
 }
 
 // ReplicationPolicy return the derived workflow replication policy
