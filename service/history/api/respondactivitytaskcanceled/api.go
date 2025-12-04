@@ -44,9 +44,12 @@ func Invoke(
 			ctx,
 			componentRef,
 			(*activity.Activity).HandleCanceled,
-			activity.WithToken[*historyservice.RespondActivityTaskCanceledRequest]{
-				Token:   token,
-				Request: req,
+			activity.RequestWithContext[*historyservice.RespondActivityTaskCanceledRequest]{
+				Request:                     req,
+				Token:                       token,
+				MetricsHandler:              shard.GetMetricsHandler(),
+				NamespaceName:               namespace,
+				BreakdownMetricsByTaskQueue: shard.GetConfig().BreakdownMetricsByTaskQueue,
 			},
 		)
 
