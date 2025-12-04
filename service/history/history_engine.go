@@ -842,7 +842,7 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
 }
 
-func (e *historyEngineImpl) GetChasmEngine() chasm.Engine {
+func (e *historyEngineImpl) ChasmEngine() chasm.Engine {
 	return e.chasmEngine
 }
 
