@@ -202,8 +202,8 @@ func (e *heartbeatTimeoutTaskExecutor) Validate(
 func (e *heartbeatTimeoutTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
-	taskAttrs chasm.TaskAttributes,
-	task *activitypb.HeartbeatTimeoutTask,
+	_ chasm.TaskAttributes,
+	_ *activitypb.HeartbeatTimeoutTask,
 ) error {
 	// There are two concurrent processes:
 	// 1. A worker is sending heartbeats.
