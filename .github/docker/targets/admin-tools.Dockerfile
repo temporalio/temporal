@@ -7,11 +7,14 @@ RUN apk add --no-cache \
     tzdata && addgroup -g 1000 temporal && \
     adduser -u 1000 -G temporal -D temporal
 
-COPY --chmod=755 ./build/${TARGETARCH}/temporal /usr/local/bin/
-COPY --chmod=755 ./build/${TARGETARCH}/tdbg /usr/local/bin/
-COPY --chmod=755 ./build/${TARGETARCH}/temporal-cassandra-tool /usr/local/bin/
-COPY --chmod=755 ./build/${TARGETARCH}/temporal-sql-tool /usr/local/bin/
-COPY --chmod=755 ./build/${TARGETARCH}/temporal-elasticsearch-tool /usr/local/bin/
+# Copy all admin tool binaries:
+# - temporal (CLI)
+# - temporal-server
+# - temporal-cassandra-tool
+# - temporal-sql-tool
+# - temporal-elasticsearch-tool
+# - tdbg
+COPY --chmod=755 ./build/${TARGETARCH}/* /usr/local/bin/
 
 COPY ./build/temporal/schema /etc/temporal/schema
 
