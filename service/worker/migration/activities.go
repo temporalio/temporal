@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"time"
+	"unicode"
 
 	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
@@ -18,6 +20,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -26,22 +29,19 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/grpc/metadata"
 )
 
 type (
-	SkippedWorkflowExecution struct {
-		WorkflowExecution *commonpb.WorkflowExecution
-		Reason            string
-	}
-
 	replicationTasksHeartbeatDetails struct {
 		NextIndex                        int
 		CheckPoint                       time.Time
-		LastNotVerifiedWorkflowExecution *commonpb.WorkflowExecution
+		LastNotVerifiedWorkflowExecution *replicationspb.MigrationExecutionInfo
 	}
 
 	verifyStatus int
@@ -51,7 +51,7 @@ type (
 	}
 
 	listWorkflowsResponse struct {
-		Executions    []*commonpb.WorkflowExecution
+		Executions    []*replicationspb.MigrationExecutionInfo
 		NextPageToken []byte
 		Error         error
 
@@ -66,7 +66,7 @@ type (
 
 	generateReplicationTasksRequest struct {
 		NamespaceID      string
-		Executions       []*commonpb.WorkflowExecution
+		Executions       []*replicationspb.MigrationExecutionInfo
 		RPS              float64
 		GetParentInfoRPS float64
 		TargetClusters   []string
@@ -78,7 +78,7 @@ type (
 		TargetClusterEndpoint string
 		TargetClusterName     string
 		VerifyInterval        time.Duration `validate:"gte=0"`
-		Executions            []*commonpb.WorkflowExecution
+		Executions            []*replicationspb.MigrationExecutionInfo
 	}
 
 	verifyReplicationTasksResponse struct {
@@ -117,6 +117,7 @@ type (
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
+		chasmRegistry                    *chasm.Registry
 	}
 
 	WorkflowVerifier func(
@@ -125,7 +126,7 @@ type (
 		remoteAdminClient adminservice.AdminServiceClient,
 		localAdminClient adminservice.AdminServiceClient,
 		ns *namespace.Namespace,
-		we *commonpb.WorkflowExecution,
+		execution *replicationspb.MigrationExecutionInfo,
 		mu *adminservice.DescribeMutableStateResponse,
 	) (verifyResult, error)
 )
@@ -358,7 +359,7 @@ func (a *activities) generateWorkflowReplicationTask(
 	rateLimiter quotas.RateLimiter,
 	namespaceName string,
 	namespaceID string,
-	we *commonpb.WorkflowExecution,
+	execution *replicationspb.MigrationExecutionInfo,
 	targetClusters []string,
 	generateViaFrontend bool,
 ) error {
@@ -372,9 +373,18 @@ func (a *activities) generateWorkflowReplicationTask(
 
 	var stateTransitionCount, historyLength int64
 	if generateViaFrontend {
+		archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeId)
+		if err != nil {
+			return err
+		}
+
 		resp, err := a.adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
-			Namespace:      namespaceName,
-			Execution:      we,
+			Namespace: namespaceName,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: execution.BusinessId,
+				RunId:      execution.RunId,
+			},
+			Archetype:      archetype,
 			TargetClusters: targetClusters,
 		})
 		if err != nil {
@@ -384,8 +394,12 @@ func (a *activities) generateWorkflowReplicationTask(
 		historyLength = resp.HistoryLength
 	} else {
 		resp, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
-			NamespaceId:    namespaceID,
-			Execution:      we,
+			NamespaceId: namespaceID,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: execution.BusinessId,
+				RunId:      execution.RunId,
+			},
+			ArchetypeId:    execution.ArchetypeId,
 			TargetClusters: targetClusters,
 		})
 		if err != nil {
@@ -474,9 +488,39 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 	}
 	var lastCloseTime, lastStartTime time.Time
 
-	executions := make([]*commonpb.WorkflowExecution, len(resp.Executions))
-	for i, e := range resp.Executions {
-		executions[i] = e.Execution
+	executions := make([]*replicationspb.MigrationExecutionInfo, 0, len(resp.Executions))
+	for _, e := range resp.Executions {
+		executionInfo := &replicationspb.MigrationExecutionInfo{
+			BusinessId: e.Execution.GetWorkflowId(),
+			RunId:      e.Execution.GetRunId(),
+			// Ideally we should use chasm.WorkflowArchetypeID by default,
+			// but for backward compatibility reason we need this field to be 0
+			// to avoid unmarshaling errors since the previous type returned in
+			// ListWorkflowExecutions.Executions is commonpb.WorkflowExecution
+			// which does not have ArchetypeId field.
+			//
+			// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
+			ArchetypeId: chasm.UnspecifiedArchetypeID,
+		}
+
+		if indexedField := e.SearchAttributes.GetIndexedFields(); indexedField != nil {
+			if nsDivisionPayload, ok := indexedField[sadefs.TemporalNamespaceDivision]; ok {
+				var nsDivisionStr string
+				if err := payload.Decode(nsDivisionPayload, &nsDivisionStr); err != nil {
+					return nil, fmt.Errorf("failed to decode TemporalNamespaceDivision field: %w", err)
+				}
+
+				if len(nsDivisionStr) != 0 && unicode.IsDigit(rune(nsDivisionStr[0])) {
+					archetypeID, err := strconv.ParseUint(nsDivisionStr, 10, 32)
+					if err != nil {
+						return nil, fmt.Errorf("failed to parse archetypeID: %w", err)
+					}
+					executionInfo.ArchetypeId = chasm.ArchetypeID(archetypeID)
+				}
+			}
+		}
+
+		executions = append(executions, executionInfo)
 
 		if e.CloseTime != nil {
 			lastCloseTime = e.CloseTime.AsTime()
@@ -486,7 +530,12 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 			lastStartTime = e.StartTime.AsTime()
 		}
 	}
-	return &listWorkflowsResponse{Executions: executions, NextPageToken: resp.NextPageToken, LastCloseTime: lastCloseTime, LastStartTime: lastStartTime}, nil
+	return &listWorkflowsResponse{
+		Executions:    executions,
+		NextPageToken: resp.NextPageToken,
+		LastCloseTime: lastCloseTime,
+		LastStartTime: lastStartTime,
+	}, nil
 }
 
 func (a *activities) CountWorkflow(ctx context.Context, request *workflowservice.CountWorkflowExecutionsRequest) (*countWorkflowResponse, error) {
@@ -540,7 +589,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 			if !common.IsNotFoundError(err) {
 				a.logger.Error("force-replication failed to generate replication task",
 					tag.WorkflowNamespaceID(request.NamespaceID),
-					tag.WorkflowID(we.GetWorkflowId()),
+					tag.WorkflowID(we.GetBusinessId()),
 					tag.WorkflowRunID(we.GetRunId()),
 					tag.Error(err))
 				return err
@@ -548,7 +597,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 
 			a.logger.Warn("force-replication ignore replication task due to NotFoundServiceError",
 				tag.WorkflowNamespaceID(request.NamespaceID),
-				tag.WorkflowID(we.GetWorkflowId()),
+				tag.WorkflowID(we.GetBusinessId()),
 				tag.WorkflowRunID(we.GetRunId()),
 				tag.Error(err))
 		}
@@ -653,14 +702,18 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 func (a *activities) checkSkipWorkflowExecution(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
-	we *commonpb.WorkflowExecution,
+	execution *replicationspb.MigrationExecutionInfo,
 	ns *namespace.Namespace,
 ) (verifyResult, error) {
 	namespaceID := request.NamespaceID
-	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId)}
+	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(execution.BusinessId), tag.WorkflowRunID(execution.RunId)}
 	resp, err := a.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
-		NamespaceId:     namespaceID,
-		Execution:       we,
+		NamespaceId: namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: execution.BusinessId,
+			RunId:      execution.RunId,
+		},
+		ArchetypeId:     execution.ArchetypeId,
 		SkipForceReload: true,
 	})
 
@@ -713,20 +766,32 @@ func (a *activities) verifySingleReplicationTask(
 	request *verifyReplicationTasksRequest,
 	remotAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
-	we *commonpb.WorkflowExecution,
+	execution *replicationspb.MigrationExecutionInfo,
 ) (verifyResult, error) {
 	s := time.Now()
 	// Check if execution exists on remote cluster
+
+	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeId)
+	if err != nil {
+		return verifyResult{
+			status: notVerified,
+		}, err
+	}
+
 	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace:       request.Namespace,
-		Execution:       we,
+		Namespace: request.Namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: execution.BusinessId,
+			RunId:      execution.RunId,
+		},
+		Archetype:       archetype,
 		SkipForceReload: true,
 	})
 	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
 
 	switch err.(type) {
 	case nil:
-		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, we, mu)
+		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, execution, mu)
 		if err == nil && result.status == verified {
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		}
@@ -736,7 +801,7 @@ func (a *activities) verifySingleReplicationTask(
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
 		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workflow being deleted due to retention.
 		// A better solution is to only check the existence for workflow which is close to retention period.
-		return a.checkSkipWorkflowExecution(ctx, request, we, ns)
+		return a.checkSkipWorkflowExecution(ctx, request, execution, ns)
 
 	case *serviceerror.NamespaceNotFound:
 		return verifyResult{
@@ -992,4 +1057,28 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 	}
 
 	return readyShardCount == expectedShardCount, nil
+}
+
+func (a *activities) archetypeIDToName(ctx context.Context, archetypeID chasm.ArchetypeID) (chasm.Archetype, error) {
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		// For backward compatibility reason, the archetypeID is set to 0 in MigrationExecutionInfo
+		// for workflows. But 0 is not a valid archetypeID in chasm.Registry, so explicitly return
+		//  WorkflowArchetype here.
+		return chasm.WorkflowArchetype, nil
+	}
+
+	archetype, ok := a.chasmRegistry.ComponentFqnByID(archetypeID)
+	if !ok {
+		activityInfo := activity.GetInfo(ctx)
+		err := fmt.Errorf("unknown archetypeID: %v", archetypeID)
+		a.logger.Error("force-replication failed to translate archetypeID to name",
+			tag.Error(err),
+			tag.ArchetypeID(archetypeID),
+			tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
+			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
+		)
+		return "", err
+	}
+	return archetype, nil
 }

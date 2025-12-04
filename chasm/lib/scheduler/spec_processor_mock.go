@@ -42,19 +42,19 @@ func (m *MockSpecProcessor) EXPECT() *MockSpecProcessorMockRecorder {
 	return m.recorder
 }
 
-// GetNextTime mocks base method.
-func (m *MockSpecProcessor) GetNextTime(arg0 *Scheduler, after time.Time) (scheduler.GetNextTimeResult, error) {
+// NextTime mocks base method.
+func (m *MockSpecProcessor) NextTime(arg0 *Scheduler, after time.Time) (scheduler.GetNextTimeResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNextTime", arg0, after)
+	ret := m.ctrl.Call(m, "NextTime", arg0, after)
 	ret0, _ := ret[0].(scheduler.GetNextTimeResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetNextTime indicates an expected call of GetNextTime.
-func (mr *MockSpecProcessorMockRecorder) GetNextTime(arg0, after any) *gomock.Call {
+// NextTime indicates an expected call of NextTime.
+func (mr *MockSpecProcessorMockRecorder) NextTime(arg0, after any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextTime", reflect.TypeOf((*MockSpecProcessor)(nil).GetNextTime), arg0, after)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextTime", reflect.TypeOf((*MockSpecProcessor)(nil).NextTime), arg0, after)
 }
 
 // ProcessTimeRange mocks base method.

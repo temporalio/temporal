@@ -165,12 +165,11 @@ func recordActivityTaskStarted(
 	}
 
 	if ai.Stamp != request.Stamp {
-		// activity has changes before task is started.
-		// ErrActivityStampMismatch is the error to indicate that requested activity has mismatched stamp
+		// This happens when the workflow task was rescheduled.
 		errorMessage := fmt.Sprintf(
-			"Activity task with this stamp not found. Id: %s,: type: %s, current stamp: %d",
+			"Activity task rejected; stamp has changed. Id: %s,: type: %s, current stamp: %d",
 			ai.ActivityId, ai.ActivityType.Name, ai.Stamp)
-		return nil, rejectCodeUndefined, serviceerror.NewNotFound(errorMessage)
+		return nil, rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask(errorMessage)
 	}
 
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()

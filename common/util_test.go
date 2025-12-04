@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -44,8 +44,8 @@ func TestIsContextCanceledErr(t *testing.T) {
 }
 
 func TestMapShardID_ByNamespaceWorkflow_4And16(t *testing.T) {
-	namespaceID := uuid.New()
-	workflowID := uuid.New()
+	namespaceID := uuid.NewString()
+	workflowID := uuid.NewString()
 	shardID4 := WorkflowIDToHistoryShard(namespaceID, workflowID, 4)
 	shardID16 := WorkflowIDToHistoryShard(namespaceID, workflowID, 16)
 
@@ -278,11 +278,11 @@ func TestMultiOperationErrorRetries(t *testing.T) {
 func TestDiscardUnknownProto(t *testing.T) {
 	msRecord := &persistencespb.WorkflowMutableState{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId: uuid.New(),
-			WorkflowId:  uuid.New(),
+			NamespaceId: uuid.NewString(),
+			WorkflowId:  uuid.NewString(),
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId: uuid.New(),
+			RunId: uuid.NewString(),
 			State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		},
 		TimerInfos: map[string]*persistencespb.TimerInfo{
@@ -411,8 +411,8 @@ func generateExecutionInfo() (a, b *persistencespb.WorkflowExecutionInfo) {
 
 func TestMergeProtoExcludingFields(t *testing.T) {
 	source := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId: uuid.New(),
-		WorkflowId:  uuid.New(),
+		NamespaceId: uuid.NewString(),
+		WorkflowId:  uuid.NewString(),
 	}
 
 	target := &persistencespb.WorkflowExecutionInfo{
@@ -492,8 +492,8 @@ func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
 	failurePayload := &failurepb.Failure{}
 	resultPayload := payloads.EncodeString("result")
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:            uuid.New(),
-		WorkflowId:           uuid.New(),
+		Namespace:            uuid.NewString(),
+		WorkflowId:           uuid.NewString(),
 		ContinuedFailure:     failurePayload,
 		LastCompletionResult: resultPayload,
 	}

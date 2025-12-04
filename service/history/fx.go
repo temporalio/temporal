@@ -3,9 +3,6 @@ package history
 import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
-	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -67,6 +64,7 @@ var Module = fx.Options(
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
+	fx.Provide(ChasmVisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -82,9 +80,6 @@ var Module = fx.Options(
 	callbacks.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
-	chasmscheduler.Module,
-	chasmcallback.Module,
-	chasmworkflow.Module,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -126,6 +121,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 		chasmEngine:                  args.ChasmEngine,
+		chasmRegistry:                args.ChasmRegistry,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -291,6 +287,7 @@ func VisibilityManagerProvider(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -300,6 +297,7 @@ func VisibilityManagerProvider(
 		saProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -312,6 +310,16 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+	)
+}
+
+func ChasmVisibilityManagerProvider(
+	chasmRegistry *chasm.Registry,
+	visibilityManager manager.VisibilityManager,
+) chasm.VisibilityManager {
+	return visibility.NewChasmVisibilityManager(
+		chasmRegistry,
+		visibilityManager,
 	)
 }
 

@@ -55,6 +55,7 @@ message DescribeMutableStateRequest {
   string namespace = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
   bool skip_force_reload = 3;
+  string archetype = 4;
 }
 
 message DescribeMutableStateResponse {
@@ -284,8 +285,8 @@ message AddOrUpdateRemoteClusterRequest {
   string frontend_address = 1;
   bool enable_remote_cluster_connection = 2;
   string frontend_http_address = 3 [deprecated = true];
-  // is_replication_enabled controls whether replication streams are active.
-  bool is_replication_enabled = 4;
+  // enable_replication controls whether replication streams are active.
+  bool enable_replication = 4;
 }
 
 message AddOrUpdateRemoteClusterResponse {
@@ -360,6 +361,7 @@ message RefreshWorkflowTasksRequest {
   reserved 1;
   string namespace_id = 3;
   temporal.api.common.v1.WorkflowExecution execution = 2;
+  string archetype = 4;
 }
 
 message RefreshWorkflowTasksResponse {
@@ -399,6 +401,7 @@ message GetTaskQueueTasksResponse {
 message DeleteWorkflowExecutionRequest {
   string namespace = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
+  string archetype = 3;
 }
 
 message DeleteWorkflowExecutionResponse {
@@ -557,6 +560,8 @@ message SyncWorkflowStateRequest {
   temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
   temporal.server.api.history.v1.VersionHistories version_histories = 4;
   int32 target_cluster_id = 5;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 6;
 }
 
 message SyncWorkflowStateResponse {
@@ -571,6 +576,7 @@ message GenerateLastHistoryReplicationTasksRequest {
   string namespace = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
   repeated string target_clusters = 3;
+  string archetype = 4;
 }
 
 message GenerateLastHistoryReplicationTasksResponse {

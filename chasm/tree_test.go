@@ -880,7 +880,10 @@ func (s *nodeSuite) TestApplyMutation() {
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.Len(root.currentSA, 3)
-	s.Len(root.currentMemo, 1)
+	s.NotNil(root.currentMemo)
+	initialMemo, ok := root.currentMemo.(*protoMessageType)
+	s.True(ok)
+	s.ProtoEqual(&protoMessageType{}, initialMemo)
 
 	// Manually deserialize some tasks to populate the taskValueCache
 	_, err = root.deserializeComponentTask(root.serializedNode.Metadata.GetComponentAttributes().PureTasks[0])
@@ -953,10 +956,15 @@ func (s *nodeSuite) TestApplyMutation() {
 	s.Equal(updatedRoot, root.serializedNode)
 	s.NotNil(root.value)
 	s.Len(root.currentSA, 3)
-	s.Len(root.currentMemo, 1)
+	s.Len(root.currentSA, 3)
 	s.Contains(root.currentSA, "TemporalDatetime01")
 	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
-	s.True(root.currentMemo[TestComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now)))
+
+	// Validate memo content.
+	s.NotNil(root.currentMemo)
+	decodedMemo, ok := root.currentMemo.(*protoMessageType)
+	s.True(ok, "currentMemo should be of type *protoMessageType")
+	s.True(decodedMemo.StartTime.AsTime().Equal(now))
 
 	// Validate the "child" node got updated.
 	nodeSC1, ok := root.children["SubComponent1"]
@@ -1088,10 +1096,8 @@ func (s *nodeSuite) TestApplySnapshot() {
 
 	// Validate visibility search attributes and memo are updated as well.
 	s.Len(root.currentSA, 3)
-	s.Len(root.currentMemo, 1)
 	s.Contains(root.currentSA, "TemporalDatetime01")
 	s.True(root.currentSA["TemporalDatetime01"].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
-	s.True(root.currentMemo[TestComponentStartTimeMemoKey].(VisibilityValueTime).Equal(VisibilityValueTime(now.AsTime())))
 }
 
 func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
@@ -1936,8 +1942,8 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.UpdateCalls[0].State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.UpdateCalls[0].Status)
 
-	// Some change unrelated to visibility
-	// Visibility component should not be updated.
+	// Change ComponentData which is used as Memo. Even though lifecycle didn't change,
+	// visibility should be updated because memo changed.
 	nextTransitionCount = 2
 	testComponent, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
@@ -1949,8 +1955,9 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	}
 	mutation, err = node.CloseTransaction()
 	s.NoError(err)
-	_, ok = mutation.UpdatedNodes["Visibility"]
-	s.False(ok)
+	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
+	s.True(ok, "visibility should be updated when memo changes")
+	s.Len(pVisibilityNode.GetMetadata().GetComponentAttributes().SideEffectTasks, 1)
 
 	// Close the run, visibility should be force updated
 	// even if not explicitly updated.
@@ -2219,6 +2226,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		Path:                                   rootPath,
 		TypeId:                                 testSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
+		ArchetypeId:                            testComponentTypeID,
 	}, chasmTask.Info)
 
 	s.Len(rootAttr.PureTasks, 1) // Only one valid side effect task.
@@ -2233,7 +2241,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	}, newPureTask)
 	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTimer], 1)
 	chasmPureTask := s.nodeBackend.TasksByCategory[tasks.CategoryTimer][0].(*tasks.ChasmTaskPure)
-	s.Equal(tasks.CategoryTimer, chasmPureTask.Category)
+	s.Equal(tasks.CategoryTimer, chasmPureTask.GetCategory())
 	s.True(chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
 
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()
@@ -2255,6 +2263,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		Path:                                   []string{"SubComponent2"},
 		TypeId:                                 testOutboundSideEffectTaskTypeID,
 		Data:                                   chasmTask.Info.GetData(), // This is tested by TestSerializeTask()
+		ArchetypeId:                            testComponentTypeID,
 	}, chasmTask.Info)
 }
 

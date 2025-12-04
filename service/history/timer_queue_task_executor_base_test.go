@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -100,6 +100,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_ExecuteDeleteHistoryEventTask_NoE
 		Version:             123,
 		TaskID:              12345,
 		VisibilityTimestamp: time.Now().UTC(),
+		ArchetypeID:         tests.ArchetypeID,
 	}
 	we := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
@@ -109,7 +110,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_ExecuteDeleteHistoryEventTask_NoE
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 
-	s.mockCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, chasm.ArchetypeAny, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, tests.ArchetypeID, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetWorkflowKey().Return(task.WorkflowKey).AnyTimes()
@@ -145,6 +146,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 		Version:             123,
 		TaskID:              12345,
 		VisibilityTimestamp: time.Now().UTC(),
+		ArchetypeID:         tests.ArchetypeID,
 	}
 	we := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
@@ -154,7 +156,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	mockMutableState := historyi.NewMockMutableState(s.controller)
 
-	s.mockCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, chasm.ArchetypeAny, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	s.mockCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, tests.ArchetypeID, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.testShardContext).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetWorkflowKey().Return(task.WorkflowKey).AnyTimes()
@@ -212,13 +214,13 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeoutTask() {
 			timerTask := &tasks.WorkflowExecutionTimeoutTask{
 				NamespaceID:         tests.NamespaceID.String(),
 				WorkflowID:          tests.WorkflowID,
-				FirstRunID:          uuid.New(),
+				FirstRunID:          uuid.NewString(),
 				VisibilityTimestamp: s.testShardContext.GetTimeSource().Now(),
 				TaskID:              100,
 			}
 			mutableStateFirstRunID := timerTask.FirstRunID
 			if !tc.firstRunIDMatch {
-				mutableStateFirstRunID = uuid.New()
+				mutableStateFirstRunID = uuid.NewString()
 			}
 
 			mockMutableState := historyi.NewMockMutableState(s.controller)
@@ -242,7 +244,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeouts() {
 	timerTask := &tasks.WorkflowExecutionTimeoutTask{
 		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  tests.WorkflowID,
-		FirstRunID:  uuid.New(),
+		FirstRunID:  uuid.NewString(),
 		TaskID:      100,
 	}
 	mockMutableState := historyi.NewMockMutableState(s.controller)

@@ -44,8 +44,15 @@ func (l *ServiceLibrary) RegisterServices(server *grpc.Server) {
 }
 
 func TestChasmRequestInterceptor_ShouldRespond(t *testing.T) {
-	mockEngine := chasm.NewMockEngine(gomock.NewController(t))
-	requestInterceptor := chasm.ChasmRequestInterceptorProvider(mockEngine, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	ctrl := gomock.NewController(t)
+	mockEngine := chasm.NewMockEngine(ctrl)
+	mockVisibilityManager := chasm.NewMockVisibilityManager(ctrl)
+	requestInterceptor := chasm.ChasmRequestInterceptorProvider(
+		mockEngine,
+		mockVisibilityManager,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
 
 	server, address := startTestServer(t, grpc.UnaryInterceptor(requestInterceptor.Intercept))
 	defer server.Stop()

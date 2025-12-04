@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -29,6 +29,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -178,6 +179,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 		_, err := historyClient0.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
 			NamespaceId: s.namespaceID,
 			Execution:   execution,
+			ArchetypeId: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
 	}
@@ -211,8 +213,8 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 	}
 	var runID string
 	for _, version := range versions {
-		workflowID := "xdc-stream-replication-test-" + uuid.New()
-		runID = uuid.New()
+		workflowID := "xdc-stream-replication-test-" + uuid.NewString()
+		runID = uuid.NewString()
 
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(namespaceName, namespaceId, version)
@@ -412,7 +414,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -458,7 +460,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -509,6 +511,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 
@@ -549,7 +552,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -595,7 +598,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 4,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -610,7 +613,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 		Reason:                    "test",
 		WorkflowTaskFinishEventId: 7,
-		RequestId:                 uuid.New(),
+		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -626,6 +629,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -640,6 +644,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -654,6 +659,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -667,6 +673,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
@@ -675,6 +682,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	_, err = s.clusters[1].AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
@@ -683,6 +691,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp2.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 
@@ -695,6 +704,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -710,6 +720,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -725,6 +736,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		var expectedErr *serviceerror.NotFound
 		return errors.As(err, &expectedErr)
@@ -738,6 +750,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -749,6 +762,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      we.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -761,6 +775,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp1.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -772,6 +787,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp1.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -784,6 +800,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			WorkflowId: id,
 			RunId:      resetResp2.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
@@ -795,6 +812,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 					WorkflowId: id,
 					RunId:      resetResp2.GetRunId(),
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 		return err == nil
 	},
@@ -817,10 +835,10 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 	}
 	s.T().Log("Cleared replication stream recorders on all clusters")
 
-	workflowID := "test-replication-" + uuid.New()
+	workflowID := "test-replication-" + uuid.NewString()
 	sourceClient := s.clusters[0].FrontendClient()
 	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
@@ -885,6 +903,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	s.Require().NoError(err, "Failed to describe mutable state")
 	s.Require().NotNil(mutableStateResp.GetDatabaseMutableState(), "Database mutable state is nil")
@@ -938,6 +957,7 @@ func (s *streamBasedReplicationTestSuite) TestCloseTransferTaskAckedReplication(
 			WorkflowId: workflowID,
 			RunId:      startResp.GetRunId(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.Require().NoError(err, "Failed to generate last history replication tasks")
 	s.T().Log("Generated last history replication tasks to force replication of completed workflow")
@@ -1037,7 +1057,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	s.Require().NotNil(recorder0)
 	s.Require().NotNil(recorder1)
 
-	workflowID := "task-recorder-test-" + uuid.New()
+	workflowID := "task-recorder-test-" + uuid.NewString()
 	taskQueue := "task-recorder-tq"
 
 	// Get namespace ID for task filtering
@@ -1233,7 +1253,7 @@ func (s *streamBasedReplicationTestSuite) TestWorkflowTaskFailureStampReplicatio
 	s.Require().NotNil(recorder0)
 	s.Require().NotNil(recorder1)
 
-	workflowID := "workflow-task-failure-test-" + uuid.New()
+	workflowID := "workflow-task-failure-test-" + uuid.NewString()
 	taskQueue := "workflow-task-failure-tq"
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{

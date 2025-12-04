@@ -18,8 +18,12 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -63,7 +67,7 @@ const (
 
 var (
 	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
-	ErrClosed                = serviceerror.NewInvalidArgument("schedule closed")
+	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
 	ErrUnprocessable         = serviceerror.NewInternal("unprocessable schedule")
 )
 
@@ -91,13 +95,13 @@ func NewScheduler(
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{}),
 	}
+	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
-	sched.Schedule.State = &schedulepb.ScheduleState{}
 
-	invoker := NewInvoker(ctx, sched)
+	invoker := NewInvoker(ctx)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
 
-	generator := NewGenerator(ctx, sched, invoker)
+	generator := NewGenerator(ctx)
 	sched.Generator = chasm.NewComponentField(ctx, generator)
 
 	// Create backfillers to fulfill initialPatch.
@@ -106,6 +110,16 @@ func NewScheduler(
 	sched.Visibility = chasm.NewComponentField(ctx, visibility)
 
 	return sched
+}
+
+// setNullableFields sets fields that are nullable in API requests.
+func (s *Scheduler) setNullableFields() {
+	if s.Schedule.Policies == nil {
+		s.Schedule.Policies = &schedulepb.SchedulePolicies{}
+	}
+	if s.Schedule.State == nil {
+		s.Schedule.State = &schedulepb.ScheduleState{}
+	}
 }
 
 // handlePatch creates backfillers to fulfill the given patch request.
@@ -418,18 +432,16 @@ func (s *Scheduler) HandleNexusCompletion(
 	var wfStatus enumspb.WorkflowExecutionStatus
 	switch outcome := info.Outcome.(type) {
 	case *persistencespb.ChasmNexusCompletion_Failure:
+		previousResult := s.LastCompletionResult.Get(ctx) // Most-recent success is kept after failure.
 		wfStatus = executionStatusFromFailure(outcome.Failure)
 		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-			Outcome: &schedulerpb.LastCompletionResult_Failure{
-				Failure: outcome.Failure,
-			},
+			Failure: outcome.Failure,
+			Success: previousResult.Success,
 		})
 	case *persistencespb.ChasmNexusCompletion_Success:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-			Outcome: &schedulerpb.LastCompletionResult_Success{
-				Success: outcome.Success,
-			},
+			Success: outcome.Success,
 		})
 	default:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
@@ -522,14 +534,63 @@ func (s *Scheduler) Describe(
 	ctx chasm.Context,
 	req *schedulerpb.DescribeScheduleRequest,
 ) (*schedulerpb.DescribeScheduleResponse, error) {
+	if s.Closed {
+		return nil, ErrClosed
+	}
+
+	visibility := s.Visibility.Get(ctx)
+	memo := visibility.GetMemo(ctx)
+	delete(memo, visibilityMemoFieldInfo) // We don't need to return a redundant info block.
+
+	if s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
+		s.Schedule.Policies.OverlapPolicy = s.overlapPolicy()
+	}
+	if !s.Schedule.GetPolicies().GetCatchupWindow().IsValid() {
+		// TODO - this should be set from Tweakables.DefaultCatchupWindow.
+		s.Schedule.Policies.CatchupWindow = durationpb.New(365 * 24 * time.Hour)
+	}
+
+	schedule := common.CloneProto(s.Schedule)
+	cleanSpec(schedule.Spec)
+
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
-			Schedule:      common.CloneProto(s.Schedule),
-			Info:          common.CloneProto(s.Info),
-			ConflictToken: s.generateConflictToken(),
-			// TODO - memo and search_attributes are handled by visibility (separate PR)
+			Schedule:         schedule,
+			Info:             common.CloneProto(s.Info),
+			ConflictToken:    s.generateConflictToken(),
+			Memo:             &commonpb.Memo{Fields: memo},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.GetSearchAttributes(ctx)},
 		},
 	}, nil
+}
+
+// cleanSpec sets default values in ranges for the DescribeSchedule response.
+func cleanSpec(spec *schedulepb.ScheduleSpec) {
+	cleanRanges := func(ranges []*schedulepb.Range) {
+		for _, r := range ranges {
+			if r.End < r.Start {
+				r.End = r.Start
+			}
+			if r.Step == 0 {
+				r.Step = 1
+			}
+		}
+	}
+	cleanCal := func(structured *schedulepb.StructuredCalendarSpec) {
+		cleanRanges(structured.Second)
+		cleanRanges(structured.Minute)
+		cleanRanges(structured.Hour)
+		cleanRanges(structured.DayOfMonth)
+		cleanRanges(structured.Month)
+		cleanRanges(structured.Year)
+		cleanRanges(structured.DayOfWeek)
+	}
+	for _, structured := range spec.StructuredCalendar {
+		cleanCal(structured)
+	}
+	for _, structured := range spec.ExcludeStructuredCalendar {
+		cleanCal(structured)
+	}
 }
 
 // Delete marks the Scheduler as closed without an idle timer.
@@ -556,12 +617,29 @@ func (s *Scheduler) Update(
 	//
 	// TODO - we could also easily support allowing the customer to update their
 	// memo here.
-	visibility := s.Visibility.Get(ctx)
-	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	if req.FrontendRequest.GetSearchAttributes() != nil {
+		// To preserve compatibility with V1 scheduler, we do a full replacement
+		// of search attributes, dropping any that aren't a part of the update's
+		// `CustomSearchAttributes` map. Search attribute replacement is ignored entirely
+		// when that map is unset, however, an allocated yet empty map will clear all
+		// attributes.
 
-	s.Schedule = common.CloneProto(req.FrontendRequest.Schedule)
+		// Preserve the old custom memo in the new Visibility component.
+		oldVisibility := s.Visibility.Get(ctx)
+		oldMemo := oldVisibility.GetMemo(ctx)
+
+		visibility := chasm.NewVisibilityWithData(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields(), oldMemo)
+		s.Visibility = chasm.NewComponentField(ctx, visibility)
+	}
+
+	s.Schedule = req.FrontendRequest.Schedule
+	s.setNullableFields()
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
+
+	// Since the spec may have been updated, kick off the generator.
+	generator := s.Generator.Get(ctx)
+	generator.Generate(ctx)
 
 	return &schedulerpb.UpdateScheduleResponse{
 		FrontendResponse: &workflowservice.UpdateScheduleResponse{},
@@ -600,6 +678,11 @@ func (s *Scheduler) generateConflictToken() []byte {
 }
 
 func (s *Scheduler) validateConflictToken(token []byte) bool {
+	// When unset in mutate requests, the schedule should update unconditionally.
+	if token == nil {
+		return true
+	}
+
 	current := s.generateConflictToken()
 	return bytes.Equal(current, token)
 }
@@ -615,25 +698,17 @@ func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyVa
 func (s *Scheduler) Memo(
 	ctx chasm.Context,
 ) map[string]chasm.VisibilityValue {
-	newInfo, err := s.ListInfo(ctx)
+	newInfo := s.ListInfo(ctx)
+
+	infoPayload, err := proto.MarshalOptions{
+		Deterministic: true,
+	}.Marshal(newInfo)
 	if err != nil {
-		// Unable to retrieve list info. Return nil to skip memo update.
-		// Error will be logged once loggers are available in CHASM.
 		return nil
 	}
 
-	payload, err := newInfo.Marshal()
-	if err != nil {
-		// Unable to marshal list info. Return nil to skip memo update.
-		// Error will be logged once loggers are available in CHASM.
-		return nil
-	}
-
-	// TODO - Memo provider is being updated to support protobufs, byte slices
-	// may cause oscillating writes to visibility given that proto serialization is
-	// non-deterministic.
 	return map[string]chasm.VisibilityValue{
-		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(payload),
+		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(infoPayload),
 	}
 }
 
@@ -641,7 +716,7 @@ func (s *Scheduler) Memo(
 // answer List queries.
 func (s *Scheduler) ListInfo(
 	ctx chasm.Context,
-) (*schedulepb.ScheduleListInfo, error) {
+) *schedulepb.ScheduleListInfo {
 	spec := common.CloneProto(s.Schedule.Spec)
 
 	// Clear fields that are too large/not useful for the list view.
@@ -661,5 +736,24 @@ func (s *Scheduler) ListInfo(
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
 		FutureActionTimes: generator.FutureActionTimes,
-	}, nil
+	}
+}
+
+// startWorkflowSearchAttributes returns the search attributes to be applied to
+// workflows kicked off. Includes custom search attributes and Temporal-managed.
+func (s *Scheduler) startWorkflowSearchAttributes(
+	nominal time.Time,
+) *commonpb.SearchAttributes {
+	attributes := s.Schedule.GetAction().GetStartWorkflow().GetSearchAttributes()
+
+	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
+	if p, err := payload.Encode(nominal); err == nil {
+		fields[sadefs.TemporalScheduledStartTime] = p
+	}
+	if p, err := payload.Encode(s.ScheduleId); err == nil {
+		fields[sadefs.TemporalScheduledById] = p
+	}
+	return &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
 }

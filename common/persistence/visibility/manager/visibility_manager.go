@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
@@ -33,7 +34,9 @@ type (
 
 		// Read APIs.
 		ListWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
+		ListChasmExecutions(ctx context.Context, request *ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error)
 		CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
+		CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 
 		// Admin APIs
@@ -108,6 +111,28 @@ type (
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
+	}
+
+	ListChasmExecutionsRequest struct {
+		ArchetypeID chasm.ArchetypeID
+		NamespaceID namespace.ID
+		Namespace   namespace.Name
+		PageSize    int // Maximum number of workflow executions per page
+		Query       string
+		// Token to continue reading next page of workflow executions.
+		// Pass in empty slice for first page.
+		NextPageToken []byte
+	}
+
+	CountChasmExecutionsRequest struct {
+		ArchetypeID chasm.ArchetypeID
+		NamespaceID namespace.ID
+		Namespace   namespace.Name
+		Query       string
+	}
+
+	CountChasmExecutionsResponse struct {
+		Count int64
 	}
 
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions

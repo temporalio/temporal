@@ -10,6 +10,7 @@ linters:
   enable:
     - errcheck
     - importas
+    - depguard
     - revive
     - staticcheck
     - govet
@@ -35,6 +36,15 @@ linters:
           msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
         - pattern: panic
           msg: "Please avoid using panic in application code"
+        - pattern: time\.Now
+          msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: github.com/pborman/uuid
+              desc: "Importing github.com/pborman/uuid is disallowed; use github.com/google/uuid instead"
     importas:
       # Enforce the aliases below.
       no-unaliased: true
@@ -145,6 +155,14 @@ linters:
     rules:
       - path-except: _test\.go|tests/.+\.go
         text: "time.Sleep"
+        linters:
+          - forbidigo
+      - path-except: chasm/lib/.*\.go$
+        text: "time.Now"
+        linters:
+          - forbidigo
+      - path: chasm/lib/.*_test\.go$
+        text: "time.Now"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/

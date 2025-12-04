@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
@@ -15,14 +16,16 @@ func NewQueryConverterLegacy(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *QueryConverterLegacy {
 	switch pluginName {
 	case mysql.PluginName:
-		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
+		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString, chasmMapper, archetypeID)
 	case postgresql.PluginName, postgresql.PluginNamePGX:
-		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
+		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString, chasmMapper, archetypeID)
 	case sqlite.PluginName:
-		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
+		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString, chasmMapper, archetypeID)
 	default:
 		return nil
 	}

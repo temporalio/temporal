@@ -408,7 +408,10 @@ type ChasmTaskInfo struct {
 	TypeId uint32 `protobuf:"varint,4,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"`
 	// Opaque attached task data. May be nil. Usable by components, not the CHASM
 	// framework itself.
-	Data          *v1.DataBlob `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
+	Data *v1.DataBlob `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
+	// ArchetypeID of the execution that generated this task.
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId   uint32 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -476,6 +479,13 @@ func (x *ChasmTaskInfo) GetData() *v1.DataBlob {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *ChasmTaskInfo) GetArchetypeId() uint32 {
+	if x != nil {
+		return x.ArchetypeId
+	}
+	return 0
 }
 
 // ChasmComponentRef references a specific chasm component.
@@ -811,13 +821,14 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\x13ChasmDataAttributes\"\x1b\n" +
 	"\x19ChasmCollectionAttributes\"5\n" +
 	"\x16ChasmPointerAttributes\x12\x1b\n" +
-	"\tnode_path\x18\x01 \x03(\tR\bnodePath\"\x97\x03\n" +
+	"\tnode_path\x18\x01 \x03(\tR\bnodePath\"\xba\x03\n" +
 	"\rChasmTaskInfo\x12\x8c\x01\n" +
 	"&component_initial_versioned_transition\x18\x01 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR#componentInitialVersionedTransition\x12\x93\x01\n" +
 	"*component_last_update_versioned_transition\x18\x02 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR&componentLastUpdateVersionedTransition\x12\x12\n" +
 	"\x04path\x18\x03 \x03(\tR\x04path\x12\x17\n" +
 	"\atype_id\x18\x04 \x01(\rR\x06typeId\x124\n" +
-	"\x04data\x18\x05 \x01(\v2 .temporal.api.common.v1.DataBlobR\x04data\"\xc6\x03\n" +
+	"\x04data\x18\x05 \x01(\v2 .temporal.api.common.v1.DataBlobR\x04data\x12!\n" +
+	"\farchetype_id\x18\x06 \x01(\rR\varchetypeId\"\xc6\x03\n" +
 	"\x11ChasmComponentRef\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vbusiness_id\x18\x02 \x01(\tR\n" +

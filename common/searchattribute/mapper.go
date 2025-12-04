@@ -115,7 +115,7 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	}, nil
 }
 
-// AliasFields returns SearchAttributes struct where each search attribute name is replaced with alias.
+// AliasFields returns SearchAttributes struct where each custom search attribute name is replaced with alias.
 // If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
 func AliasFields(
 	mapperProvider MapperProvider,

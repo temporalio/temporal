@@ -68,7 +68,7 @@ func NewComponentRef[C Component](
 func (r *ComponentRef) ArchetypeID(
 	registry *Registry,
 ) (ArchetypeID, error) {
-	if r.archetypeID != 0 {
+	if r.archetypeID != UnspecifiedArchetypeID {
 		return r.archetypeID, nil
 	}
 
@@ -93,7 +93,7 @@ func (r *ComponentRef) ShardingKey(
 		return "", err
 	}
 
-	rc, ok := registry.componentByID(archetypeID)
+	rc, ok := registry.ComponentByID(archetypeID)
 	if !ok {
 		return "", serviceerror.NewInternalf("unknown chasm component type id: %d", archetypeID)
 	}

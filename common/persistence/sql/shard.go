@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/softassert"
 )
 
 type sqlShardStore struct {
@@ -134,7 +133,6 @@ func lockShard(
 	switch err {
 	case nil:
 		if rangeID != oldRangeID {
-			softassert.Sometimes(logger).Debug("ShardOwnershipLostError: Failed to update shard")
 			return &persistence.ShardOwnershipLostError{
 				ShardID: shardID,
 				Msg:     fmt.Sprintf("Failed to update shard. Previous range ID: %v; new range ID: %v", oldRangeID, rangeID),
