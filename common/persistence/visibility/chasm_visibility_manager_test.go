@@ -1,4 +1,4 @@
-package history
+package visibility
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 )
 
 type (
-	ChasmVisibilitySuite struct {
+	ChasmVisibilityManagerSuite struct {
 		*require.Assertions
 		suite.Suite
 		controller *gomock.Controller
@@ -33,7 +33,7 @@ type (
 		visibilityManager *manager.MockVisibilityManager
 		shardContext      *historyi.MockShardContext
 		config            *configs.Config
-		engine            *ChasmEngine
+		visibilityMgr     *ChasmVisibilityManager
 	}
 
 	// Test component for mocking CHASM components in visibility tests
@@ -71,10 +71,10 @@ func (tc *visibilityTestComponent) LifecycleState(_ chasm.Context) chasm.Lifecyc
 }
 
 func TestChasmVisibilitySuite(t *testing.T) {
-	suite.Run(t, new(ChasmVisibilitySuite))
+	suite.Run(t, new(ChasmVisibilityManagerSuite))
 }
 
-func (s *ChasmVisibilitySuite) SetupTest() {
+func (s *ChasmVisibilityManagerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
@@ -103,19 +103,17 @@ func (s *ChasmVisibilitySuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.config.HistoryMaxPageSize = dynamicconfig.GetIntPropertyFnFilteredByNamespace(1000)
 
-	s.engine = newChasmEngine(
-		nil, // entityCache not needed for visibility tests
+	s.visibilityMgr = NewChasmVisibilityManager(
 		s.registry,
-		s.config,
 		s.visibilityManager,
 	)
 }
 
-func (s *ChasmVisibilitySuite) TearDownTest() {
+func (s *ChasmVisibilityManagerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *ChasmVisibilitySuite) TestListRuns_Success() {
+func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 	ctx := context.Background()
 
 	query := "StartTime > '2024-01-01T00:00:00Z'"
@@ -209,7 +207,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_Success() {
 		NextPageToken: pageToken,
 	}
 
-	response, err := s.engine.ListExecutions(
+	response, err := s.visibilityMgr.ListExecutions(
 		ctx,
 		reflect.TypeFor[*visibilityTestComponent](),
 		request,
@@ -245,7 +243,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_Success() {
 	s.Equal(chasmMemoPayload, execution.ChasmMemo)
 }
 
-func (s *ChasmVisibilitySuite) TestCountRuns_Success() {
+func (s *ChasmVisibilityManagerSuite) TestCountExecutions_Success() {
 	ctx := context.Background()
 
 	query := "StartTime > '2024-01-01T00:00:00Z'"
@@ -285,7 +283,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_Success() {
 		Query:         query,
 	}
 
-	response, err := s.engine.CountExecutions(
+	response, err := s.visibilityMgr.CountExecutions(
 		ctx,
 		reflect.TypeFor[*visibilityTestComponent](),
 		request,
@@ -297,7 +295,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_Success() {
 	s.Equal(expectedCount, response.Count)
 }
 
-func (s *ChasmVisibilitySuite) TestListRuns_InvalidArchetypeType() {
+func (s *ChasmVisibilityManagerSuite) TestListExecutions_InvalidArchetypeType() {
 	ctx := context.Background()
 
 	// Use an invalid type that's not registered
@@ -309,7 +307,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_InvalidArchetypeType() {
 		Query:         "StartTime > '2024-01-01T00:00:00Z'",
 	}
 
-	response, err := s.engine.ListExecutions(
+	response, err := s.visibilityMgr.ListExecutions(
 		ctx,
 		invalidType,
 		request,
@@ -319,7 +317,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_InvalidArchetypeType() {
 	s.Nil(response)
 }
 
-func (s *ChasmVisibilitySuite) TestCountRuns_InvalidArchetypeType() {
+func (s *ChasmVisibilityManagerSuite) TestCountExecutions_InvalidArchetypeType() {
 	ctx := context.Background()
 
 	// Use an invalid type that's not registered
@@ -331,7 +329,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_InvalidArchetypeType() {
 		Query:         "StartTime > '2024-01-01T00:00:00Z'",
 	}
 
-	response, err := s.engine.CountExecutions(
+	response, err := s.visibilityMgr.CountExecutions(
 		ctx,
 		invalidType,
 		request,
@@ -341,7 +339,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_InvalidArchetypeType() {
 	s.Nil(response)
 }
 
-func (s *ChasmVisibilitySuite) TestListRuns_VisibilityManagerError() {
+func (s *ChasmVisibilityManagerSuite) TestListExecutions_VisibilityManagerError() {
 	ctx := context.Background()
 
 	query := "StartTime > '2024-01-01T00:00:00Z'"
@@ -364,7 +362,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_VisibilityManagerError() {
 		Query:         query,
 	}
 
-	response, err := s.engine.ListExecutions(
+	response, err := s.visibilityMgr.ListExecutions(
 		ctx,
 		reflect.TypeFor[*visibilityTestComponent](),
 		request,
@@ -375,7 +373,7 @@ func (s *ChasmVisibilitySuite) TestListRuns_VisibilityManagerError() {
 	s.Equal(errTestVisibilityError, err)
 }
 
-func (s *ChasmVisibilitySuite) TestCountRuns_VisibilityManagerError() {
+func (s *ChasmVisibilityManagerSuite) TestCountExecutions_VisibilityManagerError() {
 	ctx := context.Background()
 
 	query := "StartTime > '2024-01-01T00:00:00Z'"
@@ -398,7 +396,7 @@ func (s *ChasmVisibilitySuite) TestCountRuns_VisibilityManagerError() {
 		Query:         query,
 	}
 
-	response, err := s.engine.CountExecutions(
+	response, err := s.visibilityMgr.CountExecutions(
 		ctx,
 		reflect.TypeFor[*visibilityTestComponent](),
 		request,
