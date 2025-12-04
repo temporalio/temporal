@@ -45,6 +45,9 @@ type Engine interface {
 		func(Context, Component) (bool, error),
 		...TransitionOption,
 	) ([]byte, error)
+
+	// NotifyExecution notifies any PollComponent callers waiting on the execution.
+	NotifyExecution(EntityKey)
 }
 
 type BusinessIDReusePolicy int

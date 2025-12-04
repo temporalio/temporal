@@ -87,8 +87,8 @@ func (e *ChasmEngine) SetShardController(
 	e.shardController = shardController
 }
 
-func (e *ChasmEngine) GetNotifier() *ChasmNotifier {
-	return e.notifier
+func (e *ChasmEngine) NotifyExecution(key chasm.EntityKey) {
+	e.notifier.Notify(key)
 }
 
 func (e *ChasmEngine) NewEntity(

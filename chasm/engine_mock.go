@@ -61,6 +61,18 @@ func (mr *MockEngineMockRecorder) NewEntity(arg0, arg1, arg2 any, arg3 ...any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewEntity", reflect.TypeOf((*MockEngine)(nil).NewEntity), varargs...)
 }
 
+// NotifyExecution mocks base method.
+func (m *MockEngine) NotifyExecution(arg0 EntityKey) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyExecution", arg0)
+}
+
+// NotifyExecution indicates an expected call of NotifyExecution.
+func (mr *MockEngineMockRecorder) NotifyExecution(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyExecution", reflect.TypeOf((*MockEngine)(nil).NotifyExecution), arg0)
+}
+
 // PollComponent mocks base method.
 func (m *MockEngine) PollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) (bool, error), arg3 ...TransitionOption) ([]byte, error) {
 	m.ctrl.T.Helper()

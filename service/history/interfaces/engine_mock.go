@@ -84,6 +84,20 @@ func (mr *MockEngineMockRecorder) BackfillHistoryEvents(ctx, request any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackfillHistoryEvents", reflect.TypeOf((*MockEngine)(nil).BackfillHistoryEvents), ctx, request)
 }
 
+// ChasmEngine mocks base method.
+func (m *MockEngine) ChasmEngine() chasm.Engine {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmEngine")
+	ret0, _ := ret[0].(chasm.Engine)
+	return ret0
+}
+
+// ChasmEngine indicates an expected call of ChasmEngine.
+func (mr *MockEngineMockRecorder) ChasmEngine() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmEngine", reflect.TypeOf((*MockEngine)(nil).ChasmEngine))
+}
+
 // ConvertReplicationTask mocks base method.
 func (m *MockEngine) ConvertReplicationTask(ctx context.Context, task tasks.Task, clusterID int32) (*repication.ReplicationTask, error) {
 	m.ctrl.T.Helper()
@@ -172,20 +186,6 @@ func (m *MockEngine) GenerateLastHistoryReplicationTasks(ctx context.Context, re
 func (mr *MockEngineMockRecorder) GenerateLastHistoryReplicationTasks(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockEngine)(nil).GenerateLastHistoryReplicationTasks), ctx, request)
-}
-
-// GetChasmEngine mocks base method.
-func (m *MockEngine) GetChasmEngine() chasm.Engine {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetChasmEngine")
-	ret0, _ := ret[0].(chasm.Engine)
-	return ret0
-}
-
-// GetChasmEngine indicates an expected call of GetChasmEngine.
-func (mr *MockEngineMockRecorder) GetChasmEngine() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmEngine", reflect.TypeOf((*MockEngine)(nil).GetChasmEngine))
 }
 
 // GetDLQMessages mocks base method.
