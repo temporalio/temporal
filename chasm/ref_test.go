@@ -77,9 +77,9 @@ func (s *componentRefSuite) TestShardingKey() {
 
 func (s *componentRefSuite) TestSerializeDeserialize() {
 	_, err := DeserializeComponentRef(nil)
-	s.Error(err)
+	s.ErrorIs(err, ErrInvalidComponentRef)
 	_, err = DeserializeComponentRef([]byte{})
-	s.Error(err)
+	s.ErrorIs(err, ErrInvalidComponentRef)
 
 	tv := testvars.New(s.T())
 	entityKey := EntityKey{
