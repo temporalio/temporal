@@ -73,6 +73,7 @@ type (
 		// Address for SDK to connect to, using membership grpc resolver.
 		frontendMembershipAddress string
 		chasmEngine               chasm.Engine
+		chasmVisibilityMgr        chasm.VisibilityManager
 
 		// These are routing/load balancing clients but do not do retries:
 		adminClient    adminservice.AdminServiceClient
@@ -324,6 +325,10 @@ func (c *TemporalImpl) ChasmEngine() (chasm.Engine, error) {
 	return c.chasmEngine, nil
 }
 
+func (c *TemporalImpl) ChasmVisibilityManager() chasm.VisibilityManager {
+	return c.chasmVisibilityMgr
+}
+
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
@@ -507,6 +512,7 @@ func (c *TemporalImpl) startHistory() {
 			chasmFxOptions,
 			fx.Populate(&namespaceRegistry),
 			fx.Populate(&c.chasmEngine),
+			fx.Populate(&c.chasmVisibilityMgr),
 			fx.Populate(&c.chasmRegistry),
 		)
 		err := app.Err()
