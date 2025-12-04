@@ -658,6 +658,7 @@ func AdminHandlerProvider(
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	dynamicClient dynamicconfig.Client,
 	matchingClient resource.MatchingClient,
 	chasmRegistry *chasm.Registry,
 ) *AdminHandler {
@@ -689,6 +690,7 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		chasmRegistry,
+		dynamicClient,
 		taskCategoryRegistry,
 		matchingClient,
 	}
