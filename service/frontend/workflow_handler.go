@@ -5277,42 +5277,28 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 		return errBuildIdTooLong
 	}
-
-	// Checks for versioning v3
-	versioningMode := deploymentOptions.GetWorkerVersioningMode()
-
-	// Validate deployment version based on the versioning mode
-	err := wh.validateDeploymentVersionWithMode(versioningMode, deploymentOptions, tq)
-	if err != nil {
-		return err
+	if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+		return errUseVersioningWithoutNormalName
 	}
 
-	return nil
+	return wh.validateDeploymentOptions(deploymentOptions)
 }
 
-func (wh *WorkflowHandler) validateDeploymentVersionWithMode(
-	versioningMode enumspb.WorkerVersioningMode,
-	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
-	tq *taskqueuepb.TaskQueue,
-) error {
-	var deploymentVersion *deploymentspb.WorkerDeploymentVersion
-	if deploymentOptions.GetDeploymentName() != "" || deploymentOptions.GetBuildId() != "" {
-		deploymentVersion = &deploymentspb.WorkerDeploymentVersion{
-			DeploymentName: deploymentOptions.GetDeploymentName(),
-			BuildId:        deploymentOptions.GetBuildId(),
-		}
-	}
-
-	// Validation checks
-	switch versioningMode {
-	case enumspb.WORKER_VERSIONING_MODE_VERSIONED:
-		if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
-			return errUseVersioningWithoutNormalName
-		}
-		return worker_versioning.ValidateDeploymentVersion(deploymentVersion, wh.config.MaxIDLengthLimit())
-	default:
+func (wh *WorkflowHandler) validateDeploymentOptions(deploymentOptions *deploymentpb.WorkerDeploymentOptions) error {
+	if deploymentOptions == nil {
 		return nil
 	}
+	if deploymentOptions.GetDeploymentName() != "" && deploymentOptions.GetBuildId() == "" {
+		return errDeploymentOptionsNotSet
+	}
+	if deploymentOptions.GetDeploymentName() == "" && deploymentOptions.GetBuildId() != "" {
+		return errDeploymentOptionsNotSet
+	}
+	deploymentVersion := &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: deploymentOptions.GetDeploymentName(),
+		BuildId:        deploymentOptions.GetBuildId(),
+	}
+	return worker_versioning.ValidateDeploymentVersion(deploymentVersion, wh.config.MaxIDLengthLimit())
 }
 
 //nolint:revive // cyclomatic complexity
