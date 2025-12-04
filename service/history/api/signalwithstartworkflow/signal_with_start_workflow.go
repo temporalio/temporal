@@ -327,7 +327,6 @@ func signalWorkflow(
 			)
 		}
 
-		//TODO: Check pause and skip.
 		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 		if err != nil {
 			return err
