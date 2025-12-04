@@ -2926,6 +2926,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
+func (ms *MutableStateImpl) IsWorkflowExecutionStatusPaused() bool {
+	return ms.executionState.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+}
+
 func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
 	identity string,
 	reason string,
