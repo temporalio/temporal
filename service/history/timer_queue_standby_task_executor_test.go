@@ -904,7 +904,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_AttemptMismatch() {
 	// This test verifies that when a workflow task fails and is rescheduled with a new attempt,
-	// the old timer task (with old attempt and event id) is skipped without calling UpdateWorkflowExecution.
+	// the old timer task (with old attempt and old stamp) correctly returns stale reference error.
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -955,9 +955,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Atte
 	)
 	s.NoError(err)
 
-	wt2, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_TRANSIENT)
+	wt, err = mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_TRANSIENT)
 	s.NoError(err)
-	s.Equal(int32(2), wt2.Attempt)
+	s.Equal(int32(2), wt.Attempt)
 
 	timerTask := &tasks.WorkflowTaskTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -965,6 +965,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Atte
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
+		// Timer task has old attempt (1) and old stamp (default 0).
+		// Current workflow task has new attempt (2) and new stamp (incremented).
+		// This should return stale reference error due to stamp mismatch.
 		ScheduleAttempt:     1,
 		Version:             s.version,
 		TaskID:              s.mustGenerateTaskID(),
@@ -978,7 +981,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Atte
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.NoError(resp.ExecutionErr)
+	// After workflow task fails and is rescheduled, the stamp is incremented.
+	// The old timer task with old stamp should now return stale reference error.
+	s.ErrorIs(resp.ExecutionErr, consts.ErrStaleReference)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_StampMismatch() {
