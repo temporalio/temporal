@@ -13,4 +13,4 @@ COPY --chmod=755 ./scripts/sh/entrypoint.sh /etc/temporal/entrypoint.sh
 WORKDIR /etc/temporal
 USER temporal
 
-ENTRYPOINT [ "/etc/temporal/entrypoint.sh" ]
+CMD [ "/etc/temporal/entrypoint.sh" ]

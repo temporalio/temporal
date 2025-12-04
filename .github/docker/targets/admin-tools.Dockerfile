@@ -4,8 +4,7 @@ ARG TARGETARCH
 
 RUN apk add --no-cache \
     ca-certificates \
-    tzdata \
-    tini && addgroup -g 1000 temporal && \
+    tzdata && addgroup -g 1000 temporal && \
     adduser -u 1000 -G temporal -D temporal
 
 COPY --chmod=755 ./build/${TARGETARCH}/temporal /usr/local/bin/
@@ -17,7 +16,5 @@ COPY --chmod=755 ./build/${TARGETARCH}/temporal-elasticsearch-tool /usr/local/bi
 COPY ./build/temporal/schema /etc/temporal/schema
 
 USER temporal
-WORKDIR /etc/temporal
 
-ENTRYPOINT ["tini", "--"]
-CMD ["sleep", "infinity"]
+CMD ["sh", "-c", "trap exit INT HUP TERM; sleep infinity"]
