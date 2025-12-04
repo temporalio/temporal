@@ -78,7 +78,7 @@ var (
 	execution2 = &replicationspb.MigrationExecutionInfo{
 		BusinessId:  "workflow2",
 		RunId:       "run2",
-		ArchetypeId: chasm.WorkflowArchetypeID,
+		ArchetypeId: chasm.UnspecifiedArchetypeID,
 	}
 
 	completeState = &historyservice.DescribeMutableStateResponse{
