@@ -275,39 +275,55 @@ func (e *ChasmEngine) PollComponent(
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 	opts ...chasm.TransitionOption,
 ) (retRef []byte, retError error) {
+
+	var ch <-chan struct{}
+	var unsubscribe func()
 	defer func() {
-		if errors.Is(retError, consts.ErrStaleState) {
-			retError = serviceerror.NewUnavailable("please retry")
+		if unsubscribe != nil {
+			unsubscribe()
 		}
 	}()
 
-	closedCh := make(chan struct{})
-	close(closedCh)
-	var ch <-chan struct{} = closedCh
-	unsubscribe := func() {}
-	defer func() { unsubscribe() }()
+	checkPredicateOrSubscribe := func() ([]byte, error) {
+		_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+		if err != nil {
+			return nil, err
+		}
+		defer executionLease.GetReleaseFn()(nil)
+
+		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
+		if err != nil {
+			if errors.Is(err, consts.ErrStaleState) {
+				err = serviceerror.NewUnavailable("please retry")
+			}
+			return nil, err
+		}
+		if ref != nil {
+			return ref, nil
+		}
+		// Predicate not satisfied; subscribe before releasing the lock.
+		ch, unsubscribe = e.notifier.Subscribe(requestRef.EntityKey)
+		return nil, nil
+	}
+
+	ref, err := checkPredicateOrSubscribe()
+	if err != nil {
+		return nil, err
+	}
+	if ref != nil {
+		return ref, nil
+	}
 
 	for {
 		select {
 		case <-ch:
-			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+			ref, err := checkPredicateOrSubscribe()
 			if err != nil {
 				return nil, err
 			}
-			satisfiedRef, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
-			if err != nil {
-				executionLease.GetReleaseFn()(nil)
-				return nil, err
+			if ref != nil {
+				return ref, nil
 			}
-			if satisfiedRef != nil {
-				executionLease.GetReleaseFn()(nil)
-				return satisfiedRef, nil
-			}
-			// Predicate not satisfied; subscribe before releasing the lock.
-			func() {
-				defer executionLease.GetReleaseFn()(nil)
-				ch, unsubscribe = e.notifier.Subscribe(requestRef.EntityKey)
-			}()
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -334,10 +350,12 @@ func (e *ChasmEngine) predicateSatisfied(
 	// It is not acceptable to declare the predicate to be satisfied against execution state that is
 	// behind the requested reference. However, getExecutionLease does not currently guarantee that
 	// execution VT >= ref VT, therefore we call IsStale() again here and return any error (which at
-	// this point must be ErrStaleState; ErrStaleReference would have been returned as an error from
-	// getExecutionLease).
+	// this point must be ErrStaleState; ErrStaleReference has already been eliminated).
 	err := chasmTree.IsStale(ref)
 	if err != nil {
+		if errors.Is(err, consts.ErrStaleState) {
+			err = serviceerror.NewUnavailable("please retry")
+		}
 		// ErrStaleState
 		// TODO(dan): this should be retryable if it is the failover version that is stale
 		return nil, err
