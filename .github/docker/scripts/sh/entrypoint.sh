@@ -1,5 +1,6 @@
 #!/bin/sh
-
+# pipefail is included in alpine
+# shellcheck disable=SC3040
 set -eu -o pipefail
 
 # Resolve hostname to IP address for binding if not already set (supports both IPv4 and IPv6)
