@@ -220,6 +220,7 @@ type (
 		ApplyWorkflowExecutionPausedEvent(event *historypb.HistoryEvent) error
 		AddWorkflowExecutionUnpausedEvent(identity string, reason string, requestID string) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionUnpausedEvent(event *historypb.HistoryEvent) error
+		IsWorkflowExecutionStatusPaused() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
