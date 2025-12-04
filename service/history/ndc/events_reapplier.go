@@ -77,6 +77,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 	}
 
 	if !ms.HasPendingWorkflowTask() {
+		// TODO: Check pause and skip.
 		if _, err := ms.AddWorkflowTaskScheduledEvent(
 			false,
 			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,

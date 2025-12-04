@@ -110,6 +110,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// then the lease is released without an error, i.e. workflow context and mutable state are NOT cleared.
 	releaseLeaseWithError := true
 
+	// TODO: Check pause & request.GetForceCreateNewWorkflowTask()  and reject request.
 	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err

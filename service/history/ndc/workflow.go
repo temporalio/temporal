@@ -218,6 +218,7 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 	if _, err = r.failWorkflowTask(); err != nil {
 		return err
 	}
+	// TODO: Talk to Will
 	if _, err := r.mutableState.AddWorkflowTaskScheduledEvent(
 		false,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
