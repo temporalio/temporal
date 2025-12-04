@@ -3338,7 +3338,7 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 	ms.GetExecutionInfo().BuildIdRedirectCounter = redirectCounter
 
 	// Re-scheduling pending workflow and activity tasks.
-	err = ms.reschedulePendingWorkflowTask()
+	err = ms.reschedulePendingWorkflowTask(false)
 	if err != nil {
 		return err
 	}
@@ -3352,16 +3352,6 @@ func (ms *MutableStateImpl) ApplyBuildIdRedirect(
 			// TODO: skip task generation also when activity is in backoff period
 			continue
 		}
-
-		// need to update stamp so the passive side regenerate the task
-		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
-			info.Stamp++
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
 		// we only need to resend the activities to matching, no need to update timer tasks.
 		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
 		if err != nil {
@@ -5249,7 +5239,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 
 	// Finally, reschedule the pending workflow task if so requested.
 	if requestReschedulePendingWorkflowTask {
-		return ms.reschedulePendingWorkflowTask()
+		return ms.reschedulePendingWorkflowTask(true)
 	}
 	return nil
 }
@@ -5257,8 +5247,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 func (ms *MutableStateImpl) updateVersioningOverride(
 	override *workflowpb.VersioningOverride,
 ) (bool, error) {
-	previousEffectiveDeployment := ms.GetEffectiveDeployment()
-	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	var requestReschedulePendingWorkflowTask bool
 
 	if override != nil {
@@ -5322,6 +5310,8 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		ms.GetExecutionInfo().WorkerDeploymentName = ""
 	}
 
+	previousEffectiveDeployment := ms.GetEffectiveDeployment()
+	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
@@ -8731,7 +8721,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// - reschedule the pending WFT so the old one is invalided
 	ms.ClearStickyTaskQueue()
 
-	err := ms.reschedulePendingWorkflowTask()
+	err := ms.reschedulePendingWorkflowTask(false)
 	if err != nil {
 		return err
 	}
@@ -8770,17 +8760,8 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 			// activity already started
 			continue
 		}
-
-		// need to update stamp so the passive side regenerate the task
-		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
-			info.Stamp++
-			return nil
-		})
-		if err != nil {
-			return err
-		}
 		// we only need to resend the activities to matching, no need to update timer tasks.
-		err = ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
 		if err != nil {
 			return err
 		}
@@ -8791,7 +8772,7 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 
 // reschedulePendingWorkflowTask reschedules the pending WFT if it is not started yet.
 // The currently scheduled WFT will be rejected when attempting to start because its stamp changed.
-func (ms *MutableStateImpl) reschedulePendingWorkflowTask() error {
+func (ms *MutableStateImpl) reschedulePendingWorkflowTask(invalidatePendingTasks bool) error {
 	// If the WFT is started but not finished, we let it run its course
 	// - once it's completed, failed or timed out a new one will be scheduled.
 	if !ms.HasPendingWorkflowTask() || ms.HasStartedWorkflowTask() {
@@ -8806,13 +8787,15 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask() error {
 		ms.logInfo("start transition did not reschedule pending speculative task")
 		return nil
 	}
-	// Reset the attempt; forcing a non-transient workflow task to be scheduled.
-	ms.executionInfo.WorkflowTaskAttempt = 1
 
-	// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
-	// We don't invalidate speculative WFTs because they are very latency sensitive.
-	ms.executionInfo.WorkflowTaskStamp += 1
-	ms.workflowTaskUpdated = true
+	if invalidatePendingTasks {
+		// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
+		// We don't invalidate speculative WFTs because they are very latency sensitive.
+		ms.executionInfo.WorkflowTaskStamp += 1
+
+		// Reset the attempt; forcing a non-transient workflow task to be scheduled.
+		ms.executionInfo.Attempt = 1
+	}
 
 	return ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(pendingTask.ScheduledEventID)
 }
