@@ -1,0 +1,106 @@
+name: Build Docker Images
+description: Build Temporal Docker images from binaries
+
+inputs:
+  push:
+    description: "Push images to Docker Hub"
+    required: false
+    default: "false"
+  tag-latest:
+    description: "Tag images as latest"
+    required: false
+    default: "false"
+  platform:
+    description: "Single platform to build (e.g., linux/amd64)"
+    required: false
+    default: ""
+  load:
+    description: "Load image into local Docker daemon (only works with linux/amd64 - the runner architecture)"
+    required: false
+    default: "false"
+  dockerhub-username:
+    description: "Docker Hub username"
+    required: false
+  dockerhub-token:
+    description: "Docker Hub token"
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Validate and sanitize branch name for Docker tag
+      id: sanitize-tag
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const sanitizeTag = require('./.github/actions/build-docker-images/scripts/sanitize-tag.js');
+          sanitizeTag({ context, core });
+
+    - name: Organize binaries for Docker
+      id: organize-binaries
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const organizeBinaries = require('./.github/actions/build-docker-images/scripts/organize-binaries.js');
+          organizeBinaries({ core });
+
+    - name: Download Temporal CLI
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const downloadCli = require('./.github/actions/build-docker-images/scripts/download-cli.js');
+          const availableArchsStr = '${{ steps.organize-binaries.outputs.available-archs }}';
+          const availableArchs = availableArchsStr.split(',');
+          downloadCli({ availableArchs });
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      if: inputs.push == 'true'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.dockerhub-username }}
+        password: ${{ inputs.dockerhub-token }}
+
+    - name: Build Docker images
+      if: inputs.push != 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        IMAGE_REPO: temporaliotest
+        IMAGE_SHA_TAG: ${{ github.sha }}
+        IMAGE_BRANCH_TAG: ${{ steps.sanitize-tag.outputs.tag }}
+        TEMPORAL_SHA: ${{ github.sha }}
+        TAG_LATEST: ${{ inputs.tag-latest }}
+        ENABLE_CACHE: "true"
+      run: |
+        if [ -n "${{ inputs.platform }}" ]; then
+          docker buildx bake \
+            --set "*.platform=${{ inputs.platform }}" \
+            ${{ inputs.load == 'true' && '--load' || '' }} \
+            -f docker/docker-bake.hcl \
+            server admin-tools
+        else
+          docker buildx bake \
+            ${{ inputs.load == 'true' && '--load' || '' }} \
+            -f docker/docker-bake.hcl \
+            server admin-tools
+        fi
+
+    - name: Build and push Docker images
+      if: inputs.push == 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        IMAGE_REPO: temporaliotest
+        IMAGE_SHA_TAG: ${{ github.sha }}
+        IMAGE_BRANCH_TAG: ${{ steps.sanitize-tag.outputs.tag }}
+        TEMPORAL_SHA: ${{ github.sha }}
+        TAG_LATEST: ${{ inputs.tag-latest }}
+        ENABLE_CACHE: "true"
+      run: |
+        docker buildx bake \
+          --push \
+          -f docker/docker-bake.hcl \
+          server admin-tools

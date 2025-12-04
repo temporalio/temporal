@@ -1,6 +1,12 @@
+# GoReleaser v2 configuration
+version: 2
+
 before:
   hooks:
     - go mod download
+
+snapshot:
+  version_template: "{{ .Version }}-SNAPSHOT-{{ .ShortCommit }}"
 
 archives:
   - id: default
@@ -79,11 +85,11 @@ builds:
       - arm64
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
   algorithm: sha256
 
 changelog:
-  skip: true
+  disable: true
 
 announce:
-  skip: "true"
+  skip: true
