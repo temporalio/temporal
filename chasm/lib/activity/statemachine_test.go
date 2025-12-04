@@ -8,7 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/api/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
@@ -94,7 +94,7 @@ func TestTransitionScheduled(t *testing.T) {
 					ScheduleToStartTimeout: durationpb.New(tc.scheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
-					TaskQueue:              &taskqueue.TaskQueue{Name: "test-task-queue"},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 				},
 				RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
 					Input: input,
@@ -247,7 +247,7 @@ func TestTransitionRescheduled(t *testing.T) {
 					ScheduleToStartTimeout: durationpb.New(tc.scheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-					TaskQueue:              &taskqueue.TaskQueue{Name: "test-task-queue"},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 				},
 				Attempt: chasm.NewDataField(ctx, attemptState),
 				Outcome: chasm.NewDataField(ctx, outcome),
@@ -406,7 +406,7 @@ func TestTransitionTimedout(t *testing.T) {
 					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 tc.startStatus,
-					TaskQueue:              &taskqueue.TaskQueue{Name: "test-task-queue"},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 				},
 				Attempt: chasm.NewDataField(ctx, attemptState),
 				Outcome: chasm.NewDataField(ctx, outcome),
@@ -496,7 +496,7 @@ func TestTransitionCompleted(t *testing.T) {
 			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			TaskQueue:              &taskqueue.TaskQueue{Name: "test-task-queue"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
 		Attempt: chasm.NewDataField(ctx, attemptState),
 		Outcome: chasm.NewDataField(ctx, outcome),
@@ -571,7 +571,7 @@ func TestTransitionFailed(t *testing.T) {
 			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			TaskQueue:              &taskqueue.TaskQueue{Name: "test-task-queue"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
 		Attempt:       chasm.NewDataField(ctx, attemptState),
 		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
@@ -733,7 +733,7 @@ func TestTransitionCanceled(t *testing.T) {
 			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-			TaskQueue:              &taskqueue.TaskQueue{Name: "test-task-queue"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
 		Attempt: chasm.NewDataField(ctx, attemptState),
 		Outcome: chasm.NewDataField(ctx, outcome),

@@ -23,7 +23,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
-	namespace := namespaceEntry.Name()
+	namespaceName := namespaceEntry.Name()
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func Invoke(
 				Token:          token,
 				Request:        req,
 				MetricsHandler: shard.GetMetricsHandler(),
-				NamespaceName:  namespace,
+				NamespaceName:  namespaceName,
 			},
 		)
 		return response, err
