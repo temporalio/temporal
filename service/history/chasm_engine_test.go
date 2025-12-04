@@ -120,7 +120,6 @@ func (s *chasmEngineSuite) SetupTest() {
 		s.executionCache,
 		s.registry,
 		s.config,
-		s.mockShard.Resource.VisibilityManager,
 	)
 	s.engine.SetShardController(s.mockShardController)
 }

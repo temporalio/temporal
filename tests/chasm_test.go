@@ -26,7 +26,7 @@ const (
 type ChasmTestSuite struct {
 	testcore.FunctionalTestBase
 
-	chasmEngine                 chasm.Engine
+	chasmContext                context.Context
 	enableUnifiedQueryConverter bool
 }
 
@@ -50,20 +50,25 @@ func (s *ChasmTestSuite) SetupSuite() {
 		}),
 	)
 
-	var err error
-	s.chasmEngine, err = s.FunctionalTestBase.GetTestCluster().Host().ChasmEngine()
+	chasmEngine, err := s.FunctionalTestBase.GetTestCluster().Host().ChasmEngine()
 	s.Require().NoError(err)
-	s.Require().NotNil(s.chasmEngine)
+	s.Require().NotNil(chasmEngine)
+
+	chasmVisibilityMgr := s.GetTestCluster().Host().ChasmVisibilityManager()
+	s.Require().NotNil(chasmVisibilityMgr)
+
+	s.chasmContext = chasm.NewEngineContext(context.Background(), chasmEngine)
+	s.chasmContext = chasm.NewVisibilityManagerContext(s.chasmContext, chasmVisibilityMgr)
 }
 
 func (s *ChasmTestSuite) TestNewPayloadStore() {
 	tv := testvars.New(s.T())
 
-	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
 	_, err := tests.NewPayloadStoreHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.NewPayloadStoreRequest{
 			NamespaceID:      s.NamespaceID(),
 			StoreID:          tv.Any().String(),
@@ -77,13 +82,13 @@ func (s *ChasmTestSuite) TestNewPayloadStore() {
 func (s *ChasmTestSuite) TestNewPayloadStore_ConflictPolicy_UseExisting() {
 	tv := testvars.New(s.T())
 
-	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
 	storeID := tv.Any().String()
 
 	resp, err := tests.NewPayloadStoreHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.NewPayloadStoreRequest{
 			NamespaceID:      s.NamespaceID(),
 			StoreID:          storeID,
@@ -96,7 +101,7 @@ func (s *ChasmTestSuite) TestNewPayloadStore_ConflictPolicy_UseExisting() {
 	currentRunID := resp.RunID
 
 	resp, err = tests.NewPayloadStoreHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.NewPayloadStoreRequest{
 			NamespaceID:      s.NamespaceID(),
 			StoreID:          storeID,
@@ -107,7 +112,7 @@ func (s *ChasmTestSuite) TestNewPayloadStore_ConflictPolicy_UseExisting() {
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
 
 	resp, err = tests.NewPayloadStoreHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.NewPayloadStoreRequest{
 			NamespaceID:      s.NamespaceID(),
 			StoreID:          storeID,
@@ -122,12 +127,12 @@ func (s *ChasmTestSuite) TestNewPayloadStore_ConflictPolicy_UseExisting() {
 func (s *ChasmTestSuite) TestPayloadStore_UpdateComponent() {
 	tv := testvars.New(s.T())
 
-	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
 	storeID := tv.Any().String()
 	_, err := tests.NewPayloadStoreHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.NewPayloadStoreRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
@@ -136,7 +141,7 @@ func (s *ChasmTestSuite) TestPayloadStore_UpdateComponent() {
 	s.NoError(err)
 
 	_, err = tests.AddPayloadHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.AddPayloadRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
@@ -147,7 +152,7 @@ func (s *ChasmTestSuite) TestPayloadStore_UpdateComponent() {
 	s.NoError(err)
 
 	descResp, err := tests.DescribePayloadStoreHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.DescribePayloadStoreRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
@@ -161,12 +166,12 @@ func (s *ChasmTestSuite) TestPayloadStore_UpdateComponent() {
 func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
 	tv := testvars.New(s.T())
 
-	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
 	storeID := tv.Any().String()
 	_, err := tests.NewPayloadStoreHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.NewPayloadStoreRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
@@ -175,7 +180,7 @@ func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
 	s.NoError(err)
 
 	_, err = tests.AddPayloadHandler(
-		chasm.NewEngineContext(ctx, s.chasmEngine),
+		ctx,
 		tests.AddPayloadRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
@@ -188,7 +193,7 @@ func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
 
 	s.Eventually(func() bool {
 		descResp, err := tests.DescribePayloadStoreHandler(
-			chasm.NewEngineContext(ctx, s.chasmEngine),
+			ctx,
 			tests.DescribePayloadStoreRequest{
 				NamespaceID: s.NamespaceID(),
 				StoreID:     storeID,
@@ -202,13 +207,12 @@ func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
 func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	tv := testvars.New(s.T())
 
-	ctx, cancel := context.WithTimeout(context.Background(), chasmTestTimeout)
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
 	storeID := tv.Any().String()
-	engineContext := chasm.NewEngineContext(ctx, s.chasmEngine)
 	createResp, err := tests.NewPayloadStoreHandler(
-		engineContext,
+		ctx,
 		tests.NewPayloadStoreRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
@@ -224,7 +228,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
 		func() bool {
-			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](engineContext, &chasm.ListExecutionsRequest{
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
@@ -266,7 +270,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.Equal(archetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
 	addPayloadResp, err := tests.AddPayloadHandler(
-		engineContext,
+		ctx,
 		tests.AddPayloadRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
@@ -278,7 +282,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 
 	s.Eventually(
 		func() bool {
-			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](engineContext, &chasm.ListExecutionsRequest{
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
@@ -299,7 +303,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.Equal(addPayloadResp.State.TotalSize, visRecord.ChasmMemo.TotalSize)
 
 	_, err = tests.ClosePayloadStoreHandler(
-		engineContext,
+		ctx,
 		tests.ClosePayloadStoreRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
@@ -309,7 +313,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 
 	s.Eventually(
 		func() bool {
-			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](engineContext, &chasm.ListExecutionsRequest{
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
