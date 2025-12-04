@@ -6909,7 +6909,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 			return serviceerror.NewInternalf("no event definition registered for %v", t)
 		}
 		if def.IsWorkflowTaskTrigger() {
-			if !ms.HasPendingWorkflowTask() {
+			if !ms.HasPendingWorkflowTask() && !ms.IsWorkflowExecutionStatusPaused() {
 				if _, err := ms.AddWorkflowTaskScheduledEvent(
 					false,
 					enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
