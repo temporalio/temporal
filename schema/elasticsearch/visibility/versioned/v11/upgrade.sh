@@ -69,6 +69,9 @@ new_mapping='
     "TemporalKeyword04": {
       "type": "keyword"
     },
+    "TemporalLowCardinalityKeyword01": {
+      "type": "keyword"
+    },
     "TemporalKeywordList01": {
       "type": "keyword"
     },
