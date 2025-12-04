@@ -9,6 +9,9 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -28,13 +31,19 @@ func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus
 	a.Status = state
 }
 
+type scheduleEvent struct {
+	handler   metrics.Handler
+	namespace namespace.Name
+	inputSize int
+}
+
 // TransitionScheduled transitions to Scheduled status.
 var TransitionScheduled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-	func(a *Activity, ctx chasm.MutableContext, _ any) error {
+	func(a *Activity, ctx chasm.MutableContext, event scheduleEvent) error {
 		attempt, err := a.Attempt.Get(ctx)
 		if err != nil {
 			return err
@@ -70,13 +79,20 @@ var TransitionScheduled = chasm.NewTransition(
 				Attempt: attempt.GetCount(),
 			})
 
+		recordPayloadSize(event.inputSize, event.handler, event.namespace.String(), metrics.HistoryRecordActivityTaskStartedScope)
+
 		return nil
 	},
 )
 
 type rescheduleEvent struct {
-	retryInterval time.Duration
-	failure       *failurepb.Failure
+	retryInterval               time.Duration
+	failure                     *failurepb.Failure
+	handler                     metrics.Handler
+	namespace                   namespace.Name
+	breakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	timeoutType                 enumspb.TimeoutType
+	operationTag                string
 }
 
 // TransitionRescheduled transitions to Scheduled from Started, which happens on retries. The event to pass in
@@ -119,6 +135,14 @@ var TransitionRescheduled = chasm.NewTransition(
 			&activitypb.ActivityDispatchTask{
 				Attempt: attempt.GetCount(),
 			})
+
+		a.recordOnAttemptedMetrics(
+			attempt.GetStartedTime().AsTime(),
+			event.namespace.String(),
+			event.handler,
+			event.breakdownMetricsByTaskQueue,
+			event.operationTag,
+			event.timeoutType)
 
 		return nil
 	},
@@ -169,7 +193,7 @@ var TransitionCompleted = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) error {
+	func(a *Activity, ctx chasm.MutableContext, reqWithCtx RequestWithContext[*historyservice.RespondActivityTaskCompletedRequest]) error {
 		// TODO: after rebase on main, don't need error and add a helper store := a.LoadStore(ctx)
 		store, err := a.Store.Get(ctx)
 		if err != nil {
@@ -180,6 +204,8 @@ var TransitionCompleted = chasm.NewTransition(
 			store = a
 		}
 
+		req := reqWithCtx.Request
+
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			attempt, err := a.Attempt.Get(ctx)
 			if err != nil {
@@ -187,18 +213,31 @@ var TransitionCompleted = chasm.NewTransition(
 			}
 
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
-			attempt.LastWorkerIdentity = request.GetCompleteRequest().GetIdentity()
+			attempt.LastWorkerIdentity = req.GetCompleteRequest().GetIdentity()
 
 			outcome, err := a.Outcome.Get(ctx)
 			if err != nil {
 				return err
 			}
 
+			result := req.GetCompleteRequest().GetResult()
+
 			outcome.Variant = &activitypb.ActivityOutcome_Successful_{
 				Successful: &activitypb.ActivityOutcome_Successful{
-					Output: request.GetCompleteRequest().GetResult(),
+					Output: result,
 				},
 			}
+
+			namespaceName := reqWithCtx.NamespaceName.String()
+
+			a.recordOnClosedMetrics(
+				attempt.GetStartedTime().AsTime(),
+				namespaceName,
+				reqWithCtx.MetricsHandler,
+				reqWithCtx.BreakdownMetricsByTaskQueue,
+				metrics.HistoryRespondActivityTaskCompletedScope,
+				enumspb.TIMEOUT_TYPE_UNSPECIFIED)
+			recordPayloadSize(result.Size(), reqWithCtx.MetricsHandler, namespaceName, metrics.HistoryRespondActivityTaskCompletedScope)
 
 			return nil
 		})
@@ -212,7 +251,7 @@ var TransitionFailed = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
+	func(a *Activity, ctx chasm.MutableContext, reqWithCtx RequestWithContext[*historyservice.RespondActivityTaskFailedRequest]) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
@@ -221,6 +260,8 @@ var TransitionFailed = chasm.NewTransition(
 		if store == nil {
 			store = a
 		}
+
+		req := reqWithCtx.Request
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
@@ -240,7 +281,23 @@ var TransitionFailed = chasm.NewTransition(
 
 			attempt.LastWorkerIdentity = req.GetFailedRequest().GetIdentity()
 
-			return a.recordFailedAttempt(ctx, 0, req.GetFailedRequest().GetFailure(), true)
+			failure := req.GetFailedRequest().GetFailure()
+
+			if err := a.recordFailedAttempt(ctx, 0, failure, true); err != nil {
+				return err
+			}
+
+			namespaceName := reqWithCtx.NamespaceName.String()
+			a.recordOnClosedMetrics(
+				attempt.GetStartedTime().AsTime(),
+				namespaceName,
+				reqWithCtx.MetricsHandler,
+				reqWithCtx.BreakdownMetricsByTaskQueue,
+				metrics.HistoryRespondActivityTaskFailedScope,
+				enumspb.TIMEOUT_TYPE_UNSPECIFIED)
+			recordPayloadSize(failure.Size(), reqWithCtx.MetricsHandler, namespaceName, metrics.HistoryRespondActivityTaskFailedScope)
+
+			return nil
 		})
 	},
 )
@@ -322,7 +379,7 @@ var TransitionCanceled = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskCanceledRequest) error {
+	func(a *Activity, ctx chasm.MutableContext, reqWithCtx RequestWithContext[*historyservice.RespondActivityTaskCanceledRequest]) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
@@ -341,7 +398,7 @@ var TransitionCanceled = chasm.NewTransition(
 			failure := &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-						Details: req.GetCancelRequest().GetDetails(),
+						Details: reqWithCtx.Request.GetCancelRequest().GetDetails(),
 					},
 				},
 			}
@@ -352,10 +409,30 @@ var TransitionCanceled = chasm.NewTransition(
 				},
 			}
 
+			attempt, err := a.Attempt.Get(ctx)
+			if err != nil {
+				return err
+			}
+
+			a.recordOnClosedMetrics(
+				attempt.GetStartedTime().AsTime(),
+				reqWithCtx.NamespaceName.String(),
+				reqWithCtx.MetricsHandler,
+				reqWithCtx.BreakdownMetricsByTaskQueue,
+				metrics.HistoryRespondActivityTaskCanceledScope,
+				enumspb.TIMEOUT_TYPE_UNSPECIFIED)
+
 			return nil
 		})
 	},
 )
+
+type timeoutEvent struct {
+	namespaceName               namespace.Name
+	metricsHandler              metrics.Handler
+	timeoutType                 enumspb.TimeoutType
+	breakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+}
 
 // TransitionTimedOut transitions to TimedOut status
 var TransitionTimedOut = chasm.NewTransition(
@@ -365,7 +442,7 @@ var TransitionTimedOut = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-	func(a *Activity, ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
+	func(a *Activity, ctx chasm.MutableContext, event timeoutEvent) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
@@ -375,20 +452,41 @@ var TransitionTimedOut = chasm.NewTransition(
 			store = a
 		}
 
+		timeoutType := event.timeoutType
+
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-				return a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
+				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
-				return a.recordFailedAttempt(ctx, 0, failure, true)
+				err = a.recordFailedAttempt(ctx, 0, failure, true)
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				failure := createHeartbeatTimeoutFailure()
-				return a.recordFailedAttempt(ctx, 0, failure, true)
+				err = a.recordFailedAttempt(ctx, 0, failure, true)
 			default:
 				return fmt.Errorf("unhandled activity timeout: %v", timeoutType)
 			}
+
+			if err != nil {
+				return err
+			}
+
+			attempt, err := a.Attempt.Get(ctx)
+			if err != nil {
+				return err
+			}
+
+			a.recordOnClosedMetrics(
+				attempt.GetStartedTime().AsTime(),
+				event.namespaceName.String(),
+				event.metricsHandler,
+				event.breakdownMetricsByTaskQueue,
+				metrics.TimerActiveTaskActivityTimeoutScope,
+				timeoutType)
+
+			return nil
 		})
 	},
 )

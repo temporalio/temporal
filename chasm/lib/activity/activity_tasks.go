@@ -6,6 +6,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/fx"
@@ -70,12 +73,24 @@ func (e *activityDispatchTaskExecutor) Execute(
 	return err
 }
 
+type timeoutTaskExecutorOptions struct {
+	fx.In
+
+	Dc                *dynamicconfig.Collection
+	MetricsHandler    metrics.Handler
+	NamespaceRegistry namespace.Registry
+}
+
 // ScheduleToStartTimeoutTask is a pure task that enforces a timeout on the time spent waiting for
 // the activity to start. It transitions the activity to TIMED_OUT status.
-type scheduleToStartTimeoutTaskExecutor struct{}
+type scheduleToStartTimeoutTaskExecutor struct {
+	opts timeoutTaskExecutorOptions
+}
 
-func newScheduleToStartTimeoutTaskExecutor() *scheduleToStartTimeoutTaskExecutor {
-	return &scheduleToStartTimeoutTaskExecutor{}
+func newScheduleToStartTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *scheduleToStartTimeoutTaskExecutor {
+	return &scheduleToStartTimeoutTaskExecutor{
+		opts,
+	}
 }
 
 func (e *scheduleToStartTimeoutTaskExecutor) Validate(
@@ -99,15 +114,32 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToStartTimeoutTask,
 ) error {
-	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
+	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	if err != nil {
+		return err
+	}
+
+	event := timeoutEvent{
+		namespaceName:               namespaceName,
+		timeoutType:                 enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		metricsHandler:              e.opts.MetricsHandler,
+		breakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(e.opts.Dc),
+	}
+
+	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
 // ScheduleToCloseTimeoutTask is a pure task that enforces a timeout across the sequence of activity
 // attempts. It transitions the activity to TIMED_OUT status.
-type scheduleToCloseTimeoutTaskExecutor struct{}
+type scheduleToCloseTimeoutTaskExecutor struct {
+	opts timeoutTaskExecutorOptions
+}
 
-func newScheduleToCloseTimeoutTaskExecutor() *scheduleToCloseTimeoutTaskExecutor {
-	return &scheduleToCloseTimeoutTaskExecutor{}
+func newScheduleToCloseTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *scheduleToCloseTimeoutTaskExecutor {
+	return &scheduleToCloseTimeoutTaskExecutor{
+		opts,
+	}
 }
 
 func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
@@ -125,15 +157,32 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) error {
-	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
+	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	if err != nil {
+		return err
+	}
+
+	event := timeoutEvent{
+		namespaceName:               namespaceName,
+		timeoutType:                 enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		metricsHandler:              e.opts.MetricsHandler,
+		breakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(e.opts.Dc),
+	}
+
+	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
 // StartToCloseTimeoutTask is a pure task that enforces a timeout on a single activity attempt. It
 // either retries or transitions the activity to TIMED_OUT status.
-type startToCloseTimeoutTaskExecutor struct{}
+type startToCloseTimeoutTaskExecutor struct {
+	opts timeoutTaskExecutorOptions
+}
 
-func newStartToCloseTimeoutTaskExecutor() *startToCloseTimeoutTaskExecutor {
-	return &startToCloseTimeoutTaskExecutor{}
+func newStartToCloseTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *startToCloseTimeoutTaskExecutor {
+	return &startToCloseTimeoutTaskExecutor{
+		opts,
+	}
 }
 
 func (e *startToCloseTimeoutTaskExecutor) Validate(
@@ -162,23 +211,45 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 		return err
 	}
 
+	breakdownMetricsByTaskQueue := dynamicconfig.MetricsBreakdownByTaskQueue.Get(e.opts.Dc)
+	metricsHandler := e.opts.MetricsHandler
+	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
+	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	if err != nil {
+		return err
+	}
+
 	// Retry task if we have remaining attempts and time. A retry involves transitioning the activity back to scheduled state.
 	if shouldRetry {
 		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
-			retryInterval: retryInterval,
-			failure:       createStartToCloseTimeoutFailure(),
+			retryInterval:               retryInterval,
+			failure:                     createStartToCloseTimeoutFailure(),
+			handler:                     metricsHandler,
+			namespace:                   namespaceName,
+			breakdownMetricsByTaskQueue: breakdownMetricsByTaskQueue,
+			timeoutType:                 enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			operationTag:                metrics.TimerActiveTaskActivityTimeoutScope,
 		})
 	}
 
 	// Reached maximum attempts, timeout the activity
-	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
+		namespaceName:               namespaceName,
+		timeoutType:                 enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		metricsHandler:              metricsHandler,
+		breakdownMetricsByTaskQueue: breakdownMetricsByTaskQueue,
+	})
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
-type heartbeatTimeoutTaskExecutor struct{}
+type heartbeatTimeoutTaskExecutor struct {
+	opts timeoutTaskExecutorOptions
+}
 
-func newHeartbeatTimeoutTaskExecutor() *heartbeatTimeoutTaskExecutor {
-	return &heartbeatTimeoutTaskExecutor{}
+func newHeartbeatTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *heartbeatTimeoutTaskExecutor {
+	return &heartbeatTimeoutTaskExecutor{
+		opts,
+	}
 }
 
 // Validate validates a HeartbeatTimeoutTask.
@@ -248,6 +319,14 @@ func (e *heartbeatTimeoutTaskExecutor) Execute(
 		return nil
 	}
 
+	breakdownMetricsByTaskQueue := dynamicconfig.MetricsBreakdownByTaskQueue.Get(e.opts.Dc)
+	metricsHandler := e.opts.MetricsHandler
+	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
+	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	if err != nil {
+		return err
+	}
+
 	// Fail this attempt due to heartbeat timeout.
 	shouldRetry, retryInterval, err := activity.shouldRetry(ctx, 0)
 	if err != nil {
@@ -255,9 +334,20 @@ func (e *heartbeatTimeoutTaskExecutor) Execute(
 	}
 	if shouldRetry {
 		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
-			retryInterval: retryInterval,
-			failure:       createHeartbeatTimeoutFailure(),
+			retryInterval:               retryInterval,
+			failure:                     createHeartbeatTimeoutFailure(),
+			handler:                     metricsHandler,
+			namespace:                   namespaceName,
+			breakdownMetricsByTaskQueue: breakdownMetricsByTaskQueue,
+			timeoutType:                 enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			operationTag:                metrics.TimerActiveTaskActivityTimeoutScope,
 		})
 	}
-	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_HEARTBEAT)
+
+	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
+		namespaceName:               namespaceName,
+		timeoutType:                 enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		metricsHandler:              e.opts.MetricsHandler,
+		breakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(e.opts.Dc),
+	})
 }

@@ -21,6 +21,10 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -54,10 +58,13 @@ type Activity struct {
 	Store chasm.Field[ActivityStore]
 }
 
-// WithToken wraps a request with its deserialized task token.
-type WithToken[R any] struct {
-	Token   *tokenspb.Task
-	Request R
+// RequestWithContext wraps a request context specific metadata.
+type RequestWithContext[R any] struct {
+	Request                     R
+	Token                       *tokenspb.Task
+	MetricsHandler              metrics.Handler
+	NamespaceName               namespace.Name
+	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 }
 
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
@@ -237,14 +244,14 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 // HandleCompleted updates the activity on activity completion.
 func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
-	input WithToken[*historyservice.RespondActivityTaskCompletedRequest],
+	req RequestWithContext[*historyservice.RespondActivityTaskCompletedRequest],
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
 	// TODO(dan): add test coverage for this validation
-	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
+	if err := ValidateActivityTaskToken(ctx, a, req.Token); err != nil {
 		return nil, err
 	}
 
-	if err := TransitionCompleted.Apply(a, ctx, input.Request); err != nil {
+	if err := TransitionCompleted.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
 
@@ -255,14 +262,14 @@ func (a *Activity) HandleCompleted(
 // for retry instead.
 func (a *Activity) HandleFailed(
 	ctx chasm.MutableContext,
-	input WithToken[*historyservice.RespondActivityTaskFailedRequest],
+	req RequestWithContext[*historyservice.RespondActivityTaskFailedRequest],
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
 	// TODO(dan): add test coverage for this validation
-	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
+	if err := ValidateActivityTaskToken(ctx, a, req.Token); err != nil {
 		return nil, err
 	}
 
-	failure := input.Request.GetFailedRequest().GetFailure()
+	failure := req.Request.GetFailedRequest().GetFailure()
 
 	shouldRetry, retryInterval, err := a.shouldRetryOnFailure(ctx, failure)
 	if err != nil {
@@ -271,8 +278,12 @@ func (a *Activity) HandleFailed(
 
 	if shouldRetry {
 		if err := TransitionRescheduled.Apply(a, ctx, rescheduleEvent{
-			retryInterval: retryInterval,
-			failure:       failure,
+			retryInterval:               retryInterval,
+			failure:                     failure,
+			handler:                     req.MetricsHandler,
+			namespace:                   req.NamespaceName,
+			breakdownMetricsByTaskQueue: req.BreakdownMetricsByTaskQueue,
+			operationTag:                metrics.HistoryRespondActivityTaskFailedScope,
 		}); err != nil {
 			return nil, err
 		}
@@ -281,7 +292,7 @@ func (a *Activity) HandleFailed(
 	}
 
 	// No more retries, transition to failed state
-	if err := TransitionFailed.Apply(a, ctx, input.Request); err != nil {
+	if err := TransitionFailed.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
 
@@ -291,14 +302,14 @@ func (a *Activity) HandleFailed(
 // HandleCanceled updates the activity on activity canceled.
 func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
-	input WithToken[*historyservice.RespondActivityTaskCanceledRequest],
+	req RequestWithContext[*historyservice.RespondActivityTaskCanceledRequest],
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	// TODO(dan): add test coverage for this validation
-	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
+	if err := ValidateActivityTaskToken(ctx, a, req.Token); err != nil {
 		return nil, err
 	}
 
-	if err := TransitionCanceled.Apply(a, ctx, input.Request); err != nil {
+	if err := TransitionCanceled.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
 
@@ -509,15 +520,21 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 // RecordHeartbeat records a heartbeat for the activity.
 func (a *Activity) RecordHeartbeat(
 	ctx chasm.MutableContext,
-	input WithToken[*historyservice.RecordActivityTaskHeartbeatRequest],
+	req RequestWithContext[*historyservice.RecordActivityTaskHeartbeatRequest],
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
-	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
+	if err := ValidateActivityTaskToken(ctx, a, req.Token); err != nil {
 		return nil, err
 	}
+
+	details := req.Request.HeartbeatRequest.GetDetails()
+
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
 		RecordedTime: timestamppb.New(ctx.Now(a)),
-		Details:      input.Request.HeartbeatRequest.GetDetails(),
+		Details:      details,
 	})
+
+	recordPayloadSize(details.Size(), req.MetricsHandler, req.NamespaceName.String(), metrics.HistoryRecordActivityTaskHeartbeatScope)
+
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		// TODO(dan): ActivityPaused, ActivityReset
@@ -678,4 +695,104 @@ func (a *Activity) buildPollActivityExecutionResponse(
 	return &activitypb.PollActivityExecutionResponse{
 		FrontendResponse: response,
 	}, nil
+}
+
+// recordOnAttemptedMetrics records metrics for attempted activities, including retries and originating from any
+// terminal state transitions.
+func (a *Activity) recordOnAttemptedMetrics(
+	startedTime time.Time,
+	namespaceName string,
+	metricsHandler metrics.Handler,
+	breakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter,
+	operationTag string,
+	timeoutType enumspb.TimeoutType,
+) {
+	taskQueueFamily := a.GetTaskQueue().GetName()
+
+	handler := metrics.GetPerTaskQueueFamilyScope(
+		metricsHandler,
+		namespaceName,
+		tqid.UnsafeTaskQueueFamily(namespaceName, taskQueueFamily),
+		breakdownMetricsByTaskQueue(namespaceName, taskQueueFamily, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		metrics.OperationTag(operationTag),
+		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
+		// metrics.VersioningBehaviorTag(versioningBehavior), TODO add when we have versioning
+	)
+
+	if !startedTime.IsZero() {
+		latency := time.Since(startedTime)
+		metrics.ActivityStartToCloseLatency.With(handler).Record(latency)
+	}
+
+	switch operationTag {
+	case metrics.HistoryRespondActivityTaskFailedScope:
+		metrics.ActivityTaskFail.With(handler).Record(1)
+	case metrics.TimerActiveTaskActivityTimeoutScope:
+		timeoutTag := metrics.StringTag("timeout_type", timeoutType.String())
+		metrics.ActivityTaskTimeout.With(handler).Record(1, timeoutTag)
+	default:
+		// Ignore
+	}
+}
+
+// recordOnClosedMetrics records metrics on transition to a terminal state. It always calls recordOnAttemptedMetrics to
+// record metrics for the attempted activity as this transition is also an attempt..
+func (a *Activity) recordOnClosedMetrics(
+	startedTime time.Time,
+	namespaceName string,
+	metricsHandler metrics.Handler,
+	breakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter,
+	operationTag string,
+	timeoutType enumspb.TimeoutType,
+) {
+	a.recordOnAttemptedMetrics(
+		startedTime,
+		namespaceName,
+		metricsHandler,
+		breakdownMetricsByTaskQueue,
+		operationTag,
+		timeoutType)
+
+	taskQueueFamily := a.GetTaskQueue().GetName()
+
+	handler := metrics.GetPerTaskQueueFamilyScope(
+		metricsHandler,
+		namespaceName,
+		tqid.UnsafeTaskQueueFamily(namespaceName, taskQueueFamily),
+		breakdownMetricsByTaskQueue(namespaceName, taskQueueFamily, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		metrics.OperationTag(operationTag),
+		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
+		// metrics.VersioningBehaviorTag(versioningBehavior), TODO add when we have versioning
+	)
+
+	scheduleToCloseLatency := time.Since(a.GetScheduledTime().AsTime())
+	metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
+
+	switch operationTag {
+	case metrics.HistoryRespondActivityTaskCompletedScope:
+		metrics.ActivitySuccess.With(handler).Record(1)
+	case metrics.HistoryRespondActivityTaskFailedScope:
+		metrics.ActivityFail.With(handler).Record(1)
+	case metrics.HistoryRespondActivityTaskCanceledScope:
+		metrics.ActivityCancel.With(handler).Record(1)
+	case metrics.TimerActiveTaskActivityTimeoutScope:
+		timeoutTag := metrics.StringTag("timeout_type", timeoutType.String())
+		metrics.ActivityTimeout.With(handler).Record(1, timeoutTag)
+	default:
+		// Ignore
+	}
+}
+
+func recordPayloadSize(
+	payloadSize int,
+	handler metrics.Handler,
+	namespaceName string,
+	operationTag string,
+) {
+	if payloadSize > 0 {
+		metrics.ActivityPayloadSize.With(handler).Record(
+			int64(payloadSize),
+			metrics.OperationTag(operationTag),
+			metrics.NamespaceTag(namespaceName))
+	}
 }
