@@ -766,7 +766,7 @@ func (a *Activity) recordOnClosedMetrics(
 	)
 
 	scheduleToCloseLatency := time.Since(a.GetScheduledTime().AsTime())
-	metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
+	metrics.ActivityScheduleToCloseLatency.With(handler).Record(scheduleToCloseLatency)
 
 	switch operationTag {
 	case metrics.HistoryRespondActivityTaskCompletedScope:
