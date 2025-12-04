@@ -78,7 +78,7 @@ var (
 	execution2 = &replicationspb.MigrationExecutionInfo{
 		BusinessId:  "workflow2",
 		RunId:       "run2",
-		ArchetypeId: chasm.WorkflowArchetypeID,
+		ArchetypeId: chasm.UnspecifiedArchetypeID,
 	}
 
 	completeState = &historyservice.DescribeMutableStateResponse{
@@ -722,6 +722,38 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Success() {
 			},
 			ArchetypeId: execution.ArchetypeId,
 		})).Return(&historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
+	}
+
+	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
+	s.NoError(err)
+
+	s.Greater(len(iceptor.generateReplicationRecordedHeartbeats), 0)
+	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
+	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
+	s.Equal(lastIdx, lastHeartBeat)
+}
+
+func (s *activitiesSuite) TestGenerateReplicationTasks_ViaFrontend_Success() {
+	env, iceptor := s.initEnv()
+	s.a.generateMigrationTaskViaFrontend = dynamicconfig.GetBoolPropertyFn(true)
+
+	request := generateReplicationTasksRequest{
+		NamespaceID:      mockedNamespaceID,
+		RPS:              10,
+		GetParentInfoRPS: 10,
+		Executions:       []*replicationspb.MigrationExecutionInfo{execution1, execution2},
+	}
+
+	for i := 0; i < len(request.Executions); i++ {
+		execution := request.Executions[i]
+		s.mockAdminClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&adminservice.GenerateLastHistoryReplicationTasksRequest{
+			Namespace: mockedNamespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: execution.BusinessId,
+				RunId:      execution.RunId,
+			},
+			Archetype: chasm.WorkflowArchetype,
+		})).Return(&adminservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
 	}
 
 	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
