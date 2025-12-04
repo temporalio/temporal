@@ -57,6 +57,11 @@ func ScheduleWorkflowTask(
 		return nil
 	}
 
+	// If workflow is not running, do not schedule a workflow task. This can happen if the workflow is paused.
+	if mutableState.GetExecutionState().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
+
 	_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
