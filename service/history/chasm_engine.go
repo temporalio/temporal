@@ -353,9 +353,6 @@ func (e *ChasmEngine) predicateSatisfied(
 	// this point must be ErrStaleState; ErrStaleReference has already been eliminated).
 	err := chasmTree.IsStale(ref)
 	if err != nil {
-		if errors.Is(err, consts.ErrStaleState) {
-			err = serviceerror.NewUnavailable("please retry")
-		}
 		// ErrStaleState
 		// TODO(dan): this should be retryable if it is the failover version that is stale
 		return nil, err
