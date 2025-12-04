@@ -185,17 +185,40 @@ func newHeartbeatTimeoutTaskExecutor() *heartbeatTimeoutTaskExecutor {
 func (e *heartbeatTimeoutTaskExecutor) Validate(
 	ctx chasm.Context,
 	activity *Activity,
-	_ chasm.TaskAttributes,
+	taskAttrs chasm.TaskAttributes,
 	task *activitypb.HeartbeatTimeoutTask,
 ) (bool, error) {
+	// Must be in a state that can heartbeat.
+	if !(activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) {
+		return false, nil
+	}
+
+	// Task attempt must still match current attempt.
 	attempt, err := activity.Attempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}
-	valid := (activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
-		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) &&
-		attempt.GetCount() == task.Attempt
-	return valid, nil
+	if attempt.GetCount() != task.Attempt {
+		return false, nil
+	}
+
+	// Must not have been a heartbeat since this task was created
+	lastHb, err := activity.LastHeartbeat.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	hbTimeout := activity.GetHeartbeatTimeout().AsDuration()
+	attemptStartTime := attempt.GetStartedTime().AsTime()
+	lastHbTime := lastHb.GetRecordedTime().AsTime() // could be from a previous attempt
+	// No heartbeats in the attempt so far is equivalent to a heartbeat having been sent at attempt
+	// start time.
+	hbDeadline := util.MaxTime(lastHbTime, attemptStartTime).Add(hbTimeout)
+	if taskAttrs.ScheduledTime.Before(hbDeadline) {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // Execute executes a HeartbeatTimeoutTask.

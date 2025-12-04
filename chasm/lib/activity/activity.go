@@ -511,13 +511,27 @@ func (a *Activity) RecordHeartbeat(
 	ctx chasm.MutableContext,
 	input WithToken[*historyservice.RecordActivityTaskHeartbeatRequest],
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
-	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
+	err := ValidateActivityTaskToken(ctx, a, input.Token)
+	if err != nil {
+		return nil, err
+	}
+	attempt, err := a.Attempt.Get(ctx)
+	if err != nil {
 		return nil, err
 	}
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
 		RecordedTime: timestamppb.New(ctx.Now(a)),
 		Details:      input.Request.HeartbeatRequest.GetDetails(),
 	})
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			ScheduledTime: ctx.Now(a).Add(a.GetHeartbeatTimeout().AsDuration()),
+		},
+		&activitypb.HeartbeatTimeoutTask{
+			Attempt: attempt.GetCount(),
+		},
+	)
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		// TODO(dan): ActivityPaused, ActivityReset
