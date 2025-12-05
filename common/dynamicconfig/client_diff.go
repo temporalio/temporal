@@ -84,7 +84,7 @@ func diffAndLogValue(logger log.Logger, key Key, oldValue *ConstrainedValue, new
 	logLine := &strings.Builder{}
 	logLine.Grow(128)
 	logLine.WriteString("dynamic config changed for the key: ")
-	logLine.WriteString(string(key))
+	logLine.WriteString(key.String())
 	logLine.WriteString(" oldValue: ")
 	appendConstrainedValue(logLine, oldValue)
 	logLine.WriteString(" newValue: ")
