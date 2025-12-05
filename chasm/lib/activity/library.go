@@ -56,7 +56,6 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 			l.activityDispatchTaskExecutor,
 			l.activityDispatchTaskExecutor,
 		),
-		// TODO(dan): why are the task names "FooTimer" but "FooTimeoutTask" in the struct names?
 		chasm.NewRegistrablePureTask(
 			"scheduleToStartTimer",
 			l.scheduleToStartTimeoutTaskExecutor,

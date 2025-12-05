@@ -521,7 +521,7 @@ func (a *Activity) RecordHeartbeat(
 	}
 	a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
 		RecordedTime: timestamppb.New(ctx.Now(a)),
-		Details:      input.Request.HeartbeatRequest.GetDetails(),
+		Details:      input.Request.GetHeartbeatRequest().GetDetails(),
 	})
 	ctx.AddTask(
 		a,
