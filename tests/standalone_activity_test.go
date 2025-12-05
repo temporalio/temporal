@@ -47,11 +47,14 @@ func TestStandaloneActivityTestSuite(t *testing.T) {
 
 func (s *standaloneActivityTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuite()
-	s.tv = testvars.New(s.T())
 	s.OverrideDynamicConfig(
 		dynamicconfig.EnableChasm,
 		true,
 	)
+}
+
+func (s *standaloneActivityTestSuite) SetupTest() {
+	s.tv = testvars.New(s.T())
 }
 
 func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
@@ -108,8 +111,8 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := testcore.RandomizeStr(t.Name())
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue()
 
 	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
@@ -120,7 +123,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		Input: defaultInput,
 		Options: &activitypb.ActivityOptions{
 			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
+				Name: taskQueue.Name,
 			},
 			StartToCloseTimeout: durationpb.New(1 * time.Second),
 		},
@@ -145,7 +148,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
+			Name: taskQueue.Name,
 		},
 		Identity: s.tv.WorkerIdentity(),
 	})
@@ -226,10 +229,10 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NoWait() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := testcore.RandomizeStr(t.Name())
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue()
 
-	startResp, err := s.startActivity(ctx, activityID, taskQueue)
+	startResp, err := s.startActivity(ctx, activityID, taskQueue.Name)
 	require.NoError(t, err)
 
 	t.Run("MinimalResponse", func(t *testing.T) {
@@ -283,10 +286,10 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_WaitAnyStateChan
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := testcore.RandomizeStr(t.Name())
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue()
 
-	startResp, err := s.startActivity(ctx, activityID, taskQueue)
+	startResp, err := s.startActivity(ctx, activityID, taskQueue.Name)
 	require.NoError(t, err)
 
 	// First poll lacks token and therefore responds immediately, returning a token
@@ -338,7 +341,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_WaitAnyStateChan
 
 	// Worker picks up activity task, triggering transition (via RecordActivityTaskStarted)
 	go func() {
-		_, err := s.pollActivityTaskQueue(ctx, taskQueue)
+		_, err := s.pollActivityTaskQueue(ctx, taskQueue.Name)
 		taskQueuePollErr <- err
 	}()
 
@@ -377,9 +380,9 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_DeadlineExceeded
 	ctx := testcore.NewContext()
 
 	// Start an activity and get initial long-poll state token
-	activityID := "test-activity-" + t.Name()
-	taskQueue := "test-task-queue-" + t.Name()
-	startResp, err := s.startActivity(ctx, activityID, taskQueue)
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue()
+	startResp, err := s.startActivity(ctx, activityID, taskQueue.Name)
 	require.NoError(t, err)
 	pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
@@ -460,9 +463,9 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 	t := s.T()
 	ctx := testcore.NewContext()
 
-	existingActivityID := testcore.RandomizeStr(t.Name())
-	tq := testcore.RandomizeStr(t.Name())
-	startResp, err := s.startActivity(ctx, existingActivityID, tq)
+	existingActivityID := s.tv.ActivityID()
+	tq := s.tv.TaskQueue()
+	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
 	require.NoError(t, err)
 	existingRunID := startResp.RunId
 	require.NotEmpty(t, existingRunID)
@@ -553,9 +556,9 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument(
 	t := s.T()
 	ctx := testcore.NewContext()
 
-	existingActivityID := testcore.RandomizeStr(t.Name())
-	tq := testcore.RandomizeStr(t.Name())
-	startResp, err := s.startActivity(ctx, existingActivityID, tq)
+	existingActivityID := s.tv.ActivityID()
+	tq := s.tv.TaskQueue()
+	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
 	require.NoError(t, err)
 	existingRunID := startResp.RunId
 	require.NotEmpty(t, existingRunID)
@@ -686,8 +689,8 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument(
 		require.NoError(t, err)
 		require.NotEmpty(t, validPollResp.StateChangeLongPollToken)
 
-		activityID2 := testcore.RandomizeStr(t.Name())
-		startResp2, err := s.startActivity(ctx, activityID2, tq)
+		activityID2 := s.tv.Any().String()
+		startResp2, err := s.startActivity(ctx, activityID2, tq.Name)
 		require.NoError(t, err)
 		require.NotEmpty(t, startResp2.GetRunId())
 
