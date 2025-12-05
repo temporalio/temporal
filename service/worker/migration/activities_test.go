@@ -685,13 +685,16 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 			},
 		}, nil).Times(1)
 
-		ns := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+		factory := namespace.NewDefaultReplicationResolverFactory()
+		detail := &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: durationpb.New(retention),
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-		})
+		}
+		ns, nsErr := namespace.FromPersistentState(detail, factory(detail))
+		s.Require().NoError(nsErr)
 
 		details := replicationTasksHeartbeatDetails{}
 		ctx := context.TODO()

@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
@@ -79,6 +80,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			dynamicconfig.GetBoolPropertyFn(false),
 			metricsHandler,
 			logger,
+			namespace.NewDefaultReplicationResolverFactory(),
 		)
 		out.handler = newWorkflowTaskCompletedHandler( // 😲
 			t.Name(), // identity

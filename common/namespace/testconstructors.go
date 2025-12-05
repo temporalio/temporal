@@ -13,16 +13,19 @@ func NewLocalNamespaceForTest(
 	config *persistencespb.NamespaceConfig,
 	targetCluster string,
 ) *Namespace {
-	return &Namespace{
-		info:              ensureInfo(info),
-		config:            ensureConfig(config),
-		isGlobalNamespace: false,
-		replicationConfig: &persistencespb.NamespaceReplicationConfig{
+	detail := &persistencespb.NamespaceDetail{
+		Info:   ensureInfo(info),
+		Config: ensureConfig(config),
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: targetCluster,
 			Clusters:          []string{targetCluster},
 		},
-		failoverVersion: common.EmptyVersion,
+		FailoverVersion: common.EmptyVersion,
 	}
+	factory := NewDefaultReplicationResolverFactory()
+	resolver := factory(detail)
+	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(false))
+	return ns
 }
 
 // NewNamespaceForTest returns an entry with test data
@@ -33,13 +36,16 @@ func NewNamespaceForTest(
 	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
 ) *Namespace {
-	return &Namespace{
-		info:              ensureInfo(info),
-		config:            ensureConfig(config),
-		isGlobalNamespace: isGlobalNamespace,
-		replicationConfig: ensureRepConfig(repConfig),
-		failoverVersion:   failoverVersion,
+	detail := &persistencespb.NamespaceDetail{
+		Info:              ensureInfo(info),
+		Config:            ensureConfig(config),
+		ReplicationConfig: ensureRepConfig(repConfig),
+		FailoverVersion:   failoverVersion,
 	}
+	factory := NewDefaultReplicationResolverFactory()
+	resolver := factory(detail)
+	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(isGlobalNamespace))
+	return ns
 }
 
 // newGlobalNamespaceForTest returns an entry with test data
@@ -49,13 +55,16 @@ func NewGlobalNamespaceForTest(
 	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
 ) *Namespace {
-	return &Namespace{
-		info:              ensureInfo(info),
-		config:            ensureConfig(config),
-		isGlobalNamespace: true,
-		replicationConfig: ensureRepConfig(repConfig),
-		failoverVersion:   failoverVersion,
+	detail := &persistencespb.NamespaceDetail{
+		Info:              ensureInfo(info),
+		Config:            ensureConfig(config),
+		ReplicationConfig: ensureRepConfig(repConfig),
+		FailoverVersion:   failoverVersion,
 	}
+	factory := NewDefaultReplicationResolverFactory()
+	resolver := factory(detail)
+	ns, _ := FromPersistentState(detail, resolver, WithGlobalFlag(true))
+	return ns
 }
 
 func ensureInfo(proto *persistencespb.NamespaceInfo) *persistencespb.NamespaceInfo {
