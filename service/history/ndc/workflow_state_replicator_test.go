@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -105,6 +106,7 @@ func (s *workflowReplicatorSuite) SetupTest() {
 		s.mockWorkflowCache,
 		eventReapplier,
 		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
 		s.logger,
 	)
 }
@@ -597,6 +599,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		s.mockWorkflowCache,
 		nil,
 		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -688,6 +691,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		s.mockWorkflowCache,
 		nil,
 		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -773,6 +777,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		s.mockWorkflowCache,
 		nil,
 		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -867,6 +872,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		s.mockWorkflowCache,
 		nil,
 		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
@@ -947,6 +953,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		s.mockWorkflowCache,
 		nil,
 		serialization.NewSerializer(),
+		quotas.NoopRequestRateLimiter,
 		s.logger,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)

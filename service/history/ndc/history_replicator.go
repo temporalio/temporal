@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -27,7 +26,6 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -36,8 +34,7 @@ import (
 )
 
 const (
-	mutableStateMissingMessage    = "Resend events due to missing mutable state"
-	backfillHistoryEventsPerToken = 100
+	mutableStateMissingMessage = "Resend events due to missing mutable state"
 )
 
 type (
@@ -100,16 +97,15 @@ type (
 	}
 
 	HistoryReplicatorImpl struct {
-		shardContext           historyi.ShardContext
-		clusterMetadata        cluster.Metadata
-		historySerializer      serialization.Serializer
-		metricsHandler         metrics.Handler
-		namespaceRegistry      namespace.Registry
-		workflowCache          wcache.Cache
-		eventsReapplier        EventsReapplier
-		transactionMgr         TransactionManager
-		persistenceRateLimiter quotas.RequestRateLimiter
-		logger                 log.Logger
+		shardContext      historyi.ShardContext
+		clusterMetadata   cluster.Metadata
+		historySerializer serialization.Serializer
+		metricsHandler    metrics.Handler
+		namespaceRegistry namespace.Registry
+		workflowCache     wcache.Cache
+		eventsReapplier   EventsReapplier
+		transactionMgr    TransactionManager
+		logger            log.Logger
 
 		mutableStateMapper *MutableStateMapperImpl
 		newResetter        workflowResetterProvider
@@ -128,23 +124,21 @@ func NewHistoryReplicator(
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	eventSerializer serialization.Serializer,
-	persistenceRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 ) *HistoryReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentHistoryReplicator)
 	transactionMgr := NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false)
 	replicator := &HistoryReplicatorImpl{
-		shardContext:           shardContext,
-		clusterMetadata:        shardContext.GetClusterMetadata(),
-		historySerializer:      eventSerializer,
-		metricsHandler:         shardContext.GetMetricsHandler(),
-		namespaceRegistry:      shardContext.GetNamespaceRegistry(),
-		workflowCache:          workflowCache,
-		transactionMgr:         transactionMgr,
-		eventsReapplier:        eventsReapplier,
-		persistenceRateLimiter: persistenceRateLimiter,
-		logger:                 logger,
+		shardContext:      shardContext,
+		clusterMetadata:   shardContext.GetClusterMetadata(),
+		historySerializer: eventSerializer,
+		metricsHandler:    shardContext.GetMetricsHandler(),
+		namespaceRegistry: shardContext.GetNamespaceRegistry(),
+		workflowCache:     workflowCache,
+		transactionMgr:    transactionMgr,
+		eventsReapplier:   eventsReapplier,
+		logger:            logger,
 
 		mutableStateMapper: NewMutableStateMapping(
 			shardContext,
@@ -199,6 +193,7 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
+
 	task, err := newReplicationTaskFromRequest(
 		r.clusterMetadata,
 		r.historySerializer,
@@ -212,46 +207,10 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	return r.doApplyEvents(ctx, task)
 }
 
-func (r *HistoryReplicatorImpl) backfillHistoryEventsQuotaRequest(ctx context.Context, request *historyi.BackfillHistoryEventsRequest) quotas.Request {
-	eventCount := 1
-	totalEvents := 0
-	for _, batch := range request.Events {
-		totalEvents += len(batch)
-	}
-	if request.NewEvents != nil {
-		totalEvents += len(request.NewEvents)
-	}
-	if totalEvents > 0 {
-		eventCount = totalEvents
-	}
-	tokenCount := eventCount / backfillHistoryEventsPerToken
-	if tokenCount == 0 {
-		tokenCount = 1
-	}
-
-	nsName, err := r.namespaceRegistry.GetNamespaceName(namespace.ID(request.NamespaceID))
-	if err != nil {
-		nsName = namespace.EmptyName
-	}
-
-	return quotas.NewRequest(
-		"BackfillHistoryEvents",
-		tokenCount,
-		nsName.String(),
-		headers.CallerTypePreemptable,
-		0,
-		"")
-}
-
 func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
 	ctx context.Context,
 	request *historyi.BackfillHistoryEventsRequest,
 ) error {
-	quotaRequest := r.backfillHistoryEventsQuotaRequest(ctx, request)
-	if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
-		return err
-	}
-
 	task, err := newReplicationTaskFromBatch(
 		r.clusterMetadata,
 		r.logger,
