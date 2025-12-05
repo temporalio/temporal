@@ -853,7 +853,7 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 				"saName": "AliasForDatetime01",
 				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			},
-			retValue: dt.Format(s.queryConverter.getDatetimeFormat()),
+			retValue: fmt.Sprintf("%s", dt.Format(s.queryConverter.getDatetimeFormat())),
 			err:      nil,
 		},
 		{

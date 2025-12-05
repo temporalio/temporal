@@ -41,7 +41,7 @@ type Activity struct {
 	*activitypb.ActivityState
 
 	Visibility    chasm.Field[*chasm.Visibility]
-	Attempt       chasm.Field[*activitypb.ActivityAttemptState]
+	LastAttempt   chasm.Field[*activitypb.ActivityAttemptState]
 	LastHeartbeat chasm.Field[*activitypb.ActivityHeartbeatState]
 	Outcome       chasm.Field[*activitypb.ActivityOutcome]
 	// Standalone only
@@ -91,7 +91,7 @@ func NewStandaloneActivity(
 			RetryPolicy:            options.GetRetryPolicy(),
 			Priority:               request.Priority,
 		},
-		Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
 			Input:        request.Input,
 			Header:       request.Header,
@@ -138,7 +138,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		return nil, err
 	}
 
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 }
 
 func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -344,7 +344,7 @@ func (a *Activity) recordFailedAttempt(
 		return err
 	}
 
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -370,7 +370,7 @@ func (a *Activity) recordFailedAttempt(
 }
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration, error) {
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, 0, err
 	}
@@ -388,7 +388,7 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time
 // remains, it will also return a valid retry interval
 func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration, error) {
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, 0, err
 	}
@@ -470,7 +470,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 
 	key := ctx.ExecutionKey()
 
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -560,7 +560,7 @@ func (a *Activity) buildPollActivityExecutionResponse(
 				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
 
 			if shouldHaveFailure {
-				attempt, err := a.Attempt.Get(ctx)
+				attempt, err := a.LastAttempt.Get(ctx)
 				if err != nil {
 					return nil, err
 				}
