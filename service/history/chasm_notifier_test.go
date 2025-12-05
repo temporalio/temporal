@@ -14,10 +14,10 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 
 	notifier := NewChasmNotifier()
 
-	entityKey := chasm.EntityKey{
+	executionKey := chasm.ExecutionKey{
 		NamespaceID: tv.NamespaceID().String(),
 		BusinessID:  tv.WorkflowID(),
-		EntityID:    tv.RunID(),
+		RunID:       tv.RunID(),
 	}
 
 	// Multiple subscribers
@@ -27,13 +27,13 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	}, subscriberCount)
 
 	for i := range subscriberCount {
-		ch, unsubscribe := notifier.Subscribe(entityKey)
+		ch, unsubscribe := notifier.Subscribe(executionKey)
 		defer unsubscribe() //nolint:revive
 		subscribers[i].channel = ch
 	}
 
 	// Single notification
-	notifier.Notify(entityKey)
+	notifier.Notify(executionKey)
 
 	// All subscribers should receive it
 	for i, sub := range subscribers {
@@ -50,20 +50,20 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 
 	notifier := NewChasmNotifier()
 
-	entityKey1 := chasm.EntityKey{
+	executionKey1 := chasm.ExecutionKey{
 		NamespaceID: tv.NamespaceID().String(),
 		BusinessID:  tv.WorkflowID(),
-		EntityID:    tv.RunID(),
+		RunID:       tv.RunID(),
 	}
-	entityKey2 := chasm.EntityKey{
+	executionKey2 := chasm.ExecutionKey{
 		NamespaceID: "different-namespace-id",
 		BusinessID:  "different-workflow-id",
-		EntityID:    "different-run-id",
+		RunID:       "different-run-id",
 	}
 
-	channel, unsubscribe := notifier.Subscribe(entityKey1)
+	channel, unsubscribe := notifier.Subscribe(executionKey1)
 	defer unsubscribe()
-	notifier.Notify(entityKey2)
+	notifier.Notify(executionKey2)
 	select {
 	case <-channel:
 		t.Fatal("should not receive notification for different entity")
@@ -72,10 +72,10 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 }
 
 func TestChasmNotifier_ConstantMemory(t *testing.T) {
-	key := chasm.EntityKey{
+	key := chasm.ExecutionKey{
 		NamespaceID: "ns",
 		BusinessID:  "wf",
-		EntityID:    "run",
+		RunID:       "run",
 	}
 	notifier := NewChasmNotifier()
 	require.Empty(t, notifier.executions)
@@ -89,10 +89,10 @@ func TestChasmNotifier_ConstantMemory(t *testing.T) {
 }
 
 func TestChasmNotifier_Unsubscribe(t *testing.T) {
-	key := chasm.EntityKey{
+	key := chasm.ExecutionKey{
 		NamespaceID: "ns",
 		BusinessID:  "wf",
-		EntityID:    "run",
+		RunID:       "run",
 	}
 
 	t.Run("StaleUnsubscribeIsSafe", func(t *testing.T) {

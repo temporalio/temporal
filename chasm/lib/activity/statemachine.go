@@ -37,11 +37,7 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		attempt, err := a.LastAttempt.Get(ctx)
-		if err != nil {
-			return err
-		}
-
+		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
 		attempt.Count += 1
 
@@ -89,15 +85,11 @@ var TransitionRescheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
-		attempt, err := a.LastAttempt.Get(ctx)
-		if err != nil {
-			return err
-		}
-
+		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
 		attempt.Count += 1
 
-		err = a.recordFailedAttempt(ctx, event.retryInterval, event.failure, false)
+		err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, false)
 		if err != nil {
 			return err
 		}
@@ -133,20 +125,14 @@ var TransitionStarted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		attempt, err := a.LastAttempt.Get(ctx)
-		if err != nil {
-			return err
-		}
-
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
 				ScheduledTime: ctx.Now(a).Add(a.GetStartToCloseTimeout().AsDuration()),
 			},
 			&activitypb.StartToCloseTimeoutTask{
-				Attempt: attempt.GetCount(),
+				Attempt: a.LastAttempt.Get(ctx).GetCount(),
 			})
-
 		return nil
 	},
 )
@@ -346,11 +332,7 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
-		store, err := a.Store.Get(ctx)
-		if err != nil {
-			return err
-		}
-
+		store := a.Store.Get(ctx)
 		if store == nil {
 			store = a
 		}
