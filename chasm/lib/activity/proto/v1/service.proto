@@ -9,18 +9,18 @@ import "temporal/server/api/routing/v1/extension.proto";
 
 service ActivityService {
     rpc StartActivityExecution(StartActivityExecutionRequest) returns (StartActivityExecutionResponse) {
-        option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
     }
 
     rpc PollActivityExecution(PollActivityExecutionRequest) returns (PollActivityExecutionResponse) {
-      option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
+      option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
     }
 
     rpc TerminateActivityExecution(TerminateActivityExecutionRequest) returns (TerminateActivityExecutionResponse) {
-      option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
+      option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
     }
 
   rpc RequestCancelActivityExecution(RequestCancelActivityExecutionRequest) returns (RequestCancelActivityExecutionResponse) {
-    option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
   }
 }
