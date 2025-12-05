@@ -7,9 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"google.golang.org/protobuf/proto"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -85,8 +89,8 @@ func TestTransitionScheduled(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
 				},
-				Attempt: chasm.NewDataField(ctx, attemptState),
-				Outcome: chasm.NewDataField(ctx, outcome),
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, outcome),
 			}
 
 			err := TransitionScheduled.Apply(activity, ctx, nil)
@@ -176,23 +180,23 @@ func TestTransitionRescheduled(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 				},
-				Attempt: chasm.NewDataField(ctx, attemptState),
-				Outcome: chasm.NewDataField(ctx, outcome),
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, outcome),
 			}
 
-			err := TransitionRescheduled.Apply(activity, ctx, nil)
+			err := TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
+				retryInterval: tc.expectedRetryInterval,
+				failure:       createStartToCloseTimeoutFailure(),
+			})
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, activity.Status)
 			require.Equal(t, tc.startingAttemptCount+1, attemptState.Count)
-			require.True(t, proto.Equal(
-				durationpb.New(tc.expectedRetryInterval),
-				attemptState.GetCurrentRetryInterval(),
-			), "retry intervals should be equal")
+			protorequire.ProtoEqual(t, durationpb.New(tc.expectedRetryInterval), attemptState.GetCurrentRetryInterval())
 
 			// Verify attempt state failure details updated correctly
 			lastFailureDetails := attemptState.GetLastFailureDetails()
 			require.NotNil(t, lastFailureDetails.GetFailure())
-			require.Equal(t, lastFailureDetails.GetTime(), attemptState.GetLastAttemptCompleteTime())
+			require.Equal(t, lastFailureDetails.GetTime(), attemptState.GetCompleteTime())
 			// This should remain nil on intermediate retry attempts. The final attempt goes directly via TransitionTimedOut.
 			require.Nil(t, outcome.GetVariant())
 
@@ -233,8 +237,8 @@ func TestTransitionStarted(t *testing.T) {
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		},
-		Attempt: chasm.NewDataField(ctx, attemptState),
-		Outcome: chasm.NewDataField(ctx, outcome),
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
 	err := TransitionStarted.Apply(activity, ctx, nil)
@@ -296,8 +300,8 @@ func TestTransitionTimedout(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 tc.startStatus,
 				},
-				Attempt: chasm.NewDataField(ctx, attemptState),
-				Outcome: chasm.NewDataField(ctx, outcome),
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, outcome),
 			}
 
 			err := TransitionTimedOut.Apply(activity, ctx, tc.timeoutType)
@@ -310,20 +314,20 @@ func TestTransitionTimedout(t *testing.T) {
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
 				// Timeout failure is recorded in outcome but not attempt state
 				require.Nil(t, attemptState.GetLastFailureDetails())
-				require.Nil(t, attemptState.GetLastAttemptCompleteTime())
+				require.Nil(t, attemptState.GetCompleteTime())
 				require.NotNil(t, outcome.GetFailed().GetFailure())
 				// do something
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-				// Timeout failure is recorded in attempt state. TransitionTimedOut should only be called when there
+				// Timeout failure is recorded in both attempt state and outcome. TransitionTimedOut should only be called when there
 				// are no more retries. Retries go through TransitionRescheduled.
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetFailure())
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
-				require.NotNil(t, attemptState.GetLastAttemptCompleteTime())
+				require.NotNil(t, attemptState.GetCompleteTime())
 				require.Nil(t, attemptState.GetCurrentRetryInterval())
 
 				failure, ok := outcome.GetVariant().(*activitypb.ActivityOutcome_Failed_)
 				require.True(t, ok, "expected variant to be of type Failed")
-				require.Nil(t, failure.Failed)
+				require.Nil(t, failure.Failed, "expected outcome.Failed to be nil since failure is recorded in attempt state")
 
 			default:
 				t.Fatalf("unexpected timeout type: %v", tc.timeoutType)
@@ -332,4 +336,86 @@ func TestTransitionTimedout(t *testing.T) {
 			require.Empty(t, ctx.Tasks)
 		})
 	}
+}
+
+func TestTransitionCompleted(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	outcome := &activitypb.ActivityOutcome{}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
+	}
+
+	payload := payloads.EncodeString("Done")
+
+	err := TransitionCompleted.Apply(activity, ctx, &historyservice.RespondActivityTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
+			Result:   payload,
+			Identity: "worker",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
+	require.EqualValues(t, 1, attemptState.Count)
+	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
+	require.NotNil(t, attemptState.GetCompleteTime())
+	protorequire.ProtoEqual(t, payload, outcome.GetSuccessful().GetOutput())
+}
+
+func TestTransitionFailed(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	heartbeatState := &activitypb.ActivityHeartbeatState{}
+	outcome := &activitypb.ActivityOutcome{}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		LastAttempt:   chasm.NewDataField(ctx, attemptState),
+		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
+		Outcome:       chasm.NewDataField(ctx, outcome),
+	}
+
+	heartbeatDetails := payloads.EncodeString("Heartbeat")
+	failure := &failurepb.Failure{
+		Message: "Failed Activity",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "Test",
+			NonRetryable: true,
+		}},
+	}
+
+	err := TransitionFailed.Apply(activity, ctx, &historyservice.RespondActivityTaskFailedRequest{
+		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+			Failure:              failure,
+			LastHeartbeatDetails: heartbeatDetails,
+			Identity:             "worker",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, activity.Status)
+	require.EqualValues(t, 1, attemptState.Count)
+	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
+	require.NotNil(t, attemptState.GetCompleteTime())
+	protorequire.ProtoEqual(t, heartbeatDetails, heartbeatState.GetDetails())
+	require.NotNil(t, heartbeatState.GetRecordedTime())
+	protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
+	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
+	require.Nil(t, outcome.GetFailed())
 }

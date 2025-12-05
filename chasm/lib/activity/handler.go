@@ -42,7 +42,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 			return newActivity, &workflowservice.StartActivityExecutionResponse{
 				Started: true,
-				// EagerTask: TODO when supported, need to call the same code that would handle the RecordActivityTaskStarted API
+				// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 			}, nil
 		},
 		req.GetFrontendRequest(),
@@ -138,16 +138,15 @@ func (h *handler) PollActivityExecution(
 			ctx chasm.Context,
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
-			// TODO(dan): check for terminal activity states
-			panic("pollActivityExecutionWaitCompletion is not implemented") //nolint:forbidigo
-			completed := false                                              //nolint:govet
-			if completed {
+			if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				if err != nil {
 					return nil, true, err
 				}
+
 				return response, true, nil
 			}
+
 			return nil, false, nil
 		}, req)
 	default:

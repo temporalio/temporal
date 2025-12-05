@@ -120,10 +120,10 @@ message ActivityAttemptState {
     google.protobuf.Duration current_retry_interval = 2;
 
     // Time the last attempt was started.
-    google.protobuf.Timestamp last_started_time = 3;
+    google.protobuf.Timestamp started_time = 3;
 
     // The time when the last activity attempt completed. If activity has not been completed yet, it will be null.
-    google.protobuf.Timestamp last_attempt_complete_time = 4;
+    google.protobuf.Timestamp complete_time = 4;
 
     message LastFailureDetails {
       // The last time the activity attempt failed.

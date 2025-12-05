@@ -32,7 +32,7 @@ func (e *activityDispatchTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
+	attempt, err := activity.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -78,7 +78,7 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
+	attempt, err := activity.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -108,7 +108,7 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
+	attempt, err := activity.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -138,7 +138,7 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
+	attempt, err := activity.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -151,19 +151,19 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
-	task *activitypb.StartToCloseTimeoutTask,
+	_ *activitypb.StartToCloseTimeoutTask,
 ) error {
-	retryPolicy := activity.RetryPolicy
-
-	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || task.GetAttempt() < retryPolicy.GetMaximumAttempts()
-	enoughTime, err := activity.hasEnoughTimeForRetry(ctx)
+	shouldRetry, retryInterval, err := activity.shouldRetry(ctx, 0)
 	if err != nil {
 		return err
 	}
 
 	// Retry task if we have remaining attempts and time. A retry involves transitioning the activity back to scheduled state.
-	if enoughAttempts && enoughTime {
-		return TransitionRescheduled.Apply(activity, ctx, nil)
+	if shouldRetry {
+		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
+			retryInterval: retryInterval,
+			failure:       createStartToCloseTimeoutFailure(),
+		})
 	}
 
 	// Reached maximum attempts, timeout the activity

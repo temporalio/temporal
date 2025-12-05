@@ -2434,9 +2434,10 @@ func (h *Handler) convertError(err error) error {
 }
 
 func validateTaskToken(taskToken *tokenspb.Task) error {
-	if taskToken.GetWorkflowId() == "" {
+	if len(taskToken.GetComponentRef()) == 0 && taskToken.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
 	}
+
 	return nil
 }
 
