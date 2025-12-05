@@ -68,7 +68,7 @@ func (s *chasmEngineSuite) SetupTest() {
 	s.mockEngine = historyi.NewMockEngine(s.controller)
 
 	s.config = tests.NewDynamicConfig()
-	s.config.EnableChasm = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -724,9 +724,9 @@ func (l *testComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttribut
 	}
 }
 
-func (l *testComponent) Memo(_ chasm.Context) map[string]chasm.VisibilityValue {
-	return map[string]chasm.VisibilityValue{
-		testComponentPausedMemoName: chasm.VisibilityValueBool(l.ActivityInfo.Paused),
+func (l *testComponent) Memo(_ chasm.Context) proto.Message {
+	return &persistencespb.WorkflowExecutionState{
+		RunId: l.ActivityInfo.ActivityId,
 	}
 }
 

@@ -397,7 +397,7 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
-	if s.config.EnableChasm() {
+	if s.config.EnableChasm(namespaceEntry.Name().String()) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
 			shard.GetTimeSource(),
@@ -542,7 +542,7 @@ func NewMutableStateFromDB(
 		mutableState.chasmNodeSizes[key] = nodeSize
 	}
 
-	if shard.GetConfig().EnableChasm() {
+	if shard.GetConfig().EnableChasm(namespaceEntry.Name().String()) {
 		var err error
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
@@ -6421,6 +6421,17 @@ func (ms *MutableStateImpl) processCloseCallbacksHsm() error {
 
 // processCloseCallbacksChasm triggers "WorkflowClosed" callbacks using the CHASM implementation.
 func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+
+	// Return early if there are no chasm callbacks to process.
+	if len(wf.Callbacks) == 0 {
+		return nil
+	}
+
+	// If there are callbacks to process, create a writable workflow component.
 	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
 	if err != nil {
 		return err

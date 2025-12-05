@@ -265,8 +265,6 @@ All PR titles should start with Upper case and have no dot at the end.
 and [base-builder](https://github.com/temporalio/docker-builds/blob/main/docker/base-images/base-builder.Dockerfile)~~ 
 **Note:** The docker-builds repository is now deprecated and will be archived.
 
-<!-- TODO: Remove docker/config_template.yaml after temporalio/docker-builds repository is archived -->
-
 ## License
 
 MIT License, please see [LICENSE](LICENSE) for details.
