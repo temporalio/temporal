@@ -1,20 +1,20 @@
 -- Pre-allocated CHASM search attributes
 ALTER TABLE executions_visibility
-  ADD COLUMN TemporalBool01            BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'TemporalBool01')::boolean)        STORED,
-  ADD COLUMN TemporalBool02            BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'TemporalBool02')::boolean)        STORED,
-  ADD COLUMN TemporalDatetime01        TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalDatetime01'))  STORED,
-  ADD COLUMN TemporalDatetime02        TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalDatetime02'))  STORED,
-  ADD COLUMN TemporalDouble01          DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble01')::decimal)      STORED,
-  ADD COLUMN TemporalDouble02          DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble02')::decimal)      STORED,
-  ADD COLUMN TemporalInt01             BIGINT          GENERATED ALWAYS AS ((search_attributes->'TemporalInt01')::bigint)          STORED,
-  ADD COLUMN TemporalInt02             BIGINT          GENERATED ALWAYS AS ((search_attributes->'TemporalInt02')::bigint)          STORED,
-  ADD COLUMN TemporalKeyword01         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword01')               STORED,
-  ADD COLUMN TemporalKeyword02         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword02')               STORED,
-  ADD COLUMN TemporalKeyword03         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword03')               STORED,
+  ADD COLUMN TemporalBool01                  BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'TemporalBool01')::boolean)        STORED,
+  ADD COLUMN TemporalBool02                  BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'TemporalBool02')::boolean)        STORED,
+  ADD COLUMN TemporalDatetime01              TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalDatetime01'))  STORED,
+  ADD COLUMN TemporalDatetime02              TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalDatetime02'))  STORED,
+  ADD COLUMN TemporalDouble01                DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble01')::decimal)      STORED,
+  ADD COLUMN TemporalDouble02                DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'TemporalDouble02')::decimal)      STORED,
+  ADD COLUMN TemporalInt01                   BIGINT          GENERATED ALWAYS AS ((search_attributes->'TemporalInt01')::bigint)          STORED,
+  ADD COLUMN TemporalInt02                   BIGINT          GENERATED ALWAYS AS ((search_attributes->'TemporalInt02')::bigint)          STORED,
+  ADD COLUMN TemporalKeyword01               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword01')               STORED,
+  ADD COLUMN TemporalKeyword02               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword02')               STORED,
+  ADD COLUMN TemporalKeyword03               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword03')               STORED,
   ADD COLUMN TemporalKeyword04               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalKeyword04')               STORED,
   ADD COLUMN TemporalLowCardinalityKeyword01 VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalLowCardinalityKeyword01') STORED,
   ADD COLUMN TemporalKeywordList01           JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList01')            STORED,
-  ADD COLUMN TemporalKeywordList02     JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList02')            STORED;
+  ADD COLUMN TemporalKeywordList02           JSONB           GENERATED ALWAYS AS (search_attributes->'TemporalKeywordList02')            STORED;
 
 -- Indexes for the pre-allocated CHASM search attributes
 CREATE INDEX by_temporal_bool_01                    ON executions_visibility (namespace_id, TemporalBool01, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);

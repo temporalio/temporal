@@ -192,17 +192,17 @@ CREATE TABLE chasm_search_attributes (
       '+00:00'
     )
   ),
-  TemporalDouble01          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble01"),
-  TemporalDouble02          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble02"),
-  TemporalInt01             BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt01"),
-  TemporalInt02             BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt02"),
-  TemporalKeyword01         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword01"),
-  TemporalKeyword02         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword02"),
-  TemporalKeyword03         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword03"),
+  TemporalDouble01                DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble01"),
+  TemporalDouble02                DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble02"),
+  TemporalInt01                   BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt01"),
+  TemporalInt02                   BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt02"),
+  TemporalKeyword01               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword01"),
+  TemporalKeyword02               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword02"),
+  TemporalKeyword03               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword03"),
   TemporalKeyword04               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword04"),
   TemporalLowCardinalityKeyword01 VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalLowCardinalityKeyword01"),
   TemporalKeywordList01           JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList01"),
-  TemporalKeywordList02     JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList02"),
+  TemporalKeywordList02           JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList02"),
 
   PRIMARY KEY (namespace_id, run_id)
 );

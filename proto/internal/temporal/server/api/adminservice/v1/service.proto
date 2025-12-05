@@ -118,6 +118,8 @@ service AdminService {
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
     }
 
+    // BatchRefreshWorkflowTasks refreshes all tasks that for a given batch of workflows
+
     // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
     rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
     }
