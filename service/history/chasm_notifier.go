@@ -6,19 +6,17 @@ import (
 	"go.temporal.io/server/chasm"
 )
 
-type (
-	// ChasmNotifier allows subscribers to receive notifications relating to a CHASM execution.
-	ChasmNotifier struct {
-		// TODO(dan): use ShardedConcurrentTxMap
-		executions map[chasm.EntityKey]*subscriptionTracker
-		lock       sync.Mutex
-	}
+type subscriptionTracker struct {
+	ch             chan struct{}
+	numSubscribers int
+}
 
-	subscriptionTracker struct {
-		ch             chan struct{}
-		numSubscribers int
-	}
-)
+// ChasmNotifier allows subscribers to receive notifications relating to a CHASM execution.
+type ChasmNotifier struct {
+	// TODO(dan): use ShardedConcurrentTxMap
+	executions map[chasm.EntityKey]*subscriptionTracker
+	lock       sync.Mutex
+}
 
 // NewChasmNotifier creates a new instance of ChasmNotifier.
 func NewChasmNotifier() *ChasmNotifier {
@@ -39,8 +37,8 @@ func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (<-chan struct{}, func())
 	s, ok := n.executions[key]
 	if !ok {
 		s = &subscriptionTracker{ch: make(chan struct{})}
+		n.executions[key] = s
 	}
-	n.executions[key] = s
 	s.numSubscribers++
 	return s.ch, sync.OnceFunc(func() {
 		n.lock.Lock()
@@ -48,7 +46,6 @@ func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (<-chan struct{}, func())
 		if n.executions[key] == s {
 			s.numSubscribers--
 			if s.numSubscribers == 0 {
-				close(s.ch)
 				delete(n.executions, key)
 			}
 		}
