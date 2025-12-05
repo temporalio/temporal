@@ -9,6 +9,7 @@ import (
 type (
 	// ChasmNotifier allows subscribers to receive notifications relating to a CHASM execution.
 	ChasmNotifier struct {
+		// TODO(dan): use ShardedConcurrentTxMap
 		executions map[chasm.EntityKey]*subscriptionTracker
 		lock       sync.Mutex
 	}
