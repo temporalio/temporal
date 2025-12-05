@@ -5268,17 +5268,17 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
 		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
-	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
-		return errUseVersioningWithoutNormalName
+	if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+		if id.GetUseVersioning() || deploymentOptions != nil {
+			// Versioned pollers require a normal name to be set when polling on a sticky queue
+			return errUseVersioningWithoutNormalName
+		}
 	}
 	if id.GetUseVersioning() && len(id.GetBuildId()) == 0 {
 		return errUseVersioningWithoutBuildId
 	}
 	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 		return errBuildIdTooLong
-	}
-	if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
-		return errUseVersioningWithoutNormalName
 	}
 
 	return wh.validateDeploymentOptions(deploymentOptions)
