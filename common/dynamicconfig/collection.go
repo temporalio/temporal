@@ -257,7 +257,7 @@ func findMatchWithCache(
 	var cached map[Constraints]int32
 	weakcvp := weak.Make(&cvs[0])
 	if v, ok := cache.Load(weakcvp); ok {
-		cached = v.(map[Constraints]int32)
+		cached = v.(map[Constraints]int32) // nolint:revive // unchecked-type-assertion
 	} else {
 		cached = make(map[Constraints]int32, len(cvs))
 		for i := range cvs {

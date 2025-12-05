@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // These two tests are in a separate file in the 'dynamicconfig' package to access the private
@@ -78,12 +79,12 @@ func TestFindMatchIndexed(t *testing.T) {
 
 	var cache sync.Map
 	v, err := findMatch(&cache, cvs, have)
-	assert.NoError(t, err)
-	assert.NotNil(t, v)
+	require.NoError(t, err)
+	require.NotNil(t, v)
 	assert.EqualValues(t, 1075, v.Value)
 	assert.Equal(t, &cvs[75], v)
 
-	v, err = findMatch(&cache, cvs, notHave)
+	_, err = findMatch(&cache, cvs, notHave)
 	assert.Error(t, err)
 }
 
