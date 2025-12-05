@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"time"
 
 	"github.com/temporalio/sqlparser"
@@ -595,14 +594,11 @@ func (s *VisibilityStore) getGroupByFieldTypes(
 		)
 	}
 
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, saTypeMap.Custom())
-	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
-	typeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+	combinedTypeMap := store.CombineTypeMaps(saTypeMap, chasmMapper)
 
 	groupByTypes := make([]enumspb.IndexedValueType, len(fieldNames))
 	for i, fieldName := range fieldNames {
-		tp, err := typeMap.GetType(fieldName)
+		tp, err := combinedTypeMap.GetType(fieldName)
 		if err != nil {
 			return nil, err
 		}
@@ -862,15 +858,11 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 			fmt.Sprintf("Unable to read search attributes types: %v", err))
 	}
 
-	// Build combined type map (custom + CHASM types)
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, saTypeMap.Custom())
-	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
-	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+	combinedTypeMap := store.CombineTypeMaps(saTypeMap, chasmMapper)
 
 	// Fix SQLite keyword list handling (convert string to []string for keyword lists)
 	for name, value := range rowSearchAttributes {
-		tp, err := finalTypeMap.GetType(name)
+		tp, err := combinedTypeMap.GetType(name)
 		if err != nil {
 			return nil, err
 		}
@@ -889,7 +881,7 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 	}
 
 	// Encode all search attributes together
-	encodedSAs, err := searchattribute.Encode(rowSearchAttributes, &finalTypeMap)
+	encodedSAs, err := searchattribute.Encode(rowSearchAttributes, &combinedTypeMap)
 	if err != nil {
 		return nil, err
 	}

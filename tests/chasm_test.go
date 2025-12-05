@@ -287,7 +287,7 @@ func (s *ChasmTestSuite) TestListExecutions() {
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
-				Query:         visQuery,
+				Query:         visQuery + " AND PayloadTotalCount > 0",
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -318,7 +318,7 @@ func (s *ChasmTestSuite) TestListExecutions() {
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
-				Query:         visQuery + " AND ExecutionStatus = 'Completed'",
+				Query:         visQuery + " AND ExecutionStatus = 'Completed' AND PayloadTotalCount > 0",
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -401,7 +401,7 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 					Query:         "GROUP BY `PayloadExecutionStatus`",
 				},
 			)
-			return err == nil && countResp != nil
+			return err == nil && countResp != nil && countResp.Count > 0
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

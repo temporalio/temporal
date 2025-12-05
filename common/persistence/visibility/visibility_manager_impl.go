@@ -320,13 +320,12 @@ func (p *visibilityManagerImpl) convertToCountWorkflowExecutionsResponse(
 
 	if len(internal.Groups) > 0 {
 		response.Groups = make([]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup, 0, len(internal.Groups))
-	}
-
-	for _, group := range internal.Groups {
-		response.Groups = append(response.Groups, &workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
-			GroupValues: group.GroupValues,
-			Count:       group.Count,
-		})
+		for _, group := range internal.Groups {
+			response.Groups = append(response.Groups, &workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				GroupValues: group.GroupValues,
+				Count:       group.Count,
+			})
+		}
 	}
 
 	return response, nil

@@ -129,22 +129,6 @@ var (
 	}
 )
 
-func IsGroupByFieldAllowed(fieldName string) bool {
-	for _, allowedField := range groupByFieldAllowlist {
-		if fieldName == allowedField {
-			return true
-		}
-	}
-
-	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
-		if strings.HasPrefix(fieldName, allowedPrefix) {
-			return true
-		}
-	}
-
-	return false
-}
-
 func NewQueryConverter[ExprT any](
 	storeQC StoreQueryConverter[ExprT],
 	namespaceName namespace.Name,
@@ -726,6 +710,20 @@ func (c *QueryConverter[ExprT]) validateValueType(
 			saName,
 		)
 	}
+}
+
+func IsGroupByFieldAllowed(fieldName string) bool {
+	for _, allowedField := range groupByFieldAllowlist {
+		if fieldName == allowedField {
+			return true
+		}
+	}
+	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
+		if strings.HasPrefix(fieldName, allowedPrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseExecutionStatusValue(value any) (string, error) {

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -999,10 +998,7 @@ func (s *VisibilityStore) ParseESDoc(
 		return nil, serviceerror.NewInternalf("unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err)
 	}
 
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, saTypeMap.Custom())
-	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
-	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+	combinedTypeMap := store.CombineTypeMaps(saTypeMap, chasmMapper)
 
 	var (
 		isValidType         bool
@@ -1034,7 +1030,7 @@ func (s *VisibilityStore) ParseESDoc(
 			continue
 		}
 
-		fieldType, err := finalTypeMap.GetType(fieldName)
+		fieldType, err := combinedTypeMap.GetType(fieldName)
 		if err != nil {
 			// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
 			if errors.Is(err, searchattribute.ErrInvalidName) {
@@ -1095,7 +1091,7 @@ func (s *VisibilityStore) ParseESDoc(
 	}
 
 	var err error
-	record.SearchAttributes, err = searchattribute.Encode(allSearchAttributes, &finalTypeMap)
+	record.SearchAttributes, err = searchattribute.Encode(allSearchAttributes, &combinedTypeMap)
 	if err != nil {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf(
@@ -1136,14 +1132,11 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 		)
 	}
 
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, saTypeMap.Custom())
-	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
-	typeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+	combinedTypeMap := store.CombineTypeMaps(saTypeMap, chasmMapper)
 
 	groupByTypes := make([]enumspb.IndexedValueType, len(groupByFields))
 	for i, saName := range groupByFields {
-		tp, err := typeMap.GetType(saName)
+		tp, err := combinedTypeMap.GetType(saName)
 		if err != nil {
 			return nil, err
 		}
