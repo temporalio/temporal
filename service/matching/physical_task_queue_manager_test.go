@@ -67,11 +67,6 @@ func TestPhysicalTaskQueueManager_Fair_TestSuite(t *testing.T) {
 
 func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	s.config = defaultTestConfig()
-	if s.fairness {
-		useFairness(s.config)
-	} else if s.newMatcher {
-		useNewMatcher(s.config)
-	}
 	s.controller = gomock.NewController(s.T())
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 
