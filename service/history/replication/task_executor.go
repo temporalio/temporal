@@ -32,25 +32,25 @@ type (
 	}
 
 	TaskExecutorParams struct {
-		RemoteCluster   string // TODO: Remove this remote cluster from executor then it can use singleton.
-		Shard           historyi.ShardContext
-		HistoryResender eventhandler.ResendHandler
-		DeleteManager   deletemanager.DeleteManager
-		WorkflowCache   wcache.Cache
+		RemoteCluster        string // TODO: Remove this remote cluster from executor then it can use singleton.
+		Shard                historyi.ShardContext
+		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
+		DeleteManager        deletemanager.DeleteManager
+		WorkflowCache        wcache.Cache
 	}
 
 	TaskExecutorProvider func(params TaskExecutorParams) TaskExecutor
 
 	taskExecutorImpl struct {
-		currentCluster    string
-		remoteCluster     string
-		shardContext      historyi.ShardContext
-		namespaceRegistry namespace.Registry
-		resendHandler     eventhandler.ResendHandler
-		deleteManager     deletemanager.DeleteManager
-		workflowCache     wcache.Cache
-		metricsHandler    metrics.Handler
-		logger            log.Logger
+		currentCluster       string
+		remoteCluster        string
+		shardContext         historyi.ShardContext
+		namespaceRegistry    namespace.Registry
+		remoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
+		deleteManager        deletemanager.DeleteManager
+		workflowCache        wcache.Cache
+		metricsHandler       metrics.Handler
+		logger               log.Logger
 	}
 )
 
@@ -59,20 +59,20 @@ type (
 func NewTaskExecutor(
 	remoteCluster string,
 	shardContext historyi.ShardContext,
-	resendHandler eventhandler.ResendHandler,
+	remoteHistoryFetcher eventhandler.HistoryPaginatedFetcher,
 	deleteManager deletemanager.DeleteManager,
 	workflowCache wcache.Cache,
 ) TaskExecutor {
 	return &taskExecutorImpl{
-		currentCluster:    shardContext.GetClusterMetadata().GetCurrentClusterName(),
-		remoteCluster:     remoteCluster,
-		shardContext:      shardContext,
-		namespaceRegistry: shardContext.GetNamespaceRegistry(),
-		resendHandler:     resendHandler,
-		deleteManager:     deleteManager,
-		workflowCache:     workflowCache,
-		metricsHandler:    shardContext.GetMetricsHandler(),
-		logger:            shardContext.GetLogger(),
+		currentCluster:       shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		remoteCluster:        remoteCluster,
+		shardContext:         shardContext,
+		namespaceRegistry:    shardContext.GetNamespaceRegistry(),
+		remoteHistoryFetcher: remoteHistoryFetcher,
+		deleteManager:        deleteManager,
+		workflowCache:        workflowCache,
+		metricsHandler:       shardContext.GetMetricsHandler(),
+		logger:               shardContext.GetLogger(),
 	}
 }
 
@@ -170,7 +170,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 			)
 		}()
 
-		resendErr := e.resendHandler.ResendHistoryEvents(
+		resendErr := e.resend(
 			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
@@ -264,8 +264,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
-
-		resendErr := e.resendHandler.ResendHistoryEvents(
+		resendErr := e.resend(
 			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
@@ -330,7 +329,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	case nil:
 		return nil
 	case *serviceerrors.RetryReplication:
-		resendErr := e.resendHandler.ResendHistoryEvents(
+		resendErr := e.resend(
 			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
@@ -425,4 +424,47 @@ func (e *taskExecutorImpl) newTaskContext(
 	ctx = headers.SetCallerName(ctx, namespaceName.String())
 
 	return ctx, cancel
+}
+
+func (e *taskExecutorImpl) resend(
+	ctx context.Context,
+	remoteClusterName string,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64) error {
+	iterator := e.remoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
+		ctx,
+		remoteClusterName,
+		namespaceID,
+		workflowID,
+		runID,
+		startEventID,
+		startEventVersion,
+		endEventID,
+		endEventVersion,
+	)
+	for iterator.HasNext() {
+		historyBatch, err := iterator.Next()
+		if err != nil {
+			return err
+		}
+		replicateRequest := &historyservice.ReplicateEventsV2Request{
+			NamespaceId: namespaceID.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			Events:              historyBatch.RawEventBatch,
+			VersionHistoryItems: historyBatch.VersionHistory.GetItems(),
+		}
+		_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, replicateRequest)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
