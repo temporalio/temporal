@@ -5,16 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -143,132 +139,6 @@ func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) er
 		},
 	}
 	return workflow.UpsertMemo(ctx, memo)
-}
-
-// nolint:revive,cognitive-complexity
-func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) error {
-	if params.GetOperation() == nil ||
-		params.GetReason() == "" ||
-		params.GetNamespace() == "" ||
-		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
-	}
-
-	if len(params.GetJobId()) == 0 {
-		return serviceerror.NewInvalidArgument("JobId is not set on request.")
-	}
-	if len(params.GetNamespace()) == 0 {
-		return serviceerror.NewInvalidArgument("Namespace is not set on request.")
-	}
-	if len(params.GetVisibilityQuery()) == 0 && len(params.GetExecutions()) == 0 {
-		return serviceerror.NewInvalidArgument("VisibilityQuery or Executions must be set on request.")
-	}
-	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
-		return errors.New("batch query and executions are mutually exclusive")
-	}
-	if len(params.GetReason()) == 0 {
-		return serviceerror.NewInvalidArgument("Reason is not set on request.")
-	}
-	if params.GetOperation() == nil {
-		return serviceerror.NewInvalidArgument("Batch operation is not set on request.")
-	}
-
-	switch op := params.GetOperation().(type) {
-	case *workflowservice.StartBatchOperationRequest_SignalOperation:
-		if op.SignalOperation.GetSignal() == "" {
-			return errors.New("must provide signal name")
-		}
-		return nil
-	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
-		if op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions() == nil {
-			return errors.New("must provide UpdateOptions")
-		}
-		if op.UpdateWorkflowOptionsOperation.GetUpdateMask() == nil {
-			return errors.New("must provide UpdateMask")
-		}
-		return worker_versioning.ValidateVersioningOverride(op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
-	case *workflowservice.StartBatchOperationRequest_CancellationOperation,
-		*workflowservice.StartBatchOperationRequest_TerminationOperation,
-		*workflowservice.StartBatchOperationRequest_DeletionOperation:
-		return nil
-	case *workflowservice.StartBatchOperationRequest_ResetOperation:
-		if op.ResetOperation == nil {
-			return serviceerror.NewInvalidArgument("reset operation is not set")
-		}
-		if op.ResetOperation.Options != nil {
-			if op.ResetOperation.Options.Target == nil {
-				return serviceerror.NewInvalidArgument("batch reset missing target")
-			}
-		} else {
-			//nolint:staticcheck // SA1019: GetResetType is deprecated but still needed for backward compatibility
-			resetType := op.ResetOperation.GetResetType()
-			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
-				return serviceerror.NewInvalidArgumentf("unknown batch reset type %v", resetType)
-			}
-		}
-	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
-		if op.UnpauseActivitiesOperation == nil {
-			return serviceerror.NewInvalidArgument("unpause activities operation is not set")
-		}
-		if op.UnpauseActivitiesOperation.GetActivity() == nil {
-			return serviceerror.NewInvalidArgument("activity filter must be set")
-		}
-		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
-		case *batchpb.BatchOperationUnpauseActivities_Type:
-			if len(a.Type) == 0 {
-				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			if !a.MatchAll {
-				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-		}
-		return nil
-	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
-		if op.ResetActivitiesOperation == nil {
-			return serviceerror.NewInvalidArgument("reset activities operation is not set")
-		}
-		if op.ResetActivitiesOperation.GetActivity() == nil && !op.ResetActivitiesOperation.GetMatchAll() {
-			return serviceerror.NewInvalidArgument("must provide ActivityType or MatchAll")
-		}
-
-		switch a := op.ResetActivitiesOperation.GetActivity().(type) {
-		case *batchpb.BatchOperationResetActivities_Type:
-			if len(a.Type) == 0 {
-				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-		case *batchpb.BatchOperationResetActivities_MatchAll:
-			if !a.MatchAll {
-				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-		}
-		return nil
-	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
-		if op.UpdateActivityOptionsOperation == nil {
-			return serviceerror.NewInvalidArgument("update activity options operation is not set")
-		}
-		if op.UpdateActivityOptionsOperation.GetActivityOptions() != nil && op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
-			return serviceerror.NewInvalidArgument("cannot set both activity options and restore original")
-		}
-		if op.UpdateActivityOptionsOperation.GetActivityOptions() == nil && !op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
-			return serviceerror.NewInvalidArgument("Either activity type must be set, or restore original should be set to true")
-		}
-
-		switch a := op.UpdateActivityOptionsOperation.GetActivity().(type) {
-		case *batchpb.BatchOperationUpdateActivityOptions_Type:
-			if len(a.Type) == 0 {
-				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-		case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
-			if !a.MatchAll {
-				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
-			}
-		}
-		return nil
-	default:
-		return fmt.Errorf("not supported batch type: %v", params.GetOperation())
-	}
-	return nil
 }
 
 func setDefaultParams(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {

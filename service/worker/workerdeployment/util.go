@@ -7,6 +7,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
@@ -53,13 +54,6 @@ const (
 	// Memos
 	WorkerDeploymentMemoField = "WorkerDeploymentMemo" // for Worker Deployment wf
 
-	// Prefixes, Delimeters and Keys
-	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
-	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix)
-	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
-	WorkerDeploymentBuildIDFieldName             = "BuildID"
-
 	// Application error names for rejected updates
 	errNoChangeType               = "errNoChange"
 	errTooManyVersions            = "errTooManyVersions"
@@ -70,8 +64,7 @@ const (
 	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 
-	errConflictTokenMismatchType = "errConflictTokenMismatch"
-	errFailedPrecondition        = "FailedPrecondition"
+	errFailedPrecondition = "FailedPrecondition"
 
 	errVersionIsDrainingSuffix   = "cannot be deleted since it is draining"
 	ErrVersionIsDraining         = "version '%s' " + errVersionIsDrainingSuffix
@@ -118,32 +111,28 @@ var (
 // validateVersionWfParams is a helper that verifies if the fields used for generating
 // Worker Deployment Version related workflowID's are valid
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
-	// Length checks
-	if field == "" {
-		return serviceerror.NewInvalidArgumentf("%v cannot be empty", fieldName)
-	}
+	return worker_versioning.ValidateDeploymentVersionFields(fieldName, field, maxIDLengthLimit)
+}
 
-	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
-	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
-		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
-	}
+// GenerateDeploymentWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment workflows
+func GenerateDeploymentWorkflowID(deploymentName string) string {
+	return worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionWorkflowIDDelimeter + deploymentName
+}
 
-	// deploymentName cannot have "."
-	// TODO: remove this restriction once the old version strings are completely cleaned from external and internal API
-	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiterV31) {
-		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiterV31)
-	}
-	// deploymentName cannot have ":"
-	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
-		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter)
-	}
+func GetDeploymentNameFromWorkflowID(workflowID string) string {
+	_, deploymentName, _ := strings.Cut(workflowID, worker_versioning.WorkerDeploymentVersionWorkflowIDDelimeter)
+	return deploymentName
+}
 
-	// buildID or deployment name cannot start with "__"
-	if strings.HasPrefix(field, "__") {
-		return serviceerror.NewInvalidArgumentf("%v cannot start with '__'", fieldName)
-	}
-
-	return nil
+// GenerateVersionWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment Version workflows
+func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
+	versionString := worker_versioning.ExternalWorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildID,
+	})
+	return worker_versioning.WorkerDeploymentVersionWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionWorkflowIDDelimeter + versionString
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {

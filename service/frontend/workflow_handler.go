@@ -15,6 +15,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -145,6 +147,7 @@ type (
 		scheduleSpecBuilder             *scheduler.SpecBuilder
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
+		versionExistenceCache           cache.Cache
 	}
 )
 
@@ -231,6 +234,11 @@ func NewWorkflowHandler(
 		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
 		httpEnabled:         httpEnabled,
 	}
+
+	// Initializing the cache
+	handler.versionExistenceCache = cache.New(10000, &cache.Options{
+		TTL: config.FrontendWorkerVersionExistsCacheTTL(),
+	})
 
 	return handler
 }
@@ -385,7 +393,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	var err error
-	if request, err = wh.prepareStartWorkflowRequest(request); err != nil {
+	if request, err = wh.prepareStartWorkflowRequest(ctx, request); err != nil {
 		return nil, err
 	}
 
@@ -443,6 +451,7 @@ func (wh *WorkflowHandler) convertToStartWorkflowExecutionResponse(
 
 // Validates the request and sets default values where they are missing.
 func (wh *WorkflowHandler) prepareStartWorkflowRequest(
+	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) (*workflowservice.StartWorkflowExecutionRequest, error) {
 	if request == nil {
@@ -453,8 +462,11 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
-	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	if err := wh.validateRetryPolicy(namespaceEntry.Name(), request.RetryPolicy); err != nil {
 		return nil, err
 	}
 
@@ -487,14 +499,14 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if err := wh.validateWorkflowIdReusePolicy(
-		namespaceName,
+		namespaceEntry.Name(),
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy); err != nil {
 		return nil, err
 	}
 
 	// Validate versioning override, if present.
-	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+	if err := wh.validateVersioningOverride(ctx, namespaceEntry, request.GetVersioningOverride()); err != nil {
 		return nil, err
 	}
 
@@ -505,7 +517,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
+	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceEntry.Name())
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +532,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
+	if err := wh.validateWorkflowCompletionCallbacks(namespaceEntry.Name(), request.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
 
@@ -531,7 +543,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	for _, cb := range request.GetCompletionCallbacks() {
 		allLinks = append(allLinks, cb.GetLinks()...)
 	}
-	if err := wh.validateLinks(namespaceName, allLinks); err != nil {
+	if err := wh.validateLinks(namespaceEntry.Name(), allLinks); err != nil {
 		return nil, err
 	}
 
@@ -584,7 +596,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, errMultiOpNotStartAndUpdate
 	}
 
-	historyReq, err := wh.convertToHistoryMultiOperationRequest(namespaceID, request)
+	historyReq, err := wh.convertToHistoryMultiOperationRequest(ctx, namespaceID, request)
 	if err != nil {
 		return nil, err
 	}
@@ -608,6 +620,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 }
 
 func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	request *workflowservice.ExecuteMultiOperationRequest,
 ) (*historyservice.ExecuteMultiOperationRequest, error) {
@@ -618,7 +631,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	errs := make([]error, len(request.Operations))
 
 	for i, op := range request.Operations {
-		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, op)
+		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(ctx, namespaceID, op)
 		if err != nil {
 			hasError = true
 		} else {
@@ -649,6 +662,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 }
 
 func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	op *workflowservice.ExecuteMultiOperationRequest_Operation,
 ) (*historyservice.ExecuteMultiOperationRequest_Operation, string, error) {
@@ -657,7 +671,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 
 	if startReq := op.GetStartWorkflow(); startReq != nil {
 		var err error
-		if startReq, err = wh.prepareStartWorkflowRequest(startReq); err != nil {
+		if startReq, err = wh.prepareStartWorkflowRequest(ctx, startReq); err != nil {
 			return nil, "", err
 		}
 		if len(startReq.CronSchedule) > 0 {
@@ -875,7 +889,8 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -991,9 +1006,11 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errIdentityTooLong
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if err := wh.validateVersioningInfo(
 		request.Namespace,
 		request.WorkerVersionStamp,
+		request.DeploymentOptions,
 		request.StickyAttributes.GetWorkerTaskQueue(),
 	); err != nil {
 		return nil, err
@@ -1124,7 +1141,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -2083,17 +2101,17 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 	// Validate versioning override, if present.
-	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+	if err := wh.validateVersioningOverride(ctx, namespaceEntry, request.GetVersioningOverride()); err != nil {
 		return nil, err
 	}
 
 	resp, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId:            namespaceID.String(),
+		NamespaceId:            namespaceEntry.ID().String(),
 		SignalWithStartRequest: request,
 	})
 
@@ -2126,7 +2144,12 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if err := validatePostResetOperationInputs(request.GetPostResetOperations()); err != nil {
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := wh.validatePostResetOperationInputs(ctx, namespaceEntry, request.GetPostResetOperations()); err != nil {
 		return nil, err
 	}
 
@@ -2134,14 +2157,8 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	if _, validType := enumspb.ResetReapplyType_name[int32(request.GetResetReapplyType())]; !validType {
 		return nil, serviceerror.NewInternalf("unknown reset reapply type: %v", request.GetResetReapplyType())
 	}
-
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := wh.historyClient.ResetWorkflowExecution(ctx, &historyservice.ResetWorkflowExecutionRequest{
-		NamespaceId:  namespaceID.String(),
+		NamespaceId:  namespaceEntry.ID().String(),
 		ResetRequest: request,
 	})
 	if err != nil {
@@ -2152,12 +2169,12 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 }
 
 // validatePostResetOperationInputs validates the optional post reset operation inputs.
-func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
+func (wh *WorkflowHandler) validatePostResetOperationInputs(ctx context.Context, namespaceEntry *namespace.Namespace, postResetOperations []*workflowpb.PostResetOperation) error {
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+			if err := wh.validateVersioningOverride(ctx, namespaceEntry, opts.GetVersioningOverride()); err != nil {
 				return err
 			}
 		default:
@@ -4744,6 +4761,132 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	return response, nil
 }
 
+// nolint:revive,cognitive-complexity
+func (wh *WorkflowHandler) validateBatchOperation(ctx context.Context, namespaceEntry *namespace.Namespace, params *workflowservice.StartBatchOperationRequest) error {
+	if params.GetOperation() == nil ||
+		params.GetReason() == "" ||
+		params.GetNamespace() == "" ||
+		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
+		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
+	}
+
+	if len(params.GetJobId()) == 0 {
+		return serviceerror.NewInvalidArgument("JobId is not set on request.")
+	}
+	if len(params.GetNamespace()) == 0 {
+		return serviceerror.NewInvalidArgument("Namespace is not set on request.")
+	}
+	if len(params.GetVisibilityQuery()) == 0 && len(params.GetExecutions()) == 0 {
+		return serviceerror.NewInvalidArgument("VisibilityQuery or Executions must be set on request.")
+	}
+	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
+		return errors.New("batch query and executions are mutually exclusive")
+	}
+	if len(params.GetReason()) == 0 {
+		return serviceerror.NewInvalidArgument("Reason is not set on request.")
+	}
+	if params.GetOperation() == nil {
+		return serviceerror.NewInvalidArgument("Batch operation is not set on request.")
+	}
+
+	switch op := params.GetOperation().(type) {
+	case *workflowservice.StartBatchOperationRequest_SignalOperation:
+		if op.SignalOperation.GetSignal() == "" {
+			return errors.New("must provide signal name")
+		}
+		return nil
+	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
+		if op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions() == nil {
+			return errors.New("must provide UpdateOptions")
+		}
+		if op.UpdateWorkflowOptionsOperation.GetUpdateMask() == nil {
+			return errors.New("must provide UpdateMask")
+		}
+		return wh.validateVersioningOverride(ctx, namespaceEntry, op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
+	case *workflowservice.StartBatchOperationRequest_CancellationOperation,
+		*workflowservice.StartBatchOperationRequest_TerminationOperation,
+		*workflowservice.StartBatchOperationRequest_DeletionOperation:
+		return nil
+	case *workflowservice.StartBatchOperationRequest_ResetOperation:
+		if op.ResetOperation == nil {
+			return serviceerror.NewInvalidArgument("reset operation is not set")
+		}
+		if op.ResetOperation.Options != nil {
+			if op.ResetOperation.Options.Target == nil {
+				return serviceerror.NewInvalidArgument("batch reset missing target")
+			}
+		} else {
+			//nolint:staticcheck // SA1019: GetResetType is deprecated but still needed for backward compatibility
+			resetType := op.ResetOperation.GetResetType()
+			if _, ok := enumspb.ResetType_name[int32(resetType)]; !ok || resetType == enumspb.RESET_TYPE_UNSPECIFIED {
+				return serviceerror.NewInvalidArgumentf("unknown batch reset type %v", resetType)
+			}
+		}
+	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
+		if op.UnpauseActivitiesOperation == nil {
+			return serviceerror.NewInvalidArgument("unpause activities operation is not set")
+		}
+		if op.UnpauseActivitiesOperation.GetActivity() == nil {
+			return serviceerror.NewInvalidArgument("activity filter must be set")
+		}
+		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
+		case *batchpb.BatchOperationUnpauseActivities_Type:
+			if len(a.Type) == 0 {
+				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
+			if !a.MatchAll {
+				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+		}
+		return nil
+	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
+		if op.ResetActivitiesOperation == nil {
+			return serviceerror.NewInvalidArgument("reset activities operation is not set")
+		}
+		if op.ResetActivitiesOperation.GetActivity() == nil && !op.ResetActivitiesOperation.GetMatchAll() {
+			return serviceerror.NewInvalidArgument("must provide ActivityType or MatchAll")
+		}
+
+		switch a := op.ResetActivitiesOperation.GetActivity().(type) {
+		case *batchpb.BatchOperationResetActivities_Type:
+			if len(a.Type) == 0 {
+				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+		case *batchpb.BatchOperationResetActivities_MatchAll:
+			if !a.MatchAll {
+				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+		}
+		return nil
+	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
+		if op.UpdateActivityOptionsOperation == nil {
+			return serviceerror.NewInvalidArgument("update activity options operation is not set")
+		}
+		if op.UpdateActivityOptionsOperation.GetActivityOptions() != nil && op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
+			return serviceerror.NewInvalidArgument("cannot set both activity options and restore original")
+		}
+		if op.UpdateActivityOptionsOperation.GetActivityOptions() == nil && !op.UpdateActivityOptionsOperation.GetRestoreOriginal() {
+			return serviceerror.NewInvalidArgument("Either activity type must be set, or restore original should be set to true")
+		}
+
+		switch a := op.UpdateActivityOptionsOperation.GetActivity().(type) {
+		case *batchpb.BatchOperationUpdateActivityOptions_Type:
+			if len(a.Type) == 0 {
+				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+		case *batchpb.BatchOperationUpdateActivityOptions_MatchAll:
+			if !a.MatchAll {
+				return serviceerror.NewInvalidArgument("Either activity type must be set, or match all should be set to true")
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("not supported batch type: %v", params.GetOperation())
+	}
+	return nil
+}
+
 func (wh *WorkflowHandler) StartBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StartBatchOperationRequest,
@@ -4762,7 +4905,11 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
-	if err := batcher.ValidateBatchOperation(request); err != nil {
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	if err := wh.validateBatchOperation(ctx, namespaceEntry, request); err != nil {
 		return nil, err
 	}
 
@@ -4787,14 +4934,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	visibilityQuery := request.GetVisibilityQuery()
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	input := &batchspb.BatchOperationInput{
 		Request:     request,
-		NamespaceId: namespaceID.String(),
+		NamespaceId: namespaceEntry.ID().String(),
 	}
 
 	var identity string
@@ -4875,7 +5017,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	_, err = wh.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
-			namespaceID.String(),
+			namespaceEntry.ID().String(),
 			startReq,
 			nil,
 			nil,
@@ -5180,7 +5322,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -5530,7 +5672,8 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, deploymentOptions *deploymentpb.WorkerDeploymentOptions, tq *taskqueuepb.TaskQueue) error {
+	// TODO: Deprecate old versioning checks
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
 		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
@@ -5543,7 +5686,47 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 		return errBuildIdTooLong
 	}
+
+	// Checks for versioning v3
+	versioningMode := deploymentOptions.GetWorkerVersioningMode()
+
+	// Validate deployment version based on the versioning mode
+	err := wh.validateDeploymentVersionWithMode(versioningMode, deploymentOptions, tq)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (wh *WorkflowHandler) validateDeploymentVersionWithMode(
+	versioningMode enumspb.WorkerVersioningMode,
+	deploymentOptions *deploymentpb.WorkerDeploymentOptions,
+	tq *taskqueuepb.TaskQueue,
+) error {
+	var deploymentVersion *deploymentspb.WorkerDeploymentVersion
+	if deploymentOptions.GetDeploymentName() != "" || deploymentOptions.GetBuildId() != "" {
+		deploymentVersion = &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentOptions.GetDeploymentName(),
+			BuildId:        deploymentOptions.GetBuildId(),
+		}
+	}
+
+	// Validation checks
+	switch versioningMode {
+	case enumspb.WORKER_VERSIONING_MODE_UNVERSIONED:
+		// if deploymentVersion != nil {
+		// 	return serviceerror.NewInvalidArgument("deployment version cannot be set for unversioned worker")
+		// }
+		return nil
+	case enumspb.WORKER_VERSIONING_MODE_VERSIONED:
+		if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+			return errUseVersioningWithoutNormalName
+		}
+		return worker_versioning.ValidateDeploymentVersion(deploymentVersion, wh.config.MaxIDLengthLimit())
+	default:
+		return nil
+	}
 }
 
 //nolint:revive // cyclomatic complexity
@@ -5975,16 +6158,16 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+	if err := wh.validateVersioningOverride(ctx, namespaceEntry, opts.GetVersioningOverride()); err != nil {
 		return nil, err
 	}
 
 	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
-		NamespaceId:   namespaceID.String(),
+		NamespaceId:   namespaceEntry.ID().String(),
 		UpdateRequest: request,
 	})
 	if err != nil {
@@ -5994,6 +6177,79 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	return &workflowservice.UpdateWorkflowExecutionOptionsResponse{
 		WorkflowExecutionOptions: response.WorkflowExecutionOptions,
 	}, nil
+}
+
+func (wh *WorkflowHandler) verifyPinnedVersionExists(ctx context.Context, namespaceEntry *namespace.Namespace, version *deploymentpb.WorkerDeploymentVersion) error {
+	deploymentVersionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(version)
+	cacheKey := fmt.Sprintf("%s-%s", namespaceEntry.ID().String(), deploymentVersionStr)
+
+	exists := wh.versionExistenceCache.Get(cacheKey)
+	if exists != nil {
+		return nil
+	}
+
+	_, err := wh.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace:         namespaceEntry.Name().String(),
+		DeploymentVersion: version,
+	})
+
+	if err == nil {
+		// Add the key to the cache
+		wh.versionExistenceCache.Put(cacheKey, true)
+		return nil
+	}
+
+	// Either the version does not exist or there was some other error
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
+		return serviceerror.NewNotFound("Worker Deployment Version not found. Worker Deployment Version must exist before it can be set as a pinned override.")
+	}
+	return err
+}
+
+// TODO (Shivam): Ponder later if we wanna move this back to worker-versioning package or not
+func (wh *WorkflowHandler) validateVersioningOverride(ctx context.Context, namespaceEntry *namespace.Namespace, override *workflowpb.VersioningOverride) error {
+	if override == nil {
+		return nil
+	}
+
+	if override.GetAutoUpgrade() { // v0.32
+		return nil
+	} else if p := override.GetPinned(); p != nil {
+		if p.GetVersion() == nil {
+			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
+		}
+		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
+			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
+		}
+		return wh.verifyPinnedVersionExists(ctx, namespaceEntry, p.GetVersion())
+	}
+
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	switch override.GetBehavior() {
+	case enumspb.VERSIONING_BEHAVIOR_PINNED:
+		if override.GetDeployment() != nil {
+			return worker_versioning.ValidateDeployment(override.GetDeployment())
+		} else if override.GetPinnedVersion() != "" {
+			_, err := worker_versioning.ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
+			return err
+		} else {
+			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+		if override.GetDeployment() != nil {
+			return serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
+		}
+		if override.GetPinnedVersion() != "" {
+			return serviceerror.NewInvalidArgument("only provide pinned version if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
+		return serviceerror.NewInvalidArgument("override behavior is required")
+	default:
+		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
+		return serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
+	}
+	return nil
 }
 
 func (wh *WorkflowHandler) UpdateActivityOptions(

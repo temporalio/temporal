@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -3995,6 +3996,46 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("v2", result)
+}
+
+func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// Simulate an old SDK polling a sticky task queue without providing normalName
+	stickyTaskQueueWithoutNormalName := &taskqueuepb.TaskQueue{
+		Name:       "sticky-" + uuid.NewString(),
+		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+		NormalName: "",
+	}
+
+	// Poll the sticky task queue
+	wfResponse, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue:         stickyTaskQueueWithoutNormalName,
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		Namespace:         s.Namespace().String(),
+		Identity:          tv.WorkerIdentity(),
+	})
+
+	// Expect an error because a versioned poller always requires a non-empty NormalName
+	s.Error(err)
+	s.Nil(wfResponse)
+	s.ErrorContains(err, "NormalName must be set on sticky queue if UseVersioning is true.")
+
+	// Poll activity task queue with an empty normalName (not possible, but conservative programming to safeguard against any potential bugs)
+	activityResponse, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		TaskQueue:         stickyTaskQueueWithoutNormalName,
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		Namespace:         s.Namespace().String(),
+		Identity:          tv.WorkerIdentity(),
+	})
+
+	// Expect an error because a versioned activity poller always requires a non-empty NormalName
+	s.Error(err)
+	s.Nil(activityResponse)
+	s.ErrorContains(err, "NormalName must be set on sticky queue if UseVersioning is true.")
 }
 
 func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {

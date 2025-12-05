@@ -192,7 +192,7 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 	s.NoError(err)
 
 	// ForceCAN
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	workflowID := workerdeployment.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 	}
@@ -2830,7 +2830,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	s.startVersionWorkflow(ctx, tv1)
 
 	// Signal the first version to be drained. Only do this in tests.
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}
