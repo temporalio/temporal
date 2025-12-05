@@ -26,53 +26,12 @@ if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${es_endpoint}/${ES_V
     exit 1
 fi
 
-echo "=== Step 1. Add new builtin search attributes ==="
+echo "=== Step 1. Add TemporalLowCardinalityKeyword01 search attribute ==="
 
 new_mapping='
 {
   "properties": {
-    "TemporalBool01": {
-      "type": "boolean"
-    },
-    "TemporalBool02": {
-      "type": "boolean"
-    },
-    "TemporalDatetime01": {
-      "type": "date_nanos"
-    },
-    "TemporalDatetime02": {
-      "type": "date_nanos"
-    },
-    "TemporalDouble01": {
-      "type": "scaled_float",
-      "scaling_factor": 10000
-    },
-    "TemporalDouble02": {
-      "type": "scaled_float",
-      "scaling_factor": 10000
-    },
-    "TemporalInt01": {
-      "type": "long"
-    },
-    "TemporalInt02": {
-      "type": "long"
-    },
-    "TemporalKeyword01": {
-      "type": "keyword"
-    },
-    "TemporalKeyword02": {
-      "type": "keyword"
-    },
-    "TemporalKeyword03": {
-      "type": "keyword"
-    },
-    "TemporalKeyword04": {
-      "type": "keyword"
-    },
-    "TemporalKeywordList01": {
-      "type": "keyword"
-    },
-    "TemporalKeywordList02": {
+    "TemporalLowCardinalityKeyword01": {
       "type": "keyword"
     }
   }
@@ -80,7 +39,7 @@ new_mapping='
 '
 
 if [ -z "${AUTO_CONFIRM}" ]; then
-    read -p "Add new builtin search attributes to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
+    read -p "Add TemporalLowCardinalityKeyword01 search attribute to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
     echo
 else
     REPLY="y"
