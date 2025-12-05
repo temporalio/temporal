@@ -20,7 +20,7 @@ service ActivityService {
       option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
     }
 
-    rpc RequestCancelActivityExecution(RequestCancelActivityExecutionRequest) returns (RequestCancelActivityExecutionResponse) {
-      option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
-    }
+  rpc RequestCancelActivityExecution(RequestCancelActivityExecutionRequest) returns (RequestCancelActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).execution_id = "frontend_request.activity_id";
+  }
 }

@@ -206,7 +206,7 @@ func validateAndNormalizeStartActivityExecutionRequest(
 
 func validateInputSize(
 	activityID string,
-	activityType string,
+	blobSizeViolationTagValue string,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	inputSize int,
@@ -221,7 +221,7 @@ func validateInputSize(
 			tag.WorkflowNamespace(namespaceName),
 			tag.ActivityID(activityID),
 			tag.ActivitySize(int64(inputSize)),
-			tag.BlobSizeViolationOperation(activityType))
+			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
 
 		if inputSize > sizeErrorLimit {
 			return common.ErrBlobSizeExceedsLimit
@@ -256,11 +256,17 @@ func ValidatePollActivityExecutionRequest(
 		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
-	if req.GetRunId() == "" {
-		return serviceerror.NewInvalidArgument("run id is required")
+	hasRunID := req.GetRunId() != ""
+	hasLongPollToken := len(req.GetWaitAnyStateChange().GetLongPollToken()) > 0
+
+	if hasLongPollToken && !hasRunID {
+		return serviceerror.NewInvalidArgument("run id is required when long poll token is provided")
 	}
-	if _, err := uuid.Parse(req.GetRunId()); err != nil {
-		return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+	if hasRunID {
+		_, err := uuid.Parse(req.GetRunId())
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
 	}
 	return nil
 }

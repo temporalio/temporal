@@ -37,7 +37,7 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		attempt, err := a.Attempt.Get(ctx)
+		attempt, err := a.LastAttempt.Get(ctx)
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ var TransitionRescheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
-		attempt, err := a.Attempt.Get(ctx)
+		attempt, err := a.LastAttempt.Get(ctx)
 		if err != nil {
 			return err
 		}
@@ -135,7 +135,7 @@ var TransitionStarted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		attempt, err := a.Attempt.Get(ctx)
+		attempt, err := a.LastAttempt.Get(ctx)
 		if err != nil {
 			return err
 		}
@@ -172,7 +172,7 @@ var TransitionCompleted = chasm.NewTransition(
 		}
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			attempt, err := a.Attempt.Get(ctx)
+			attempt, err := a.LastAttempt.Get(ctx)
 			if err != nil {
 				return err
 			}
@@ -224,7 +224,7 @@ var TransitionFailed = chasm.NewTransition(
 				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
 			}
 
-			attempt, err := a.Attempt.Get(ctx)
+			attempt, err := a.LastAttempt.Get(ctx)
 			if err != nil {
 				return err
 			}
@@ -255,21 +255,13 @@ var TransitionTerminated = chasm.NewTransition(
 		}
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			attempt, err := a.Attempt.Get(ctx)
-			if err != nil {
-				return err
-			}
-
-			if identity := req.GetFrontendRequest().GetIdentity(); identity != "" {
-				attempt.LastWorkerIdentity = identity
-			}
-
 			outcome, err := a.Outcome.Get(ctx)
 			if err != nil {
 				return err
 			}
 
 			failure := &failurepb.Failure{
+				// TODO if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
 				Message:     req.GetFrontendRequest().GetReason(),
 				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
 			}

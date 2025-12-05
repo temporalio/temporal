@@ -32,7 +32,7 @@ func (e *activityDispatchTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
+	attempt, err := activity.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -78,7 +78,7 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
+	attempt, err := activity.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -108,7 +108,7 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
+	attempt, err := activity.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -138,7 +138,7 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
+	attempt, err := activity.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, err
 	}

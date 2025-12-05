@@ -1190,6 +1190,17 @@ func unmarshalProto(
 func (n *Node) Ref(
 	component Component,
 ) ([]byte, error) {
+	ref, err := n.structuredRef(component)
+	if err != nil {
+		return nil, err
+	}
+	return ref.Serialize(n.registry)
+}
+
+// structuredRef returns a ComponentRef for the node.
+func (n *Node) structuredRef(
+	component Component,
+) (ComponentRef, error) {
 	// No need to update tree structure here. If a Component can only be found after
 	// syncSubComponents() is called, it means the component is created in the
 	// current transition and don't have a reference yet.
@@ -1197,7 +1208,7 @@ func (n *Node) Ref(
 	for path, node := range n.andAllChildren() {
 		if node.value == component {
 			workflowKey := node.backend.GetWorkflowKey()
-			ref := ComponentRef{
+			return ComponentRef{
 				EntityKey: EntityKey{
 					NamespaceID: workflowKey.NamespaceID,
 					BusinessID:  workflowKey.WorkflowID,
@@ -1209,11 +1220,10 @@ func (n *Node) Ref(
 				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
 				componentPath:      path,
 				componentInitialVT: node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
-			}
-			return ref.Serialize(n.registry)
+			}, nil
 		}
 	}
-	return nil, errComponentNotFound
+	return ComponentRef{}, errComponentNotFound
 }
 
 // componentNodePath implements the CHASM Context interface
