@@ -25,7 +25,7 @@ import (
 
 type ActivityStore interface {
 	// PopulateRecordActivityTaskStartedResponse populates the response for RecordActivityTaskStarted
-	PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error
+	PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error
 
 	// RecordCompletion applies the provided function to record activity completion
 	RecordCompletion(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
@@ -78,10 +78,11 @@ func NewStandaloneActivity(
 	ctx chasm.MutableContext,
 	request *workflowservice.StartActivityExecutionRequest,
 ) (*Activity, error) {
-	visibility, err := chasm.NewVisibilityWithData(ctx, request.GetSearchAttributes().GetIndexedFields(), request.GetMemo().GetFields())
-	if err != nil {
-		return nil, err
-	}
+	visibility := chasm.NewVisibilityWithData(
+		ctx,
+		request.GetSearchAttributes().GetIndexedFields(),
+		request.GetMemo().GetFields(),
+	)
 
 	// TODO flatten this when API is updated
 	options := request.GetOptions()
@@ -143,11 +144,7 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 		return nil, err
 	}
 
-	attempt, err := a.Attempt.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
+	attempt := a.Attempt.Get(ctx)
 	attempt.LastStartedTime = timestamppb.New(ctx.Now(a))
 	attempt.LastWorkerIdentity = params.WorkerIdentity
 
@@ -158,11 +155,7 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 		}
 	}
 
-	store, err := a.Store.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
+	store := a.Store.Get(ctx)
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	if store == nil {
 		if err := a.PopulateRecordActivityTaskStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
@@ -177,21 +170,10 @@ func (a *Activity) RecordActivityTaskStarted(ctx chasm.MutableContext, params Re
 	return response, nil
 }
 
-func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {
-	attempt, err := a.Attempt.Get(ctx)
-	if err != nil {
-		return err
-	}
-
-	lastHeartbeat, err := a.LastHeartbeat.Get(ctx)
-	if err != nil {
-		return err
-	}
-
-	requestData, err := a.RequestData.Get(ctx)
-	if err != nil {
-		return err
-	}
+func (a *Activity) PopulateRecordActivityTaskStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error {
+	attempt := a.Attempt.Get(ctx)
+	lastHeartbeat := a.LastHeartbeat.Get(ctx)
+	requestData := a.RequestData.Get(ctx)
 
 	response.StartedTime = attempt.LastStartedTime
 	response.Attempt = attempt.GetCount()
@@ -227,10 +209,7 @@ func (a *Activity) RecordCompletion(ctx chasm.MutableContext, applyFn func(ctx c
 // recordFromScheduledTimeOut records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
 // set the outcome failure directly and leave the attempt failure as is.
 func (a *Activity) recordFromScheduledTimeOut(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
-	outcome, err := a.Outcome.Get(ctx)
-	if err != nil {
-		return err
-	}
+	outcome := a.Outcome.Get(ctx)
 
 	failure := &failurepb.Failure{
 		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
@@ -253,10 +232,7 @@ func (a *Activity) recordFromScheduledTimeOut(ctx chasm.MutableContext, timeoutT
 // recordStartToCloseTimedOut records start-to-close timeouts. These come from retried attempts so we update the attempt
 // failure info but leave the outcome failure empty to avoid duplication
 func (a *Activity) recordStartToCloseTimedOut(ctx chasm.MutableContext, retryInterval time.Duration, noRetriesLeft bool) error {
-	outcome, err := a.Outcome.Get(ctx)
-	if err != nil {
-		return err
-	}
+	outcome := a.Outcome.Get(ctx)
 
 	timeoutType := enumspb.TIMEOUT_TYPE_START_TO_CLOSE
 
@@ -269,10 +245,7 @@ func (a *Activity) recordStartToCloseTimedOut(ctx chasm.MutableContext, retryInt
 		},
 	}
 
-	attempt, err := a.Attempt.Get(ctx)
-	if err != nil {
-		return err
-	}
+	attempt := a.Attempt.Get(ctx)
 
 	currentTime := timestamppb.New(ctx.Now(a))
 
@@ -295,10 +268,7 @@ func (a *Activity) recordStartToCloseTimedOut(ctx chasm.MutableContext, retryInt
 }
 
 func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context) (bool, error) {
-	attempt, err := a.Attempt.Get(ctx)
-	if err != nil {
-		return false, err
-	}
+	attempt := a.Attempt.Get(ctx)
 
 	retryInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.Count)
 
@@ -351,20 +321,14 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		return nil, serviceerror.NewInternalf("unknown activity execution status: %s", a.GetStatus())
 	}
 
-	requestData, err := a.RequestData.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
+	requestData := a.RequestData.Get(ctx)
 
-	attempt, err := a.Attempt.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
+	attempt := a.Attempt.Get(ctx)
 	key := ctx.ExecutionKey()
 
 	info := &activity.ActivityExecutionInfo{
 		ActivityId:    key.BusinessID,
-		RunId:         key.EntityID,
+		RunId:         key.RunID,
 		ActivityType:  a.GetActivityType(),
 		Status:        status,
 		RunState:      runState,
@@ -399,25 +363,19 @@ func (a *Activity) buildPollActivityExecutionResponse(
 
 	var input *commonpb.Payloads
 	if request.GetIncludeInput() {
-		activityRequest, err := a.RequestData.Get(ctx)
-		if err != nil {
-			return nil, err
-		}
+		activityRequest := a.RequestData.Get(ctx)
 		input = activityRequest.GetInput()
 	}
 
 	response := &workflowservice.PollActivityExecutionResponse{
 		Info:                     info,
-		RunId:                    ctx.ExecutionKey().EntityID,
+		RunId:                    ctx.ExecutionKey().RunID,
 		Input:                    input,
 		StateChangeLongPollToken: token,
 	}
 
 	if request.GetIncludeOutcome() {
-		activityOutcome, err := a.Outcome.Get(ctx)
-		if err != nil {
-			return nil, err
-		}
+		activityOutcome := a.Outcome.Get(ctx)
 		// There are two places where a failure might be stored but only one place where a
 		// successful outcome is stored.
 		if successful := activityOutcome.GetSuccessful(); successful != nil {
@@ -435,10 +393,7 @@ func (a *Activity) buildPollActivityExecutionResponse(
 				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
 
 			if shouldHaveFailure {
-				attempt, err := a.Attempt.Get(ctx)
-				if err != nil {
-					return nil, err
-				}
+				attempt := a.Attempt.Get(ctx)
 				if details := attempt.GetLastFailureDetails(); details != nil {
 					response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
 						Failure: details.GetFailure(),

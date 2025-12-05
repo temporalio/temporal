@@ -23,9 +23,9 @@ func newHandler(config *Config) *handler {
 }
 
 func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.StartActivityExecutionRequest) (*activitypb.StartActivityExecutionResponse, error) {
-	response, key, _, err := chasm.NewEntity(
+	response, key, _, err := chasm.NewExecution(
 		ctx,
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
 			BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		},
@@ -53,7 +53,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
-	response.RunId = key.EntityID
+	response.RunId = key.RunID
 
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: response,
@@ -74,10 +74,10 @@ func (h *handler) PollActivityExecution(
 	ctx context.Context,
 	req *activitypb.PollActivityExecutionRequest,
 ) (response *activitypb.PollActivityExecutionResponse, err error) {
-	ref := chasm.NewComponentRef[*Activity](chasm.EntityKey{
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
 		NamespaceID: req.GetNamespaceId(),
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
-		EntityID:    req.GetFrontendRequest().GetRunId(),
+		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
 	defer func() {
 		var notFound *serviceerror.NotFound

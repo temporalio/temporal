@@ -1241,7 +1241,7 @@ func (n *Node) structuredRef(
 		if node.value == component {
 			workflowKey := node.backend.GetWorkflowKey()
 			return ComponentRef{
-				EntityKey: EntityKey{
+				ExecutionKey: ExecutionKey{
 					NamespaceID: workflowKey.NamespaceID,
 					BusinessID:  workflowKey.WorkflowID,
 					RunID:       workflowKey.RunID,
@@ -1249,9 +1249,9 @@ func (n *Node) structuredRef(
 				archetypeID: n.ArchetypeID(),
 				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 				// Using VersionedTransition of the entire tree might be too strict.
-				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
-				componentPath:      path,
-				componentInitialVT: node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+				executionLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
+				componentPath:         path,
+				componentInitialVT:    node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
 			}, nil
 		}
 	}

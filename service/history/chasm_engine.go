@@ -72,10 +72,10 @@ func newChasmEngine(
 	notifier *ChasmNotifier,
 ) *ChasmEngine {
 	return &ChasmEngine{
-		entityCache: entityCache,
-		registry:    registry,
-		config:      config,
-		notifier:    notifier,
+		executionCache: executionCache,
+		registry:       registry,
+		config:         config,
+		notifier:       notifier,
 	}
 }
 
@@ -87,7 +87,7 @@ func (e *ChasmEngine) SetShardController(
 	e.shardController = shardController
 }
 
-func (e *ChasmEngine) NotifyExecution(key chasm.EntityKey) {
+func (e *ChasmEngine) NotifyExecution(key chasm.ExecutionKey) {
 	e.notifier.Notify(key)
 }
 
@@ -309,7 +309,7 @@ func (e *ChasmEngine) PollComponent(
 			return ref, nil
 		}
 		// Predicate not satisfied; subscribe before releasing the lock.
-		ch, unsubscribe = e.notifier.Subscribe(requestRef.EntityKey)
+		ch, unsubscribe = e.notifier.Subscribe(requestRef.ExecutionKey)
 		return nil, nil
 	}
 

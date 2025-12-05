@@ -32,11 +32,7 @@ func (e *activityDispatchTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
-	if err != nil {
-		return false, err
-	}
-
+	attempt := activity.Attempt.Get(ctx)
 	// TODO make sure we handle resets when we support them, as they will reset the attempt count
 	if !TransitionStarted.Possible(activity) || task.Attempt != attempt.Count {
 		return false, nil
@@ -78,11 +74,7 @@ func (e *scheduleToStartTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
-	if err != nil {
-		return false, err
-	}
-
+	attempt := activity.Attempt.Get(ctx)
 	valid := activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && task.Attempt == attempt.Count
 	return valid, nil
 }
@@ -108,11 +100,7 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
-	if err != nil {
-		return false, err
-	}
-
+	attempt := activity.Attempt.Get(ctx)
 	valid := TransitionTimedOut.Possible(activity) && task.Attempt == attempt.Count
 	return valid, nil
 }
@@ -138,11 +126,7 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.Attempt.Get(ctx)
-	if err != nil {
-		return false, err
-	}
-
+	attempt := activity.Attempt.Get(ctx)
 	valid := activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED && task.Attempt == attempt.Count
 	return valid, nil
 }

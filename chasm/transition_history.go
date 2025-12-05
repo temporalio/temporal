@@ -17,10 +17,10 @@ func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) (bool, err
 	if err != nil {
 		return false, err
 	}
-	if ref.EntityKey != currentRef.EntityKey {
+	if ref.ExecutionKey != currentRef.ExecutionKey {
 		return false, ErrInvalidComponentRef
 	}
-	switch transitionhistory.Compare(ref.entityLastUpdateVT, currentRef.entityLastUpdateVT) {
+	switch transitionhistory.Compare(ref.executionLastUpdateVT, currentRef.executionLastUpdateVT) {
 	case -1:
 		// Execution state has advanced beyond submitted ref
 		return true, nil
