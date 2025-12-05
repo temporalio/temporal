@@ -1,11 +1,10 @@
 package activity
 
 import (
-	"fmt"
-
 	"github.com/google/uuid"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
@@ -43,7 +42,7 @@ func ValidateAndNormalizeActivityAttributes(
 	runTimeout *durationpb.Duration,
 ) error {
 	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
-		return fmt.Errorf("invalid TaskQueue: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+		return err
 	}
 
 	if activityID == "" {
@@ -54,7 +53,7 @@ func ValidateAndNormalizeActivityAttributes(
 	}
 
 	if err := validateActivityRetryPolicy(namespaceID, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
-		return fmt.Errorf("invalid ActivityRetryPolicy: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+		return err
 	}
 
 	if len(activityID) > maxIDLengthLimit {
@@ -182,6 +181,10 @@ func validateAndNormalizeStartActivityExecutionRequest(
 		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
 	}
 
+	if err := normalizeAndValidateIDPolicy(req); err != nil {
+		return err
+	}
+
 	if err := validateInputSize(
 		req.GetActivityId(),
 		req.GetActivityType().GetName(),
@@ -199,6 +202,18 @@ func validateAndNormalizeStartActivityExecutionRequest(
 			saValidator); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
+	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
+		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	}
+
+	if req.GetIdConflictPolicy() == enumspb.ACTIVITY_ID_CONFLICT_POLICY_UNSPECIFIED {
+		req.IdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL
 	}
 
 	return nil
