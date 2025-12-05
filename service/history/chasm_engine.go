@@ -307,11 +307,8 @@ func (e *ChasmEngine) PollComponent(
 	}
 
 	ref, err := checkPredicateOrSubscribe()
-	if err != nil {
-		return nil, err
-	}
-	if ref != nil {
-		return ref, nil
+	if err != nil || ref != nil {
+		return ref, err
 	}
 
 	for {
