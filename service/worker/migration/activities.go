@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strconv"
 	"time"
-	"unicode"
 
 	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
@@ -29,11 +27,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute/sadefs"
+	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -503,21 +500,15 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 			ArchetypeId: chasm.UnspecifiedArchetypeID,
 		}
 
-		if indexedField := e.SearchAttributes.GetIndexedFields(); indexedField != nil {
-			if nsDivisionPayload, ok := indexedField[sadefs.TemporalNamespaceDivision]; ok {
-				var nsDivisionStr string
-				if err := payload.Decode(nsDivisionPayload, &nsDivisionStr); err != nil {
-					return nil, fmt.Errorf("failed to decode TemporalNamespaceDivision field: %w", err)
-				}
-
-				if len(nsDivisionStr) != 0 && unicode.IsDigit(rune(nsDivisionStr[0])) {
-					archetypeID, err := strconv.ParseUint(nsDivisionStr, 10, 32)
-					if err != nil {
-						return nil, fmt.Errorf("failed to parse archetypeID: %w", err)
-					}
-					executionInfo.ArchetypeId = chasm.ArchetypeID(archetypeID)
-				}
-			}
+		archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(e)
+		if err != nil {
+			return nil, fmt.Errorf("archetypeID extraction error: %w", err)
+		}
+		if archetypeID != chasm.WorkflowArchetypeID {
+			// For backward compatibility reason we need this field to be 0
+			// to avoid unmarshaling errors for workflows.
+			// Check comment above for more details.
+			executionInfo.ArchetypeId = archetypeID
 		}
 
 		executions = append(executions, executionInfo)
