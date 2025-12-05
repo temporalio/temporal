@@ -10,7 +10,7 @@ var (
 	LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
 		"chasm.activity.longPollTimeout",
 		20*time.Second,
-		`LongPollTimeout is a timeout for activity long-poll requests.`,
+		`Timeout for activity long-poll requests.`,
 	)
 
 	LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
