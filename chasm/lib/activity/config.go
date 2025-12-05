@@ -17,7 +17,7 @@ var (
 		"chasm.activity.longPollBuffer",
 		time.Second,
 		`A buffer used to adjust the activity long-poll timeouts.
- Specifically, activity long-poll requests are timed out at a time which leaves at least LongPollBuffer
+ Specifically, activity long-poll requests are timed out at a time which leaves at least the buffer's duration
  remaining before the caller's deadline, if permitted by the caller's deadline.`,
 	)
 )
