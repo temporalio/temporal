@@ -20,6 +20,7 @@ import (
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	workflow "go.temporal.io/server/api/workflow/v1"
+	chasm "go.temporal.io/server/chasm"
 	collection "go.temporal.io/server/common/collection"
 	definition "go.temporal.io/server/common/definition"
 	metrics "go.temporal.io/server/common/metrics"
@@ -411,6 +412,18 @@ func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *hist
 func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockEngine)(nil).MergeDLQMessages), ctx, messagesRequest)
+}
+
+// NotifyChasmExecution mocks base method.
+func (m *MockEngine) NotifyChasmExecution(executionKey chasm.EntityKey, componentRef []byte) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyChasmExecution", executionKey, componentRef)
+}
+
+// NotifyChasmExecution indicates an expected call of NotifyChasmExecution.
+func (mr *MockEngineMockRecorder) NotifyChasmExecution(executionKey, componentRef any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChasmExecution", reflect.TypeOf((*MockEngine)(nil).NotifyChasmExecution), executionKey, componentRef)
 }
 
 // NotifyNewHistoryEvent mocks base method.
