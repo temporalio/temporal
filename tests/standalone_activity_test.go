@@ -351,8 +351,10 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 	require.NoError(t, err)
 
 	info := activityResp.GetInfo()
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
+		"expected status=Canceled but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -408,8 +410,10 @@ func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
 	require.NoError(t, err)
 
 	info := activityResp.GetInfo()
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
+		"expected status=Canceled but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -494,8 +498,10 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSu
 	require.NoError(t, err)
 
 	info := activityResp.GetInfo()
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
+		"expected status=Canceled but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
 }
@@ -664,8 +670,10 @@ func (s *standaloneActivityTestSuite) TestActivityTerminated() {
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, info.GetStatus(),
+		"expected status=Terminated but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, "worker", info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1407,6 +1415,433 @@ func (s *standaloneActivityTestSuite) Test_PollActivityExecution_InvalidArgument
 	}
 }
 
+func (s *standaloneActivityTestSuite) TestHeartbeat() {
+	// TODO(dan)
+	// - a heartbeat timer set on one attempt should not timeout a subsequent attempt (not unless
+	//   there have been some appropriate adjustments to the schedule time)
+
+	t := s.T()
+	ctx := testcore.NewContext()
+	heartbeatDetails := payloads.EncodeString("Heartbeat Details")
+
+	t.Run("InvalidArgument", func(t *testing.T) {
+		testCases := []struct {
+			name        string
+			taskToken   []byte
+			expectedErr string
+		}{
+			{
+				name:        "EmptyTaskToken",
+				taskToken:   nil,
+				expectedErr: "Task token not set on request",
+			},
+			{
+				name:        "MalformedTaskToken",
+				taskToken:   []byte("invalid-token-data"),
+				expectedErr: "Error deserializing task token",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				_, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+					Namespace: s.Namespace().String(),
+					TaskToken: tc.taskToken,
+					Details:   heartbeatDetails,
+				})
+				require.Error(t, err)
+				statusErr := serviceerror.ToStatus(err)
+				require.NotNil(t, statusErr)
+				require.Equal(t, codes.InvalidArgument, statusErr.Code())
+				require.Contains(t, statusErr.Message(), tc.expectedErr)
+			})
+		}
+	})
+
+	t.Run("StaleToken", func(t *testing.T) {
+		// Start an activity and get a valid task token, then complete it
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		_, err := s.startActivity(ctx, activityID, taskQueue)
+		require.NoError(t, err)
+
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    defaultResult,
+		})
+		require.NoError(t, err)
+
+		// Heartbeat with stale token (activity already completed)
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.Error(t, err)
+		statusErr := serviceerror.ToStatus(err)
+		require.Equal(t, codes.NotFound, statusErr.Code())
+		require.Contains(t, statusErr.Message(), "activity task not found")
+	})
+
+	t.Run("StaleAttemptToken", func(t *testing.T) {
+		// Start an activity with retries, fail first attempt, then try to heartbeat with old token.
+		// Use NextRetryDelay=1s to ensure the retry dispatch happens within test timeout.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+				ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
+				RetryPolicy: &commonpb.RetryPolicy{
+					MaximumAttempts: 3,
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll and get task token for attempt 1
+		attempt1Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, attempt1Resp.Attempt)
+
+		// Fail the task with NextRetryDelay to control retry timing
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: attempt1Resp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					NonRetryable:   false,
+					NextRetryDelay: durationpb.New(1 * time.Second),
+				}},
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll to get attempt 2 (ensures retry has happened)
+		attempt2Resp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, attempt2Resp.Attempt)
+
+		// Heartbeat with the attempt 2 token
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: attempt2Resp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Try to heartbeat with the old attempt 1 token - should fail with NotFound
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: attempt1Resp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.Error(t, err)
+		statusErr := serviceerror.ToStatus(err)
+		require.Equal(t, codes.NotFound, statusErr.Code())
+		require.Contains(t, statusErr.Message(), "activity task not found")
+	})
+
+	t.Run("ResponseIncludesCancelRequested", func(t *testing.T) {
+		// Start activity, worker accepts task, request cancellation, worker heartbeats.
+		// Verify: heartbeat response has cancel_requested=true.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Options: &activitypb.ActivityOptions{
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+				StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			},
+		})
+		require.NoError(t, err)
+		runID := startResp.RunId
+
+		// Worker accepts task
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Heartbeat before cancellation - cancel_requested should be false
+		hbResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+		require.False(t, hbResp.CancelRequested)
+
+		// Request cancellation
+		_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			RequestId:  uuid.New().String(),
+			Reason:     "test cancellation",
+		})
+		require.NoError(t, err)
+
+		// Heartbeat after cancellation - cancel_requested should be true
+		hbResp, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+		require.True(t, hbResp.CancelRequested)
+	})
+
+	t.Run("HeartbeatDetailsAvailableOnRetry", func(t *testing.T) {
+		// Start activity (with retries), worker accepts, heartbeats with details,
+		// worker fails the task. Worker accepts retry attempt.
+		// Verify: retry task contains previous heartbeat details.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+				StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+				ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Millisecond),
+					MaximumAttempts: 3,
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// First attempt: worker accepts task
+		pollResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp1.Attempt)
+		require.Nil(t, pollResp1.HeartbeatDetails) // No heartbeat details on first attempt
+
+		// Worker heartbeats with details
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp1.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Worker fails with retryable error
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollResp1.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable: false,
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Second attempt: worker accepts retry task
+		pollResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, pollResp2.Attempt)
+
+		// Verify: heartbeat details from first attempt are available
+		protorequire.ProtoEqual(t, heartbeatDetails, pollResp2.HeartbeatDetails)
+	})
+
+	t.Run("ActivityTimesOutWithoutHeartbeat", func(t *testing.T) {
+		// Start activity (no retries), worker accepts task, time passes beyond
+		// heartbeat timeout, worker never heartbeats.
+		// Verify: activity status is TIMED_OUT.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Options: &activitypb.ActivityOptions{
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+				StartToCloseTimeout: durationpb.New(1 * time.Minute),
+				HeartbeatTimeout:    durationpb.New(1 * time.Second),
+				RetryPolicy: &commonpb.RetryPolicy{
+					MaximumAttempts: 1, // No retries
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Worker accepts task (starts the activity)
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollTaskResp.TaskToken)
+
+		// Long poll for completion (heartbeat timeout will fire)
+		pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeInfo:    true,
+			IncludeOutcome: true,
+			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitCompletion{
+				WaitCompletion: &workflowservice.PollActivityExecutionRequest_CompletionWaitOptions{},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, pollResp.GetInfo().GetStatus(),
+			"expected status=TimedOut but is %s", pollResp.GetInfo().GetStatus())
+		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+			"expected timeout type=Heartbeat but is %s", pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	})
+
+	t.Run("ActivityRetriesOnHeartbeatTimeout", func(t *testing.T) {
+		// Start activity (with retries), worker accepts task, time passes beyond
+		// heartbeat timeout, worker never heartbeats.
+		// Verify: activity returns to SCHEDULED (or new task available).
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+				StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+				ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+				HeartbeatTimeout:       durationpb.New(1 * time.Second),
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Millisecond),
+					MaximumAttempts: 2,
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Attempt 1: worker accepts task
+		pollTaskResp1, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollTaskResp1.Attempt)
+
+		// Don't heartbeat - let it timeout and retry
+		// Second attempt: worker accepts retry task
+		pollTaskResp2, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, pollTaskResp2.Attempt)
+	})
+
+	t.Run("HeartbeatKeepsActivityAlive", func(t *testing.T) {
+		// Start activity, worker accepts, worker heartbeats within timeout,
+		// more time passes, worker heartbeats again, worker completes.
+		// Verify: activity status is COMPLETED.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Options: &activitypb.ActivityOptions{
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+				StartToCloseTimeout: durationpb.New(1 * time.Minute),
+				HeartbeatTimeout:    durationpb.New(1 * time.Second),
+				RetryPolicy: &commonpb.RetryPolicy{
+					MaximumAttempts: 1, // No retries - timeout would be terminal
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Worker accepts task
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollTaskResp.TaskToken)
+
+		// Heartbeat before timeout
+		time.Sleep(600 * time.Millisecond)
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Wait again, then heartbeat again
+		time.Sleep(600 * time.Millisecond)
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Complete the activity
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Result:    defaultResult,
+		})
+		require.NoError(t, err)
+
+		// Verify activity completed successfully (didn't timeout)
+		pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeInfo:    true,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, pollResp.GetInfo().GetStatus(),
+			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
+		protorequire.ProtoEqual(t, defaultResult, pollResp.GetResult())
+	})
+}
+
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
 	t *testing.T,
 	info *activitypb.ActivityExecutionInfo,
@@ -1466,8 +1901,10 @@ func (s *standaloneActivityTestSuite) startAndValidateActivity(
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, startResponse.RunId, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus(),
+		"expected status=Running but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState(),
+		"expected run state=Scheduled but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Nil(t, activityResp.Outcome)
 	require.Nil(t, info.GetLastFailure())
@@ -1510,8 +1947,10 @@ func (s *standaloneActivityTestSuite) pollActivityTaskAndValidate(
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus(),
+		"expected status=Running but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState(),
+		"expected run state=Started but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, s.tv.WorkerIdentity(), info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1543,8 +1982,10 @@ func (s *standaloneActivityTestSuite) validateCompletion(
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, info.GetStatus(),
+		"expected status=Completed but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1575,8 +2016,10 @@ func (s *standaloneActivityTestSuite) validateFailure(
 
 	require.NoError(t, err)
 	s.validateBaseActivityResponse(t, activityID, runID, activityResp)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, info.GetStatus())
-	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState())
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, info.GetStatus(),
+		"expected status=Failed but is %s", info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
+		"expected run state=Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())

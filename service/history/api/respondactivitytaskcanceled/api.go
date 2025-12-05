@@ -44,7 +44,10 @@ func Invoke(
 			ctx,
 			componentRef,
 			(*activity.Activity).HandleCanceled,
-			req,
+			activity.WithToken[*historyservice.RespondActivityTaskCanceledRequest]{
+				Token:   token,
+				Request: req,
+			},
 		)
 
 		if err != nil {

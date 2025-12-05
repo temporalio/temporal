@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -31,6 +33,21 @@ func Invoke(
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
+
+	// Handle as standalone activity if token has component ref.
+	if componentRef := token.GetComponentRef(); len(componentRef) > 0 {
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			componentRef,
+			(*activity.Activity).RecordHeartbeat,
+			activity.WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+				Token:   token,
+				Request: req,
+			},
+		)
+		return response, err
+	}
+
 	if err := api.SetActivityTaskRunID(ctx, token, workflowConsistencyChecker); err != nil {
 		return nil, err
 	}

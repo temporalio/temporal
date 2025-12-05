@@ -27,3 +27,9 @@ message StartToCloseTimeoutTask {
   // The current attempt number for this activity execution. Used for task validation.
   int32 attempt = 1;
 }
+
+// HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
+message HeartbeatTimeoutTask {
+  // The current attempt number for this activity execution. Used for task validation.
+  int32 attempt = 1;
+}

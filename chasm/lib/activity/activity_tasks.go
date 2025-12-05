@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/util"
 	"go.uber.org/fx"
 )
 
@@ -171,4 +172,115 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 
 	// Reached maximum attempts, timeout the activity
 	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+}
+
+// HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
+type heartbeatTimeoutTaskExecutor struct{}
+
+func newHeartbeatTimeoutTaskExecutor() *heartbeatTimeoutTaskExecutor {
+	return &heartbeatTimeoutTaskExecutor{}
+}
+
+// Validate validates a HeartbeatTimeoutTask.
+func (e *heartbeatTimeoutTaskExecutor) Validate(
+	ctx chasm.Context,
+	activity *Activity,
+	taskAttrs chasm.TaskAttributes,
+	task *activitypb.HeartbeatTimeoutTask,
+) (bool, error) {
+	// Must be in a state that can heartbeat.
+	if !(activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) {
+		return false, nil
+	}
+
+	// Task attempt must still match current attempt.
+	attempt, err := activity.Attempt.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	if attempt.GetCount() != task.Attempt {
+		return false, nil
+	}
+
+	// Must not have been a heartbeat since this task was created
+	lastHb, err := activity.LastHeartbeat.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	hbTimeout := activity.GetHeartbeatTimeout().AsDuration()
+	attemptStartTime := attempt.GetStartedTime().AsTime()
+	lastHbTime := lastHb.GetRecordedTime().AsTime() // could be from a previous attempt
+	// No heartbeats in the attempt so far is equivalent to a heartbeat having been sent at attempt
+	// start time.
+	hbDeadline := util.MaxTime(lastHbTime, attemptStartTime).Add(hbTimeout)
+	if taskAttrs.ScheduledTime.Before(hbDeadline) {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// Execute executes a HeartbeatTimeoutTask.
+func (e *heartbeatTimeoutTaskExecutor) Execute(
+	ctx chasm.MutableContext,
+	activity *Activity,
+	_ chasm.TaskAttributes,
+	_ *activitypb.HeartbeatTimeoutTask,
+) error {
+	// There are two concurrent processes:
+	// 1. A worker is sending heartbeats.
+	// 2. The server is executing this function at (shortly after) certain scheduled times.
+	//
+	// Each time we execute this function, our task is to look back into the past and determine
+	// whether more than HeartbeatTimeout time has elapsed since the last worker heartbeat. If it
+	// has, we fail the attempt (and decide between retrying or failing the activity). If it has
+	// not, then we schedule a new timer task to execute this function at the new deadline, i.e.
+	// lastHeartbeatTime+HeartbeatTimeout.
+	//
+	// Task validation has established that an attempt is currently in progress and that it is the
+	// attempt for which this heartbeat timer was originally set.
+
+	attempt, err := activity.Attempt.Get(ctx)
+	if err != nil {
+		return err
+	}
+	lastHb, err := activity.LastHeartbeat.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	hbTimeout := activity.GetHeartbeatTimeout().AsDuration()
+	attemptStartTime := attempt.GetStartedTime().AsTime()
+	lastHbTime := lastHb.GetRecordedTime().AsTime() // could be from a previous attempt
+	// No heartbeats in the attempt so far is equivalent to a heartbeat having been sent at attempt
+	// start time.
+	hbDeadline := util.MaxTime(lastHbTime, attemptStartTime).Add(hbTimeout)
+
+	if ctx.Now(activity).Before(hbDeadline) {
+		// Deadline has not expired; schedule a new task.
+		ctx.AddTask(
+			activity,
+			chasm.TaskAttributes{
+				ScheduledTime: hbDeadline,
+			},
+			&activitypb.HeartbeatTimeoutTask{
+				Attempt: attempt.GetCount(),
+			},
+		)
+		return nil
+	}
+
+	// Fail this attempt due to heartbeat timeout.
+	shouldRetry, retryInterval, err := activity.shouldRetry(ctx, 0)
+	if err != nil {
+		return err
+	}
+	if shouldRetry {
+		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
+			retryInterval: retryInterval,
+			failure:       createHeartbeatTimeoutFailure(),
+		})
+	}
+	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 }
