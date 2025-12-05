@@ -3,7 +3,9 @@ package activity
 import (
 	"context"
 
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -116,10 +118,24 @@ func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,
 	req *workflowservice.TerminateActivityExecutionRequest,
 ) (*workflowservice.TerminateActivityExecutionResponse, error) {
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	namespaceName := req.GetNamespace()
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(namespaceName))
 	if err != nil {
 		return nil, err
 	}
+
+	if err := validateInputSize(
+		req.GetActivityId(),
+		"activity-termination",
+		dynamicconfig.BlobSizeLimitError.Get(h.dc),
+		dynamicconfig.BlobSizeLimitWarn.Get(h.dc),
+		len(req.GetReason()),
+		h.logger,
+		namespaceName); err != nil {
+		return nil, err
+	}
+
+	// TODO add request ID validation when API updated
 
 	_, err = h.client.TerminateActivityExecution(ctx, &activitypb.TerminateActivityExecutionRequest{
 		NamespaceId:     namespaceID.String(),
@@ -143,12 +159,22 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 
 	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
-	err = validateAndNormalizeRequestID(&req.RequestId, dynamicconfig.MaxIDLengthLimit.Get(h.dc)())
-	if err != nil {
-		return nil, err
+
+	maxIDLen := dynamicconfig.MaxIDLengthLimit.Get(h.dc)()
+
+	if len(req.GetRequestId()) > maxIDLen {
+		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
 	}
 
-	_, err = h.client.CancelActivityExecution(ctx, &activitypb.CancelActivityExecutionRequest{
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
+	if len(req.GetReason()) > maxIDLen {
+		return nil, serviceerror.NewInvalidArgument("Reason length exceeds limit.")
+	}
+
+	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
@@ -165,6 +191,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 ) (*workflowservice.StartActivityExecutionRequest, error) {
 	// Since validation includes mutation of the request, we clone it first so that any retries use the original request.
 	req = common.CloneProto(req)
+	activityType := req.ActivityType.GetName()
 
 	if req.Options.RetryPolicy == nil {
 		req.Options.RetryPolicy = &commonpb.RetryPolicy{}
@@ -172,7 +199,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 
 	err := ValidateAndNormalizeActivityAttributes(
 		req.ActivityId,
-		req.ActivityType.GetName(),
+		activityType,
 		dynamicconfig.DefaultActivityRetryPolicy.Get(h.dc),
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
 		namespaceID,
@@ -190,7 +217,6 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		dynamicconfig.BlobSizeLimitWarn.Get(h.dc),
 		h.logger,
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
-		h.saMapperProvider,
 		h.saValidator)
 	if err != nil {
 		return nil, err

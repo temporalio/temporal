@@ -35,11 +35,11 @@ message TerminateActivityExecutionRequest {
 message TerminateActivityExecutionResponse {
 }
 
-message CancelActivityExecutionRequest {
+message RequestCancelActivityExecutionRequest {
   string namespace_id = 1;
 
   temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest frontend_request = 2;
 }
 
-message CancelActivityExecutionResponse {
+message RequestCancelActivityExecutionResponse {
 }

@@ -171,11 +171,14 @@ func validateAndNormalizeStartActivityExecutionRequest(
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	maxIDLengthLimit int,
-	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
-	if err := validateAndNormalizeRequestID(&req.RequestId, maxIDLengthLimit); err != nil {
-		return err
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
 	}
 
 	if err := normalizeAndValidateIDPolicy(req); err != nil {
@@ -196,23 +199,9 @@ func validateAndNormalizeStartActivityExecutionRequest(
 	if req.GetSearchAttributes() != nil {
 		if err := validateAndNormalizeSearchAttributes(
 			req,
-			saMapperProvider,
 			saValidator); err != nil {
 			return err
 		}
-	}
-
-	return nil
-}
-
-func validateAndNormalizeRequestID(requestID *string, maxIDLengthLimit int) error {
-	if *requestID == "" {
-		// For easy direct API use, we default the request ID here but expect all SDKs and other auto-retrying clients to set it
-		*requestID = uuid.New().String()
-	}
-
-	if len(*requestID) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
 	}
 
 	return nil
@@ -232,7 +221,7 @@ func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionReq
 
 func validateInputSize(
 	activityID string,
-	activityType string,
+	blobSizeViolationTagValue string,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	inputSize int,
@@ -247,7 +236,7 @@ func validateInputSize(
 			tag.WorkflowNamespace(namespaceName),
 			tag.ActivityID(activityID),
 			tag.ActivitySize(int64(inputSize)),
-			tag.BlobSizeViolationOperation(activityType))
+			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
 
 		if inputSize > sizeErrorLimit {
 			return common.ErrBlobSizeExceedsLimit
@@ -259,7 +248,6 @@ func validateInputSize(
 
 func validateAndNormalizeSearchAttributes(
 	req *workflowservice.StartActivityExecutionRequest,
-	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
 	namespaceName := req.GetNamespace()
@@ -283,11 +271,17 @@ func ValidatePollActivityExecutionRequest(
 		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
-	if req.GetRunId() == "" {
-		return serviceerror.NewInvalidArgument("run id is required")
+	hasRunID := req.GetRunId() != ""
+	hasLongPollToken := len(req.GetWaitAnyStateChange().GetLongPollToken()) > 0
+
+	if hasLongPollToken && !hasRunID {
+		return serviceerror.NewInvalidArgument("run id is required when long poll token is provided")
 	}
-	if _, err := uuid.Parse(req.GetRunId()); err != nil {
-		return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+	if hasRunID {
+		_, err := uuid.Parse(req.GetRunId())
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
 	}
 	return nil
 }

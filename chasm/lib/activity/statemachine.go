@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -35,7 +37,7 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		attempt, err := a.Attempt.Get(ctx)
+		attempt, err := a.LastAttempt.Get(ctx)
 		if err != nil {
 			return err
 		}
@@ -89,7 +91,7 @@ var TransitionRescheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
-		attempt, err := a.Attempt.Get(ctx)
+		attempt, err := a.LastAttempt.Get(ctx)
 		if err != nil {
 			return err
 		}
@@ -133,7 +135,7 @@ var TransitionStarted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		attempt, err := a.Attempt.Get(ctx)
+		attempt, err := a.LastAttempt.Get(ctx)
 		if err != nil {
 			return err
 		}
@@ -170,7 +172,7 @@ var TransitionCompleted = chasm.NewTransition(
 		}
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			attempt, err := a.Attempt.Get(ctx)
+			attempt, err := a.LastAttempt.Get(ctx)
 			if err != nil {
 				return err
 			}
@@ -222,7 +224,7 @@ var TransitionFailed = chasm.NewTransition(
 				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
 			}
 
-			attempt, err := a.Attempt.Get(ctx)
+			attempt, err := a.LastAttempt.Get(ctx)
 			if err != nil {
 				return err
 			}
@@ -253,21 +255,13 @@ var TransitionTerminated = chasm.NewTransition(
 		}
 
 		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			attempt, err := a.Attempt.Get(ctx)
-			if err != nil {
-				return err
-			}
-
-			if identity := req.GetFrontendRequest().GetIdentity(); identity != "" {
-				attempt.LastWorkerIdentity = identity
-			}
-
 			outcome, err := a.Outcome.Get(ctx)
 			if err != nil {
 				return err
 			}
 
 			failure := &failurepb.Failure{
+				// TODO if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
 				Message:     req.GetFrontendRequest().GetReason(),
 				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
 			}
@@ -286,18 +280,16 @@ var TransitionTerminated = chasm.NewTransition(
 // TransitionCancelRequested affects a transition to CancelRequested status
 var TransitionCancelRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
-		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, // Allow idempotent transition
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-	func(a *Activity, ctx chasm.MutableContext, req *activitypb.CancelActivityExecutionRequest) error {
-		frontendReq := req.GetFrontendRequest()
-
+	func(a *Activity, ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
 		a.CancelState = &activitypb.ActivityCancelState{
-			Identity:    frontendReq.GetIdentity(),
-			RequestId:   req.GetFrontendRequest().GetRequestId(),
-			Reason:      frontendReq.GetReason(),
+			Identity:    req.GetIdentity(),
+			RequestId:   req.GetRequestId(),
+			Reason:      req.GetReason(),
 			RequestTime: timestamppb.New(ctx.Now(a)),
 		}
 
@@ -311,7 +303,7 @@ var TransitionCanceled = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskCanceledRequest) error {
+	func(a *Activity, ctx chasm.MutableContext, details *commonpb.Payloads) error {
 		store, err := a.Store.Get(ctx)
 		if err != nil {
 			return err
@@ -328,9 +320,10 @@ var TransitionCanceled = chasm.NewTransition(
 			}
 
 			failure := &failurepb.Failure{
+				Message: "Activity canceled",
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-						Details: req.GetCancelRequest().GetDetails(),
+						Details: details,
 					},
 				},
 			}

@@ -187,18 +187,18 @@ func (c *ActivityServiceLayeredClient) TerminateActivityExecution(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
-func (c *ActivityServiceLayeredClient) callCancelActivityExecutionNoRetry(
+func (c *ActivityServiceLayeredClient) callRequestCancelActivityExecutionNoRetry(
 	ctx context.Context,
-	request *CancelActivityExecutionRequest,
+	request *RequestCancelActivityExecutionRequest,
 	opts ...grpc.CallOption,
-) (*CancelActivityExecutionResponse, error) {
-	var response *CancelActivityExecutionResponse
+) (*RequestCancelActivityExecutionResponse, error) {
+	var response *RequestCancelActivityExecutionResponse
 	var err error
 	startTime := time.Now().UTC()
 	// the caller is a namespace, hence the tag below.
 	caller := headers.GetCallerInfo(ctx).CallerName
 	metricsHandler := c.metricsHandler.WithTags(
-		metrics.OperationTag("ActivityService.CancelActivityExecution"),
+		metrics.OperationTag("ActivityService.RequestCancelActivityExecution"),
 		metrics.NamespaceTag(caller),
 		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 	)
@@ -214,19 +214,19 @@ func (c *ActivityServiceLayeredClient) callCancelActivityExecutionNoRetry(
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
 		defer cancel()
-		response, err = client.CancelActivityExecution(ctx, request, opts...)
+		response, err = client.RequestCancelActivityExecution(ctx, request, opts...)
 		return err
 	}
 	err = c.redirector.Execute(ctx, shardID, op)
 	return response, err
 }
-func (c *ActivityServiceLayeredClient) CancelActivityExecution(
+func (c *ActivityServiceLayeredClient) RequestCancelActivityExecution(
 	ctx context.Context,
-	request *CancelActivityExecutionRequest,
+	request *RequestCancelActivityExecutionRequest,
 	opts ...grpc.CallOption,
-) (*CancelActivityExecutionResponse, error) {
-	call := func(ctx context.Context) (*CancelActivityExecutionResponse, error) {
-		return c.callCancelActivityExecutionNoRetry(ctx, request, opts...)
+) (*RequestCancelActivityExecutionResponse, error) {
+	call := func(ctx context.Context) (*RequestCancelActivityExecutionResponse, error) {
+		return c.callRequestCancelActivityExecutionNoRetry(ctx, request, opts...)
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }

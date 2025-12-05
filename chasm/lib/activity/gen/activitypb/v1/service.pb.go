@@ -26,32 +26,32 @@ var File_temporal_server_chasm_lib_activity_proto_v1_service_proto protoreflect.
 
 const file_temporal_server_chasm_lib_activity_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/activity/proto/v1/service.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1aBtemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xfd\x06\n" +
+	"9temporal/server/chasm/lib/activity/proto/v1/service.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1aBtemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\x92\a\n" +
 	"\x0fActivityService\x12\xd5\x01\n" +
 	"\x16StartActivityExecution\x12J.temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest\x1aK.temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xd2\x01\n" +
 	"\x15PollActivityExecution\x12I.temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest\x1aJ.temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xe1\x01\n" +
-	"\x1aTerminateActivityExecution\x12N.temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest\x1aO.temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xd8\x01\n" +
-	"\x17CancelActivityExecution\x12K.temporal.server.chasm.lib.activity.proto.v1.CancelActivityExecutionRequest\x1aL.temporal.server.chasm.lib.activity.proto.v1.CancelActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_idBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	"\x1aTerminateActivityExecution\x12N.temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest\x1aO.temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xed\x01\n" +
+	"\x1eRequestCancelActivityExecution\x12R.temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest\x1aS.temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_idBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var file_temporal_server_chasm_lib_activity_proto_v1_service_proto_goTypes = []any{
-	(*StartActivityExecutionRequest)(nil),      // 0: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest
-	(*PollActivityExecutionRequest)(nil),       // 1: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest
-	(*TerminateActivityExecutionRequest)(nil),  // 2: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest
-	(*CancelActivityExecutionRequest)(nil),     // 3: temporal.server.chasm.lib.activity.proto.v1.CancelActivityExecutionRequest
-	(*StartActivityExecutionResponse)(nil),     // 4: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse
-	(*PollActivityExecutionResponse)(nil),      // 5: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse
-	(*TerminateActivityExecutionResponse)(nil), // 6: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse
-	(*CancelActivityExecutionResponse)(nil),    // 7: temporal.server.chasm.lib.activity.proto.v1.CancelActivityExecutionResponse
+	(*StartActivityExecutionRequest)(nil),          // 0: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest
+	(*PollActivityExecutionRequest)(nil),           // 1: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest
+	(*TerminateActivityExecutionRequest)(nil),      // 2: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest
+	(*RequestCancelActivityExecutionRequest)(nil),  // 3: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest
+	(*StartActivityExecutionResponse)(nil),         // 4: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse
+	(*PollActivityExecutionResponse)(nil),          // 5: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse
+	(*TerminateActivityExecutionResponse)(nil),     // 6: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse
+	(*RequestCancelActivityExecutionResponse)(nil), // 7: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionResponse
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_service_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityService.StartActivityExecution:input_type -> temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest
 	1, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityService.PollActivityExecution:input_type -> temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest
 	2, // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityService.TerminateActivityExecution:input_type -> temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest
-	3, // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityService.CancelActivityExecution:input_type -> temporal.server.chasm.lib.activity.proto.v1.CancelActivityExecutionRequest
+	3, // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityService.RequestCancelActivityExecution:input_type -> temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest
 	4, // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityService.StartActivityExecution:output_type -> temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse
 	5, // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityService.PollActivityExecution:output_type -> temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse
 	6, // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityService.TerminateActivityExecution:output_type -> temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse
-	7, // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityService.CancelActivityExecution:output_type -> temporal.server.chasm.lib.activity.proto.v1.CancelActivityExecutionResponse
+	7, // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityService.RequestCancelActivityExecution:output_type -> temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionResponse
 	4, // [4:8] is the sub-list for method output_type
 	0, // [0:4] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

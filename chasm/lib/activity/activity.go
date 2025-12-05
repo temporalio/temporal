@@ -1,7 +1,6 @@
 package activity
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/payload"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -41,11 +41,11 @@ type Activity struct {
 	*activitypb.ActivityState
 
 	Visibility    chasm.Field[*chasm.Visibility]
-	Attempt       chasm.Field[*activitypb.ActivityAttemptState]
+	LastAttempt   chasm.Field[*activitypb.ActivityAttemptState]
 	LastHeartbeat chasm.Field[*activitypb.ActivityHeartbeatState]
-	Outcome       chasm.Field[*activitypb.ActivityOutcome]
 	// Standalone only
 	RequestData chasm.Field[*activitypb.ActivityRequestData]
+	Outcome     chasm.Field[*activitypb.ActivityOutcome]
 	// Pointer to an implementation of the "store". for a workflow activity this would be a parent pointer back to
 	// the workflow. For a standalone activity this would be nil.
 	// TODO: revisit a standalone activity pointing to itself once we handle storing it more efficiently.
@@ -91,7 +91,7 @@ func NewStandaloneActivity(
 			RetryPolicy:            options.GetRetryPolicy(),
 			Priority:               request.Priority,
 		},
-		Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
 			Input:        request.Input,
 			Header:       request.Header,
@@ -133,12 +133,13 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
-	*historyservice.RecordActivityTaskStartedResponse, error) {
+	*historyservice.RecordActivityTaskStartedResponse, error,
+) {
 	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
 		return nil, err
 	}
 
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +174,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 }
 
 func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.EntityKey, response *historyservice.RecordActivityTaskStartedResponse) error {
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -221,7 +222,8 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 
 // HandleCompleted updates the activity on activity completion.
 func (a *Activity) HandleCompleted(ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) (
-	*historyservice.RespondActivityTaskCompletedResponse, error) {
+	*historyservice.RespondActivityTaskCompletedResponse, error,
+) {
 	if err := TransitionCompleted.Apply(a, ctx, request); err != nil {
 		return nil, err
 	}
@@ -232,7 +234,8 @@ func (a *Activity) HandleCompleted(ctx chasm.MutableContext, request *historyser
 // HandleFailed updates the activity on activity failure. if the activity is retryable, it will be rescheduled
 // for retry instead.
 func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) (
-	*historyservice.RespondActivityTaskFailedResponse, error) {
+	*historyservice.RespondActivityTaskFailedResponse, error,
+) {
 	failure := req.GetFailedRequest().GetFailure()
 
 	shouldRetry, retryInterval, err := a.shouldRetryOnFailure(ctx, failure)
@@ -261,8 +264,9 @@ func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.Re
 
 // HandleCanceled updates the activity on activity canceled.
 func (a *Activity) HandleCanceled(ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCanceledRequest) (
-	*historyservice.RespondActivityTaskCanceledResponse, error) {
-	if err := TransitionCanceled.Apply(a, ctx, request); err != nil {
+	*historyservice.RespondActivityTaskCanceledResponse, error,
+) {
+	if err := TransitionCanceled.Apply(a, ctx, request.GetCancelRequest().GetDetails()); err != nil {
 		return nil, err
 	}
 
@@ -270,7 +274,8 @@ func (a *Activity) HandleCanceled(ctx chasm.MutableContext, request *historyserv
 }
 
 func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) (
-	*activitypb.TerminateActivityExecutionResponse, error) {
+	*activitypb.TerminateActivityExecutionResponse, error,
+) {
 	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
@@ -294,8 +299,9 @@ func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.Activ
 	return heartbeat, nil
 }
 
-func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *activitypb.CancelActivityExecutionRequest) (
-	*activitypb.CancelActivityExecutionResponse, error) {
+func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *activitypb.RequestCancelActivityExecutionRequest) (
+	*activitypb.RequestCancelActivityExecutionResponse, error,
+) {
 	newReqID := req.GetFrontendRequest().GetRequestId()
 	existingReqID := a.GetCancelState().GetRequestId()
 
@@ -306,14 +312,30 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *ac
 				fmt.Sprintf("cancellation already requested with request ID %s", existingReqID))
 		}
 
-		return &activitypb.CancelActivityExecutionResponse{}, nil
+		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
-	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
+	// If in scheduled state, cancel immediately right after marking cancel requested
+	isCancelImmediately := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+
+	if err := TransitionCancelRequested.Apply(a, ctx, req.GetFrontendRequest()); err != nil {
 		return nil, err
 	}
 
-	return &activitypb.CancelActivityExecutionResponse{}, nil
+	if isCancelImmediately {
+		details := &commonpb.Payloads{
+			Payloads: []*commonpb.Payload{
+				payload.EncodeString(req.GetFrontendRequest().GetReason()),
+			},
+		}
+
+		err := TransitionCanceled.Apply(a, ctx, details)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 }
 
 func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Failure) (bool, time.Duration, error) {
@@ -376,7 +398,7 @@ func (a *Activity) recordFailedAttempt(
 		return err
 	}
 
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return err
 	}
@@ -406,7 +428,7 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 		return false, 0, nil
 	}
 
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, 0, err
 	}
@@ -424,7 +446,7 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time
 // remains, it will also return a valid retry interval
 func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration, error) {
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return false, 0, err
 	}
@@ -460,10 +482,6 @@ func (a *Activity) RecordHeartbeat(ctx chasm.MutableContext, details *commonpb.P
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.ActivityExecutionInfo, error) {
-	if a.ActivityState == nil {
-		return nil, errors.New("activity state is nil")
-	}
-
 	// TODO(dan): support pause states
 	var status enumspb.ActivityExecutionStatus
 	var runState enumspb.PendingActivityState
@@ -504,9 +522,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		return nil, err
 	}
 
-	key := ctx.ExecutionKey()
-
-	attempt, err := a.Attempt.Get(ctx)
+	attempt, err := a.LastAttempt.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -515,6 +531,8 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 	if err != nil {
 		return nil, err
 	}
+
+	key := ctx.ExecutionKey()
 
 	info := &activity.ActivityExecutionInfo{
 		ActivityId:              key.BusinessID,
@@ -579,16 +597,15 @@ func (a *Activity) buildPollActivityExecutionResponse(
 		if err != nil {
 			return nil, err
 		}
-		if activityOutcome != nil {
-			switch v := activityOutcome.GetVariant().(type) {
-			case *activitypb.ActivityOutcome_Failed_:
-				response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
-					Failure: v.Failed.GetFailure(),
-				}
-			case *activitypb.ActivityOutcome_Successful_:
-				response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
-					Result: v.Successful.GetOutput(),
-				}
+		// There are two places where a failure might be stored but only one place where a
+		// successful outcome is stored.
+		if successful := activityOutcome.GetSuccessful(); successful != nil {
+			response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
+				Result: successful.GetOutput(),
+			}
+		} else if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
+			response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
+				Failure: failure,
 			}
 		} else {
 			shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||
@@ -597,7 +614,7 @@ func (a *Activity) buildPollActivityExecutionResponse(
 				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
 
 			if shouldHaveFailure {
-				attempt, err := a.Attempt.Get(ctx)
+				attempt, err := a.LastAttempt.Get(ctx)
 				if err != nil {
 					return nil, err
 				}

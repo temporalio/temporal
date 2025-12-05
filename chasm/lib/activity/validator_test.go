@@ -233,7 +233,6 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 		defaultBlobSizeLimitWarn,
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
-		nil,
 		nil)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
@@ -255,7 +254,6 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 		defaultBlobSizeLimitWarn,
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
-		nil,
 		nil)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
@@ -280,7 +278,6 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		func(ns string) int { return payloadSize },
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
-		nil,
 		nil)
 	require.NoError(t, err)
 }
@@ -300,7 +297,6 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 		defaultBlobSizeLimitWarn,
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
-		nil,
 		nil)
 
 	require.NoError(t, err)

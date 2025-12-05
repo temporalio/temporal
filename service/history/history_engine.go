@@ -842,18 +842,9 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
 }
 
-func (e *historyEngineImpl) GetChasmEngine() chasm.Engine {
-	return e.chasmEngine
-}
-
 func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.EntityKey, componentRef []byte) {
-	if e.chasmEngine == nil {
-		return
-	}
-	if chasmEngine, ok := e.chasmEngine.(*ChasmEngine); ok && chasmEngine != nil {
-		if notifier := chasmEngine.GetNotifier(); notifier != nil {
-			notifier.Notify(executionKey)
-		}
+	if e.chasmEngine != nil {
+		e.chasmEngine.NotifyExecution(executionKey)
 	}
 }
 
