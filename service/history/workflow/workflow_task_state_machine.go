@@ -4,7 +4,10 @@ package workflow
 
 import (
 	"cmp"
+	"fmt"
 	"math"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -318,8 +321,21 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	// If while scheduling a workflow task and new events has come, then this workflow task cannot be a transient/speculative.
 	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for
 	// transient/speculative workflow task and will cause in timeout processing to not work for transient workflow tasks.
+	preservedAttemptDueToBufferedEvents := false
 	if m.ms.HasBufferedEvents() {
-		m.ms.executionInfo.WorkflowTaskAttempt = 1
+		// Only reset attempt if we're NOT in a transient workflow task (i.e., not continuously failing).
+		// When workflow tasks are failing continuously and signals arrive, we should preserve the attempt
+		// count to properly trigger the TemporalReportedProblems search attribute.
+		wasTransient := m.ms.IsTransientWorkflowTask()
+		if !wasTransient {
+			m.ms.executionInfo.WorkflowTaskAttempt = 1
+			_, file, line, _ := runtime.Caller(0)
+			fmt.Printf("[DEBUG WFT] %s:%d: Workflow task attempt reset to 1: buffered events present (not transient)\n", filepath.Base(file), line)
+		} else {
+			preservedAttemptDueToBufferedEvents = true
+			_, file, line, _ := runtime.Caller(0)
+			fmt.Printf("[DEBUG WFT] %s:%d: Buffered events present but preserving attempt %d (transient workflow task)\n", filepath.Base(file), line, m.ms.executionInfo.WorkflowTaskAttempt)
+		}
 		workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		createWorkflowTaskScheduledEvent = true
 		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
@@ -335,10 +351,19 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 
 		// If failover happened during transient workflow task,
 		// then reset the attempt to 1, and not use transient workflow task.
+		// However, if we just preserved the attempt due to buffered events during failures,
+		// don't reset it here even if versions differ (the version change is from flushing buffered events).
 		if m.ms.GetCurrentVersion() != lastEventVersion {
-			m.ms.executionInfo.WorkflowTaskAttempt = 1
-			workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-			createWorkflowTaskScheduledEvent = true
+			if !preservedAttemptDueToBufferedEvents {
+				m.ms.executionInfo.WorkflowTaskAttempt = 1
+				_, file, line, _ := runtime.Caller(0)
+				fmt.Printf("[DEBUG WFT] %s:%d: Workflow task attempt reset to 1: failover during transient workflow task\n", filepath.Base(file), line)
+				workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+				createWorkflowTaskScheduledEvent = true
+			} else {
+				_, file, line, _ := runtime.Caller(0)
+				fmt.Printf("[DEBUG WFT] %s:%d: Version mismatch detected but preserving attempt %d (already preserved due to buffered events)\n", filepath.Base(file), line, m.ms.executionInfo.WorkflowTaskAttempt)
+			}
 		}
 	}
 
@@ -490,7 +515,18 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	if !workflowTaskScheduledEventCreated &&
 		(workflowTask.ScheduledEventID != m.ms.GetNextEventID() || workflowTask.Version != m.ms.GetCurrentVersion()) {
 
-		workflowTask.Attempt = 1
+		// Only reset attempt to 1 if this is NOT a transient workflow task (attempt was 1).
+		// If workflow tasks are continuously failing (attempt > 1) and new events arrive (e.g., buffered signals),
+		// preserve the attempt count to properly trigger the TemporalReportedProblems search attribute.
+		if workflowTask.Attempt == 1 {
+			// Not a transient workflow task, safe to keep attempt at 1
+			_, file, line, _ := runtime.Caller(0)
+			fmt.Printf("[DEBUG WFT] %s:%d: Converting speculative/transient WT to normal, attempt stays 1\n", filepath.Base(file), line)
+		} else {
+			// Transient workflow task (was failing), preserve the attempt count
+			_, file, line, _ := runtime.Caller(0)
+			fmt.Printf("[DEBUG WFT] %s:%d: Converting transient WT to normal but preserving attempt %d\n", filepath.Base(file), line, workflowTask.Attempt)
+		}
 		workflowTask.Type = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		workflowTaskScheduledEventCreated = true
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
@@ -950,6 +986,9 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
+	_, file, line, _ := runtime.Caller(0)
+	fmt.Printf("[DEBUG WFT] %s:%d: Workflow task failed, new attempt: %d\n", filepath.Base(file), line, failWorkflowTaskInfo.Attempt)
+
 	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
 	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt >= int32(consecutiveFailuresRequired) {
 		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
@@ -987,6 +1026,8 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 		HistorySizeBytes:      0,
 	}
 	m.UpdateWorkflowTask(resetWorkflowTaskInfo)
+	_, file, line, _ := runtime.Caller(0)
+	fmt.Printf("[DEBUG WFT] %s:%d: Workflow task attempt reset to 1: deleteWorkflowTask\n", filepath.Base(file), line)
 }
 
 // UpdateWorkflowTask updates a workflow task.
@@ -1016,6 +1057,8 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskRequestId = workflowTask.RequestID
 	m.ms.executionInfo.WorkflowTaskTimeout = durationpb.New(workflowTask.WorkflowTaskTimeout)
 	m.ms.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
+	_, file, line, _ := runtime.Caller(0)
+	fmt.Printf("[DEBUG WFT] %s:%d: UpdateWorkflowTask: setting attempt to %d\n", filepath.Base(file), line, workflowTask.Attempt)
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
 	}
