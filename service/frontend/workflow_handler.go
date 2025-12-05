@@ -5288,10 +5288,7 @@ func (wh *WorkflowHandler) validateDeploymentOptions(deploymentOptions *deployme
 	if deploymentOptions == nil {
 		return nil
 	}
-	if deploymentOptions.GetDeploymentName() != "" && deploymentOptions.GetBuildId() == "" {
-		return errDeploymentOptionsNotSet
-	}
-	if deploymentOptions.GetDeploymentName() == "" && deploymentOptions.GetBuildId() != "" {
+	if deploymentOptions.GetDeploymentName() == "" || deploymentOptions.GetBuildId() == "" {
 		return errDeploymentOptionsNotSet
 	}
 	deploymentVersion := &deploymentspb.WorkerDeploymentVersion{
