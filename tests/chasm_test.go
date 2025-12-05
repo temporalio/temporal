@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
@@ -379,7 +379,7 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	s.True(ok)
 	_, err = s.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
-		Execution: &common.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 			RunId:      createResp.RunID,
 		},
@@ -390,13 +390,14 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	// Validate mutable state is deleted.
 	_, err = s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
-		Execution: &common.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 			RunId:      createResp.RunID,
 		},
 		Archetype: archetype,
 	})
-	s.IsType(&serviceerror.NotFound{}, err)
+	var notFoundErr *serviceerror.NotFound
+	s.ErrorAs(err, &notFoundErr)
 
 	// Validate visibility record is deleted.
 	s.Eventually(

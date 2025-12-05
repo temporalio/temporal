@@ -5,14 +5,14 @@ import (
 	"strconv"
 	"unicode"
 
-	"go.temporal.io/api/workflow/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 func ArchetypeIDFromExecutionInfo(
-	executionInfo *workflow.WorkflowExecutionInfo,
+	executionInfo *workflowpb.WorkflowExecutionInfo,
 ) (chasm.ArchetypeID, error) {
 	indexedField := executionInfo.SearchAttributes.GetIndexedFields()
 	if indexedField == nil {
