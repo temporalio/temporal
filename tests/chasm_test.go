@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
@@ -314,8 +317,8 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
-				NamespaceName: string(s.Namespace()),
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery + " AND ExecutionStatus = 'Completed'",
 			})
@@ -333,6 +336,83 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.Equal(int64(3), visRecord.StateTransitionCount)
 	s.NotEmpty(visRecord.CloseTime)
 	s.Empty(visRecord.HistoryLength)
+}
+
+func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	createResp, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	// Make sure visibility record is created, so that we can test its deletion later.
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
+	s.Eventually(
+		func() bool {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			s.NoError(err)
+			return len(resp.Executions) == 1
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
+	s.True(ok)
+	_, err = s.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &common.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      createResp.RunID,
+		},
+		Archetype: archetype,
+	})
+	s.NoError(err)
+
+	// Validate mutable state is deleted.
+	_, err = s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &common.WorkflowExecution{
+			WorkflowId: storeID,
+			RunId:      createResp.RunID,
+		},
+		Archetype: archetype,
+	})
+	s.IsType(&serviceerror.NotFound{}, err)
+
+	// Validate visibility record is deleted.
+	s.Eventually(
+		func() bool {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			s.NoError(err)
+			return len(resp.Executions) == 0
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
 }
 
 // TODO: More tests here...
