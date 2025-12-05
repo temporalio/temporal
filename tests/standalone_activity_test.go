@@ -899,33 +899,6 @@ func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
 	// info.LastDeploymentVersion
 }
 
-//func (s *standaloneActivityTestSuite) startActivity(ctx context.Context, activityID string, taskQueue string) (*workflowservice.StartActivityExecutionResponse, error) {
-//	return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-//		Namespace:  s.Namespace().String(),
-//		ActivityId: activityID,
-//		ActivityType: &commonpb.ActivityType{
-//			Name: "test-activity-type",
-//		},
-//		Input: &commonpb.Payloads{
-//			Payloads: []*commonpb.Payload{
-//				{
-//					Metadata: map[string][]byte{
-//						"encoding": []byte("json/plain"),
-//					},
-//					Data: []byte("test-activity-input"),
-//				},
-//			},
-//		},
-//		Options: &activitypb.ActivityOptions{
-//			TaskQueue: &taskqueuepb.TaskQueue{
-//				Name: taskQueue,
-//			},
-//			StartToCloseTimeout: durationpb.New(1 * time.Minute),
-//		},
-//		RequestId: "test-request-id",
-//	})
-//}
-
 func (s *standaloneActivityTestSuite) pollActivityTaskQueue(ctx context.Context, taskQueue string) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	return s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
