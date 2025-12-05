@@ -290,57 +290,36 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_WaitAnyStateChan
 		enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
 	)
 
-	taskQueuePollErr := make(chan error, 1)
-	activityPollDone := make(chan struct{})
-	var activityPollResp *workflowservice.PollActivityExecutionResponse
-	var activityPollErr error
-
-	go func() {
-		defer close(activityPollDone)
-		// Second poll uses token and therefore waits for a state transition
-		activityPollResp, activityPollErr = s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			ActivityId:   activityID,
-			RunId:        startResp.RunId,
-			IncludeInfo:  true,
-			IncludeInput: true,
-			WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
-				WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
-					LongPollToken: firstPollResp.StateChangeLongPollToken,
-				},
-			},
-		})
-	}()
-
-	// TODO(dan): race here: subscription might not be established yet
-
 	// Worker picks up activity task, triggering transition (via RecordActivityTaskStarted)
-	go func() {
-		_, err := s.pollActivityTaskQueue(ctx, taskQueue.Name)
-		taskQueuePollErr <- err
-	}()
-
-	select {
-	case <-activityPollDone:
-		require.NoError(t, activityPollErr)
-		require.NotNil(t, activityPollResp)
-		require.NotNil(t, activityPollResp.Info)
-		s.assertActivityExecutionInfo(
-			t,
-			activityPollResp.Info,
-			activityID,
-			startResp.RunId,
-			enumspb.PENDING_ACTIVITY_STATE_STARTED,
-		)
-		require.NotNil(t, activityPollResp.Input)
-		require.Equal(t, "test-activity-input", string(activityPollResp.Input.Payloads[0].Data))
-
-	case <-ctx.Done():
-		t.Fatal("PollActivityExecution timed out")
-	}
-
-	err = <-taskQueuePollErr
+	_, err = s.pollActivityTaskQueue(ctx, taskQueue.Name)
 	require.NoError(t, err)
+
+	// Second poll uses token and therefore waits for a state transition
+	activityPollResp, activityPollErr := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		ActivityId:   activityID,
+		RunId:        startResp.RunId,
+		IncludeInfo:  true,
+		IncludeInput: true,
+		WaitPolicy: &workflowservice.PollActivityExecutionRequest_WaitAnyStateChange{
+			WaitAnyStateChange: &workflowservice.PollActivityExecutionRequest_StateChangeWaitOptions{
+				LongPollToken: firstPollResp.StateChangeLongPollToken,
+			},
+		},
+	})
+
+	require.NoError(t, activityPollErr)
+	require.NotNil(t, activityPollResp)
+	require.NotNil(t, activityPollResp.Info)
+	s.assertActivityExecutionInfo(
+		t,
+		activityPollResp.Info,
+		activityID,
+		startResp.RunId,
+		enumspb.PENDING_ACTIVITY_STATE_STARTED,
+	)
+	require.NotNil(t, activityPollResp.Input)
+	require.Equal(t, "test-activity-input", string(activityPollResp.Input.Payloads[0].Data))
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_WaitCompletion() {
