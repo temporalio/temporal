@@ -51,14 +51,14 @@ func TestNameInterceptor(t *testing.T) {
 	assert.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.JSONEq(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
 	var actualSorterMaps []interface{}
 	for _, sorter := range queryParams.Sorter {
 		actualSorterMap, _ := sorter.Source()
 		actualSorterMaps = append(actualSorterMaps, actualSorterMap)
 	}
 	actualSorterJson, _ := json.Marshal(actualSorterMaps)
-	assert.JSONEq(t, `[{"StartTime1":{"order":"asc"}}]`, string(actualSorterJson))
+	assert.Equal(t, `[{"StartTime1":{"order":"asc"}}]`, string(actualSorterJson))
 
 	_, err = c.ConvertWhereOrderBy("error='Running' order by StartTime")
 	assert.Error(t, err)
@@ -71,19 +71,19 @@ func TestValuesInterceptor(t *testing.T) {
 	assert.NoError(t, err)
 	actualQueryMap, _ := queryParams.Query.Source()
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.JSONEq(t, `{"bool":{"filter":{"term":{"ExecutionStatus":"Status1"}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":{"term":{"ExecutionStatus":"Status1"}}}}`, string(actualQueryJson))
 
 	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus in (1,2)")
 	assert.NoError(t, err)
 	actualQueryMap, _ = queryParams.Query.Source()
 	actualQueryJson, _ = json.Marshal(actualQueryMap)
-	assert.JSONEq(t, `{"bool":{"filter":{"terms":{"ExecutionStatus":["Status1","Status2"]}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":{"terms":{"ExecutionStatus":["Status1","Status2"]}}}}`, string(actualQueryJson))
 
 	queryParams, err = c.ConvertWhereOrderBy("ExecutionStatus between 5 and 7")
 	assert.NoError(t, err)
 	actualQueryMap, _ = queryParams.Query.Source()
 	actualQueryJson, _ = json.Marshal(actualQueryMap)
-	assert.JSONEq(t, `{"bool":{"filter":{"range":{"ExecutionStatus":{"from":"Status5","include_lower":true,"include_upper":true,"to":"Status7"}}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":{"range":{"ExecutionStatus":{"from":"Status5","include_lower":true,"include_upper":true,"to":"Status7"}}}}}`, string(actualQueryJson))
 
 	_, err = c.ConvertWhereOrderBy("error='Running'")
 	assert.Error(t, err)
