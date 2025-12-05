@@ -170,7 +170,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 
 	// TODO: Add a workflowId extractor here to get the workflowId from the request
 	if policy.enableForAllAPIs {
-		return namespaceEntry.ActiveClusterName(namespace.EmptyWorkflowID), true
+		return namespaceEntry.ActiveClusterName(namespace.EmptyBusinessID), true
 	}
 
 	_, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]
@@ -179,5 +179,5 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	return namespaceEntry.ActiveClusterName(""), true
+	return namespaceEntry.ActiveClusterName(namespace.EmptyBusinessID), true
 }

@@ -449,7 +449,7 @@ func (s *xdcBaseSuite) failover(
 				resp, err := r.GetNamespace(namespace.Name(ns))
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.EmptyWorkflowID))
+				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.EmptyBusinessID))
 			}
 		}
 	}, replicationWaitTime, replicationCheckInterval)
