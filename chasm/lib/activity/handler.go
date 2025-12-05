@@ -105,11 +105,9 @@ func (h *handler) PollActivityExecution(
 	)
 	defer cancel()
 
-	switch waitPolicy.(type) {
+	switch waitPolicyType := waitPolicy.(type) {
 	case *workflowservice.PollActivityExecutionRequest_WaitAnyStateChange:
-		token := req.GetFrontendRequest().
-			GetWaitPolicy().(*workflowservice.PollActivityExecutionRequest_WaitAnyStateChange).
-			WaitAnyStateChange.GetLongPollToken()
+		token := waitPolicyType.WaitAnyStateChange.GetLongPollToken()
 		if len(token) == 0 {
 			return chasm.ReadComponent(ctx, ref, (*Activity).buildPollActivityExecutionResponse, req, nil)
 		}
