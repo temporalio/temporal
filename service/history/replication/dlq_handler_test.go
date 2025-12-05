@@ -100,7 +100,7 @@ func (s *dlqHandlerSuite) SetupTest() {
 			return NewTaskExecutor(
 				params.RemoteCluster,
 				params.Shard,
-				params.HistoryResender,
+				params.RemoteHistoryFetcher,
 				params.DeleteManager,
 				params.WorkflowCache,
 			)
