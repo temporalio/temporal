@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -209,7 +211,8 @@ func TestValidateFailures(t *testing.T) {
 				tc.options,
 				tc.priority,
 				durationpb.New(0))
-			require.Error(t, err)
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
 		})
 	}
 }
@@ -231,7 +234,8 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
 		nil)
-	require.Error(t, err)
+	var invalidArgErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgErr)
 }
 
 func TestValidateStandAloneInputTooLarge(t *testing.T) {
@@ -251,7 +255,8 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
 		nil)
-	require.Error(t, err)
+	var invalidArgErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgErr)
 }
 
 func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
@@ -275,6 +280,28 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		defaultMaxIDLengthLimit,
 		nil)
 	require.NoError(t, err)
+}
+
+func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
+	req := &workflowservice.StartActivityExecutionRequest{
+		ActivityId:   defaultActivityID,
+		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
+		Options:      &defaultActivityOptions,
+		Namespace:    "default",
+		RequestId:    "test-request-id",
+	}
+
+	err := validateAndNormalizeStartActivityExecutionRequest(
+		req,
+		defaultBlobSizeLimitError,
+		defaultBlobSizeLimitWarn,
+		log.NewNoopLogger(),
+		defaultMaxIDLengthLimit,
+		nil)
+
+	require.NoError(t, err)
+	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)
+	require.Equal(t, enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL, req.IdConflictPolicy)
 }
 
 func TestModifiedActivityTimeouts(t *testing.T) {
@@ -406,7 +433,8 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 				tc.runTimeout)
 
 			if tc.isErr {
-				require.Error(t, err)
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
 				return
 			}
 

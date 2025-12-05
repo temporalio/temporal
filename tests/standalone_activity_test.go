@@ -62,6 +62,115 @@ func (s *standaloneActivityTestSuite) SetupTest() {
 	s.tv = testvars.New(s.T())
 }
 
+func (s *standaloneActivityTestSuite) TestIDReusePolicy_RejectDuplicate() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Result:    defaultResult,
+		Identity:  "new-worker",
+	})
+	require.NoError(t, err)
+
+	s.validateCompletion(ctx, t, activityID, runID, "new-worker")
+
+	_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		ActivityId:   activityID,
+		ActivityType: s.tv.ActivityType(),
+		Identity:     s.tv.WorkerIdentity(),
+		Input:        defaultInput,
+		Options: &activitypb.ActivityOptions{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		},
+		IdReusePolicy: enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	})
+	require.Error(t, err)
+}
+
+func (s *standaloneActivityTestSuite) TestIDReusePolicy_AllowDuplicateFailedOnly() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Failure:   defaultFailure,
+		Identity:  "new-worker",
+	})
+	require.NoError(t, err)
+
+	s.validateFailure(ctx, t, activityID, runID, nil, "new-worker")
+
+	_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		ActivityId:   activityID,
+		ActivityType: s.tv.ActivityType(),
+		Identity:     s.tv.WorkerIdentity(),
+		Input:        defaultInput,
+		Options: &activitypb.ActivityOptions{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		},
+		IdReusePolicy: enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+	})
+	require.NoError(t, err)
+}
+
+func (s *standaloneActivityTestSuite) TestIDConflictPolicy_FailsIfExists() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+
+	// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
+	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		ActivityId:   activityID,
+		ActivityType: s.tv.ActivityType(),
+		Identity:     s.tv.WorkerIdentity(),
+		Input:        defaultInput,
+		Options: &activitypb.ActivityOptions{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		},
+	})
+	require.Error(t, err)
+}
+
+// TODO(fred): add test for BusinessIDConflictPolicyUseExisting after rebasing on main
+
 func (s *standaloneActivityTestSuite) TestActivityCompleted() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
