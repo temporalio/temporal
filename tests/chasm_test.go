@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
@@ -360,20 +362,31 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
 	s.True(ok)
 	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
+	fmt.Println("visQuery yyc: ", visQuery)
+	var executionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   s.NamespaceID().String(),
-				NamespaceName: s.Namespace().String(),
-				PageSize:      10,
-				Query:         visQuery,
+			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     visQuery,
 			})
 			s.NoError(err)
+			if len(resp.Executions) > 0 {
+				executionInfo = resp.Executions[0]
+			}
 			return len(resp.Executions) == 1
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
+	archetypePayload, ok := executionInfo.SearchAttributes.GetIndexedFields()[sadefs.TemporalNamespaceDivision]
+	s.True(ok)
+	var archetypeIDStr string
+	s.NoError(payload.Decode(archetypePayload, &archetypeIDStr))
+	parsedArchetypeID, err := strconv.ParseUint(archetypeIDStr, 10, 32)
+	s.NoError(err)
+	s.Equal(archetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
 	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
 	s.True(ok)
