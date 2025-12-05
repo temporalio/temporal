@@ -435,10 +435,36 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.Equal("rejection-of-"+tv.UpdateID(), updStatus.Outcome.GetFailure().GetMessage())
 
 		s.EqualHistoryEvents(`
- 13 WorkflowTaskScheduled // WFT events were created even if it was a rejection (because number of events > 10). 
+ 13 WorkflowTaskScheduled // WFT events were created even if it was a rejection (because number of events > 10).
  14 WorkflowTaskStarted
  15 WorkflowTaskCompleted
 `, <-writtenHistoryCh)
+	})
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestForceCreateNewWorkflowTaskOnPausedWorkflow() {
+	s.Run("Returns error when workflow is paused and ForceCreateNewWorkflowTask is true", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		wfContext, serializedTaskToken := s.createPausedWorkflowWithWFT(tv)
+
+		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+		s.True(ms.IsWorkflowExecutionStatusPaused())
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:                  serializedTaskToken,
+				Identity:                   tv.Any().String(),
+				ForceCreateNewWorkflowTask: true,
+			},
+		})
+		s.Error(err)
+		var failedPrecondition *serviceerror.FailedPrecondition
+		s.ErrorAs(err, &failedPrecondition)
+		s.Contains(err.Error(), "Workflow is paused and force create new workflow task is not allowed")
 	})
 }
 
@@ -616,4 +642,96 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 	}
 
 	return updRequestMsg, upd, serializedTaskToken
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *testvars.TestVars) (historyi.WorkflowContext, []byte) {
+	ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
+		tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
+
+	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:               tv.WorkflowID(),
+		WorkflowType:             tv.WorkflowType(),
+		TaskQueue:                tv.TaskQueue(),
+		Input:                    tv.Any().Payloads(),
+		WorkflowExecutionTimeout: tv.Any().InfiniteTimeout(),
+		WorkflowRunTimeout:       tv.Any().InfiniteTimeout(),
+		WorkflowTaskTimeout:      tv.Any().InfiniteTimeout(),
+		Identity:                 tv.ClientIdentity(),
+	}
+
+	_, _ = ms.AddWorkflowExecutionStartedEvent(
+		tv.WorkflowExecution(),
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:             1,
+			NamespaceId:         tv.NamespaceID().String(),
+			StartRequest:        startRequest,
+			ParentExecutionInfo: nil,
+		},
+	)
+
+	// Complete the first workflow task to transition state to Running.
+	wt, _ := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	_, _, _ = ms.AddWorkflowTaskStartedEvent(
+		wt.ScheduledEventID,
+		tv.RunID(),
+		tv.TaskQueue(),
+		tv.Any().String(),
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity: tv.Any().String(),
+	}, historyi.WorkflowTaskCompletionLimits{MaxResetPoints: 10, MaxSearchAttributeValueSize: 2048})
+
+	// Add a speculative WFT before pausing.
+	wt2, _ := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+	_, _, _ = ms.AddWorkflowTaskStartedEvent(
+		wt2.ScheduledEventID,
+		tv.RunID(),
+		tv.StickyTaskQueue(),
+		tv.Any().String(),
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	taskToken := &tokenspb.Task{
+		Attempt:          1,
+		NamespaceId:      tv.NamespaceID().String(),
+		WorkflowId:       tv.WorkflowID(),
+		RunId:            tv.RunID(),
+		ScheduledEventId: wt2.ScheduledEventID,
+	}
+	serializedTaskToken, err := taskToken.Marshal()
+	s.NoError(err)
+
+	// Pause the workflow
+	_, err = ms.AddWorkflowExecutionPausedEvent("test-identity", "test-reason", tv.Any().String())
+	s.NoError(err)
+	s.True(ms.IsWorkflowExecutionStatusPaused())
+	ms.FlushBufferedEvents()
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+			return &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil
+		}).AnyTimes()
+
+	wfContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
+		metrics.AddMetricsContext(context.Background()),
+		s.mockShard,
+		tv.NamespaceID(),
+		tv.WorkflowExecution(),
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	s.NotNil(wfContext)
+
+	loadedMS, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
+	s.NoError(err)
+	s.NotNil(loadedMS)
+	release(nil)
+
+	return wfContext, serializedTaskToken
 }
