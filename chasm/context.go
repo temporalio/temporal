@@ -21,6 +21,7 @@ type Context interface {
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
 
+	structuredRef(Component) (ComponentRef, error)
 	getContext() context.Context
 }
 
@@ -92,6 +93,10 @@ func newContext(
 
 func (c *immutableCtx) Ref(component Component) ([]byte, error) {
 	return c.root.Ref(component)
+}
+
+func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) {
+	return c.root.structuredRef(component)
 }
 
 func (c *immutableCtx) Now(component Component) time.Time {

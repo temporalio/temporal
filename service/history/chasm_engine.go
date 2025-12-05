@@ -60,7 +60,7 @@ var ChasmEngineModule = fx.Options(
 	fx.Provide(NewChasmNotifier),
 	fx.Provide(newChasmEngine),
 	fx.Provide(func(impl *ChasmEngine) chasm.Engine { return impl }),
-	fx.Invoke(func(lc fx.Lifecycle, impl *ChasmEngine, shardController shard.Controller) {
+	fx.Invoke(func(impl *ChasmEngine, shardController shard.Controller) {
 		impl.SetShardController(shardController)
 	}),
 )
@@ -87,8 +87,8 @@ func (e *ChasmEngine) SetShardController(
 	e.shardController = shardController
 }
 
-func (e *ChasmEngine) GetNotifier() *ChasmNotifier {
-	return e.notifier
+func (e *ChasmEngine) NotifyExecution(key chasm.EntityKey) {
+	e.notifier.Notify(key)
 }
 
 func (e *ChasmEngine) NewEntity(
@@ -166,7 +166,7 @@ func (e *ChasmEngine) UpdateWithNewEntity(
 // UpdateComponent applies updateFn to the component identified by the supplied component reference,
 // returning the new component reference corresponding to the transition. An error is returned if
 // the state transition specified by the supplied component reference is inconsistent with execution
-// transition history.
+// transition history. opts are currently ignored.
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -221,7 +221,7 @@ func (e *ChasmEngine) UpdateComponent(
 
 // ReadComponent evaluates readFn against the current state of the component identified by the
 // supplied component reference. An error is returned if the state transition specified by the
-// component reference is inconsistent with execution transition history.
+// component reference is inconsistent with execution transition history. opts are currently ignored.
 func (e *ChasmEngine) ReadComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -259,84 +259,67 @@ func (e *ChasmEngine) ReadComponent(
 // PollComponent waits until the supplied predicate is satisfied when evaluated against the
 // component identified by the supplied component reference. If there is no error, it returns (ref,
 // nil) where ref is a component reference identifying the state at which the predicate was
-// satisfied. The predicate must be monotonic: if it returns true at execution state transition s it
-// must return true at all transitions t > s. It is an error if execution transition history is
-// (after reloading from persistence) behind the requested ref, or if the ref is inconsistent with
-// execution transition history. Thus when the predicate function is evaluated, it is guaranteed
-// that the execution VT >= requestRef VT.
+// satisfied. It's possible that multiple state transitions (multiple notifications) occur between
+// predicate checks, therefore the predicate must be monotonic: if it returns true at execution
+// state transition s it must return true at all transitions t > s. It is an error if execution
+// transition history is (after reloading from persistence) behind the requested ref, or if the ref
+// is inconsistent with execution transition history. Thus when the predicate function is evaluated,
+// it is guaranteed that the execution VT >= requestRef VT. opts are currently ignored.
+// PollComponent subscribes to execution-level notifications. Suppose that an execution consists of
+// one component A, and A has subcomponent B. Subscribers interested only in component B may be
+// woken up unnecessarily (and thus evaluate the predicate unnecessarily) due to changes in parts of
+// A that do not also belong to B.
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
+	opts ...chasm.TransitionOption,
 ) (retRef []byte, retError error) {
+
+	var ch <-chan struct{}
+	var unsubscribe func()
 	defer func() {
-		if errors.Is(retError, consts.ErrStaleState) {
-			retError = serviceerror.NewUnavailable("please retry")
+		if unsubscribe != nil {
+			unsubscribe()
 		}
 	}()
 
-	shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
-	if err != nil {
-		// E.g. requestRef VT inconsistent with execution VT ('stale reference')
-		return nil, err
-	}
-	defer executionLease.GetReleaseFn()(nil)
+	checkPredicateOrSubscribe := func() ([]byte, error) {
+		_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+		if err != nil {
+			return nil, err
+		}
+		defer executionLease.GetReleaseFn()(nil) //nolint:revive
 
-	// At this point it's possible that execution VT < requestRef VT (getExecutionLease does not
-	// guarantee that returned execution state is non-stale w.r.t. requestRef).
-	satisfiedRef, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
-	if err != nil {
-		return nil, err
-	}
-	// execution VT >= requestRef VT (enforced by checkPredicate)
-
-	if satisfiedRef != nil {
-		// wait condition was satisfied
-		return satisfiedRef, nil
-	}
-
-	// Wait condition not satisfied; long-poll
-
-	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
-		namespace.ID(requestRef.EntityKey.NamespaceID),
-	)
-	if err != nil {
-		return nil, err
+		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
+		if err != nil {
+			if errors.Is(err, consts.ErrStaleState) {
+				err = serviceerror.NewUnavailable("please retry")
+			}
+			return nil, err
+		}
+		if ref != nil {
+			return ref, nil
+		}
+		// Predicate not satisfied; subscribe before releasing the lock.
+		ch, unsubscribe = e.notifier.Subscribe(requestRef.EntityKey)
+		return nil, nil
 	}
 
-	internalLongPollTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-	ctx, cancel := context.WithTimeout(ctx, internalLongPollTimeout)
-	defer cancel()
-
-	// PollComponent subscribes to execution-level notifications. Suppose that an execution consists
-	// of one component A, and A has subcomponent B. Subscribers interested only in component B may
-	// be woken up unnecessarily (and thus evaluate the predicate unnecessarily) due to changes in
-	// parts of A that do not also belong to B.
-	ch := e.notifier.Subscribe(requestRef.EntityKey)
-	executionLease.GetReleaseFn()(nil)
+	ref, err := checkPredicateOrSubscribe()
+	if err != nil || ref != nil {
+		return ref, err
+	}
 
 	for {
 		select {
-		// It is possible that multiple state transitions (multiple notifications) occur between
-		// predicate checks, therefore the predicate must be monotonic: if it returns true at
-		// execution state transition s then it must return true at all transitions t > s.
 		case <-ch:
-			_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+			ref, err := checkPredicateOrSubscribe()
 			if err != nil {
 				return nil, err
 			}
-			func() {
-				defer executionLease.GetReleaseFn()(nil)
-				satisfiedRef, err = e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
-				if err == nil && satisfiedRef == nil {
-					ch = e.notifier.Subscribe(requestRef.EntityKey)
-				}
-			}()
-			if err != nil {
-				return nil, err
-			}
-			if satisfiedRef != nil {
-				return satisfiedRef, nil
+			if ref != nil {
+				return ref, nil
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -509,7 +492,6 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newEntityParams.events,
 	)
 	if err == nil {
-		// TODO(dan): send notification on creation?
 		return currentRunInfo{}, false, nil
 	}
 
@@ -662,7 +644,6 @@ func (e *ChasmEngine) handleReusePolicy(
 	if err != nil {
 		return chasm.EntityKey{}, nil, err
 	}
-	// TODO(dan): send notification on creation?
 
 	serializedRef, err := newEntityParams.entityRef.Serialize(e.registry)
 	if err != nil {
@@ -745,10 +726,6 @@ func (e *ChasmEngine) getExecutionLease(
 	if err == nil && staleReferenceErr != nil {
 		entityLease.GetReleaseFn()(nil)
 		err = staleReferenceErr
-	}
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
-		err = serviceerror.NewNotFoundf("execution not found")
 	}
 
 	return shardContext, entityLease, err

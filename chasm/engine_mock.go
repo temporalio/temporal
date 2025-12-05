@@ -61,19 +61,36 @@ func (mr *MockEngineMockRecorder) NewEntity(arg0, arg1, arg2 any, arg3 ...any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewEntity", reflect.TypeOf((*MockEngine)(nil).NewEntity), varargs...)
 }
 
-// PollComponent mocks base method.
-func (m *MockEngine) PollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) (bool, error)) ([]byte, error) {
+// NotifyExecution mocks base method.
+func (m *MockEngine) NotifyExecution(arg0 EntityKey) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PollComponent", arg0, arg1, arg2)
+	m.ctrl.Call(m, "NotifyExecution", arg0)
+}
+
+// NotifyExecution indicates an expected call of NotifyExecution.
+func (mr *MockEngineMockRecorder) NotifyExecution(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyExecution", reflect.TypeOf((*MockEngine)(nil).NotifyExecution), arg0)
+}
+
+// PollComponent mocks base method.
+func (m *MockEngine) PollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) (bool, error), arg3 ...TransitionOption) ([]byte, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PollComponent", varargs...)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PollComponent indicates an expected call of PollComponent.
-func (mr *MockEngineMockRecorder) PollComponent(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockEngineMockRecorder) PollComponent(arg0, arg1, arg2 any, arg3 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollComponent", reflect.TypeOf((*MockEngine)(nil).PollComponent), arg0, arg1, arg2)
+	varargs := append([]any{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollComponent", reflect.TypeOf((*MockEngine)(nil).PollComponent), varargs...)
 }
 
 // ReadComponent mocks base method.
