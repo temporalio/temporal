@@ -223,7 +223,7 @@ func validateRequestID(requestID *string, maxIDLengthLimit int) error {
 
 func validateInputSize(
 	activityID string,
-	activityType string,
+	blobSizeViolationTagValue string,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	inputSize int,
@@ -238,7 +238,7 @@ func validateInputSize(
 			tag.WorkflowNamespace(namespaceName),
 			tag.ActivityID(activityID),
 			tag.ActivitySize(int64(inputSize)),
-			tag.BlobSizeViolationOperation(activityType))
+			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
 
 		if inputSize > sizeErrorLimit {
 			return common.ErrBlobSizeExceedsLimit

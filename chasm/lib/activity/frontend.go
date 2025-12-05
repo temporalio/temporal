@@ -111,6 +111,41 @@ func (h *frontendHandler) PollActivityExecution(
 	return resp.GetFrontendResponse(), err
 }
 
+// TerminateActivityExecution terminates a standalone activity execution
+func (h *frontendHandler) TerminateActivityExecution(
+	ctx context.Context,
+	req *workflowservice.TerminateActivityExecutionRequest,
+) (*workflowservice.TerminateActivityExecutionResponse, error) {
+	namespaceName := req.GetNamespace()
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(namespaceName))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateInputSize(
+		req.GetActivityId(),
+		"activity-termination",
+		dynamicconfig.BlobSizeLimitError.Get(h.dc),
+		dynamicconfig.BlobSizeLimitWarn.Get(h.dc),
+		len(req.GetReason()),
+		h.logger,
+		namespaceName); err != nil {
+		return nil, err
+	}
+
+	// TODO add request ID validation when API updated
+
+	_, err = h.client.TerminateActivityExecution(ctx, &activitypb.TerminateActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.TerminateActivityExecutionResponse{}, nil
+}
+
 func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,

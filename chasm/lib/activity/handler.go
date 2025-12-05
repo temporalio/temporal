@@ -169,3 +169,30 @@ func (h *handler) PollActivityExecution(
 	}
 	return response, err
 }
+
+// TerminateActivityExecution terminates a standalone activity execution
+func (h *handler) TerminateActivityExecution(
+	ctx context.Context,
+	req *activitypb.TerminateActivityExecutionRequest,
+) (response *activitypb.TerminateActivityExecutionResponse, err error) {
+	frontendReq := req.GetFrontendRequest()
+
+	ref := chasm.NewComponentRef[*Activity](chasm.EntityKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		EntityID:    frontendReq.GetRunId(),
+	})
+
+	response, _, err = chasm.UpdateComponent(
+		ctx,
+		ref,
+		(*Activity).handleTerminated,
+		req,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
