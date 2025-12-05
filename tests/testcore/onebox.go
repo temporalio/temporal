@@ -214,7 +214,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
-		testHooks:                        testhooks.NewTestHooks(params.Logger),
+		testHooks:                        testhooks.NewTestHooks(),
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 		hostsByProtocolByService:         params.HostsByProtocolByService,

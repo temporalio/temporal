@@ -9,7 +9,7 @@ import (
 )
 
 func TestGet(t *testing.T) {
-	th := NewTestHooks(nil)
+	th := NewTestHooks()
 
 	t.Run("returns false for unset key", func(t *testing.T) {
 		_, ok := Get[int](th, MatchingDisableSyncMatch)
@@ -35,7 +35,7 @@ func TestGet(t *testing.T) {
 }
 
 func TestCall(t *testing.T) {
-	th := NewTestHooks(nil)
+	th := NewTestHooks()
 
 	t.Run("does nothing for unset key", func(t *testing.T) {
 		Call(th, MatchingDisableSyncMatch) // should not panic
