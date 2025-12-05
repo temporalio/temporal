@@ -580,6 +580,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		shardClock,
 		ai.Version,
 		ai.StartVersion,
+		nil,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {

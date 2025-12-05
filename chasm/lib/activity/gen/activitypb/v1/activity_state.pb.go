@@ -375,9 +375,9 @@ type ActivityAttemptState struct {
 	// with a retryable application failure specifying a retry delay.
 	CurrentRetryInterval *durationpb.Duration `protobuf:"bytes,2,opt,name=current_retry_interval,json=currentRetryInterval,proto3" json:"current_retry_interval,omitempty"`
 	// Time the last attempt was started.
-	LastStartedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_started_time,json=lastStartedTime,proto3" json:"last_started_time,omitempty"`
+	StartedTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
 	// The time when the last activity attempt completed. If activity has not been completed yet, it will be null.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
+	CompleteTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=complete_time,json=completeTime,proto3" json:"complete_time,omitempty"`
 	// Details about the last failure. This will only be updated when an activity attempt fails,
 	// including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
 	// will not reset it.
@@ -434,16 +434,16 @@ func (x *ActivityAttemptState) GetCurrentRetryInterval() *durationpb.Duration {
 	return nil
 }
 
-func (x *ActivityAttemptState) GetLastStartedTime() *timestamppb.Timestamp {
+func (x *ActivityAttemptState) GetStartedTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastStartedTime
+		return x.StartedTime
 	}
 	return nil
 }
 
-func (x *ActivityAttemptState) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
+func (x *ActivityAttemptState) GetCompleteTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastAttemptCompleteTime
+		return x.CompleteTime
 	}
 	return nil
 }
@@ -835,12 +835,12 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +
 	"\frequest_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12\x1a\n" +
 	"\bidentity\x18\x03 \x01(\tR\bidentity\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xc9\x05\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xa8\x05\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
-	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12F\n" +
-	"\x11last_started_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastStartedTime\x12W\n" +
-	"\x1alast_attempt_complete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12\x86\x01\n" +
+	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
+	"\fstarted_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12?\n" +
+	"\rcomplete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\fcompleteTime\x12\x86\x01\n" +
 	"\x14last_failure_details\x18\x05 \x01(\v2T.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetailsR\x12lastFailureDetails\x120\n" +
 	"\x14last_worker_identity\x18\a \x01(\tR\x12lastWorkerIdentity\x12k\n" +
 	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x1a\x80\x01\n" +
@@ -927,8 +927,8 @@ var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdx
 	2,  // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityState.cancel_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
 	14, // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp
 	12, // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval:type_name -> google.protobuf.Duration
-	14, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_started_time:type_name -> google.protobuf.Timestamp
-	14, // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	14, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.started_time:type_name -> google.protobuf.Timestamp
+	14, // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.complete_time:type_name -> google.protobuf.Timestamp
 	7,  // 15: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_failure_details:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
 	16, // 16: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	17, // 17: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads

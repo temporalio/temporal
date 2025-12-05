@@ -767,6 +767,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
+	registry *chasm.Registry,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -795,6 +796,7 @@ func HandlerProvider(
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
 		activityHandler,
+		registry,
 	)
 	return wfHandler
 }

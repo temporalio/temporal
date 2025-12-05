@@ -6,6 +6,8 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -35,6 +37,22 @@ func Invoke(
 		return nil, err
 	}
 	namespaceName := namespaceEntry.Name()
+	// Handle standalone activity if component ref is present in the token
+	if componentRef := token.GetComponentRef(); len(componentRef) > 0 {
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			componentRef,
+			(*activity.Activity).HandleCompleted,
+			req,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return response, nil
+	}
+
 	if err := api.SetActivityTaskRunID(ctx, token, workflowConsistencyChecker); err != nil {
 		return nil, err
 	}

@@ -48,11 +48,8 @@ func Invoke(
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			activityRefProto,
-			(*activity.Activity).RecordActivityTaskStarted,
-			activity.RecordActivityTaskStartedParams{
-				VersionDirective: request.GetVersionDirective(),
-				WorkerIdentity:   request.GetPollRequest().GetIdentity(),
-			},
+			(*activity.Activity).HandleStarted,
+			request,
 		)
 
 		if err != nil {
