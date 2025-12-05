@@ -61,7 +61,13 @@ type CountExecutionsRequest struct {
 }
 
 type CountExecutionsResponse struct {
-	Count int64
+	Count  int64
+	Groups []Group
+}
+
+type Group struct {
+	Values []*commonpb.Payload
+	Count  int64
 }
 
 // ListExecutions lists the executions of a CHASM archetype given an initial query.

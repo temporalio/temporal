@@ -77,8 +77,12 @@ type (
 )
 
 var (
-	groupByFieldWhitelist = []string{
+	groupByFieldAllowlist = []string{
 		sadefs.ExecutionStatus,
+	}
+
+	groupByFieldPrefixAllowlist = []string{
+		"TemporalLowCardinalityKeyword",
 	}
 
 	supportedComparisonOperators = []string{
@@ -124,6 +128,22 @@ var (
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 )
+
+func IsGroupByFieldAllowed(fieldName string) bool {
+	for _, allowedField := range groupByFieldAllowlist {
+		if fieldName == allowedField {
+			return true
+		}
+	}
+
+	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
+		if strings.HasPrefix(fieldName, allowedPrefix) {
+			return true
+		}
+	}
+
+	return false
+}
 
 func NewQueryConverter[ExprT any](
 	storeQC StoreQueryConverter[ExprT],
@@ -276,11 +296,10 @@ func (c *QueryConverter[ExprT]) convertSelectStmt(
 		if err != nil {
 			return nil, err
 		}
-		if !slices.Contains(groupByFieldWhitelist, colName.FieldName) {
+		if !IsGroupByFieldAllowed(colName.FieldName) {
 			return nil, NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for search attributes [%v]",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				NotSupportedErrMessage,
-				strings.Join(groupByFieldWhitelist, ", "),
 			)
 		}
 		res.GroupBy = append(res.GroupBy, colName)

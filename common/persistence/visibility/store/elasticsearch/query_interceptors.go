@@ -88,10 +88,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 			)
 		}
 	case query.FieldNameGroupBy:
-		if fieldName != sadefs.ExecutionStatus {
+		if !query.IsGroupByFieldAllowed(fieldName) {
 			return "", query.NewConverterError(
-				"'group by' clause is only supported for %s search attribute",
-				sadefs.ExecutionStatus,
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				query.NotSupportedErrMessage,
 			)
 		}
 	}
