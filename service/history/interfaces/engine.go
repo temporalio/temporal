@@ -99,7 +99,6 @@ type (
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
-		ChasmEngine() chasm.Engine
 		NotifyChasmExecution(executionKey chasm.EntityKey, componentRef []byte)
 		// TODO(bergundy): This Environment should be host level once shard level workflow cache is deprecated.
 		StateMachineEnvironment(operationTag metrics.Tag) hsm.Environment
