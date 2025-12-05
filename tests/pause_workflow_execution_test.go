@@ -53,6 +53,7 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 	s.activityCompletedOnce = sync.Once{}
 
 	s.workflowFn = func(ctx workflow.Context) (string, error) {
+		s.T().Log("workflow started")
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout:    5 * time.Second,
 			ScheduleToCloseTimeout: 10 * time.Second,
@@ -60,18 +61,22 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 		ctx = workflow.WithActivityOptions(ctx, ao)
 
 		var activityResult string
+		s.T().Log("executing activity")
 		if err := workflow.ExecuteActivity(ctx, s.activityFn).Get(ctx, &activityResult); err != nil {
 			return "", err
 		}
 
 		var childResult string
+		s.T().Log("executing child workflow")
 		if err := workflow.ExecuteChildWorkflow(ctx, s.childWorkflowFn).Get(ctx, &childResult); err != nil {
 			return "", err
 		}
 
+		s.T().Log("waiting to receive signal to complete the workflow")
 		signalCh := workflow.GetSignalChannel(ctx, s.testEndSignal)
 		var signalPayload string
 		signalCh.Receive(ctx, &signalPayload)
+		s.T().Log("signal received to complete the workflow")
 		return signalPayload + activityResult + childResult, nil
 	}
 
@@ -80,6 +85,7 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 	}
 
 	s.activityFn = func(ctx context.Context) (string, error) {
+		s.T().Log("activity started")
 		s.activityCompletedOnce.Do(func() {
 			// blocks until the test case unblocks the activity.
 			<-s.activityCompletedCh
@@ -87,6 +93,10 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 		s.T().Log("activity completed")
 		return "activity", nil
 	}
+
+	s.Worker().RegisterWorkflow(s.workflowFn)
+	s.Worker().RegisterWorkflow(s.childWorkflowFn)
+	s.Worker().RegisterActivity(s.activityFn)
 }
 
 // TestPauseUnpauseWorkflowExecution tests that the pause and unpause workflow execution APIs work as expected.
@@ -100,10 +110,6 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	s.Worker().RegisterWorkflow(s.workflowFn)
-	s.Worker().RegisterWorkflow(s.childWorkflowFn)
-	s.Worker().RegisterActivity(s.activityFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
@@ -136,27 +142,16 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(pauseResp)
 
-	// unblock the activity to complete.
-	// s.activityCompletedCh <- struct{}{}
-
-	// ensure that the workflow is paused even when the activity is completed.
+	// ensure that the workflow is paused
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
-		require.NoError(t, err)
-		info := desc.GetWorkflowExecutionInfo()
-		require.NotNil(t, info)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus(), "workflow is not paused. Status: %s", info.GetStatus())
-		if pauseInfo := desc.GetWorkflowExtendedInfo().GetPauseInfo(); pauseInfo != nil {
-			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
-			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
-		}
+		s.assertWorkflowIsPaused(ctx, t, workflowID, runID)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Send signal to the workflow to complete the workflow. Since the workflow is paused, it should stay paused.
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "signal to complete the workflow")
 	s.NoError(err)
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		s.assertWorkflowIsPaused(t, ctx, workflowID, runID)
+		s.assertWorkflowIsPaused(ctx, t, workflowID, runID)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unpause the workflow.
@@ -198,8 +193,6 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(s.workflowFn)
-
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
@@ -233,15 +226,7 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 
 	// Wait until paused.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
-		require.NoError(t, err)
-		info := desc.GetWorkflowExecutionInfo()
-		require.NotNil(t, info)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
-		if pauseInfo := desc.GetWorkflowExtendedInfo().GetPauseInfo(); pauseInfo != nil {
-			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
-			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
-		}
+		s.assertWorkflowIsPaused(ctx, t, workflowID, runID)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Issue a query to the paused workflow. It should return QueryRejected with WORKFLOW_EXECUTION_STATUS_PAUSED status.
@@ -261,7 +246,21 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	s.NotNil(queryResp.GetQueryRejected())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, queryResp.GetQueryRejected().GetStatus())
 
-	// Complete the workflow to finish the test.
+	// Unpause the workflow.
+	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   s.pauseIdentity,
+		Reason:     s.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	unpauseResp, err := s.FrontendClient().UnpauseWorkflowExecution(ctx, unpauseRequest)
+	s.NoError(err)
+	s.NotNil(unpauseResp)
+
+	// Unblock the activity and send the signal to complete the workflow.
+	s.activityCompletedCh <- struct{}{}
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
 	s.NoError(err)
 
@@ -417,10 +416,6 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(s.workflowFn)
-	s.Worker().RegisterWorkflow(s.childWorkflowFn)
-	s.Worker().RegisterActivity(s.activityFn)
-
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
@@ -452,16 +447,9 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	s.NoError(err)
 	s.NotNil(pauseResp)
 
+	// Wait until paused.
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
-		require.NoError(t, err)
-		info := desc.GetWorkflowExecutionInfo()
-		require.NotNil(t, info)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, info.GetStatus())
-		if pauseInfo := desc.GetWorkflowExtendedInfo().GetPauseInfo(); pauseInfo != nil {
-			require.Equal(t, s.pauseIdentity, pauseInfo.GetIdentity())
-			require.Equal(t, s.pauseReason, pauseInfo.GetReason())
-		}
+		s.assertWorkflowIsPaused(ctx, t, workflowID, runID)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// 2nd pause request should fail with failed precondition error.
@@ -495,7 +483,8 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 		require.Nil(t, desc.GetWorkflowExtendedInfo().GetPauseInfo())
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// For now sending this signal will complete the workflow and finish the test.
+	// Unblock the activity and send the signal to complete the workflow.
+	s.activityCompletedCh <- struct{}{}
 	err = s.SdkClient().SignalWorkflow(ctx, workflowID, runID, s.testEndSignal, "test end signal")
 	s.NoError(err)
 
@@ -512,7 +501,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 // - the workflow status is paused.
 // - the workflow has the correct pause info.
 // - there is no workflow task scheduled event inbetween pause and unpause events.
-func (s *PauseWorkflowExecutionSuite) assertWorkflowIsPaused(t *assert.CollectT, ctx context.Context, workflowID string, runID string) {
+func (s *PauseWorkflowExecutionSuite) assertWorkflowIsPaused(ctx context.Context, t *assert.CollectT, workflowID string, runID string) {
 	desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
 	require.NoError(t, err)
 	info := desc.GetWorkflowExecutionInfo()
