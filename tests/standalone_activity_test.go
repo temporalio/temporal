@@ -15,24 +15,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
-)
-
-var (
-	defaultInput = &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("json/plain"),
-				},
-				Data: []byte("test-activity-input"),
-			},
-		},
-	}
 )
 
 type standaloneActivityTestSuite struct {
@@ -66,7 +54,7 @@ func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
 	activityType := &commonpb.ActivityType{
 		Name: "test-activity-type",
 	}
-	input := createDefaultInput()
+	input := payloads.EncodeString(`{"name":"test-user","count":11}`)
 	taskQueue := testcore.RandomizeStr(t.Name())
 
 	resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
@@ -120,7 +108,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		ActivityType: &commonpb.ActivityType{
 			Name: "test-activity-type",
 		},
-		Input: defaultInput,
+		Input: payloads.EncodeString("test-activity-input"),
 		Options: &activitypb.ActivityOptions{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue.Name,
@@ -210,19 +198,6 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout() {
 	// TODO implement when we have PollActivityExecution. Make sure we check the attempt vs. outcome failure population.
 	s.T().Skip("Temporarily disabled")
-}
-
-func createDefaultInput() *commonpb.Payloads {
-	return &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("json/plain"),
-				},
-				Data: []byte(`{"name":"test-user","count":11}`),
-			},
-		},
-	}
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_NoWait() {
