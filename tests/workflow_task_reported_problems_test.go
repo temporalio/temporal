@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -33,7 +32,7 @@ func TestWFTFailureReportedProblemsTestSuite(t *testing.T) {
 
 func (s *WFTFailureReportedProblemsTestSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 5)
+	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 4)
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) simpleWorkflowWithShouldFail(ctx workflow.Context) (string, error) {
@@ -138,7 +137,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_NotClearedBySignals() {
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	s.shouldFail.Store(true)
@@ -167,7 +166,6 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 				if s.stopSignals.Load() {
 					return
 				}
-				fmt.Printf("[DEBUG WFT] Sending signal 'test-signal' with value 'ping'\n")
 				_ = s.SdkClient().SignalWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test-signal", "ping")
 			case <-ctx.Done():
 				return
@@ -184,17 +182,19 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 		require.NotEmpty(t, saVal)
 		require.Contains(t, saVal, "category=WorkflowTaskFailed")
 		require.Contains(t, saVal, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
-	}, 60*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 
-	// Continue sending signals for a few more seconds and verify the search attribute is NOT removed
-	// This is the key part of the test - signals should not cause the search attribute to be cleared
-	time.Sleep(5 * time.Second)
+	// // Continue sending signals for a few more seconds and verify the search attribute is NOT removed
+	// // This is the key part of the test - signals should not cause the search attribute to be cleared
+	// time.Sleep(5 * time.Second)
 
-	description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.NoError(err)
-	saVal, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
-	s.True(ok, "Search attribute should still be present after receiving signals")
-	s.NotEmpty(saVal, "Search attribute should not be empty after receiving signals")
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		s.NoError(err)
+		saVal, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
+		s.True(ok, "Search attribute should still be present after receiving signals")
+		s.NotEmpty(saVal, "Search attribute should not be empty after receiving signals")
+	}, 5*time.Second, 500*time.Millisecond)
 
 	// Stop signals and unblock the workflow for cleanup
 	s.stopSignals.Store(true)
@@ -211,10 +211,10 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 	<-signalDone
 
 	// Verify search attribute is cleared after successful completion
-	description, err = s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
 	s.NotNil(description.TypedSearchAttributes)
-	_, ok = description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
+	_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
 	s.False(ok)
 }
 

@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"path/filepath"
 	"reflect"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -8847,8 +8845,6 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask() error {
 	}
 	// Reset the attempt; forcing a non-transient workflow task to be scheduled.
 	ms.executionInfo.WorkflowTaskAttempt = 1
-	_, file, line, _ := runtime.Caller(0)
-	fmt.Printf("[DEBUG WFT] %s:%d: Workflow task attempt reset to 1: rescheduling after start transition\n", filepath.Base(file), line)
 
 	// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
 	// We don't invalidate speculative WFTs because they are very latency sensitive.
