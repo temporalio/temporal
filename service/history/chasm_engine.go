@@ -60,7 +60,7 @@ var ChasmEngineModule = fx.Options(
 	fx.Provide(NewChasmNotifier),
 	fx.Provide(newChasmEngine),
 	fx.Provide(func(impl *ChasmEngine) chasm.Engine { return impl }),
-	fx.Invoke(func(lc fx.Lifecycle, impl *ChasmEngine, shardController shard.Controller) {
+	fx.Invoke(func(impl *ChasmEngine, shardController shard.Controller) {
 		impl.SetShardController(shardController)
 	}),
 )
