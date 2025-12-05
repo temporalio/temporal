@@ -27,7 +27,7 @@ func SetActivityTaskRunID(
 		return nil
 	}
 
-	runID, err := workflowConsistencyChecker.GetCurrentRunID(
+	runID, err := workflowConsistencyChecker.GetCurrentWorkflowRunID(
 		ctx,
 		token.NamespaceId,
 		token.WorkflowId,

@@ -18,7 +18,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -242,7 +242,7 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	var escapedBuildIds []string
 	var includeNull bool
 	if open {
-		statusFilter = fmt.Sprintf(` AND %s = "Running"`, searchattribute.ExecutionStatus)
+		statusFilter = fmt.Sprintf(` AND %s = "Running"`, sadefs.ExecutionStatus)
 		// want: currently assigned to that build-id
 		// (b1, b2) --> (assigned:b1, assigned:b2)
 		// (b1, b2, "") --> (assigned:b1, assigned:b2, unversioned, null)
@@ -256,7 +256,7 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 			}
 		}
 	} else {
-		statusFilter = fmt.Sprintf(` AND %s != "Running"`, searchattribute.ExecutionStatus)
+		statusFilter = fmt.Sprintf(` AND %s != "Running"`, sadefs.ExecutionStatus)
 		// want: closed AT that build ID, and once used that build ID
 		// (b1, b2) --> (versioned:b1, versioned:b2)
 		// (b1, b2, "") --> (versioned:b1, versioned:b2, unversioned, null)
@@ -270,11 +270,11 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 			}
 		}
 	}
-	buildIdsFilter := fmt.Sprintf("%s IN (%s)", searchattribute.BuildIds, strings.Join(escapedBuildIds, ","))
+	buildIdsFilter := fmt.Sprintf("%s IN (%s)", sadefs.BuildIds, strings.Join(escapedBuildIds, ","))
 	if includeNull {
-		buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", searchattribute.BuildIds, buildIdsFilter)
+		buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", sadefs.BuildIds, buildIdsFilter)
 	}
-	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
+	return fmt.Sprintf("%s = %s AND %s%s", sadefs.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }
 
 // getDefaultBuildId gets the build ID mentioned in the first fully-ramped Assignment Rule.

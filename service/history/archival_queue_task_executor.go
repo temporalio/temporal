@@ -7,6 +7,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -248,6 +249,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		ShardID:     e.shardContext.GetShardID(),
 		NamespaceID: task.GetNamespaceID(),
 		WorkflowID:  task.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID, // Archival is only supported for workflow now.
 		Tasks:       mutableState.PopTasks(),
 	})
 	return err

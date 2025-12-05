@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -108,7 +108,7 @@ func (s *taskExecutorSuite) TearDownTest() {
 }
 
 func (s *taskExecutorSuite) TestFilterTask_Apply() {
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(namespace.NewGlobalNamespaceForTest(
@@ -126,7 +126,7 @@ func (s *taskExecutorSuite) TestFilterTask_Apply() {
 }
 
 func (s *taskExecutorSuite) TestFilterTask_NotApply() {
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(namespace.NewGlobalNamespaceForTest(
@@ -141,7 +141,7 @@ func (s *taskExecutorSuite) TestFilterTask_NotApply() {
 }
 
 func (s *taskExecutorSuite) TestFilterTask_Error() {
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, fmt.Errorf("random error"))
@@ -151,14 +151,14 @@ func (s *taskExecutorSuite) TestFilterTask_Error() {
 }
 
 func (s *taskExecutorSuite) TestFilterTask_EnforceApply() {
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, true)
 	s.NoError(err)
 	s.True(ok)
 }
 
 func (s *taskExecutorSuite) TestFilterTask_NamespaceNotFound() {
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, &serviceerror.NamespaceNotFound{})
@@ -168,9 +168,9 @@ func (s *taskExecutorSuite) TestFilterTask_NamespaceNotFound() {
 }
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
-	namespaceID := namespace.ID(uuid.New())
-	workflowID := uuid.New()
-	runID := uuid.New()
+	namespaceID := namespace.ID(uuid.NewString())
+	workflowID := uuid.NewString()
+	runID := uuid.NewString()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
@@ -215,9 +215,9 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 }
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Resend() {
-	namespaceID := namespace.ID(uuid.New())
-	workflowID := uuid.New()
-	runID := uuid.New()
+	namespaceID := namespace.ID(uuid.NewString())
+	workflowID := uuid.NewString()
+	runID := uuid.NewString()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
@@ -281,9 +281,9 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 }
 
 func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask() {
-	namespaceID := namespace.ID(uuid.New())
-	workflowID := uuid.New()
-	runID := uuid.New()
+	namespaceID := namespace.ID(uuid.NewString())
+	workflowID := uuid.NewString()
+	runID := uuid.NewString()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
@@ -313,9 +313,9 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask() {
 }
 
 func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
-	namespaceID := namespace.ID(uuid.New())
-	workflowID := uuid.New()
-	runID := uuid.New()
+	namespaceID := namespace.ID(uuid.NewString())
+	workflowID := uuid.NewString()
+	runID := uuid.NewString()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
@@ -369,7 +369,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 }
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
@@ -389,9 +389,9 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
 }
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncHSMTask() {
-	namespaceID := namespace.ID(uuid.New())
-	workflowID := uuid.New()
-	runID := uuid.New()
+	namespaceID := namespace.ID(uuid.NewString())
+	workflowID := uuid.NewString()
+	runID := uuid.NewString()
 	task := &replicationspb.ReplicationTask{
 		SourceTaskId: rand.Int63(),
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,

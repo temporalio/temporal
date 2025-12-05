@@ -17,14 +17,19 @@ import (
 func GenerateTask(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
-	shard historyi.ShardContext,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
-	namespaceEntry, err := api.GetNamespace(shard, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
 	namespaceID := namespaceEntry.ID()
+
+	archetypeID := request.GetArchetypeId()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
 
 	chasmLease, err := workflowConsistencyChecker.GetChasmLease(
 		ctx,
@@ -34,7 +39,7 @@ func GenerateTask(
 			request.Execution.WorkflowId,
 			request.Execution.RunId,
 		),
-		chasm.ArchetypeAny, // GenerateMigrationTasks works for all Archetypes.
+		archetypeID,
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -48,11 +53,12 @@ func GenerateTask(
 		return nil, err
 	}
 
-	err = shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: shard.GetShardID(),
+	err = shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
+		ShardID: shardContext.GetShardID(),
 		// RangeID is set by shard
 		NamespaceID: string(namespaceID),
 		WorkflowID:  request.Execution.WorkflowId,
+		ArchetypeID: archetypeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: replicationTasks,
 		},

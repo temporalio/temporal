@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -395,6 +396,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.Len(desc.DatabaseMutableState.GetExecutionInfo().SubStateMachinesByType, 0)

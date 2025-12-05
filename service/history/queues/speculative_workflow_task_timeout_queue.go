@@ -2,6 +2,7 @@ package queues
 
 import (
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -20,6 +21,7 @@ type (
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 		timeSource        clock.TimeSource
+		chasmRegistry     *chasm.Registry
 		metricsHandler    metrics.Handler
 		tracer            trace.Tracer
 		logger            log.SnTaggedLogger
@@ -33,6 +35,7 @@ func NewSpeculativeWorkflowTaskTimeoutQueue(
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 	timeSource clock.TimeSource,
+	chasmRegistry *chasm.Registry,
 	metricsHandler metrics.Handler,
 	tracer trace.Tracer,
 	logger log.SnTaggedLogger,
@@ -52,6 +55,7 @@ func NewSpeculativeWorkflowTaskTimeoutQueue(
 		namespaceRegistry: namespaceRegistry,
 		clusterMetadata:   clusterMetadata,
 		timeSource:        timeSource,
+		chasmRegistry:     chasmRegistry,
 		metricsHandler:    metricsHandler,
 		tracer:            tracer,
 		logger:            logger,
@@ -83,6 +87,8 @@ func (q SpeculativeWorkflowTaskTimeoutQueue) NotifyNewTasks(ts []tasks.Task) {
 				q.timeSource,
 				q.namespaceRegistry,
 				q.clusterMetadata,
+				q.chasmRegistry,
+				GetTaskTypeTagValue,
 				q.logger,
 				q.metricsHandler.WithTags(defaultExecutableMetricsTags...),
 				q.tracer,

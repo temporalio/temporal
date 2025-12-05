@@ -66,7 +66,9 @@ func UpdateActivityInfoForRetries(
 	attempt int32,
 	failure *failurepb.Failure,
 	nextScheduledTime *timestamppb.Timestamp,
+	isActivityRetryStampIncrementEnabled bool,
 ) *persistencespb.ActivityInfo {
+	previousAttempt := ai.Attempt
 	ai.Attempt = attempt
 	ai.Version = version
 	ai.ScheduledTime = nextScheduledTime
@@ -87,6 +89,10 @@ func UpdateActivityInfoForRetries(
 	}
 	ai.ActivityReset = false
 	ai.ResetHeartbeats = false
+
+	if isActivityRetryStampIncrementEnabled && attempt > previousAttempt {
+		ai.Stamp++
+	}
 
 	return ai
 }
@@ -210,6 +216,7 @@ func GetPendingActivityInfo(
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		StartToCloseTimeout:    ai.StartToCloseTimeout,
 		HeartbeatTimeout:       ai.HeartbeatTimeout,
+		Priority:               ai.Priority,
 
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:    ai.RetryInitialInterval,

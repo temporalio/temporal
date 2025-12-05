@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -56,6 +57,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
 	currentMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.Equal(currentMutableState.GetDatabaseMutableState().ExecutionInfo.ResetRunId, newRunID)
@@ -84,6 +86,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
 	currentMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.Equal(currentMutableState.GetDatabaseMutableState().ExecutionInfo.ResetRunId, newRunID)
@@ -192,6 +195,7 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 		baseMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		s.NoError(err)
 		s.Equal(baseRunID, baseMutableState.GetDatabaseMutableState().ExecutionInfo.OriginalExecutionRunId)
@@ -419,6 +423,7 @@ func (s *WorkflowResetSuite) assertMutableStateStatus(ctx context.Context, workf
 	ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.Equal(expectedStatus, ms.GetDatabaseMutableState().ExecutionState.Status)
@@ -429,6 +434,7 @@ func (s *WorkflowResetSuite) assertResetWorkflowLink(ctx context.Context, workfl
 	baseMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.Equal(expectedLinkRunID, baseMutableState.GetDatabaseMutableState().ExecutionInfo.ResetRunId)

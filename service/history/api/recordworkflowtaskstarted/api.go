@@ -190,7 +190,7 @@ func Invoke(
 					// Dispatching to a different deployment. Try starting a transition. Starting the
 					// transition AFTER applying the start event because we don't want this pending
 					// wft to be rescheduled by StartDeploymentTransition.
-					if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+					if err := mutableState.StartDeploymentTransition(pollerDeployment, req.TaskDispatchRevisionNumber); err != nil {
 						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 							// This must be a task from a time that the workflow was unpinned, but it's
 							// now pinned so can't transition. Matching can drop the task safely.

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -116,7 +116,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	syncMatch, err := t.childMatcher.Offer(ctx, task)
 	cancel()
@@ -166,12 +166,12 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 		},
 	).Return(&remotePollResp, remotePollErr).AnyTimes()
 
-	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil, 0)
 	if taskSource == enumsspb.TASK_SOURCE_DB_BACKLOG {
 		task = newInternalTaskForSyncMatch(randomTaskInfo().Data, &taskqueuespb.TaskForwardInfo{
 			TaskSource:      enumsspb.TASK_SOURCE_DB_BACKLOG,
 			SourcePartition: "p123",
-		})
+		}, 0)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
@@ -221,7 +221,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	}, 30*time.Second, 1*time.Millisecond)
 
 	// should not allow sync match when there is an old task in backlog
-	syncMatchTask := newInternalTaskForSyncMatch(randomTaskInfoWithAge(time.Minute).Data, nil)
+	syncMatchTask := newInternalTaskForSyncMatch(randomTaskInfoWithAge(time.Minute).Data, nil, 0)
 	// Adding forwardInfo to replicate a task being forwarded from the child partition.
 	// This field is required to be non-nil for the matcher to offer this task locally to a poller, which is desired.
 	syncMatchTask.forwardInfo = &taskqueuespb.TaskForwardInfo{
@@ -254,7 +254,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 }
 
 func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
-	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil, 0)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	intruptC := make(chan struct{})
@@ -451,7 +451,7 @@ func (t *MatcherTestSuite) TestBacklogAge() {
 }
 
 func (t *MatcherTestSuite) TestSyncMatchFailure() {
-	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.AddWorkflowTaskRequest
@@ -484,7 +484,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	cancel()
 
 	// send query and expect generic DeadlineExceeded error
-	task = newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task = newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			task.forwardInfo = req.GetForwardInfo()
@@ -523,7 +523,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	t.rootConfig.QueryPollerUnavailableWindow = dynamicconfig.GetDurationPropertyFn(time.Millisecond * 5)
 
 	// make the query and expect errNoRecentPoller
-	task = newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task = newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			task.forwardInfo = req.GetForwardInfo()
@@ -540,7 +540,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 }
 
 func (t *MatcherTestSuite) TestQueryNoPollerAtAll() {
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
@@ -576,7 +576,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	resp, err := t.childMatcher.OfferQuery(ctx, task)
 	cancel()
@@ -615,7 +615,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		},
 	).Return(&remotePollResp, remotePollErr).AnyTimes()
 
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.QueryWorkflowRequest
@@ -661,7 +661,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 		}
 	}()
 
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.QueryWorkflowRequest
@@ -701,7 +701,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err := t.childMatcher.MustOffer(ctx, task, nil)
 	cancel()
@@ -754,7 +754,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
 			req = arg1
-			task := newInternalTaskForSyncMatch(task.event.AllocatedTaskInfo.Data, req.ForwardInfo)
+			task := newInternalTaskForSyncMatch(task.event.AllocatedTaskInfo.Data, req.ForwardInfo, 0)
 			close(pollSigC)
 			remoteSyncMatch, err = t.rootMatcher.Offer(ctx, task)
 		},
@@ -831,9 +831,9 @@ func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 
 	return &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
-			NamespaceId:      uuid.New(),
-			WorkflowId:       uuid.New(),
-			RunId:            uuid.New(),
+			NamespaceId:      uuid.NewString(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),
@@ -848,9 +848,9 @@ func randomTaskInfoWithAge(age time.Duration) *persistencespb.AllocatedTaskInfo 
 
 	return &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
-			NamespaceId:      uuid.New(),
-			WorkflowId:       uuid.New(),
-			RunId:            uuid.New(),
+			NamespaceId:      uuid.NewString(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
 			ScheduledEventId: rand.Int63(),
 			CreateTime:       timestamppb.New(rt1),
 			ExpiryTime:       timestamppb.New(rt2),

@@ -13,23 +13,28 @@ type Generator struct {
 
 	*schedulerpb.GeneratorState
 
-	Scheduler chasm.Field[*Scheduler]
+	Scheduler chasm.ParentPtr[*Scheduler]
 }
 
 // NewGenerator returns an intialized Generator component, which should
 // be parented under a Scheduler root node.
-func NewGenerator(ctx chasm.MutableContext, scheduler *Scheduler, invoker *Invoker) *Generator {
+func NewGenerator(ctx chasm.MutableContext) *Generator {
 	generator := &Generator{
 		GeneratorState: &schedulerpb.GeneratorState{
 			LastProcessedTime: nil,
 		},
-		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
 
 	// Kick off initial generator run.
 	ctx.AddTask(generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 
 	return generator
+}
+
+// Generate immediately kicks off a new GeneratorTask. Used after updating the
+// schedule specification.
+func (g *Generator) Generate(ctx chasm.MutableContext) {
+	ctx.AddTask(g, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 }
 
 func (g *Generator) LifecycleState(ctx chasm.Context) chasm.LifecycleState {

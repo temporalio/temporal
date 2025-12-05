@@ -15,6 +15,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/namespace"
@@ -305,6 +306,7 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 			WorkflowId: wid,
 			RunId:      rid,
 		},
+		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to get Workflow Mutable State: %s", err)
@@ -342,6 +344,7 @@ func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *
 			WorkflowId: wid,
 			RunId:      rid,
 		},
+		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
 	})
 	if err != nil {
 		return fmt.Errorf("unable to delete workflow execution: %s", err)
@@ -661,6 +664,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 			WorkflowId: wid,
 			RunId:      rid,
 		},
+		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
 	})
 	if err != nil {
 		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
@@ -731,6 +735,7 @@ func AdminReplicateWorkflow(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
+		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
 	})
 	if err != nil {
 		return fmt.Errorf("unable to replicate workflow: %w", err)

@@ -15,6 +15,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/namespace"
@@ -290,4 +291,15 @@ func getNamespaceID(c *cli.Context, clientFactory ClientFactory, nsName namespac
 	}
 
 	return namespace.ID(nsResponse.NamespaceInfo.GetId()), nil
+}
+
+func getArchetypeWithDefault(
+	c *cli.Context,
+	defaultAchetype chasm.Archetype,
+) chasm.Archetype {
+	archetype := c.String(FlagArchetype)
+	if archetype != "" {
+		return archetype
+	}
+	return defaultAchetype
 }

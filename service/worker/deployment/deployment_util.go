@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 const (
@@ -54,11 +54,11 @@ const (
 var (
 	DeploymentVisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		searchattribute.WorkflowType,
+		sadefs.WorkflowType,
 		DeploymentWorkflowType,
-		searchattribute.TemporalNamespaceDivision,
+		sadefs.TemporalNamespaceDivision,
 		DeploymentNamespaceDivision,
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 )
@@ -114,7 +114,7 @@ func BuildQueryWithSeriesFilter(seriesName string) string {
 	workflowID := GenerateDeploymentWorkflowIDForPatternMatching(seriesName)
 	escapedSeriesEntry := sqlparser.String(sqlparser.NewStrVal([]byte(workflowID)))
 
-	query := fmt.Sprintf("%s AND %s STARTS_WITH %s", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, escapedSeriesEntry)
+	query := fmt.Sprintf("%s AND %s STARTS_WITH %s", DeploymentVisibilityBaseListQuery, sadefs.WorkflowID, escapedSeriesEntry)
 	return query
 }
 

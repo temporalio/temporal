@@ -18,7 +18,7 @@ type Invoker struct {
 
 	*schedulerpb.InvokerState
 
-	Scheduler chasm.Field[*Scheduler]
+	Scheduler chasm.ParentPtr[*Scheduler]
 }
 
 func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
@@ -27,13 +27,12 @@ func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 
 // NewInvoker returns an intialized Invoker component, which should
 // be parented under a Scheduler root component.
-func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
+func NewInvoker(ctx chasm.MutableContext) *Invoker {
 	return &Invoker{
 		InvokerState: &schedulerpb.InvokerState{
 			BufferedStarts:        []*schedulespb.BufferedStart{},
-			RequestIdToWorkflowId: map[string]string{},
+			RequestIdToWorkflowId: make(map[string]string),
 		},
-		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
 }
 
@@ -42,12 +41,14 @@ func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
 func (i *Invoker) EnqueueBufferedStarts(ctx chasm.MutableContext, starts []*schedulespb.BufferedStart) {
 	i.BufferedStarts = append(i.BufferedStarts, starts...)
 
+	if i.RequestIdToWorkflowId == nil {
+		i.RequestIdToWorkflowId = make(map[string]string)
+	}
 	for _, start := range starts {
 		i.RequestIdToWorkflowId[start.RequestId] = start.WorkflowId
 	}
 
-	// Immediately begin processing the new starts.
-	ctx.AddTask(i, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
+	i.addTasks(ctx)
 }
 
 type processBufferResult struct {
@@ -236,7 +237,7 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	// backing off, or are still pending initial processing.
 	if (totalStarts - eligibleStarts) > 0 {
 		ctx.AddTask(i, chasm.TaskAttributes{
-			ScheduledTime: i.processingDeadline(),
+			ScheduledTime: i.processingDeadline(ctx),
 		}, &schedulerpb.InvokerProcessBufferTask{})
 	}
 
@@ -251,11 +252,13 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 // queue should be processed, taking into account starts that have not yet been
 // attempted, as well as those that are pending backoff to retry. If the buffer
 // is empty, the return value will be Time's zero value.
-func (i *Invoker) processingDeadline() time.Time {
+func (i *Invoker) processingDeadline(ctx chasm.Context) time.Time {
 	var deadline time.Time
 	for _, start := range i.GetBufferedStarts() {
 		if start.GetAttempt() == 0 {
-			return chasm.TaskScheduledTimeImmediate
+			// We use a current timestamp instead of TaskScheduledTimeImmediate so that we
+			// can validate the task with only the high watermark and task schedule time.
+			return ctx.Now(i)
 		}
 		backoff := start.GetBackoffTime().AsTime()
 		if deadline.IsZero() || backoff.Before(deadline) {

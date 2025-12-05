@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/service/history/api/listtasks"
 	"go.temporal.io/server/service/history/api/multioperation"
 	"go.temporal.io/server/service/history/api/pauseactivity"
+	"go.temporal.io/server/service/history/api/pauseworkflow"
 	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
@@ -74,6 +75,7 @@ import (
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
 	"go.temporal.io/server/service/history/api/unpauseactivity"
+	"go.temporal.io/server/service/history/api/unpauseworkflow"
 	"go.temporal.io/server/service/history/api/updateactivityoptions"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
@@ -390,7 +392,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
-		e.persistenceVisibilityMgr,
 		startRequest,
 		api.NewWorkflowLeaseAndContext,
 	)
@@ -412,7 +413,6 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
-		e.persistenceVisibilityMgr,
 		e.matchingClient,
 		e.testHooks,
 	)
@@ -423,7 +423,7 @@ func (e *historyEngineImpl) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
-	return api.GetOrPollMutableState(ctx, e.shardContext, request, e.workflowConsistencyChecker, e.eventNotifier)
+	return api.GetOrPollWorkflowMutableState(ctx, e.shardContext, request, e.workflowConsistencyChecker, e.eventNotifier)
 }
 
 // PollMutableState retrieves the mutable state of the workflow execution with long polling
@@ -432,7 +432,7 @@ func (e *historyEngineImpl) PollMutableState(
 	request *historyservice.PollMutableStateRequest,
 ) (*historyservice.PollMutableStateResponse, error) {
 
-	response, err := api.GetOrPollMutableState(
+	response, err := api.GetOrPollWorkflowMutableState(
 		ctx,
 		e.shardContext,
 		&historyservice.GetMutableStateRequest{
@@ -766,8 +766,13 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
-func (e *historyEngineImpl) ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error {
-	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName)
+func (e *historyEngineImpl) ReplicateVersionedTransition(
+	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
+	artifact *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+) error {
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, archetypeID, artifact, sourceClusterName)
 }
 
 func (e *historyEngineImpl) ImportWorkflowExecution(
@@ -974,10 +979,12 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	namespaceUUID namespace.ID,
 	execution *commonpb.WorkflowExecution,
+	archetypeID chasm.ArchetypeID,
 ) (retError error) {
 	return refreshworkflow.Invoke(
 		ctx,
 		definition.NewWorkflowKey(namespaceUUID.String(), execution.WorkflowId, execution.RunId),
+		archetypeID,
 		e.shardContext,
 		e.workflowConsistencyChecker,
 	)
@@ -1090,4 +1097,18 @@ func (e *historyEngineImpl) ResetActivity(
 	request *historyservice.ResetActivityRequest,
 ) (*historyservice.ResetActivityResponse, error) {
 	return resetactivity.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) PauseWorkflowExecution(
+	ctx context.Context,
+	req *historyservice.PauseWorkflowExecutionRequest,
+) (resp *historyservice.PauseWorkflowExecutionResponse, retError error) {
+	return pauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) UnpauseWorkflowExecution(
+	ctx context.Context,
+	req *historyservice.UnpauseWorkflowExecutionRequest,
+) (resp *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
+	return unpauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }

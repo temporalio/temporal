@@ -80,6 +80,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			f.NamespaceRegistry,
 			f.SchedulerRateLimiter,
 			f.TimeSource,
+			f.ChasmRegistry,
 			logger,
 			metricsHandler,
 		)
@@ -114,6 +115,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard.GetTimeSource(),
 		shard.GetNamespaceRegistry(),
 		shard.GetClusterMetadata(),
+		f.ChasmRegistry,
+		queues.GetTaskTypeTagValue,
 		logger,
 		metricsHandler,
 		f.Tracer,

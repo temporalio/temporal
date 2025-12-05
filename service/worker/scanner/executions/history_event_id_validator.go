@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -46,6 +47,10 @@ func (v *historyEventIDValidator) Validate(
 		return nil, err
 	}
 
+	if versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+		return nil, nil
+	}
+
 	// TODO currently history event ID validator only verifies
 	//  the first event batch exists, before doing whole history
 	//  validation, ensure not too much capacity is consumed
@@ -68,6 +73,9 @@ func (v *historyEventIDValidator) Validate(
 			NamespaceID: mutableState.GetExecutionInfo().NamespaceId,
 			WorkflowID:  mutableState.GetExecutionInfo().WorkflowId,
 			RunID:       mutableState.GetExecutionState().RunId,
+			// TODO: for now only workflow has events and non-empty event version history
+			// Later when supporting events for non-workflow component, we need to get ArchetypeID from MutableState.
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		switch err.(type) {
 		case nil:

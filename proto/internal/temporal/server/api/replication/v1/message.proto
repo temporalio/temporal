@@ -228,6 +228,8 @@ message VerifyVersionedTransitionTaskAttributes {
     int64 next_event_id = 4;
     repeated temporal.server.api.history.v1.VersionHistoryItem event_version_history = 5;
     string new_run_id = 6;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 7;
 }
 
 message SyncVersionedTransitionTaskAttributes {
@@ -239,6 +241,8 @@ message SyncVersionedTransitionTaskAttributes {
     string namespace_id = 6;
     string workflow_id = 7;
     string run_id = 8;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 9;
 }
 
 message VersionedTransitionArtifact {
@@ -251,4 +255,15 @@ message VersionedTransitionArtifact {
     bool is_first_sync = 5;
     bool is_close_transfer_task_acked = 6;
     bool is_force_replication = 7;
+}
+
+message MigrationExecutionInfo {
+    // The proto json name of this field needs to be "workflowId",
+    // to be backward compatibility with commonpb.WorkflowExecution,
+    // which is what used to be used in migration workflow's activity
+    // input/output.
+    string business_id = 1 [json_name = "workflowId"];
+    string run_id = 2;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 3; 
 }

@@ -44,6 +44,10 @@ type (
 	HasDestination interface {
 		GetDestination() string
 	}
+
+	HasArchetypeID interface {
+		GetArchetypeID() uint32
+	}
 )
 
 // GetShardIDForTask computes the shardID for a given task using the task's namespace, workflow ID and the number of

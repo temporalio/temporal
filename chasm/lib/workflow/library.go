@@ -13,11 +13,11 @@ func NewLibrary() *Library {
 }
 
 func (l *Library) Name() string {
-	return "workflow"
+	return chasm.WorkflowLibraryName
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Workflow]("Workflow"),
+		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName),
 	}
 }

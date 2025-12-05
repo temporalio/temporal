@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -85,7 +85,7 @@ func TestInvoke(t *testing.T) {
 					workflowKey := definition.NewWorkflowKey(
 						string(tests.NamespaceID),
 						strconv.Itoa(i),
-						uuid.New(),
+						uuid.NewString(),
 					)
 					// each workflow has two transfer tasks and one timer task
 					for _, task := range []tasks.Task{

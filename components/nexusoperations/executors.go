@@ -27,7 +27,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
 
@@ -180,7 +180,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		RequestId:   args.requestID,
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
+		return fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
 	header := nexus.Header(args.header)
@@ -297,7 +297,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	err = e.saveResult(ctx, env, ref, result, callErr)
 
 	if callErr != nil && isDestinationDown(callErr) {
-		err = queues.NewDestinationDownError(callErr.Error(), err)
+		err = queueserrors.NewDestinationDownError(callErr.Error(), err)
 	}
 
 	return err
@@ -453,8 +453,8 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		// operation if the response's operation token is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
 	case errors.Is(callErr, ErrOperationTimeoutBelowMin):
-		// Operation timeout is not retryable
-		return handleNonRetryableStartOperationError(node, operation, callErr)
+		// Not enough time to execute another request, resolve the operation with a timeout.
+		return e.recordOperationTimeout(node)
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		// If timed out, we don't leak internal info to the user
 		callErr = errRequestTimedOut
@@ -513,6 +513,10 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 }
 
 func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
+	return e.recordOperationTimeout(node)
+}
+
+func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {
@@ -638,7 +642,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
 
 	if callErr != nil && isDestinationDown(callErr) {
-		err = queues.NewDestinationDownError(callErr.Error(), err)
+		err = queueserrors.NewDestinationDownError(callErr.Error(), err)
 	}
 
 	return err

@@ -44,9 +44,6 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 			ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
 			Version:         row.Version,
 		}
-		if err != nil {
-			return nil, err
-		}
 		clusterMetadata = append(clusterMetadata, resp)
 	}
 

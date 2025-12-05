@@ -35,6 +35,9 @@ message SchedulerState {
 message GeneratorState {
     // High water mark.
     google.protobuf.Timestamp last_processed_time = 3;
+
+    // A list of upcoming times an action will be triggered.
+    repeated google.protobuf.Timestamp future_action_times = 4;
 }
 
 // CHASM scheduler's Invoker internal state.
@@ -84,11 +87,9 @@ message BackfillerState {
     int64 attempt = 8;
 }
 
-// CHASM scheduler retains the payload data for the last completed workflow
-// (either failure or success). 
+// CHASM scheduler retains the payload data for the last completed workflow. Both
+// last success and failure are stored simultaneously.
 message LastCompletionResult {
-    oneof outcome {
-        temporal.api.common.v1.Payload success = 1;
-        temporal.api.failure.v1.Failure failure = 2;
-    }
+    temporal.api.common.v1.Payload success = 1;
+    temporal.api.failure.v1.Failure failure = 2;
 }

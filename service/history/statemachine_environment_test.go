@@ -16,7 +16,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -276,7 +276,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			tc.mutateNode(node)
 			tc.mutateRef(&ref)
 
-			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 			if tc.clearTransitionHistory {
 				mutableState.GetExecutionInfo().TransitionHistory = nil
 			}
@@ -499,14 +499,15 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID.String(), workflowID, currentRunID)).AnyTimes()
 
 			mockWorkflowCache := cache.NewMockCache(controller)
-			mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+			mockWorkflowCache.EXPECT().GetOrCreateCurrentExecution(
 				gomock.Any(),
 				mockShard,
 				namespaceID,
 				workflowID,
+				chasm.WorkflowArchetypeID,
 				locks.PriorityLow,
 			).Return(cache.NoopReleaseFn, nil).AnyTimes()
-			mockWorkflowCache.EXPECT().GetOrCreateChasmEntity(
+			mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(
 				gomock.Any(),
 				mockShard,
 				namespaceID,
@@ -514,7 +515,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 					WorkflowId: workflowID,
 					RunId:      currentRunID,
 				},
-				chasmworkflow.Archetype,
+				chasm.WorkflowArchetypeID,
 				locks.PriorityLow,
 			).Return(mockWorkflowContext, cache.NoopReleaseFn, nil).Times(1)
 
@@ -523,6 +524,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				ShardID:     mockShard.GetShardID(),
 				NamespaceID: namespaceID.String(),
 				WorkflowID:  workflowID,
+				ArchetypeID: chasm.WorkflowArchetypeID,
 			}).Return(&persistence.GetCurrentExecutionResponse{
 				RunID: currentRunID,
 			}, nil).Times(1)
@@ -536,6 +538,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 					ShardID:     mockShard.GetShardID(),
 					NamespaceID: namespaceID.String(),
 					WorkflowID:  workflowID,
+					ArchetypeID: chasm.WorkflowArchetypeID,
 				}).Return(&persistence.GetCurrentExecutionResponse{
 					RunID: currentRunID,
 				}, nil).Times(1)
@@ -547,7 +550,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				mockWorkflowCache,
 				namespaceID.String(),
 				workflowID,
-				chasmworkflow.Archetype,
+				chasm.WorkflowArchetypeID,
 				locks.PriorityLow,
 			)
 			if tc.currentRunChanged {

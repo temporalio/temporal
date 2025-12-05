@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
@@ -152,7 +153,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 	}
 
 	for saName, saType := range request.GetSearchAttributes() {
-		if searchattribute.IsReserved(saName) {
+		if sadefs.IsReserved(saName) {
 			return nil, serviceerror.NewInvalidArgumentf(errSearchAttributeIsReservedMessage, saName)
 		}
 		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
@@ -289,7 +290,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		targetFieldName := ""
 		cntUsed := 0
 		for fieldName, fieldType := range cmCustomSearchAttributes {
-			if fieldType != saType || !searchattribute.IsPreallocatedCSAFieldName(fieldName, fieldType) {
+			if fieldType != saType || !sadefs.IsPreallocatedCSAFieldName(fieldName, fieldType) {
 				continue
 			}
 			if _, ok := fieldToAliasMap[fieldName]; ok {

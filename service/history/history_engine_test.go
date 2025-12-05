@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -33,6 +33,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -1576,7 +1577,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	identity := "testIdentity"
 
 	ns := tests.LocalNamespaceEntry.Clone(
-		namespace.WithID(uuid.New()),
+		namespace.WithID(uuid.NewString()),
 		namespace.WithBadBinary("test-bad-binary"),
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(ns.ID()).Return(ns, nil).AnyTimes()
@@ -1719,7 +1720,7 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration() *histor
 		Identity:          identity,
 		SignalName:        "test signal name",
 		Input:             payloads.EncodeString("test input"),
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 	}
 	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId:   tests.NamespaceID.String(),
@@ -1740,7 +1741,7 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration() *histor
 	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
 	s.NoError(err)
 
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{}}, nil)
@@ -1927,7 +1928,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Ca
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{}}, nil)
@@ -4915,7 +4916,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	identity := "testIdentity"
 	signalName := "my signal name 2"
 	input := payloads.EncodeString("test input 2")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -4958,7 +4959,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 	identity := "testIdentity"
 	signalName := "my signal name 2"
 	input := payloads.EncodeString("test input 2")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -5101,7 +5102,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	removeRequest = &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId:       tests.NamespaceID.String(),
 		WorkflowExecution: &execution,
@@ -5139,7 +5140,7 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 			Version:   eventVersion,
 		},
 	}
-	globalNamespaceID := uuid.New()
+	globalNamespaceID := uuid.NewString()
 	globalNamespaceName := "global-namespace-name"
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: globalNamespaceID, Name: globalNamespaceName},
@@ -5244,7 +5245,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 			Version:   eventVersion,
 		},
 	}
-	globalNamespaceID := uuid.New()
+	globalNamespaceID := uuid.NewString()
 	globalNamespaceName := "global-namespace-name"
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: globalNamespaceID, Name: globalNamespaceName},
@@ -5307,8 +5308,6 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	var recordedTasks []tasks.Task
 
-	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("mock")
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("mock", false).Return(searchattribute.NameTypeMap{}, nil)
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 		recordedTasks = request.NewWorkflowSnapshot.Tasks[tasks.CategoryTransfer]
 		persistenceResponse := persistence.CreateWorkflowExecutionResponse{NewMutableStateStats: tests.CreateWorkflowExecutionResponse.NewMutableStateStats}
@@ -5337,11 +5336,12 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 		return response, err
 	})
 	s.NoError(err)
-	s.Equal(len(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events), 3)
-	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[0].EventType, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
-	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[1].EventType, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
-	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[2].EventType, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
-	s.Equal(len(recordedTasks), 0)
+	startResp := response.(*historyservice.StartWorkflowExecutionResponse)
+	s.Len(startResp.EagerWorkflowTask.History.Events, 3)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startResp.EagerWorkflowTask.History.Events[0].EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, startResp.EagerWorkflowTask.History.Events[1].EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startResp.EagerWorkflowTask.History.Events[2].EventType)
+	s.Empty(recordedTasks)
 }
 
 func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
@@ -5383,6 +5383,53 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 	s.Equal(len(recordedTasks), 0)
 }
 
+func (s *engineSuite) TestEagerWorkflowStart_WithSearchAttributes() {
+	var recordedTasks []tasks.Task
+
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+		recordedTasks = request.NewWorkflowSnapshot.Tasks[tasks.CategoryTransfer]
+		persistenceResponse := persistence.CreateWorkflowExecutionResponse{NewMutableStateStats: tests.CreateWorkflowExecutionResponse.NewMutableStateStats}
+		return &persistenceResponse, nil
+	})
+
+	searchAttributes := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"Keyword01": payload.EncodeString("random-keyword"),
+		},
+	}
+	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.Resource.Logger,
+		s.config.LogAllReqErrors,
+		s.mockErrorHandler)
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Attempt:     1,
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId:            "test",
+				Namespace:             tests.Namespace.String(),
+				WorkflowType:          &commonpb.WorkflowType{Name: "test"},
+				TaskQueue:             &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "test"},
+				Identity:              "test",
+				RequestId:             "test",
+				SearchAttributes:      searchAttributes,
+				RequestEagerExecution: true,
+			},
+		})
+		return response, err
+	})
+	s.NoError(err)
+	startResp := response.(*historyservice.StartWorkflowExecutionResponse)
+	s.Len(startResp.EagerWorkflowTask.History.Events, 3)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startResp.EagerWorkflowTask.History.Events[0].EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, startResp.EagerWorkflowTask.History.Events[1].EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startResp.EagerWorkflowTask.History.Events[2].EventType)
+	workflowStartedEventAttr := startResp.EagerWorkflowTask.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
+	s.Equal(searchAttributes.IndexedFields, workflowStartedEventAttr.GetSearchAttributes().GetIndexedFields())
+	s.Empty(recordedTasks)
+}
+
 func (s *engineSuite) TestGetHistory() {
 	firstEventID := int64(100)
 	nextEventID := int64(102)
@@ -5412,7 +5459,7 @@ func (s *engineSuite) TestGetHistory() {
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"Keyword01":             payload.EncodeString("random-keyword"),
 								"TemporalChangeVersion": payload.EncodeString("random-data"),
 							},
 						},
@@ -5424,7 +5471,7 @@ func (s *engineSuite) TestGetHistory() {
 		Size:          1,
 	}, nil)
 
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
@@ -5450,13 +5497,13 @@ func (s *engineSuite) TestGetHistory() {
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
 
-	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasForCustomKeywordField"].GetMetadata()["type"])
+	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasForKeyword01"].GetMetadata()["type"])
 	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
-	newRunID := uuid.New()
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.NewString()}
+	newRunID := uuid.NewString()
 
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -5499,6 +5546,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  we.WorkflowId,
 		RunID:       we.RunId,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
 	// GetWorkflowExecutionHistory will request the last event
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -5528,7 +5576,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	}, nil).Times(2)
 
 	s.mockExecutionMgr.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 
 	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
@@ -5567,13 +5615,13 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 
 func (s *engineSuite) TestGetWorkflowExecutionHistoryWhenInternalRawHistoryIsEnabled() {
 	s.config.SendRawHistoryBetweenInternalServices = func() bool { return true }
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.NewString()}
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{},
 		"")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -5616,6 +5664,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryWhenInternalRawHistoryIsEna
 		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  we.WorkflowId,
 		RunID:       we.RunId,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
 	// GetWorkflowExecutionHistory will request the last event
 	history := historypb.History{
@@ -5657,7 +5706,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryWhenInternalRawHistoryIsEna
 	}, nil).Times(1)
 
 	s.mockExecutionMgr.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 
 	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
@@ -5679,7 +5728,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryWhenInternalRawHistoryIsEna
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.NewString()}
 
 	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
 	s.NoError(err)
@@ -5768,7 +5817,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkf
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	namespaceEntry := namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Id: namespaceID.String(),
@@ -5786,7 +5835,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkf
 				NamespaceId: namespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -5804,7 +5853,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidRunID
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	namespaceEntry := namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Id: namespaceID.String(),
@@ -5840,7 +5889,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCac
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(nil, fmt.Errorf("test"))
 	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
@@ -5849,7 +5898,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCac
 				NamespaceId: namespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -5908,7 +5957,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 				NamespaceId: tests.NamespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -5962,7 +6011,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID(
 				NamespaceId: tests.NamespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      10,
 				StartEventVersion: 100,
@@ -5981,7 +6030,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidWorkflo
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	namespaceEntry := namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Id: namespaceID.String(),
@@ -5999,7 +6048,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidWorkflo
 				NamespaceId: namespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -6017,7 +6066,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidRunID()
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	namespaceEntry := namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Id: namespaceID.String(),
@@ -6053,7 +6102,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnNamespaceCache
 	s.NoError(err)
 
 	ctx := context.Background()
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(nil, fmt.Errorf("test"))
 	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryRequest{
@@ -6062,7 +6111,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnNamespaceCache
 				NamespaceId: namespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -6121,7 +6170,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory() {
 				NamespaceId: tests.NamespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      1,
 				StartEventVersion: 100,
@@ -6179,7 +6228,7 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_SameStartIDAndEndID() 
 				NamespaceId: tests.NamespaceID.String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflowID",
-					RunId:      uuid.New(),
+					RunId:      uuid.NewString(),
 				},
 				StartEventId:      10,
 				StartEventVersion: 100,
@@ -6202,14 +6251,14 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	endItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, endItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			},
 			StartEventId:      inputStartEventID,
 			StartEventVersion: inputStartVersion,
@@ -6239,14 +6288,14 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			},
 			StartEventId:      common.EmptyEventID,
 			StartEventVersion: common.EmptyVersion,
@@ -6276,14 +6325,14 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			},
 			StartEventId:      inputStartEventID,
 			StartEventVersion: inputStartVersion,
@@ -6318,14 +6367,14 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
 	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory2)
 	s.NoError(err)
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := namespace.ID(uuid.NewString())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+				RunId:      uuid.NewString(),
 			},
 			StartEventId:      9,
 			StartEventVersion: 20,

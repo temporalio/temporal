@@ -43,6 +43,13 @@ func WithConfigLoader(configDir string, env string, zone string) ServerOption {
 	})
 }
 
+// WithServerConfigFilePath sets a custom configuration load
+func WithServerConfigFilePath(filePath string) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.configFilePath = filePath
+	})
+}
+
 // ForServices indicates which supplied services (e.g. frontend, history, matching, worker) within the server to start
 func ForServices(names []string) ServerOption {
 	return applyFunc(func(s *serverOptions) {

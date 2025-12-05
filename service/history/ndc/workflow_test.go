@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -50,9 +50,9 @@ func (s *workflowSuite) SetupTest() {
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.namespaceID = uuid.New()
+	s.namespaceID = uuid.NewString()
 	s.workflowID = "some random workflow ID"
-	s.runID = uuid.New()
+	s.runID = uuid.NewString()
 }
 
 func (s *workflowSuite) TearDownTest() {
@@ -181,7 +181,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 		RunId: s.runID,
 	}).AnyTimes()
 
-	incomingRunID := uuid.New()
+	incomingRunID := uuid.NewString()
 	incomingLastRunningClock := int64(144)
 	incomingLastEventVersion := lastEventVersion - 1
 	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -220,7 +220,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		wcache.NoopReleaseFn,
 	)
 
-	incomingRunID := uuid.New()
+	incomingRunID := uuid.NewString()
 	incomingLastRunningClock := int64(144)
 	incomingLastEventVersion := lastEventVersion + 1
 	incomingMockContext := historyi.NewMockWorkflowContext(s.controller)
@@ -308,7 +308,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		wcache.NoopReleaseFn,
 	)
 
-	incomingRunID := uuid.New()
+	incomingRunID := uuid.NewString()
 	incomingLastRunningClock := int64(144)
 	incomingLastEventVersion := lastEventVersion + 1
 	incomingMockContext := historyi.NewMockWorkflowContext(s.controller)

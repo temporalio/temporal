@@ -46,48 +46,63 @@ func (m *MockWorkflowConsistencyChecker) EXPECT() *MockWorkflowConsistencyChecke
 }
 
 // GetChasmLease mocks base method.
-func (m *MockWorkflowConsistencyChecker) GetChasmLease(ctx context.Context, reqClock *clock.VectorClock, workflowKey definition.WorkflowKey, archetype chasm.Archetype, lockPriority locks.Priority) (WorkflowLease, error) {
+func (m *MockWorkflowConsistencyChecker) GetChasmLease(ctx context.Context, reqClock *clock.VectorClock, workflowKey definition.WorkflowKey, archetypeID chasm.ArchetypeID, lockPriority locks.Priority) (WorkflowLease, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetChasmLease", ctx, reqClock, workflowKey, archetype, lockPriority)
+	ret := m.ctrl.Call(m, "GetChasmLease", ctx, reqClock, workflowKey, archetypeID, lockPriority)
 	ret0, _ := ret[0].(WorkflowLease)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetChasmLease indicates an expected call of GetChasmLease.
-func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetChasmLease(ctx, reqClock, workflowKey, archetype, lockPriority any) *gomock.Call {
+func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetChasmLease(ctx, reqClock, workflowKey, archetypeID, lockPriority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmLease", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetChasmLease), ctx, reqClock, workflowKey, archetype, lockPriority)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmLease", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetChasmLease), ctx, reqClock, workflowKey, archetypeID, lockPriority)
 }
 
 // GetChasmLeaseWithConsistencyCheck mocks base method.
-func (m *MockWorkflowConsistencyChecker) GetChasmLeaseWithConsistencyCheck(ctx context.Context, reqClock *clock.VectorClock, consistencyPredicate MutableStateConsistencyPredicate, workflowKey definition.WorkflowKey, archetype chasm.Archetype, lockPriority locks.Priority) (WorkflowLease, error) {
+func (m *MockWorkflowConsistencyChecker) GetChasmLeaseWithConsistencyCheck(ctx context.Context, reqClock *clock.VectorClock, consistencyPredicate MutableStateConsistencyPredicate, workflowKey definition.WorkflowKey, archetypeID chasm.ArchetypeID, lockPriority locks.Priority) (WorkflowLease, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetChasmLeaseWithConsistencyCheck", ctx, reqClock, consistencyPredicate, workflowKey, archetype, lockPriority)
+	ret := m.ctrl.Call(m, "GetChasmLeaseWithConsistencyCheck", ctx, reqClock, consistencyPredicate, workflowKey, archetypeID, lockPriority)
 	ret0, _ := ret[0].(WorkflowLease)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetChasmLeaseWithConsistencyCheck indicates an expected call of GetChasmLeaseWithConsistencyCheck.
-func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetChasmLeaseWithConsistencyCheck(ctx, reqClock, consistencyPredicate, workflowKey, archetype, lockPriority any) *gomock.Call {
+func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetChasmLeaseWithConsistencyCheck(ctx, reqClock, consistencyPredicate, workflowKey, archetypeID, lockPriority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmLeaseWithConsistencyCheck", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetChasmLeaseWithConsistencyCheck), ctx, reqClock, consistencyPredicate, workflowKey, archetype, lockPriority)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmLeaseWithConsistencyCheck", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetChasmLeaseWithConsistencyCheck), ctx, reqClock, consistencyPredicate, workflowKey, archetypeID, lockPriority)
 }
 
-// GetCurrentRunID mocks base method.
-func (m *MockWorkflowConsistencyChecker) GetCurrentRunID(ctx context.Context, namespaceID, workflowID string, lockPriority locks.Priority) (string, error) {
+// GetCurrentChasmRunID mocks base method.
+func (m *MockWorkflowConsistencyChecker) GetCurrentChasmRunID(ctx context.Context, namespaceID, workflowID string, archetypeID chasm.ArchetypeID, lockPriority locks.Priority) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentRunID", ctx, namespaceID, workflowID, lockPriority)
+	ret := m.ctrl.Call(m, "GetCurrentChasmRunID", ctx, namespaceID, workflowID, archetypeID, lockPriority)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetCurrentRunID indicates an expected call of GetCurrentRunID.
-func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetCurrentRunID(ctx, namespaceID, workflowID, lockPriority any) *gomock.Call {
+// GetCurrentChasmRunID indicates an expected call of GetCurrentChasmRunID.
+func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetCurrentChasmRunID(ctx, namespaceID, workflowID, archetypeID, lockPriority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentRunID", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetCurrentRunID), ctx, namespaceID, workflowID, lockPriority)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentChasmRunID", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetCurrentChasmRunID), ctx, namespaceID, workflowID, archetypeID, lockPriority)
+}
+
+// GetCurrentWorkflowRunID mocks base method.
+func (m *MockWorkflowConsistencyChecker) GetCurrentWorkflowRunID(ctx context.Context, namespaceID, workflowID string, lockPriority locks.Priority) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentWorkflowRunID", ctx, namespaceID, workflowID, lockPriority)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentWorkflowRunID indicates an expected call of GetCurrentWorkflowRunID.
+func (mr *MockWorkflowConsistencyCheckerMockRecorder) GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentWorkflowRunID", reflect.TypeOf((*MockWorkflowConsistencyChecker)(nil).GetCurrentWorkflowRunID), ctx, namespaceID, workflowID, lockPriority)
 }
 
 // GetWorkflowCache mocks base method.

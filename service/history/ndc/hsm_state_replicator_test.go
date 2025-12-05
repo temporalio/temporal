@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -12,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -123,7 +124,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_WorkflowNotFound() {
 	nonExistKey := definition.NewWorkflowKey(
 		s.namespaceEntry.ID().String(),
 		"non-exist workflowID",
-		uuid.New(),
+		uuid.NewString(),
 	)
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
@@ -131,6 +132,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_WorkflowNotFound() {
 		NamespaceID: nonExistKey.NamespaceID,
 		WorkflowID:  nonExistKey.WorkflowID,
 		RunID:       nonExistKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
 	lastEventID := int64(10)
@@ -162,6 +164,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_LocalEventVersionLarger() 
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -187,6 +190,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_IncomingEventVersionLarger
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -222,6 +226,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_LocalEventVersionSuperSet() {
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -271,6 +276,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingEventVersionSuperSet() {
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -307,6 +313,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateStale() {
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -345,6 +352,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionStale() {
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -384,6 +392,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransit
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -424,6 +433,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionNewer() {
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -466,6 +476,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransit
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -508,6 +519,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowOpen() 
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -568,6 +580,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowZombie(
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -616,6 +629,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
@@ -679,6 +693,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 		NamespaceID: s.workflowKey.NamespaceID,
 		WorkflowID:  s.workflowKey.WorkflowID,
 		RunID:       s.workflowKey.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,

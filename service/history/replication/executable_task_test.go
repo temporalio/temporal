@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -549,6 +550,7 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 		NamespaceId: uuid.NewString(),
 		WorkflowId:  uuid.NewString(),
 		RunId:       uuid.NewString(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
 		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
@@ -576,6 +578,7 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 				WorkflowId: syncStateErr.WorkflowId,
 				RunId:      syncStateErr.RunId,
 			},
+			ArchetypeId:         syncStateErr.ArchetypeId,
 			VersionedTransition: syncStateErr.VersionedTransition,
 			VersionHistories:    syncStateErr.VersionHistories,
 			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
@@ -603,6 +606,7 @@ func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBuffer
 		NamespaceId: uuid.NewString(),
 		WorkflowId:  uuid.NewString(),
 		RunId:       uuid.NewString(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
 		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
@@ -630,6 +634,7 @@ func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBuffer
 				WorkflowId: syncStateErr.WorkflowId,
 				RunId:      syncStateErr.RunId,
 			},
+			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
 			VersionHistories:    syncStateErr.VersionHistories,
 			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
@@ -1071,6 +1076,7 @@ func (s *executableTaskSuite) TestSyncState() {
 		NamespaceId: uuid.NewString(),
 		WorkflowId:  uuid.NewString(),
 		RunId:       uuid.NewString(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
 		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
@@ -1109,6 +1115,7 @@ func (s *executableTaskSuite) TestSyncState() {
 				WorkflowId: syncStateErr.WorkflowId,
 				RunId:      syncStateErr.RunId,
 			},
+			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
 			VersionHistories:    syncStateErr.VersionHistories,
 			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
@@ -1124,7 +1131,7 @@ func (s *executableTaskSuite) TestSyncState() {
 		syncStateErr.WorkflowId,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateVersionedTransition(gomock.Any(), versionedTransitionArtifact, s.sourceCluster).Return(nil)
+	engine.EXPECT().ReplicateVersionedTransition(gomock.Any(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, s.sourceCluster).Return(nil)
 
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
 	s.NoError(err)

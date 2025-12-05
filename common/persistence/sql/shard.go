@@ -86,6 +86,7 @@ func (m *sqlShardStore) UpdateShard(
 			tx,
 			request.ShardID,
 			request.PreviousRangeID,
+			m.logger,
 		); err != nil {
 			return err
 		}
@@ -123,6 +124,7 @@ func lockShard(
 	tx sqlplugin.Tx,
 	shardID int32,
 	oldRangeID int64,
+	logger log.Logger,
 ) error {
 
 	rangeID, err := tx.WriteLockShards(ctx, sqlplugin.ShardsFilter{

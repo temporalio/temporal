@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -78,18 +79,32 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	return consts.ErrTaskDiscarded
 }
 
-func isWorkflowExistOnSource(
+func executionExistsOnSource(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
+	archetypeID chasm.ArchetypeID,
 	logger log.Logger,
 	currentCluster string,
 	clientBean client.Bean,
 	registry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 ) bool {
 	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(workflowKey.NamespaceID))
 	if err != nil {
 		return true
 	}
+
+	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
+	if !ok {
+		logger.Error("Unknown archetype ID.",
+			tag.ArchetypeID(archetypeID),
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+		)
+		return true
+	}
+
 	remoteClusterName, err := getSourceClusterName(
 		currentCluster,
 		registry,
@@ -108,6 +123,7 @@ func isWorkflowExistOnSource(
 			WorkflowId: workflowKey.GetWorkflowID(),
 			RunId:      workflowKey.GetRunID(),
 		},
+		Archetype:       archetype,
 		SkipForceReload: true,
 	})
 	if err != nil {

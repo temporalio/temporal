@@ -63,7 +63,7 @@ func Invoke(
 		versionHistoryItem *historyspb.VersionHistoryItem,
 		versionedTransition *persistencespb.VersionedTransition,
 	) ([]byte, string, int64, int64, bool, *historyspb.VersionHistoryItem, *persistencespb.VersionedTransition, error) {
-		response, err := api.GetOrPollMutableState(
+		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
 			&historyservice.GetMutableStateRequest{
@@ -87,7 +87,7 @@ func Invoke(
 				tag.Error(err),
 			)
 			// if we are only querying for close event, and encounter CurrentBranchChanged error, then we retry with empty branch token to get the close event
-			response, err = api.GetOrPollMutableState(
+			response, err = api.GetOrPollWorkflowMutableState(
 				ctx,
 				shardContext,
 				&historyservice.GetMutableStateRequest{

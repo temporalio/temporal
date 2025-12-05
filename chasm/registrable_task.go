@@ -1,18 +1,22 @@
 package chasm
 
 import (
+	"fmt"
 	"reflect"
 )
 
 type (
 	RegistrableTask struct {
 		taskType        string
-		library         namer
 		goType          reflect.Type
 		componentGoType reflect.Type  // It is not clear how this one is used.
 		validateFn      reflect.Value // The Validate() method of the TaskValidator interface.
 		executeFn       reflect.Value // The Execute() method of the TaskExecutor interface.
 		isPureTask      bool
+
+		// Those two fields are initialized when the component is registered to a library.
+		library    namer
+		taskTypeID uint32
 	}
 
 	RegistrableTaskOption func(*RegistrableTask)
@@ -76,10 +80,24 @@ func newRegistrableTask(
 	return rt
 }
 
+func (rt *RegistrableTask) registerToLibrary(
+	library namer,
+) (string, uint32, error) {
+	if rt.library != nil {
+		return "", 0, fmt.Errorf("task %s is already registered in library %s", rt.taskType, rt.library.Name())
+	}
+
+	rt.library = library
+
+	fqn := rt.fqType()
+	rt.taskTypeID = generateTypeID(fqn)
+	return fqn, rt.taskTypeID, nil
+}
+
 // fqType returns the fully qualified name of the task, which is a combination of
 // the library name and the task type. This is used to uniquely identify
 // the task in the registry.
-func (rt RegistrableTask) fqType() string {
+func (rt *RegistrableTask) fqType() string {
 	if rt.library == nil {
 		// this should never happen because the task is only accessible from the library.
 		panic("task is not registered to a library")

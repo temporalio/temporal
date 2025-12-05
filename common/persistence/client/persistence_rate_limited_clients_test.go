@@ -10,7 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/mock"
@@ -164,8 +167,8 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 				serialization.NewSerializer(),
 				nil,
 				"",
-				nil,
-				nil,
+				metrics.NoopMetricsHandler,
+				log.NewTestLogger(),
 				nil,
 				func() bool { return false },
 				func() bool { return false },
@@ -191,7 +194,9 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 				{
 					name: "DeleteWorkflowExecution",
 					call: func() error {
-						return executionManager.DeleteWorkflowExecution(context.Background(), &persistence.DeleteWorkflowExecutionRequest{})
+						return executionManager.DeleteWorkflowExecution(context.Background(), &persistence.DeleteWorkflowExecutionRequest{
+							ArchetypeID: chasm.WorkflowArchetypeID,
+						})
 					},
 				},
 				{

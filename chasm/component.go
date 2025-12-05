@@ -88,9 +88,9 @@ const (
 // say, the chasm.UpdateComponent method.
 // So similar to the chasm engine, handler needs to add the intent
 // to the context.
-type operationIntentCtxKeyType string
+type operationIntentCtxKeyType struct{}
 
-const operationIntentCtxKey engineCtxKeyType = "chasmOperationIntent"
+var operationIntentCtxKey = operationIntentCtxKeyType{}
 
 func newContextWithOperationIntent(
 	ctx context.Context,

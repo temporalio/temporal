@@ -88,6 +88,7 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            f.getForwardInfo(task),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
+				Stamp:                  task.event.Data.GetStamp(),
 				Priority:               task.event.Data.GetPriority(),
 			},
 		)
@@ -104,8 +105,8 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            f.getForwardInfo(task),
-				Stamp:                  task.event.Data.GetStamp(),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
+				Stamp:                  task.event.Data.GetStamp(),
 				Priority:               task.event.Data.GetPriority(),
 				ComponentRef:           task.event.Data.GetComponentRef(),
 			},

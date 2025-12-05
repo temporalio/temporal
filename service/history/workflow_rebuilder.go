@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -114,6 +115,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 				ShardID:     r.shard.GetShardID(),
 				NamespaceID: workflowKey.NamespaceID,
 				WorkflowID:  workflowKey.WorkflowID,
+				ArchetypeID: chasm.WorkflowArchetypeID,
 			},
 		)
 		if err != nil && resp == nil {
@@ -128,6 +130,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 			NamespaceID: workflowKey.NamespaceID,
 			WorkflowID:  workflowKey.WorkflowID,
 			RunID:       workflowKey.RunID,
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		},
 	)
 	if err != nil && resp == nil {
@@ -198,6 +201,7 @@ func (r *workflowRebuilderImpl) overwriteToDB(
 
 	return r.transaction.SetWorkflowExecution(
 		ctx,
+		chasm.WorkflowArchetypeID,
 		resetWorkflowSnapshot,
 	)
 }

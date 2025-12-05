@@ -279,7 +279,12 @@ func sequentialTaskQueueFactoryProvider(
 		if config.EnableReplicationTaskBatching() {
 			return NewSequentialBatchableTaskQueue(task, nil, logger, metricsHandler)
 		}
-		return NewSequentialTaskQueue(task)
+		item := task.QueueID()
+		workflowKey, ok := item.(definition.WorkflowKey)
+		if !ok {
+			return NewSequentialTaskQueueWithID(item)
+		}
+		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
 	}
 }
 

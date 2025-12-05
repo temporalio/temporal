@@ -9,20 +9,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-func (c *metricClient) CountActivityExecutions(
-	ctx context.Context,
-	request *workflowservice.CountActivityExecutionsRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.CountActivityExecutionsResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientCountActivityExecutions")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.CountActivityExecutions(ctx, request, opts...)
-}
-
 func (c *metricClient) CountWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.CountWorkflowExecutionsRequest,
@@ -63,20 +49,6 @@ func (c *metricClient) CreateWorkflowRule(
 	}()
 
 	return c.client.CreateWorkflowRule(ctx, request, opts...)
-}
-
-func (c *metricClient) DeleteActivityExecution(
-	ctx context.Context,
-	request *workflowservice.DeleteActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.DeleteActivityExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDeleteActivityExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.DeleteActivityExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) DeleteSchedule(
@@ -471,20 +443,6 @@ func (c *metricClient) GetWorkflowExecutionHistoryReverse(
 	return c.client.GetWorkflowExecutionHistoryReverse(ctx, request, opts...)
 }
 
-func (c *metricClient) ListActivityExecutions(
-	ctx context.Context,
-	request *workflowservice.ListActivityExecutionsRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.ListActivityExecutionsResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientListActivityExecutions")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.ListActivityExecutions(ctx, request, opts...)
-}
-
 func (c *metricClient) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
@@ -695,32 +653,18 @@ func (c *metricClient) PauseActivity(
 	return c.client.PauseActivity(ctx, request, opts...)
 }
 
-func (c *metricClient) PauseActivityExecution(
+func (c *metricClient) PauseWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.PauseActivityExecutionRequest,
+	request *workflowservice.PauseWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (_ *workflowservice.PauseActivityExecutionResponse, retError error) {
+) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPauseActivityExecution")
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPauseWorkflowExecution")
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.PauseActivityExecution(ctx, request, opts...)
-}
-
-func (c *metricClient) PollActivityExecution(
-	ctx context.Context,
-	request *workflowservice.PollActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.PollActivityExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPollActivityExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.PollActivityExecution(ctx, request, opts...)
+	return c.client.PauseWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) PollActivityTaskQueue(
@@ -849,20 +793,6 @@ func (c *metricClient) RegisterNamespace(
 	return c.client.RegisterNamespace(ctx, request, opts...)
 }
 
-func (c *metricClient) RequestCancelActivityExecution(
-	ctx context.Context,
-	request *workflowservice.RequestCancelActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.RequestCancelActivityExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientRequestCancelActivityExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.RequestCancelActivityExecution(ctx, request, opts...)
-}
-
 func (c *metricClient) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.RequestCancelWorkflowExecutionRequest,
@@ -889,20 +819,6 @@ func (c *metricClient) ResetActivity(
 	}()
 
 	return c.client.ResetActivity(ctx, request, opts...)
-}
-
-func (c *metricClient) ResetActivityExecution(
-	ctx context.Context,
-	request *workflowservice.ResetActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.ResetActivityExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientResetActivityExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.ResetActivityExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) ResetStickyTaskQueue(
@@ -1199,20 +1115,6 @@ func (c *metricClient) SignalWorkflowExecution(
 	return c.client.SignalWorkflowExecution(ctx, request, opts...)
 }
 
-func (c *metricClient) StartActivityExecution(
-	ctx context.Context,
-	request *workflowservice.StartActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.StartActivityExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientStartActivityExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.StartActivityExecution(ctx, request, opts...)
-}
-
 func (c *metricClient) StartBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StartBatchOperationRequest,
@@ -1253,20 +1155,6 @@ func (c *metricClient) StopBatchOperation(
 	}()
 
 	return c.client.StopBatchOperation(ctx, request, opts...)
-}
-
-func (c *metricClient) TerminateActivityExecution(
-	ctx context.Context,
-	request *workflowservice.TerminateActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.TerminateActivityExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientTerminateActivityExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.TerminateActivityExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) TerminateWorkflowExecution(
@@ -1311,32 +1199,18 @@ func (c *metricClient) UnpauseActivity(
 	return c.client.UnpauseActivity(ctx, request, opts...)
 }
 
-func (c *metricClient) UnpauseActivityExecution(
+func (c *metricClient) UnpauseWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UnpauseActivityExecutionRequest,
+	request *workflowservice.UnpauseWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (_ *workflowservice.UnpauseActivityExecutionResponse, retError error) {
+) (_ *workflowservice.UnpauseWorkflowExecutionResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUnpauseActivityExecution")
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUnpauseWorkflowExecution")
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.UnpauseActivityExecution(ctx, request, opts...)
-}
-
-func (c *metricClient) UpdateActivityExecutionOptions(
-	ctx context.Context,
-	request *workflowservice.UpdateActivityExecutionOptionsRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.UpdateActivityExecutionOptionsResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateActivityExecutionOptions")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.UpdateActivityExecutionOptions(ctx, request, opts...)
+	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateActivityOptions(

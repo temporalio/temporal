@@ -12,6 +12,7 @@ var (
 	FlagWorkflowIDAlias            = []string{"wid"}
 	FlagRunID                      = "run-id"
 	FlagRunIDAlias                 = []string{"rid"}
+	FlagArchetype                  = "archetype"
 	FlagNumberOfShards             = "number-of-shards"
 	FlagMinEventID                 = "min-event-id"
 	FlagMaxEventID                 = "max-event-id"

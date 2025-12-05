@@ -99,6 +99,12 @@ func NewInt32(key string, value int32) ZapTag {
 	}
 }
 
+func NewUInt32(key string, value uint32) ZapTag {
+	return ZapTag{
+		field: zap.Uint32(key, value),
+	}
+}
+
 func NewFloat64(key string, value float64) ZapTag {
 	return ZapTag{
 		field: zap.Float64(key, value),

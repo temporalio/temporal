@@ -38,7 +38,7 @@ func Invoke(
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if req.NextPageToken == nil {
-		response, err := api.GetOrPollMutableState(
+		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
 			&historyservice.GetMutableStateRequest{

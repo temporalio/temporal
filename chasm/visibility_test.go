@@ -55,13 +55,13 @@ func (s *visibilitySuite) initAssertions() {
 func (s *visibilitySuite) TestComponentFqType() {
 	rc, ok := s.registry.ComponentFor(&Visibility{})
 	s.True(ok)
-	s.Equal(visibilityComponentFqType, rc.FqType())
+	s.Equal(visibilityComponentType, rc.FqType())
 }
 
 func (s *visibilitySuite) TestTaskFqType() {
 	rc, ok := s.registry.TaskFor(&persistencespb.ChasmVisibilityTaskData{})
 	s.True(ok)
-	s.Equal(visibilityTaskFqType, rc.FqType())
+	s.Equal(visibilityTaskType, rc.FqType())
 }
 
 func (s *visibilitySuite) TestLifeCycleState() {
@@ -69,8 +69,7 @@ func (s *visibilitySuite) TestLifeCycleState() {
 }
 
 func (s *visibilitySuite) TestSearchAttributes() {
-	sa, err := s.visibility.GetSearchAttributes(s.mockMutableContext)
-	s.NoError(err)
+	sa := s.visibility.GetSearchAttributes(s.mockMutableContext)
 	s.Empty(sa)
 
 	stringKey, stringVal := "stringKey", "stringValue"
@@ -78,7 +77,7 @@ func (s *visibilitySuite) TestSearchAttributes() {
 	floatKey, floatVal := "floatKey", 3.14
 
 	// Add SA via Visibility struct method.
-	err = s.visibility.SetSearchAttributes(
+	s.visibility.SetSearchAttributes(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
 			stringKey: s.mustEncode(stringVal),
@@ -86,16 +85,14 @@ func (s *visibilitySuite) TestSearchAttributes() {
 			floatKey:  s.mustEncode(floatVal),
 		},
 	)
-	s.NoError(err)
 	s.Len(s.mockMutableContext.Tasks, 1)
 	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}, s.mockMutableContext.Tasks[0].Payload.(*persistencespb.ChasmVisibilityTaskData))
 
-	sa, err = s.visibility.GetSearchAttributes(s.mockMutableContext)
-	s.NoError(err)
+	sa = s.visibility.GetSearchAttributes(s.mockMutableContext)
 	s.Len(sa, 3)
 
 	var actualStringVal string
-	err = payload.Decode(sa[stringKey], &actualStringVal)
+	err := payload.Decode(sa[stringKey], &actualStringVal)
 	s.NoError(err)
 	s.Equal(stringVal, actualStringVal)
 
@@ -110,7 +107,7 @@ func (s *visibilitySuite) TestSearchAttributes() {
 	s.Equal(floatVal, actualFloatVal)
 
 	// Test remove search attributes by setting payload to nil.
-	err = s.visibility.SetSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
+	s.visibility.SetSearchAttributes(s.mockMutableContext, map[string]*commonpb.Payload{
 		intKey:   s.mustEncode(intVal),
 		floatKey: nil,
 	})
@@ -118,14 +115,13 @@ func (s *visibilitySuite) TestSearchAttributes() {
 	s.Len(s.mockMutableContext.Tasks, 2)
 	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}, s.mockMutableContext.Tasks[1].Payload.(*persistencespb.ChasmVisibilityTaskData))
 
-	sa, err = s.visibility.GetSearchAttributes(s.mockMutableContext)
+	sa = s.visibility.GetSearchAttributes(s.mockMutableContext)
 	s.NoError(err)
 	s.Len(sa, 2, "intKey and stringKey should remain")
 }
 
 func (s *visibilitySuite) TestMemo() {
-	memo, err := s.visibility.GetMemo(s.mockMutableContext)
-	s.NoError(err)
+	memo := s.visibility.GetMemo(s.mockMutableContext)
 	s.Empty(memo)
 
 	stringKey, stringVal := "stringKey", "stringValue"
@@ -133,21 +129,19 @@ func (s *visibilitySuite) TestMemo() {
 	floatKey, floatVal := "floatKey", 3.14
 
 	// Add memo via Visibility struct method.
-	err = s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
+	s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
 		stringKey: s.mustEncode(stringVal),
 		intKey:    s.mustEncode(intVal),
 		floatKey:  s.mustEncode(floatVal),
 	})
-	s.NoError(err)
 	s.Len(s.mockMutableContext.Tasks, 1)
 	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}, s.mockMutableContext.Tasks[0].Payload.(*persistencespb.ChasmVisibilityTaskData))
 
-	memo, err = s.visibility.GetMemo(s.mockMutableContext)
-	s.NoError(err)
+	memo = s.visibility.GetMemo(s.mockMutableContext)
 	s.Len(memo, 3)
 
 	var actualStringVal string
-	err = payload.Decode(memo[stringKey], &actualStringVal)
+	err := payload.Decode(memo[stringKey], &actualStringVal)
 	s.NoError(err)
 	s.Equal(stringVal, actualStringVal)
 
@@ -162,16 +156,14 @@ func (s *visibilitySuite) TestMemo() {
 	s.Equal(floatVal, actualFloatVal)
 
 	// Test remove memo by setting payload to nil.
-	err = s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
+	s.visibility.SetMemo(s.mockMutableContext, map[string]*commonpb.Payload{
 		intKey:   s.mustEncode(intVal),
 		floatKey: nil,
 	})
-	s.NoError(err)
 	s.Len(s.mockMutableContext.Tasks, 2)
 	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}, s.mockMutableContext.Tasks[1].Payload.(*persistencespb.ChasmVisibilityTaskData))
 
-	memo, err = s.visibility.GetMemo(s.mockMutableContext)
-	s.NoError(err)
+	memo = s.visibility.GetMemo(s.mockMutableContext)
 	s.Len(memo, 2, "intKey and stringKey should remain")
 }
 

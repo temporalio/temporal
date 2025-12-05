@@ -61,7 +61,10 @@ func (s *VisibilityManagerSuite) SetupTest() {
 		s.metricsHandler,
 		metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
-		log.NewNoopLogger())
+		log.NewNoopLogger(),
+		nil, // searchAttributesMapperProvider
+		nil, // chasmRegistry
+	)
 }
 
 func (s *VisibilityManagerSuite) TearDownTest() {

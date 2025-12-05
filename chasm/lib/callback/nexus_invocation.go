@@ -21,16 +21,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
 var retryable4xxErrorTypes = []int{
 	http.StatusRequestTimeout,
 	http.StatusTooManyRequests,
-}
-
-type CompletionSource interface {
-	GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
 }
 
 type nexusInvocation struct {
@@ -55,8 +52,8 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 }
 
 func (n nexusInvocation) WrapError(result invocationResult, err error) error {
-	if failure, ok := result.(invocationResultRetry); ok {
-		return queues.NewDestinationDownError(failure.err.Error(), err)
+	if retry, ok := result.(invocationResultRetry); ok {
+		return queueserrors.NewDestinationDownError(retry.err.Error(), err)
 	}
 	return err
 }
@@ -68,8 +65,8 @@ func (n nexusInvocation) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(e.Logger,
+	if e.httpTraceProvider != nil {
+		traceLogger := log.With(e.logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
 			tag.NewStringTag("destination", taskAttr.Destination),
@@ -78,14 +75,14 @@ func (n nexusInvocation) Invoke(
 			tag.AttemptStart(time.Now().UTC()),
 			tag.Attempt(n.attempt),
 		)
-		if trace := e.HTTPTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
+		if trace := e.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
 	}
 
 	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
-		return invocationResultFail{queues.NewUnprocessableTaskError(
+		return invocationResultFail{queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
 		)}
 	}
@@ -96,7 +93,7 @@ func (n nexusInvocation) Invoke(
 		request.Header.Set(k, v)
 	}
 
-	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
+	caller := e.httpCallerProvider(queuescommon.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
 		Destination: taskAttr.Destination,
 	})
@@ -107,12 +104,12 @@ func (n nexusInvocation) Invoke(
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
 	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, response, err))
-	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
-	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+	e.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
+	e.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
 
 	if err != nil {
-		e.Logger.Error("Callback request failed with error", tag.Error(err))
-		return invocationResultRetry{err: err, retryPolicy: e.Config.RetryPolicy()}
+		e.logger.Error("Callback request failed with error", tag.Error(err))
+		return invocationResultRetry{err: err}
 	}
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
@@ -121,18 +118,18 @@ func (n nexusInvocation) Invoke(
 		// propagate errors to the machine.
 		if _, err = io.Copy(io.Discard, response.Body); err == nil {
 			if err = response.Body.Close(); err != nil {
-				e.Logger.Error("Callback request failed with error", tag.Error(err))
-				return invocationResultRetry{err: err, retryPolicy: e.Config.RetryPolicy()}
+				e.logger.Error("Callback request failed with error", tag.Error(err))
+				return invocationResultRetry{err: err}
 			}
 		}
 		return invocationResultOK{}
 	}
 
 	retryable := isRetryableHTTPResponse(response)
-	err = readHandlerErrFromResponse(response, e.Logger)
-	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
+	err = readHandlerErrFromResponse(response, e.logger)
+	e.logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
-		return invocationResultRetry{err: err, retryPolicy: e.Config.RetryPolicy()}
+		return invocationResultRetry{err: err}
 	}
 	return invocationResultFail{err}
 }

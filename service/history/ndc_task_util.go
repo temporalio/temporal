@@ -72,7 +72,7 @@ func loadMutableStateForTransferTask(
 		tasks.GetTransferTaskEventID,
 		transferTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
-		queues.GetActiveTransferTaskTypeTagValue(transferTask),
+		queues.GetActiveTransferTaskTypeTagValue(transferTask, shardContext.ChasmRegistry()),
 		logger,
 	)
 	if err != nil {
@@ -120,7 +120,7 @@ func loadMutableStateForTimerTask(
 		tasks.GetTimerTaskEventID,
 		timerTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
-		queues.GetActiveTimerTaskTypeTagValue(timerTask),
+		queues.GetActiveTimerTaskTypeTagValue(timerTask, shardContext.ChasmRegistry()),
 		logger,
 	)
 }

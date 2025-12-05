@@ -13,7 +13,7 @@ It's important to note that a special retry policy is used for `ResourceExhauste
 
 ## Service Error
 
-Service errors are specific Go errors that can generate a gRCP `Status` (see [status.proto](https://github.com/grpc/grpc/blob/master/src/proto/grpc/status/status.proto)). 
+Service errors are specific Go errors that can generate a gRPC `Status` (see [status.proto](https://github.com/grpc/grpc/blob/master/src/proto/grpc/status/status.proto)). 
 A gRPC status contains a gRPC `Code` (see [code.proto](https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto)), a message and (optionally) a payload with more details.
 
 ```go

@@ -142,6 +142,8 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"TerminateWorkflowExecution":         {},
 		"DeleteWorkflowExecution":            {},
 		"ListTaskQueuePartitions":            {},
+		"PauseWorkflowExecution":             {},
+		"UnpauseWorkflowExecution":           {},
 
 		"CreateSchedule":                   {},
 		"DescribeSchedule":                 {},

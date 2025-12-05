@@ -11,12 +11,14 @@ import (
 )
 
 var _ Task = (*SyncVersionedTransitionTask)(nil)
+var _ HasArchetypeID = (*SyncVersionedTransitionTask)(nil)
 
 type (
 	SyncVersionedTransitionTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
+		ArchetypeID         uint32
 		Priority            enumsspb.TaskPriority
 		TargetClusters      []string
 
@@ -59,6 +61,10 @@ func (a *SyncVersionedTransitionTask) GetCategory() Category {
 
 func (a *SyncVersionedTransitionTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION
+}
+
+func (a *SyncVersionedTransitionTask) GetArchetypeID() uint32 {
+	return a.ArchetypeID
 }
 
 func (a *SyncVersionedTransitionTask) String() string {

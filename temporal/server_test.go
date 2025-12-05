@@ -84,7 +84,10 @@ func loadConfig(t *testing.T) *config.Config {
 // external dependencies, so it's easy to run this test in isolation.
 func loadSQLiteConfig(t *testing.T) *config.Config {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
-	cfg, err := config.LoadConfig("development-sqlite", configDir, "")
+	cfg, err := config.Load(
+		config.WithEnv("development-sqlite"),
+		config.WithConfigDir(configDir),
+	)
 	require.NoError(t, err)
 
 	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")

@@ -14,6 +14,7 @@ import (
 func Invoke(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
+	archetypeID chasm.ArchetypeID,
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (retError error) {
@@ -22,11 +23,15 @@ func Invoke(
 		return err
 	}
 
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+
 	chasmLease, err := workflowConsistencyChecker.GetChasmLease(
 		ctx,
 		nil,
 		workflowKey,
-		chasm.ArchetypeAny, // RefreshWorkflow works for all Archetypes.
+		archetypeID,
 		locks.PriorityLow,
 	)
 	if err != nil {

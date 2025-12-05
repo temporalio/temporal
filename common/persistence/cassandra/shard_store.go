@@ -145,7 +145,6 @@ func (d *ShardStore) UpdateShard(
 		for k, v := range previous {
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
-
 		return &p.ShardOwnershipLostError{
 			ShardID: request.ShardID,
 			Msg: fmt.Sprintf("Failed to update shard.  previous_range_id: %v, columns: (%v)",

@@ -12,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -258,6 +259,7 @@ func (s *Scavenger) handleTask(
 			WorkflowId: task.workflowID,
 			RunId:      task.runID,
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	switch err.(type) {
 	case nil:
@@ -354,6 +356,7 @@ func (s *Scavenger) cleanUpWorkflowPastRetention(
 				WorkflowId: executionInfo.GetWorkflowId(),
 				RunId:      mutableState.GetExecutionState().GetRunId(),
 			},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		if err != nil {
 			// This is experimental. Ignoring the error so it will not block the history scavenger.

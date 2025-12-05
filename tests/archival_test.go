@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -17,6 +17,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/convert"
@@ -265,6 +266,7 @@ func (s *ArchivalSuite) mutableStateIsDeleted(namespaceID namespace.ID, executio
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}
 
 	s.Eventually(func() bool {
@@ -287,7 +289,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           nsName.String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -415,6 +417,7 @@ func (s *ArchivalSuite) getBranchToken(
 	descResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName.String(),
 		Execution: execution,
+		Archetype: chasm.WorkflowArchetype,
 	})
 	if err != nil {
 		return nil, err

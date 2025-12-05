@@ -818,3 +818,40 @@ func (this *VersionedTransitionArtifact) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type MigrationExecutionInfo to the protobuf v3 wire format
+func (val *MigrationExecutionInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type MigrationExecutionInfo from the protobuf v3 wire format
+func (val *MigrationExecutionInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *MigrationExecutionInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two MigrationExecutionInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *MigrationExecutionInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *MigrationExecutionInfo
+	switch t := that.(type) {
+	case *MigrationExecutionInfo:
+		that1 = t
+	case MigrationExecutionInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

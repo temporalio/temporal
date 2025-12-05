@@ -5,7 +5,7 @@ package ndc
 import (
 	"context"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -107,7 +107,7 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	// task.getVersion() > currentLastItem
 	// incoming replication task, after application, will become the current branch
 	// (because higher version wins), we need to Rebuild the mutable state for that
-	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, uuid.New())
+	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, uuid.NewString())
 	if err != nil {
 		return nil, false, err
 	}

@@ -43,28 +43,3 @@ func That(logger log.Logger, condition bool, staticMessage string, tags ...tag.T
 func Fail(logger log.Logger, staticMessage string, tags ...tag.Tag) {
 	logger.Error("failed assertion: "+staticMessage, append([]tag.Tag{tag.FailedAssertion}, tags...)...)
 }
-
-// ThatSometimes is used to conditionally log a debug message of a noteworthy but non-problematic event.
-//
-// `staticMessage` is expected to be a static string to help with grouping and searching logs.
-// Dynamic information should be passed via `tags`.
-//
-// Example:
-// softassert.ThatSometimes(logger, object.state == "terminated", "termination event", tag.NewStringTag("state", object.state))
-func ThatSometimes(logger log.Logger, condition bool, staticMessage string, tags ...tag.Tag) bool {
-	if !condition {
-		logger.Debug(staticMessage, tags...)
-	}
-	return condition
-}
-
-// Sometimes is used to log a debug message of a noteworthy but non-problematic event.
-//
-// `staticMessage` is expected to be a static string to help with grouping and searching logs.
-// Dynamic information should be passed via `tags`.
-//
-// Example:
-// softassert.Sometimes(logger, "termination event", tag.NewStringTag("state", object.state))
-func Sometimes(logger log.Logger, staticMessage string, tags ...tag.Tag) {
-	logger.Debug(staticMessage, tags...)
-}

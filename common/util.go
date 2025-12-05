@@ -594,9 +594,9 @@ func CheckEventBlobSizeLimit(
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",
-				tag.WorkflowNamespace(namespace),
-				tag.WorkflowID(workflowID),
-				tag.WorkflowRunID(runID),
+				tag.WorkflowNamespace(namespace), // TODO: Not necessarily a "workflow" namespace, fix the tag.
+				tag.WorkflowID(workflowID),       // TODO: this should be entity ID and we need an archetype too.
+				tag.WorkflowRunID(runID),         // TODO: not necessarily a workflow run ID, fix the tag.
 				tag.WorkflowSize(int64(actualSize)),
 				blobSizeViolationOperationTag)
 		}

@@ -55,9 +55,9 @@ type WorkflowTaskInfo struct {
 	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
 
-	// Stamp represents the "version" of the workflow's internal state.
-	// It increases monotonically when the workflow's options are modified.
-	// It is used to check if a workflow task is still relevant to the corresponding workflow state machine.
+	// Incrementing Stamp will invalidate the existing transfer/matching workflow task.
+	// Incrementing Stamp will ensure that the standby clusters reschedule the transfer tasks properly.
+	// Stamp is NOT scoped within a single wft, and it should never be decremented in the lifetime of the whole execution.
 	Stamp int32
 }
 

@@ -92,6 +92,8 @@ const (
 	HistoryService_PauseActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivity"
 	HistoryService_UnpauseActivity_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseActivity"
 	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
+	HistoryService_PauseWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/PauseWorkflowExecution"
+	HistoryService_UnpauseWorkflowExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseWorkflowExecution"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -375,6 +377,10 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
+	// PauseWorkflowExecution pauses the workflow execution specified in the request.
+	PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error)
+	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
+	UnpauseWorkflowExecution(ctx context.Context, in *UnpauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*UnpauseWorkflowExecutionResponse, error)
 }
 
 type historyServiceClient struct {
@@ -1055,6 +1061,24 @@ func (c *historyServiceClient) ResetActivity(ctx context.Context, in *ResetActiv
 	return out, nil
 }
 
+func (c *historyServiceClient) PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error) {
+	out := new(PauseWorkflowExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_PauseWorkflowExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) UnpauseWorkflowExecution(ctx context.Context, in *UnpauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*UnpauseWorkflowExecutionResponse, error) {
+	out := new(UnpauseWorkflowExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UnpauseWorkflowExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1336,6 +1360,10 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
+	// PauseWorkflowExecution pauses the workflow execution specified in the request.
+	PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error)
+	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
+	UnpauseWorkflowExecution(context.Context, *UnpauseWorkflowExecutionRequest) (*UnpauseWorkflowExecutionResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1558,6 +1586,12 @@ func (UnimplementedHistoryServiceServer) UnpauseActivity(context.Context, *Unpau
 }
 func (UnimplementedHistoryServiceServer) ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseWorkflowExecution not implemented")
+}
+func (UnimplementedHistoryServiceServer) UnpauseWorkflowExecution(context.Context, *UnpauseWorkflowExecutionRequest) (*UnpauseWorkflowExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnpauseWorkflowExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2876,6 +2910,42 @@ func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_PauseWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseWorkflowExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).PauseWorkflowExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_PauseWorkflowExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).PauseWorkflowExecution(ctx, req.(*PauseWorkflowExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_UnpauseWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpauseWorkflowExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UnpauseWorkflowExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UnpauseWorkflowExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UnpauseWorkflowExecution(ctx, req.(*UnpauseWorkflowExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3166,6 +3236,14 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetActivity",
 			Handler:    _HistoryService_ResetActivity_Handler,
+		},
+		{
+			MethodName: "PauseWorkflowExecution",
+			Handler:    _HistoryService_PauseWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "UnpauseWorkflowExecution",
+			Handler:    _HistoryService_UnpauseWorkflowExecution_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

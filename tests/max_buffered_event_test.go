@@ -13,6 +13,8 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -24,6 +26,17 @@ type MaxBufferedEventSuite struct {
 func TestMaxBufferedEventSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(MaxBufferedEventSuite))
+}
+
+func (s *MaxBufferedEventSuite) SetupSuite() {
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		// Set MaximumBufferedEventsSizeInBytes high so we don't hit that limit
+		dynamicconfig.MaximumBufferedEventsSizeInBytes.Key(): 10 * 1024 * 1024, // 10MB
+		// Set MutableStateSizeLimitError low so buffered events exhaust mutable state size
+		dynamicconfig.MutableStateSizeLimitWarn.Key():  200,
+		dynamicconfig.MutableStateSizeLimitError.Key(): 410 * 1024, // 410KB
+	}
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
@@ -118,10 +131,12 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 
 func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	/*
-			This test starts a workflow, and block its workflow task, then sending
-			signals to it which will be buffered. The default max mutable state
-		    size is 2MB and each signal will have a 500KB payload, so when the 4th
-			signal is received, the workflow will be force terminated.
+		This test starts a workflow, and blocks its workflow task, then sends
+		signals to it which will be buffered. The test is configured with
+		MaximumBufferedEventsSizeInBytes set to 10MB (high) and MutableStateSizeLimitError
+		set to 410KB (low). Each signal has a 100KB payload. The first three signals
+		succeed, and the fourth signal causes the mutable state size to exceed the limit,
+		resulting in workflow termination.
 	*/
 	closeStartChanOnce := sync.Once{}
 	waitStartChan := make(chan struct{})
@@ -159,7 +174,7 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 
 	s.Worker().RegisterWorkflow(workflowFn)
 
-	testCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	testCtx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 
 	wid := "test-max-buffered-events-limit"
@@ -174,40 +189,49 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	// block until workflow task started
 	<-waitStartChan
 
-	// now send 3 signals with 500KB payload each, all of them will be buffered
-	buf := make([]byte, 500*1024)
+	// now send signals with 100KB payload each, which will be buffered
+	buf := make([]byte, 100*1024) // 100KB
 	// fill the slice with random data to make sure the
 	// encoder does not zero out the data
 	_, err := rand.Read(buf)
 	s.NoError(err)
 	largePayload := payloads.EncodeBytes(buf)
+
+	// Send signals until mutable state size limit is exceeded
+	// With 410KB limit and 100KB payloads, the first 3 signals succeed but the 4th exceeds the limit
+	// First three signals should succeed
 	for i := 0; i < 3; i++ {
-		err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
-		s.NoError(err)
+		err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
+		s.NoError(err, "Signal %d should succeed", i+1)
 	}
 
-	// send 4th signal, this will fail the started workflow task and force terminate the workflow
+	// Fourth signal should fail due to mutable state size limit
 	err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
-	s.NoError(err)
+	s.Error(err, "Fourth signal should fail due to mutable state size limit")
+	s.Contains(err.Error(), "mutable state size exceeds limit", "Expected mutable state size limit error")
 
 	// unblock goroutine that runs local activity
 	close(waitSignalChan)
 
 	var sigCount int
 	err = wf1.Get(testCtx, &sigCount)
-	s.NoError(err)
-	s.Equal(4, sigCount)
+	// The workflow should be terminated, so we expect an error
+	s.Error(err)
 
 	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
-	// Not using historyrequire here because history is not deterministic.
-	var failedCause enumspb.WorkflowTaskFailedCause
-	var failedCount int
+
+	// Verify that the workflow was terminated due to mutable state size limit
+	var terminated bool
+	var terminationReason string
 	for _, evt := range historyEvents {
-		if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
-			failedCause = evt.GetWorkflowTaskFailedEventAttributes().Cause
-			failedCount++
+		if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
+			terminated = true
+			attrs := evt.GetWorkflowExecutionTerminatedEventAttributes()
+			terminationReason = attrs.GetReason()
+			break
 		}
 	}
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND, failedCause)
-	s.Equal(1, failedCount)
+	s.True(terminated, "Expected workflow to be terminated")
+	s.Equal(common.FailureReasonMutableStateSizeExceedsLimit, terminationReason,
+		"Expected workflow to be terminated due to mutable state size limit")
 }

@@ -46,6 +46,7 @@ type (
 			ctx context.Context,
 			namespaceID string,
 			execution *commonpb.WorkflowExecution,
+			archetypeID chasm.ArchetypeID,
 			targetVersionedTransition *persistencespb.VersionedTransition,
 			targetVersionHistories *historyspb.VersionHistories,
 		) (*SyncStateResult, error)
@@ -100,6 +101,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
+	archetypeID chasm.ArchetypeID,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories *historyspb.VersionHistories,
 ) (_ *SyncStateResult, retError error) {
@@ -117,7 +119,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			WorkflowID:  execution.WorkflowId,
 			RunID:       execution.RunId,
 		},
-		chasm.ArchetypeAny, // SyncWorkflowState API works on all archetypes
+		archetypeID,
 		locks.PriorityLow,
 	)
 	if err != nil {

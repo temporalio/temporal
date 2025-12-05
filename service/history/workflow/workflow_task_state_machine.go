@@ -94,6 +94,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 		Type:                  workflowTaskType,
 		SuggestContinueAsNew:  false, // reset, will be recomputed on workflow task started
 		HistorySizeBytes:      0,     // reset, will be recomputed on workflow task started
+		Stamp:                 m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
@@ -151,6 +152,7 @@ func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*histo
 		Type:                 enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		SuggestContinueAsNew: false, // reset, will be recomputed on workflow task started
 		HistorySizeBytes:     0,     // reset, will be recomputed on workflow task started
+		Stamp:                m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
@@ -207,6 +209,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		SuggestContinueAsNew:   suggestContinueAsNew,
 		HistorySizeBytes:       historySizeBytes,
 		BuildIdRedirectCounter: redirectCounter,
+		Stamp:                  m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
@@ -940,6 +943,9 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
 		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
+		if m.ms.config.EnableWorkflowTaskStampIncrementOnFailure() {
+			m.ms.executionInfo.WorkflowTaskStamp += 1
+		}
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
@@ -1027,7 +1033,6 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 
 	// NOTE:
 	// - do not update executionInfo.TaskQueue!
-	// - do not update executionInfo.WorkflowTaskStamp (only changed when rescheduling workflow task)
 
 	m.ms.logger.Debug("Workflow task updated",
 		tag.WorkflowScheduledEventID(workflowTask.ScheduledEventID),

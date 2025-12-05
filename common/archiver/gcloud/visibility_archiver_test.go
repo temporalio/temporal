@@ -144,7 +144,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidVisibilityURI() {
 		Query:       "WorkflowType='type::example' AND CloseTime='2020-02-05T11:00:00Z' AND SearchPrecision='Day'",
 	}
 
-	_, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
+	_, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
 	s.Error(err)
 }
 
@@ -192,7 +192,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 		NamespaceID: "some random namespaceID",
 		PageSize:    10,
 		Query:       "some invalid query",
-	}, searchattribute.TestNameTypeMap)
+	}, searchattribute.TestNameTypeMap())
 	s.Error(err)
 	s.Nil(response)
 }
@@ -221,7 +221,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 		PageSize:      1,
 		NextPageToken: []byte{1, 2, 3},
 	}
-	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap())
 	s.Error(err)
 	s.Nil(response)
 }
@@ -255,12 +255,12 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 		Query:       "parsed by mockParser",
 	}
 
-	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap())
 	s.NoError(err)
 	s.ProtoEqual(ei, response.Executions[0])
 }
@@ -298,25 +298,25 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 		Query:       "parsed by mockParser",
 	}
 
-	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
 	s.NoError(err)
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap())
 	s.NoError(err)
 	s.ProtoEqual(ei, response.Executions[0])
-	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap())
 	s.NoError(err)
 	s.ProtoEqual(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
-	response, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
+	response, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap())
 	s.NoError(err)
 	s.ProtoEqual(ei, response.Executions[0])
 }
@@ -333,7 +333,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {
 		NextPageToken: nil,
 		Query:         "",
 	}
-	_, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap)
+	_, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap())
 
 	var svcErr *serviceerror.InvalidArgument
 
@@ -353,7 +353,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_ZeroPageSize() {
 		NextPageToken: nil,
 		Query:         "",
 	}
-	_, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap)
+	_, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap())
 
 	var svcErr *serviceerror.InvalidArgument
 
@@ -419,7 +419,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 			NextPageToken: response.NextPageToken,
 			Query:         "",
 		}
-		response, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap)
+		response, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap())
 		s.NoError(err)
 		s.NotNil(response)
 		s.Len(response.Executions, 1)

@@ -1,7 +1,7 @@
 package frontend
 
 import (
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -19,8 +19,10 @@ func validateExecution(w *commonpb.WorkflowExecution) error {
 	if w.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
 	}
-	if w.GetRunId() != "" && uuid.Parse(w.GetRunId()) == nil {
-		return errInvalidRunID
+	if w.GetRunId() != "" {
+		if err := uuid.Validate(w.GetRunId()); err != nil {
+			return errInvalidRunID
+		}
 	}
 	return nil
 }

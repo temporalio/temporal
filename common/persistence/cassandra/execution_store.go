@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -84,11 +85,11 @@ type (
 
 var _ p.ExecutionStore = (*ExecutionStore)(nil)
 
-func NewExecutionStore(session gocql.Session) *ExecutionStore {
+func NewExecutionStore(session gocql.Session, logger log.Logger) *ExecutionStore {
 	return &ExecutionStore{
 		HistoryStore:          NewHistoryStore(session),
 		MutableStateStore:     NewMutableStateStore(session),
-		MutableStateTaskStore: NewMutableStateTaskStore(session),
+		MutableStateTaskStore: NewMutableStateTaskStore(session, logger),
 	}
 }
 

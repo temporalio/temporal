@@ -24,7 +24,8 @@ type ChasmTree interface {
 	IsStateDirty() bool
 	IsDirty() bool
 	Terminate(chasm.TerminateComponentRequest) error
-	Archetype() chasm.Archetype
+	Archetype() (chasm.Archetype, error)
+	ArchetypeID() chasm.ArchetypeID
 	EachPureTask(
 		deadline time.Time,
 		callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error),
@@ -32,7 +33,7 @@ type ChasmTree interface {
 	ExecuteSideEffectTask(
 		ctx context.Context,
 		registry *chasm.Registry,
-		entityKey chasm.EntityKey,
+		executionKey chasm.ExecutionKey,
 		task *tasks.ChasmTask,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 	) error

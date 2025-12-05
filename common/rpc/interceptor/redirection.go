@@ -85,6 +85,8 @@ var (
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },
 		"DeleteWorkflowExecution":            func() any { return &workflowservice.DeleteWorkflowExecutionResponse{} },
 		"ListTaskQueuePartitions":            func() any { return &workflowservice.ListTaskQueuePartitionsResponse{} },
+		"PauseWorkflowExecution":             func() any { return &workflowservice.PauseWorkflowExecutionResponse{} },
+		"UnpauseWorkflowExecution":           func() any { return &workflowservice.UnpauseWorkflowExecutionResponse{} },
 
 		"CreateSchedule":                   func() any { return &workflowservice.CreateScheduleResponse{} },
 		"DescribeSchedule":                 func() any { return &workflowservice.DescribeScheduleResponse{} },

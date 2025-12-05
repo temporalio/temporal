@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -680,7 +680,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 
 	normalName := "normal-queue"
-	stickyName := uuid.New()
+	stickyName := uuid.NewString()
 
 	normalTq := newTestTaskQueue(defaultNamespaceId, normalName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	stickyTq := normalTq.StickyPartition(stickyName)

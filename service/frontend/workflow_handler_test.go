@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -55,6 +56,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -177,6 +179,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMatchingClient(),
 		nil,
 		nil,
+		nil, // Not initializing the scheduler client here.
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
 		s.mockResource.GetNamespaceRegistry(),
@@ -913,6 +916,31 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 	s.ErrorContains(err, "cannot attach more than 10 links per request, got 11")
 }
 
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Priority() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  s.testNamespace.String(),
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		Priority: &commonpb.Priority{PriorityKey: -1},
+	}
+
+	_, err := wh.StartWorkflowExecution(context.Background(), request)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "priority key can't be negative")
+	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
+}
+
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -1008,6 +1036,32 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_Inval
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "link exceeds allowed size of 4000")
+}
+
+func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_Priority() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:  s.testNamespace.String(),
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		SignalName: "signal-name",
+		Priority:   &commonpb.Priority{PriorityKey: -1},
+	}
+
+	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), request)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "priority key can't be negative")
+	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }
 
 func (s *WorkflowHandlerSuite) TestSignalWorkflowExecution_Failed_InvalidLinks() {
@@ -1975,7 +2029,7 @@ func (s *WorkflowHandlerSuite) TestGetSearchAttributes() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	ctx := context.Background()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	resp, err := wh.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -2251,7 +2305,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2312,7 +2366,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeCancel), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2376,7 +2430,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2450,7 +2504,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			s.Equal(identity, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2508,7 +2562,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 			s.Equal(identity, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
 			s.ProtoEqual(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
@@ -2572,7 +2626,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.Equal(identity, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
-			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
+			s.ProtoEqual(payload.EncodeString(identity), request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser])
 
 			// Decode the input and verify PostResetOperations are correctly set
 			var batchParams batchspb.BatchOperationInput
@@ -3034,7 +3088,7 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations() {
 			_ context.Context,
 			request *manager.ListWorkflowExecutionsRequestV2,
 		) (*manager.ListWorkflowExecutionsResponse, error) {
-			s.True(strings.Contains(request.Query, searchattribute.TemporalNamespaceDivision))
+			s.Contains(request.Query, sadefs.TemporalNamespaceDivision)
 			return &manager.ListWorkflowExecutionsResponse{
 				Executions: []*workflowpb.WorkflowExecutionInfo{
 					{Execution: &commonpb.WorkflowExecution{
@@ -3090,7 +3144,7 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	newRunID := uuid.New().String()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).Times(2)
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).Times(2)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap(), nil).Times(2)
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:              tests.Namespace.String(),
@@ -3956,4 +4010,53 @@ func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
 		s.NoError(err)
 		s.NotNil(resp)
 	})
+}
+
+func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	request := &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace: s.testNamespace.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+			RunId:      "run-id",
+		},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			Priority: &commonpb.Priority{PriorityKey: -1},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
+	}
+
+	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), request)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "priority key can't be negative")
+	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
+}
+
+func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	request := &workflowservice.UpdateActivityOptionsRequest{
+		Namespace: s.testNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+			RunId:      "run-id",
+		},
+		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{
+			Id: "activity-id",
+		},
+		ActivityOptions: &activitypb.ActivityOptions{
+			Priority: &commonpb.Priority{PriorityKey: -1},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"priority"}},
+	}
+
+	_, err := wh.UpdateActivityOptions(context.Background(), request)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "priority key can't be negative")
+	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
 }

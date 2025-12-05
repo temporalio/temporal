@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -13,13 +12,14 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/queues"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
-type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
+type HTTPCallerProvider func(queuescommon.NamespaceIDAndDestination) HTTPCaller
 
 func RegisterExecutor(
 	registry *hsm.Registry,
@@ -140,54 +140,39 @@ func (e taskExecutor) loadInvocationArgs(
 			return err
 		}
 
-		// variant struct is immutable and ok to reference without copying
-		switch variant := callback.GetCallback().GetVariant().(type) {
-		case *persistencespb.Callback_Nexus_:
-			target, err := hsm.MachineData[CanGetNexusCompletion](node.Parent)
-			if err != nil {
-				return err
-			}
-
-			completion, err := target.GetNexusCompletion(ctx, callback.GetRequestId())
-			if err != nil {
-				return err
-			}
-
-			// CHASM internal callbacks make use of Nexus as their callback delivery
-			// mechanism, but with the internal delivery URL.
-			if variant.Nexus.Url == chasm.NexusCompletionHandlerURL {
-				invokable = chasmInvocation{
-					nexus:      variant.Nexus,
-					attempt:    callback.Attempt,
-					completion: completion,
-					requestID:  callback.RequestId,
-				}
-			} else {
-				invokable = nexusInvocation{
-					nexus:      variant.Nexus,
-					completion: completion,
-					workflowID: ref.WorkflowKey.WorkflowID,
-					runID:      ref.WorkflowKey.RunID,
-					attempt:    callback.Attempt,
-				}
-			}
-		// TODO - remove the Callback_Hsm branch and related invokable
-		case *persistencespb.Callback_Hsm:
-			target, err := hsm.MachineData[CanGetHSMCompletionCallbackArg](node.Parent)
-			if err != nil {
-				return err
-			}
-			hsmInvokable := hsmInvocation{}
-			hsmInvokable.hsm = variant.Hsm
-			hsmInvokable.callbackArg, err = target.GetHSMCompletionCallbackArg(ctx)
-			if err != nil {
-				return err
-			}
-			invokable = hsmInvokable
-		default:
-			return queues.NewUnprocessableTaskError(
+		variant := callback.GetCallback().GetNexus()
+		if variant == nil {
+			return queueserrors.NewUnprocessableTaskError(
 				fmt.Sprintf("unprocessable callback variant: %v", variant),
 			)
+		}
+		target, err := hsm.MachineData[CanGetNexusCompletion](node.Parent)
+		if err != nil {
+			return err
+		}
+
+		completion, err := target.GetNexusCompletion(ctx, callback.GetRequestId())
+		if err != nil {
+			return err
+		}
+
+		// CHASM internal callbacks make use of Nexus as their callback delivery
+		// mechanism, but with the internal delivery URL.
+		if variant.Url == chasm.NexusCompletionHandlerURL {
+			invokable = chasmInvocation{
+				nexus:      variant,
+				attempt:    callback.Attempt,
+				completion: completion,
+				requestID:  callback.RequestId,
+			}
+		} else {
+			invokable = nexusInvocation{
+				nexus:      variant,
+				completion: completion,
+				workflowID: ref.WorkflowKey.WorkflowID,
+				runID:      ref.WorkflowKey.RunID,
+				attempt:    callback.Attempt,
+			}
 		}
 		return nil
 	})
@@ -219,7 +204,7 @@ func (e taskExecutor) saveResult(
 					Err:  result.error(),
 				})
 			default:
-				return hsm.TransitionOutput{}, queues.NewUnprocessableTaskError(fmt.Sprintf("unrecognized callback result %v", result))
+				return hsm.TransitionOutput{}, queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unrecognized callback result %v", result))
 			}
 		})
 	})

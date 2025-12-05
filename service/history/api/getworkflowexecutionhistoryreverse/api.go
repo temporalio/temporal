@@ -41,7 +41,7 @@ func Invoke(
 		currentBranchToken []byte,
 		versionHistoryItem *historyspb.VersionHistoryItem,
 	) ([]byte, string, int64, *historyspb.VersionHistoryItem, error) {
-		response, err := api.GetOrPollMutableState(
+		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
 			&historyservice.GetMutableStateRequest{

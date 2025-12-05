@@ -69,8 +69,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_TriggerImmediateFullBuffer() {
 	// Backfillers get half of the max buffer size, so fill (half the buffer -
 	// expected starts).
 	ctx := s.newMutableContext()
-	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := s.scheduler.Invoker.Get(ctx)
 	for range scheduler.DefaultTweakables.MaxBufferSize {
 		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
 	}
@@ -129,8 +128,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_InclusiveStartEnd() {
 
 	// Clear the Invoker's buffered starts.
 	ctx := s.newMutableContext()
-	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := s.scheduler.Invoker.Get(ctx)
 	invoker.BufferedStarts = nil
 
 	// A hair off and the action won't fire.
@@ -151,8 +149,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_InclusiveStartEnd() {
 func (s *backfillerTasksSuite) TestBackfillTask_BufferCompletelyFull() {
 	// Fill buffer past max.
 	ctx := s.newMutableContext()
-	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := s.scheduler.Invoker.Get(ctx)
 	for range scheduler.DefaultTweakables.MaxBufferSize {
 		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
 	}
@@ -178,8 +175,7 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	// Backfillers get half of the max buffer size, so fill (half the buffer -
 	// expected starts).
 	ctx := s.newMutableContext()
-	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := s.scheduler.Invoker.Get(ctx)
 	for range (scheduler.DefaultTweakables.MaxBufferSize / 2) - 5 {
 		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
 	}
@@ -207,23 +203,23 @@ func (s *backfillerTasksSuite) TestBackfillTask_PartialFill() {
 	// Clear the Invoker's buffer. The remainder of the starts should buffer, and the
 	// backfiller should be deleted.
 	invoker.BufferedStarts = nil
-	err = s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+	err := s.executor.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
 	s.Equal(5, len(invoker.GetBufferedStarts()))
 
 	// Verify the backfiller is deleted
-	res, err := s.scheduler.Backfillers[backfiller.BackfillId].Get(ctx)
-	s.NoError(err)
-	s.Nil(res)
+	_, ok := s.scheduler.Backfillers[backfiller.BackfillId].TryGet(ctx)
+	s.False(ok)
 }
 
 func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
-	sched := s.scheduler
 	ctx := s.newMutableContext()
-	invoker, err := sched.Invoker.Get(ctx)
+	schedComponent, err := s.node.Component(ctx, chasm.ComponentRef{})
 	s.NoError(err)
+	sched := schedComponent.(*scheduler.Scheduler)
+	invoker := sched.Invoker.Get(ctx)
 
 	// Exactly one type of request can be set per Backfiller.
 	s.False(c.InitialBackfillRequest != nil && c.InitialTriggerRequest != nil)
@@ -250,9 +246,8 @@ func (s *backfillerTasksSuite) runTestCase(c *backfillTestCase) {
 	// Validate completion or partial progress.
 	if c.ExpectedComplete {
 		// Backfiller should no longer be present in the backfiller map.
-		res, err := sched.Backfillers[backfiller.BackfillId].Get(ctx)
-		s.NoError(err)
-		s.Nil(res)
+		_, ok := sched.Backfillers[backfiller.BackfillId].TryGet(ctx)
+		s.False(ok)
 	} else {
 		// TODO - check that a pure task to continue driving backfill exists here. Because
 		// a pure task in the tree already has the physically-created status, closing the

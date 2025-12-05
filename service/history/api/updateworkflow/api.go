@@ -53,6 +53,7 @@ type Updater struct {
 	normalTaskQueueName    string
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
+	workflowTaskStamp      int32
 }
 
 func NewUpdater(
@@ -182,6 +183,7 @@ func (u *Updater) ApplyRequest(
 	}
 
 	u.scheduledEventID = newWorkflowTask.ScheduledEventID
+	u.workflowTaskStamp = newWorkflowTask.Stamp
 	if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
 		u.scheduleToStartTimeout = scheduleToStartTimeoutPtr.AsDuration()
 	}
@@ -196,6 +198,7 @@ func (u *Updater) ApplyRequest(
 		ms.HasCompletedAnyWorkflowTask(),
 		ms.GetEffectiveVersioningBehavior(),
 		ms.GetEffectiveDeployment(),
+		ms.GetVersioningRevisionNumber(),
 	)
 
 	return &api.UpdateWorkflowAction{
@@ -276,6 +279,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		Clock:                  clock,
 		VersionDirective:       u.directive,
 		Priority:               u.priority,
+		Stamp:                  u.workflowTaskStamp,
 	})
 	if err != nil {
 		return err

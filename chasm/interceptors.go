@@ -15,6 +15,7 @@ const chasmRequestPrefix = "/temporal.server.chasm"
 // boilerplate processing before handing off.
 type ChasmRequestInterceptor struct {
 	engine         Engine
+	visibilityMgr  VisibilityManager
 	logger         log.Logger
 	metricsHandler metrics.Handler
 }
@@ -32,13 +33,20 @@ func (i *ChasmRequestInterceptor) Intercept(
 	}
 
 	ctx = NewEngineContext(ctx, i.engine)
+	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
 
 	return handler(ctx, req)
 }
 
-func ChasmRequestInterceptorProvider(engine Engine, logger log.Logger, metricsHandler metrics.Handler) *ChasmRequestInterceptor {
+func ChasmRequestInterceptorProvider(
+	engine Engine,
+	visibilityMgr VisibilityManager,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) *ChasmRequestInterceptor {
 	return &ChasmRequestInterceptor{
 		engine:         engine,
+		visibilityMgr:  visibilityMgr,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 	}

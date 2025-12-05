@@ -32,8 +32,10 @@ type (
 		DeleteWorkflowExecution(ctx context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error
 
 		// Read APIs.
-		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
+		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListExecutionsResponse, error)
+		ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
+		CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*manager.CountChasmExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 
 		// Admin APIs
@@ -44,8 +46,8 @@ type (
 		AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error
 	}
 
-	// InternalWorkflowExecutionInfo is visibility info for internal response
-	InternalWorkflowExecutionInfo struct {
+	// InternalExecutionInfo is internal visibility info for workflow execution
+	InternalExecutionInfo struct {
 		WorkflowID           string
 		RunID                string
 		TypeName             string
@@ -66,9 +68,9 @@ type (
 		RootRunID            string
 	}
 
-	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
-	InternalListWorkflowExecutionsResponse struct {
-		Executions []*InternalWorkflowExecutionInfo
+	// InternalListExecutionsResponse is response from ListWorkflowExecutions and ListChasmExecutions
+	InternalListExecutionsResponse struct {
+		Executions []*InternalExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
@@ -76,7 +78,7 @@ type (
 
 	// InternalGetWorkflowExecutionResponse is response from GetWorkflowExecution
 	InternalGetWorkflowExecutionResponse struct {
-		Execution *InternalWorkflowExecutionInfo
+		Execution *InternalExecutionInfo
 	}
 
 	// InternalVisibilityRequestBase is a base request to visibility APIs.

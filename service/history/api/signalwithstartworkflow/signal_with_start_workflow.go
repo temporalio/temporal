@@ -87,6 +87,7 @@ func startAndSignalWorkflow(
 		shard,
 		newMutableState,
 		signalWithStartRequest.GetSignalInput().Size(),
+		signalWithStartRequest.GetHeader().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
 		return "", false, err
@@ -280,6 +281,7 @@ func signalWorkflow(
 		shardContext,
 		workflowLease.GetMutableState(),
 		request.GetSignalInput().Size(),
+		request.GetHeader().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
 		// in-memory mutable state is still clean, release the lock with nil error to prevent

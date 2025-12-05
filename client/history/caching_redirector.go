@@ -3,9 +3,11 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -41,10 +43,9 @@ type (
 		logger                 log.Logger
 		membershipUpdateCh     chan *membership.ChangedEvent
 		staleTTL               dynamicconfig.DurationPropertyFn
+		listenerName           string
 	}
 )
-
-const cachingRedirectorListener = "cachingRedirectorListener"
 
 func NewCachingRedirector[C any](
 	connections connectionPool[C],
@@ -58,6 +59,7 @@ func NewCachingRedirector[C any](
 		logger:                 logger,
 		membershipUpdateCh:     make(chan *membership.ChangedEvent, 1),
 		staleTTL:               staleTTL,
+		listenerName:           fmt.Sprintf("cachingRedirectorListener-%s", uuid.New().String()),
 	}
 	r.mu.cache = make(map[int32]cacheEntry[C])
 
@@ -220,11 +222,11 @@ func maybeHostDownError(opErr error) bool {
 }
 
 func (r *CachingRedirector[C]) eventLoop(ctx context.Context) error {
-	if err := r.historyServiceResolver.AddListener(cachingRedirectorListener, r.membershipUpdateCh); err != nil {
+	if err := r.historyServiceResolver.AddListener(r.listenerName, r.membershipUpdateCh); err != nil {
 		r.logger.Fatal("Error adding listener", tag.Error(err))
 	}
 	defer func() {
-		if err := r.historyServiceResolver.RemoveListener(cachingRedirectorListener); err != nil {
+		if err := r.historyServiceResolver.RemoveListener(r.listenerName); err != nil {
 			r.logger.Warn("Error removing listener", tag.Error(err))
 		}
 	}()

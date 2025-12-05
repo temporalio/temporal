@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -55,7 +55,7 @@ func (a *taskKeyGenerator) setTaskKeys(
 	now := a.timeSource.Now()
 	// TODO: Truncation here is just to make sure task scheduled time has the same precision as the old logic.
 	// Remove this truncation once we validate the rest of the code can worker correctly with higher precision.
-	a.setTaskMinScheduledTime(now.Truncate(persistence.ScheduledTaskMinPrecision))
+	a.setTaskMinScheduledTime(now.Truncate(common.ScheduledTaskMinPrecision))
 
 	for _, taskMap := range taskMaps {
 		for category, tasksByCategory := range taskMap {
@@ -74,8 +74,8 @@ func (a *taskKeyGenerator) setTaskKeys(
 					// so that if the comparsion in the next step passes, it's guaranteed
 					// the task can be retrieved from DB by queue processor.
 					taskScheduledTime = task.GetVisibilityTime().
-						Add(persistence.ScheduledTaskMinPrecision).
-						Truncate(persistence.ScheduledTaskMinPrecision)
+						Add(common.ScheduledTaskMinPrecision).
+						Truncate(common.ScheduledTaskMinPrecision)
 
 					if taskScheduledTime.Before(a.taskMinScheduledTime) {
 						a.logger.Debug("New timer generated is less than min scheduled time",
@@ -90,7 +90,7 @@ func (a *taskKeyGenerator) setTaskKeys(
 						)
 						// Theoritically we don't need to add the extra 1ms.
 						// Guess it's just to be extra safe here.
-						taskScheduledTime = a.taskMinScheduledTime.Add(persistence.ScheduledTaskMinPrecision)
+						taskScheduledTime = a.taskMinScheduledTime.Add(common.ScheduledTaskMinPrecision)
 					}
 				}
 				task.SetVisibilityTime(taskScheduledTime)

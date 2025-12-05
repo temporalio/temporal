@@ -543,7 +543,7 @@ testGetFloat64PropertyKey:
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetIntPropertyKey:
 - value: 2000
 testGetFloat64PropertyKey:
@@ -557,7 +557,7 @@ testGetFloat64PropertyKey:
 func (s *fileBasedClientSuite) TestWarnValidationInt() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetIntPropertyKey:
 - value: not a number
 `))
@@ -569,7 +569,7 @@ testGetIntPropertyKey:
 func (s *fileBasedClientSuite) TestWarnConstraint() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetIntPropertyKey:
 - value: 5005
   constraints:
@@ -583,7 +583,7 @@ testGetIntPropertyKey:
 func (s *fileBasedClientSuite) TestWarnMultiple() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 unknownKey:
 - value: "5d"
 testGetIntPropertyKey:
@@ -596,7 +596,7 @@ testGetIntPropertyKey:
 }
 
 func (s *fileBasedClientSuite) TestErrorYamlDecode() {
-	lr := dynamicconfig.ValidateFile([]byte(`}}}}}}}}}`))
+	lr := dynamicconfig.LoadYamlFile([]byte(`}}}}}}}}}`))
 	s.Equal(1, len(lr.Errors))
 	s.ErrorContains(lr.Errors[0], "decode error")
 }
@@ -604,7 +604,7 @@ func (s *fileBasedClientSuite) TestErrorYamlDecode() {
 func (s *fileBasedClientSuite) TestErrorBadConstraint() {
 	dynamicconfig.NewNamespaceBoolSetting(testGetBoolPropertyKey, true, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetBoolPropertyKey:
 - value: false
   constraints:
@@ -617,7 +617,7 @@ testGetBoolPropertyKey:
 func (s *fileBasedClientSuite) TestErrorBadConstraints() {
 	dynamicconfig.NewTaskQueueBoolSetting(testGetBoolPropertyKey, true, "")
 
-	lr := dynamicconfig.ValidateFile([]byte(`
+	lr := dynamicconfig.LoadYamlFile([]byte(`
 testGetBoolPropertyKey:
 - value: false
   constraints:

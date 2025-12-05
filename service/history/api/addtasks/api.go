@@ -6,7 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -18,6 +18,12 @@ type (
 	// requires only the DeserializeTask method.
 	TaskDeserializer interface {
 		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
+	}
+
+	taskGroupKey struct {
+		namespaceID string
+		businessID  string
+		archetypeID chasm.ArchetypeID
 	}
 )
 
@@ -52,7 +58,7 @@ func Invoke(
 		return nil, serviceerror.NewInvalidArgument("No tasks in request")
 	}
 
-	taskBatches := make(map[definition.WorkflowKey]map[tasks.Category][]tasks.Task)
+	taskGroups := make(map[taskGroupKey]map[tasks.Category][]tasks.Task)
 
 	for i, task := range req.Tasks {
 		if task == nil {
@@ -84,26 +90,35 @@ func Invoke(
 			)
 		}
 
-		// group by namespaceID + workflowID
-		workflowKey := definition.NewWorkflowKey(
-			deserializedTask.GetNamespaceID(),
-			deserializedTask.GetWorkflowID(),
-			"",
-		)
-		if _, ok := taskBatches[workflowKey]; !ok {
-			taskBatches[workflowKey] = make(map[tasks.Category][]tasks.Task, 1)
+		// group by namespaceID + execution businessID + archetypeID
+		archetypeID := chasm.WorkflowArchetypeID
+		if hasArchetypeID, ok := deserializedTask.(tasks.HasArchetypeID); ok {
+			archetypeID = hasArchetypeID.GetArchetypeID()
+		}
+		if archetypeID == chasm.UnspecifiedArchetypeID {
+			archetypeID = chasm.WorkflowArchetypeID
+		}
+		groupKey := taskGroupKey{
+			namespaceID: deserializedTask.GetNamespaceID(),
+			businessID:  deserializedTask.GetWorkflowID(),
+			archetypeID: archetypeID,
 		}
 
-		taskBatches[workflowKey][category] = append(taskBatches[workflowKey][category], deserializedTask)
+		if _, ok := taskGroups[groupKey]; !ok {
+			taskGroups[groupKey] = make(map[tasks.Category][]tasks.Task, 1)
+		}
+
+		taskGroups[groupKey][category] = append(taskGroups[groupKey][category], deserializedTask)
 	}
 
-	for workflowKey, taskBatch := range taskBatches {
+	for groupKey, taskGroup := range taskGroups {
 		err := shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 			ShardID:     shardContext.GetShardID(),
 			RangeID:     shardContext.GetRangeID(),
-			NamespaceID: workflowKey.NamespaceID,
-			WorkflowID:  workflowKey.WorkflowID,
-			Tasks:       taskBatch,
+			NamespaceID: groupKey.namespaceID,
+			WorkflowID:  groupKey.businessID,
+			ArchetypeID: groupKey.archetypeID,
+			Tasks:       taskGroup,
 		})
 		if err != nil {
 			return nil, err

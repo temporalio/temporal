@@ -4,6 +4,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 // Encode encodes map of search attribute values to search attributes.
@@ -32,7 +33,7 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 				lastErr = err
 				continue
 			}
-			setMetadataType(valPayload, saType)
+			sadefs.SetMetadataType(valPayload, saType)
 		}
 	}
 	return &commonpb.SearchAttributes{IndexedFields: indexedFields}, lastErr
@@ -58,7 +59,8 @@ func Decode(
 		if typeMap != nil {
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
-			if err != nil {
+			// TODO: Evaluate if we should get the chasm search attribute mapper when upserting search attributes.
+			if err != nil && !sadefs.IsChasmSearchAttribute(saName) {
 				lastErr = err
 			}
 		}
