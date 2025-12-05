@@ -143,6 +143,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetLinks(),
 	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
+	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	s.currentMutableState.EXPECT().HadOrHasWorkflowTask().Return(true)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
@@ -176,6 +177,40 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 		request.GetLinks(),
 	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(true)
+	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
+
+	err := signalWorkflow(
+		ctx,
+		s.shardContext,
+		currentWorkflowLease,
+		request,
+	)
+	s.NoError(err)
+}
+
+// Tests SignalWithStart when the workflow is paused.
+// Asserts that no new workflow task is scheduled.
+func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WhenPaused() {
+	ctx := context.Background()
+	currentWorkflowLease := api.NewWorkflowLease(
+		s.currentContext,
+		wcache.NoopReleaseFn,
+		s.currentMutableState,
+	)
+	request := s.randomRequest()
+
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
+	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(false)
+	s.currentMutableState.EXPECT().AddSignalRequested(request.GetRequestId())
+	s.currentMutableState.EXPECT().AddWorkflowExecutionSignaled(
+		request.GetSignalName(),
+		request.GetSignalInput(),
+		request.GetIdentity(),
+		request.GetHeader(),
+		request.GetLinks(),
+	).Return(&historypb.HistoryEvent{}, nil)
+	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
+	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(true)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	err := signalWorkflow(
