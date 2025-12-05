@@ -3,7 +3,9 @@ package activity
 import (
 	"context"
 
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -146,6 +148,43 @@ func (h *frontendHandler) TerminateActivityExecution(
 	return &workflowservice.TerminateActivityExecutionResponse{}, nil
 }
 
+func (h *frontendHandler) RequestCancelActivityExecution(
+	ctx context.Context,
+	req *workflowservice.RequestCancelActivityExecutionRequest,
+) (*workflowservice.RequestCancelActivityExecutionResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
+	req = common.CloneProto(req)
+
+	maxIDLen := dynamicconfig.MaxIDLengthLimit.Get(h.dc)()
+
+	if len(req.GetRequestId()) > maxIDLen {
+		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	}
+
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
+	if len(req.GetReason()) > maxIDLen {
+		return nil, serviceerror.NewInvalidArgument("Reason length exceeds limit.")
+	}
+
+	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.RequestCancelActivityExecutionResponse{}, nil
+}
+
 func (h *frontendHandler) validateAndPopulateStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
 	namespaceID namespace.ID,
@@ -172,18 +211,12 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		return nil, err
 	}
 
-	err = ValidateStandaloneActivity(
-		req.ActivityId,
-		req.ActivityType.GetName(),
+	err = validateAndNormalizeStartActivityExecutionRequest(
+		req,
 		dynamicconfig.BlobSizeLimitError.Get(h.dc),
 		dynamicconfig.BlobSizeLimitWarn.Get(h.dc),
-		req.Input.Size(),
 		h.logger,
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
-		req.Namespace,
-		&req.RequestId,
-		req.SearchAttributes,
-		h.saMapperProvider,
 		h.saValidator)
 	if err != nil {
 		return nil, err

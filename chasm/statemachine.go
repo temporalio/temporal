@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+
+	"go.temporal.io/api/serviceerror"
 )
 
 // ErrInvalidTransition is returned from [Transition.Apply] on an invalid state transition.
@@ -46,7 +48,8 @@ func (t Transition[S, SM, E]) Possible(sm SM) bool {
 func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) error {
 	prevState := sm.StateMachineState()
 	if !t.Possible(sm) {
-		return fmt.Errorf("%w from %v: %v", ErrInvalidTransition, prevState, event)
+		err := fmt.Errorf("%w from %v: %v", ErrInvalidTransition, prevState, event)
+		return serviceerror.NewFailedPrecondition(err.Error())
 	}
 
 	sm.SetStateMachineState(t.Destination)

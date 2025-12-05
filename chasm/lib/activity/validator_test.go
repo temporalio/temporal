@@ -8,9 +8,11 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/retrypolicy"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -213,58 +215,64 @@ func TestValidateFailures(t *testing.T) {
 }
 
 func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
-	requestID := string(make([]byte, 1001))
+	req := &workflowservice.StartActivityExecutionRequest{
+		ActivityId:   defaultActivityID,
+		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
+		Options:      &defaultActivityOptions,
+		Namespace:    "default",
+		RequestId:    string(make([]byte, 1001)),
+		Input:        payloads.EncodeString("test-input"),
+	}
 
-	err := ValidateStandaloneActivity(
-		defaultActivityID,
-		defaultActivityType,
+	err := validateAndNormalizeStartActivityExecutionRequest(
+		req,
 		defaultBlobSizeLimitError,
 		defaultBlobSizeLimitWarn,
-		32,
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
-		"default",
-		&requestID,
-		nil,
-		nil,
 		nil)
 	require.Error(t, err)
 }
 
 func TestValidateStandAloneInputTooLarge(t *testing.T) {
-	requestID := "test-request-id"
+	req := &workflowservice.StartActivityExecutionRequest{
+		ActivityId:   defaultActivityID,
+		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
+		Options:      &defaultActivityOptions,
+		Namespace:    "default",
+		RequestId:    "test-request-id",
+		Input:        payloads.EncodeString(string(make([]byte, 1000))),
+	}
 
-	err := ValidateStandaloneActivity(
-		defaultActivityID,
-		defaultActivityType,
+	err := validateAndNormalizeStartActivityExecutionRequest(
+		req,
 		defaultBlobSizeLimitError,
 		defaultBlobSizeLimitWarn,
-		65,
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
-		"default",
-		&requestID,
-		nil,
-		nil,
 		nil)
 	require.Error(t, err)
 }
 
 func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
-	requestID := "test-request-id"
+	payload := payloads.EncodeString("test-input")
+	payloadSize := payload.Size()
 
-	err := ValidateStandaloneActivity(
-		defaultActivityID,
-		defaultActivityType,
-		defaultBlobSizeLimitError,
-		defaultBlobSizeLimitWarn,
-		48,
+	req := &workflowservice.StartActivityExecutionRequest{
+		ActivityId:   defaultActivityID,
+		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
+		Options:      &defaultActivityOptions,
+		Namespace:    "default",
+		RequestId:    "test-request-id",
+		Input:        payload,
+	}
+
+	err := validateAndNormalizeStartActivityExecutionRequest(
+		req,
+		func(ns string) int { return payloadSize + 1 },
+		func(ns string) int { return payloadSize },
 		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
-		"default",
-		&requestID,
-		nil,
-		nil,
 		nil)
 	require.NoError(t, err)
 }

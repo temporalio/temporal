@@ -148,6 +148,7 @@ var (
 	errWorkflowExecutionNotSet = serviceerror.NewInvalidArgument("WorkflowExecution not set on request.")
 	errTaskQueueNotSet         = serviceerror.NewInvalidArgument("Task queue not set.")
 	errWorkflowIDNotSet        = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	errBusinessIDNotSet        = serviceerror.NewInvalidArgument("Business ID is not set on request.")
 	errRunIDNotValid           = serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
@@ -2435,7 +2436,7 @@ func (h *Handler) convertError(err error) error {
 
 func validateTaskToken(taskToken *tokenspb.Task) error {
 	if len(taskToken.GetComponentRef()) == 0 && taskToken.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
+		return errBusinessIDNotSet
 	}
 
 	return nil

@@ -163,59 +163,42 @@ func normalizeAndValidateTimeouts(
 	return nil
 }
 
-// ValidateStandaloneActivity validates and normalizes the standalone activity specific attributes.
+// validateAndNormalizeStartActivityExecutionRequest validates and normalizes the standalone activity specific attributes.
 // IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
 // (i.e., when incoming request can potentially be retried), clone the params first before passing it in.
-func ValidateStandaloneActivity(
-	activityID string,
-	activityType string,
+func validateAndNormalizeStartActivityExecutionRequest(
+	req *workflowservice.StartActivityExecutionRequest,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	inputSizeBytes int,
 	logger log.Logger,
 	maxIDLengthLimit int,
-	namespaceName string,
-	requestID *string,
-	searchAttributes *commonpb.SearchAttributes,
-	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
-	if err := validateRequestID(requestID, maxIDLengthLimit); err != nil {
-		return err
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
 	}
 
 	if err := validateInputSize(
-		activityID,
-		activityType,
+		req.GetActivityId(),
+		req.GetActivityType().GetName(),
 		blobSizeLimitError,
 		blobSizeLimitWarn,
-		inputSizeBytes,
+		req.Input.Size(),
 		logger,
-		namespaceName); err != nil {
+		req.GetNamespace()); err != nil {
 		return err
 	}
 
-	if searchAttributes != nil {
+	if req.GetSearchAttributes() != nil {
 		if err := validateAndNormalizeSearchAttributes(
-			namespaceName,
-			searchAttributes,
-			saMapperProvider,
+			req,
 			saValidator); err != nil {
 			return err
 		}
-	}
-
-	return nil
-}
-
-func validateRequestID(requestID *string, maxIDLengthLimit int) error {
-	if *requestID == "" {
-		// For easy direct API use, we default the request ID here but expect all SDKs and other auto-retrying clients to set it
-		*requestID = uuid.New().String()
-	}
-
-	if len(*requestID) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
 	}
 
 	return nil
@@ -249,23 +232,16 @@ func validateInputSize(
 }
 
 func validateAndNormalizeSearchAttributes(
-	namespaceName string,
-	searchAttributes *commonpb.SearchAttributes,
-	saMapperProvider searchattribute.MapperProvider,
+	req *workflowservice.StartActivityExecutionRequest,
 	saValidator *searchattribute.Validator,
 ) error {
-	unaliased, err := searchattribute.UnaliasFields(saMapperProvider, searchAttributes, namespaceName)
-	if err != nil {
+	namespaceName := req.GetNamespace()
+
+	if err := saValidator.Validate(req.SearchAttributes, namespaceName); err != nil {
 		return err
 	}
 
-	searchAttributes.IndexedFields = unaliased.IndexedFields
-
-	if err := saValidator.Validate(searchAttributes, namespaceName); err != nil {
-		return err
-	}
-
-	return saValidator.ValidateSize(searchAttributes, namespaceName)
+	return saValidator.ValidateSize(req.SearchAttributes, namespaceName)
 }
 
 // ValidatePollActivityExecutionRequest validates the request for PollActivityExecution API.
