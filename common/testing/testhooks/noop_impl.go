@@ -10,14 +10,17 @@ var Module = fx.Options(
 	fx.Provide(NewTestHooks),
 )
 
-// noopTestHooks is a noop implementation of TestHooks for production builds.
-type noopTestHooks struct{}
+// TestHooks (in production mode) is an empty struct just so the build works.
+// See TestHooks in test_impl.go.
+//
+// TestHooks are an inherently unclean way of writing tests. They require mixing test-only
+// concerns into production code. In general you should prefer other ways of writing tests
+// wherever possible, and only use TestHooks sparingly, as a last resort.
+type TestHooks struct{}
 
 func NewTestHooks() TestHooks {
-	return noopTestHooks{}
+	return TestHooks{}
 }
-
-func (noopTestHooks) testHooks() {}
 
 // Get gets the value of a test hook. In production mode it always returns the zero value and
 // false, which hopefully the compiler will inline and remove the hook as dead code.
