@@ -3,7 +3,6 @@ package persistence
 import (
 	"context"
 	"errors"
-	"runtime/debug"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -1187,7 +1186,6 @@ func (m *executionManagerImpl) assertAndConvertArchetypeID(
 		archetypeID != chasm.UnspecifiedArchetypeID,
 		"ArchetypeID not specified, defaulting to Workflow.",
 		tag.Operation(methodName),
-		tag.SysStackTrace(string(debug.Stack())),
 	) {
 		return chasm.WorkflowArchetypeID, true
 	}

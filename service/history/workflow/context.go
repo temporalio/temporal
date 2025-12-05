@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"runtime/debug"
 	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
@@ -76,7 +75,6 @@ func NewContext(
 		contextImpl.throttledLogger,
 		contextImpl.archetypeID != chasm.UnspecifiedArchetypeID,
 		"Creating execution context with unspecified archetype ID",
-		tag.SysStackTrace(string(debug.Stack())),
 	)
 
 	return contextImpl

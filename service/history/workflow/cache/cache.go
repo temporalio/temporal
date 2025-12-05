@@ -4,7 +4,6 @@ package cache
 
 import (
 	"context"
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -268,7 +267,6 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		shardContext.GetLogger(),
 		archetypeID != chasm.UnspecifiedArchetypeID,
 		"Creating execution cache key with unspecified archetype ID",
-		tag.SysStackTrace(string(debug.Stack())),
 	) {
 		archetypeID = chasm.WorkflowArchetypeID
 	}
