@@ -68,6 +68,8 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 // long-poll request. This response is sent before the caller's deadline (see
 // chasm.activity.longPollBuffer) so that it is likely that the caller does indeed receive the
 // non-error response.
+//
+//nolint:revive // cognitive complexity
 func (h *handler) PollActivityExecution(
 	ctx context.Context,
 	req *activitypb.PollActivityExecutionRequest,
@@ -126,9 +128,8 @@ func (h *handler) PollActivityExecution(
 			if changed {
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				return response, true, err
-			} else {
-				return nil, false, nil
 			}
+			return nil, false, nil
 		}, req)
 	case *workflowservice.PollActivityExecutionRequest_WaitCompletion:
 		// TODO(dan): add functional test when RecordActivityTaskCompleted is implemented
@@ -138,8 +139,8 @@ func (h *handler) PollActivityExecution(
 			req *activitypb.PollActivityExecutionRequest,
 		) (*activitypb.PollActivityExecutionResponse, bool, error) {
 			// TODO(dan): check for terminal activity states
-			panic("pollActivityExecutionWaitCompletion is not implemented")
-			completed := false
+			panic("pollActivityExecutionWaitCompletion is not implemented") //nolint:forbidigo
+			completed := false                                              //nolint:govet
 			if completed {
 				response, err := a.buildPollActivityExecutionResponse(ctx, req)
 				if err != nil {

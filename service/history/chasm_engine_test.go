@@ -660,7 +660,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	// Perform two execution updates that do not satisfy the predicate followed by one that does.
 	for range 2 {
 		updateComponent(false)
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 		assertEmptyChan(pollResult)
 	}
 	updateComponent(true)

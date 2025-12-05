@@ -28,7 +28,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 
 	for i := range subscriberCount {
 		ch, unsubscribe := notifier.Subscribe(entityKey)
-		defer unsubscribe()
+		defer unsubscribe() //nolint:revive
 		subscribers[i].channel = ch
 	}
 
@@ -80,7 +80,7 @@ func TestChasmNotifier_ConstantMemory(t *testing.T) {
 	notifier := NewChasmNotifier()
 	require.Empty(t, notifier.executions)
 	notifier.Subscribe(key)
-	require.Equal(t, 1, len(notifier.executions))
+	require.Len(t, notifier.executions, 1)
 	notifier.Notify(key)
 	require.Empty(t, notifier.executions)
 	// Ignored: no subscribers

@@ -490,7 +490,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
-			require.ErrorAs(t, err, &tc.expectedErr)
+			require.ErrorAs(t, err, &tc.expectedErr) //nolint:testifylint
 			require.Equal(t, tc.expectedErrMsg, tc.expectedErr.Error())
 		})
 	}

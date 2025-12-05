@@ -289,7 +289,7 @@ func (e *ChasmEngine) PollComponent(
 		if err != nil {
 			return nil, err
 		}
-		defer executionLease.GetReleaseFn()(nil)
+		defer executionLease.GetReleaseFn()(nil) //nolint:revive
 
 		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
 		if err != nil {

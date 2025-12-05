@@ -31,5 +31,5 @@ func ExecutionStateChanged(c Component, ctx Context, refBytes []byte) (bool, err
 		// Execution state is behind submitted ref
 		return false, consts.ErrStaleState
 	}
-	panic("unexpected result from transitionhistory.Compare")
+	panic("unexpected result from transitionhistory.Compare") //nolint:forbidigo
 }
