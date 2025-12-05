@@ -80,9 +80,6 @@ func (h *handler) PollActivityExecution(
 	defer func() {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			// TODO(dan): include execution key in error message; we may do this at the CHASM
-			// framework level.
-			// cf. "workflow execution not found for workflow ID XXX and run ID YYY"
 			err = serviceerror.NewNotFound("activity execution not found")
 		}
 	}()
