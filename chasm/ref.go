@@ -1,7 +1,6 @@
 package chasm
 
 import (
-	"errors"
 	"reflect"
 
 	"go.temporal.io/api/serviceerror"
@@ -9,10 +8,10 @@ import (
 )
 
 // ErrMalformedComponentRef is returned when component ref bytes cannot be deserialized.
-var ErrMalformedComponentRef = errors.New("malformed component ref")
+var ErrMalformedComponentRef = serviceerror.NewInvalidArgument("malformed component ref")
 
 // ErrInvalidComponentRef is returned when component ref bytes deserialize to an invalid component ref.
-var ErrInvalidComponentRef = errors.New("invalid component ref")
+var ErrInvalidComponentRef = serviceerror.NewInvalidArgument("invalid component ref")
 
 var defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
 
@@ -141,7 +140,7 @@ func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 	}
 	var pRef persistencespb.ChasmComponentRef
 	if err := pRef.Unmarshal(data); err != nil {
-		return ComponentRef{}, err
+		return ComponentRef{}, ErrMalformedComponentRef
 	}
 
 	ref := ProtoRefToComponentRef(&pRef)
