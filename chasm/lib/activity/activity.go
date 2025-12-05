@@ -258,6 +258,15 @@ func (a *Activity) HandleFailed(ctx chasm.MutableContext, req *historyservice.Re
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
 
+func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) (
+	*activitypb.TerminateActivityExecutionResponse, error) {
+	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
+		return nil, err
+	}
+
+	return &activitypb.TerminateActivityExecutionResponse{}, nil
+}
+
 // getLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
 // to avoid unnecessary writes when heartbeats are not used.
 func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.ActivityHeartbeatState, error) {
