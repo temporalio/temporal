@@ -328,6 +328,7 @@ var TransitionCanceled = chasm.NewTransition(
 			}
 
 			failure := &failurepb.Failure{
+				Message: "Activity canceled",
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
 						Details: details,

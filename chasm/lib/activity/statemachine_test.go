@@ -511,6 +511,7 @@ func TestTransitionCanceled(t *testing.T) {
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
 
 	expectedFailure := &failurepb.Failure{
+		Message: "Activity canceled",
 		FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 			CanceledFailureInfo: &failurepb.CanceledFailureInfo{
 				Details: payloads.EncodeString("Details"),
