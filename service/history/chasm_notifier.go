@@ -15,7 +15,8 @@ type subscriptionTracker struct {
 type ChasmNotifier struct {
 	// TODO(dan): use ShardedConcurrentTxMap
 	executions map[chasm.EntityKey]*subscriptionTracker
-	lock       sync.Mutex
+	// TODO(dan): consider RWMutex
+	lock sync.Mutex
 }
 
 // NewChasmNotifier creates a new instance of ChasmNotifier.
