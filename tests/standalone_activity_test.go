@@ -650,7 +650,6 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument(
 	}
 
 	t.Run("LongPollTokenFromWrongExecution", func(t *testing.T) {
-
 		validPollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 			Namespace:  existingNamespace,
 			ActivityId: existingActivityID,
