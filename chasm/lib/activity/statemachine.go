@@ -256,6 +256,7 @@ var TransitionTerminated = chasm.NewTransition(
 			}
 
 			failure := &failurepb.Failure{
+				// TODO if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
 				Message:     req.GetFrontendRequest().GetReason(),
 				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
 			}
