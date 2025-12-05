@@ -96,6 +96,7 @@ func NewStandaloneActivity(
 			HeartbeatTimeout:       options.GetHeartbeatTimeout(),
 			RetryPolicy:            options.GetRetryPolicy(),
 			Priority:               request.Priority,
+			BusinessId:             request.ActivityId,
 		},
 		Attempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
@@ -134,6 +135,9 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 		TaskQueue:              a.GetTaskQueue(),
 		Priority:               a.GetPriority(),
 		ComponentRef:           componentRef,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: a.GetBusinessId(),
+		},
 	}, nil
 }
 
