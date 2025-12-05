@@ -2623,7 +2623,7 @@ that task will be sent to DLQ.`,
 	)
 	SendRawHistoryBetweenInternalServices = NewGlobalBoolSetting(
 		"history.sendRawHistoryBetweenInternalServices",
-		false,
+		true,
 		`SendRawHistoryBetweenInternalServices is whether to send raw history events between internal temporal services`,
 	)
 
