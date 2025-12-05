@@ -196,3 +196,29 @@ func (h *handler) TerminateActivityExecution(
 
 	return response, nil
 }
+
+// RequestCancelActivityExecution requests cancellation on a standalone activity execution
+func (h *handler) RequestCancelActivityExecution(
+	ctx context.Context,
+	req *activitypb.RequestCancelActivityExecutionRequest,
+) (response *activitypb.RequestCancelActivityExecutionResponse, err error) {
+	frontendReq := req.GetFrontendRequest()
+
+	ref := chasm.NewComponentRef[*Activity](chasm.EntityKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		EntityID:    frontendReq.GetRunId(),
+	})
+
+	response, _, err = chasm.UpdateComponent(
+		ctx,
+		ref,
+		(*Activity).handleCancellationRequested,
+		req,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}

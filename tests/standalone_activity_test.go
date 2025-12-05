@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
@@ -182,6 +183,392 @@ func (s *standaloneActivityTestSuite) TestActivityFailedByID() {
 	require.NoError(t, err)
 
 	s.validateFailure(ctx, t, activityID, runID, nil, s.tv.WorkerIdentity())
+}
+
+func (s *standaloneActivityTestSuite) TestActivityCancelled() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: s.tv.ActivityID(),
+		RunId:      runID,
+		Identity:   "cancelling-worker",
+		RequestId:  s.tv.RequestID(),
+		Reason:     "Test Cancellation",
+	})
+	require.NoError(t, err)
+
+	// TODO: we should get the cancel request from heart beat once we implement it
+
+	details := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			payload.EncodeString("Canceled Details"),
+		},
+	}
+
+	_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Details:   details,
+		Identity:  "new-worker",
+	})
+	require.NoError(t, err)
+
+	activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          runID,
+		IncludeInfo:    true,
+		IncludeInput:   true,
+		IncludeOutcome: true,
+	})
+	require.NoError(t, err)
+
+	info := activityResp.GetInfo()
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
+	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
+	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
+}
+
+func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: s.tv.ActivityID(),
+		RunId:      runID,
+		Identity:   "cancelling-worker",
+		RequestId:  s.tv.RequestID(),
+		Reason:     "Test Cancellation",
+	})
+	require.NoError(t, err)
+
+	// TODO: we should get the cancel request from heart beat once we implement it
+
+	details := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			payload.EncodeString("Canceled Details"),
+		},
+	}
+
+	_, err = s.FrontendClient().RespondActivityTaskCanceledById(ctx, &workflowservice.RespondActivityTaskCanceledByIdRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+		Details:    details,
+		Identity:   "new-worker",
+	})
+	require.NoError(t, err)
+
+	activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          runID,
+		IncludeInfo:    true,
+		IncludeInput:   true,
+		IncludeOutcome: true,
+	})
+	require.NoError(t, err)
+
+	info := activityResp.GetInfo()
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
+	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
+	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
+}
+
+func (s *standaloneActivityTestSuite) TestActivityCancelled_FailsIfNeverRequested() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	details := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			payload.EncodeString("Canceled Details"),
+		},
+	}
+
+	_, err := s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Details:   details,
+		Identity:  "new-worker",
+	})
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+}
+
+func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSucceeds() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	for i := 0; i < 2; i++ {
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: s.tv.ActivityID(),
+			RunId:      runID,
+			Identity:   "cancelling-worker",
+			RequestId:  "cancel-request-id",
+			Reason:     "Test Cancellation",
+		})
+		require.NoError(t, err)
+	}
+
+	// TODO: we should get the cancel request from heart beat once we implement it
+
+	activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          runID,
+		IncludeInfo:    true,
+		IncludeInput:   true,
+		IncludeOutcome: true,
+	})
+	require.NoError(t, err)
+
+	info := activityResp.GetInfo()
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus())
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, info.GetRunState())
+	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
+}
+
+func (s *standaloneActivityTestSuite) TestActivityCancelled_DifferentRequestIDFails() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: s.tv.ActivityID(),
+		RunId:      runID,
+		Identity:   "cancelling-worker",
+		RequestId:  "cancel-request-id",
+		Reason:     "Test Cancellation",
+	})
+	require.NoError(t, err)
+
+	_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: s.tv.ActivityID(),
+		RunId:      runID,
+		Identity:   "cancelling-worker",
+		RequestId:  "different-cancel-request-id",
+		Reason:     "Test Cancellation",
+	})
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+}
+
+func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested() {
+	testCases := []struct {
+		name             string
+		taskCompletionFn func(context.Context, *testing.T, []byte, string, string) error
+		expectedStatus   enumspb.ActivityExecutionStatus
+	}{
+		{
+			name: "finish with completion",
+			taskCompletionFn: func(ctx context.Context, t *testing.T, taskToken []byte, activityID string, runID string) error {
+				_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: s.Namespace().String(),
+					TaskToken: taskToken,
+					Result:    defaultResult,
+				})
+
+				return err
+			},
+			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			name: "finish with failure",
+			taskCompletionFn: func(ctx context.Context, t *testing.T, taskToken []byte, activityID string, runID string) error {
+				_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+					Namespace: s.Namespace().String(),
+					TaskToken: taskToken,
+					Failure:   defaultFailure,
+				})
+
+				return err
+			},
+			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		},
+		{
+			name: "finish with termination",
+			taskCompletionFn: func(ctx context.Context, t *testing.T, taskToken []byte, activityID string, runID string) error {
+				_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+					Namespace:  s.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      runID,
+					Reason:     "Test Termination",
+				})
+
+				return err
+			},
+			expectedStatus: enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+
+			activityID := s.tv.Any().String()
+			taskQueue := s.tv.TaskQueue().String()
+
+			startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+			runID := startResp.RunId
+
+			pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      runID,
+				Identity:   "cancelling-worker",
+				RequestId:  s.tv.RequestID(),
+				Reason:     "Test Cancellation",
+			})
+			require.NoError(t, err)
+
+			err = tc.taskCompletionFn(ctx, t, pollTaskResp.GetTaskToken(), activityID, runID)
+			require.NoError(t, err)
+
+			activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+				Namespace:   s.Namespace().String(),
+				ActivityId:  activityID,
+				RunId:       runID,
+				IncludeInfo: true,
+			})
+			require.NoError(t, err)
+
+			info := activityResp.GetInfo()
+			require.Equal(t, tc.expectedStatus, info.GetStatus())
+		})
+	}
+}
+
+func (s *standaloneActivityTestSuite) TestRequestCancellation_FailsValidation() {
+	testCases := []struct {
+		name   string
+		reqID  string
+		reason string
+	}{
+		{
+			name:   "request ID too long",
+			reqID:  string(make([]byte, 1001)), // dynamic config default is 1000
+			reason: "",
+		},
+		{
+			name:   "reason too long",
+			reqID:  "",
+			reason: string(make([]byte, 1001)), // dynamic config default is 1000
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: s.tv.ActivityID(),
+				RunId:      "run-id",
+				Identity:   "cancelling-worker",
+				RequestId:  tc.reqID,
+				Reason:     tc.reason,
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+		})
+	}
+}
+
+// TODO running into "unable to change workflow state from Created to Completed, status Failed from the chasm engine"
+// This should be re-enabled after its addressed from the chasm engine and we implement the search attributes interface.
+func (s *standaloneActivityTestSuite) TestActivityImmediatelyCancelled_WhenInScheduledState() {
+	s.T().Skip("Temporarily disabled")
+
+	/*	t := s.T()
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
+
+		activityID := s.tv.ActivityID()
+		taskQueue := s.tv.TaskQueue().String()
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: s.tv.ActivityID(),
+			RunId:      runID,
+			Identity:   "cancelling-worker",
+			RequestId:  s.tv.RequestID(),
+			Reason:     "Test Cancellation",
+		})
+		require.NoError(t, err)
+
+		activityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          runID,
+			IncludeInfo:    true,
+			IncludeInput:   true,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+
+		info := activityResp.GetInfo()
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus()) */
 }
 
 func (s *standaloneActivityTestSuite) TestActivityTerminated() {
