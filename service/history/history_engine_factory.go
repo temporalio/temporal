@@ -2,6 +2,7 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -45,6 +46,7 @@ type (
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		TestHooks                       testhooks.TestHooks
+		ChasmEngine                     chasm.Engine
 	}
 
 	historyEngineFactory struct {
@@ -78,5 +80,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.CommandHandlerRegistry,
 		f.OutboundQueueCBPool,
 		f.TestHooks,
+		f.ChasmEngine,
 	)
 }
