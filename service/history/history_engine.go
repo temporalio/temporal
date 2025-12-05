@@ -131,6 +131,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
@@ -168,6 +169,7 @@ func NewEngineWithShardContext(
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
+	chasmEngine chasm.Engine,
 ) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -218,6 +220,7 @@ func NewEngineWithShardContext(
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
 		testHooks:                  testHooks,
+		chasmEngine:                chasmEngine,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -845,6 +848,12 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 ) {
 
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
+}
+
+func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.EntityKey, componentRef []byte) {
+	if e.chasmEngine != nil {
+		e.chasmEngine.NotifyExecution(executionKey)
+	}
 }
 
 func (e *historyEngineImpl) NotifyNewTasks(
