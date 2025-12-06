@@ -33,7 +33,7 @@ func Invoke(
 		return nil
 	}
 
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(namespaceUUID.String()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(namespaceUUID.String()), workflowID)
 	if err != nil {
 		return err
 	}

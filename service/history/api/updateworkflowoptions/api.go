@@ -23,11 +23,11 @@ func Invoke(
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
-	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()))
+	req := request.GetUpdateRequest()
+	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	req := request.GetUpdateRequest()
 	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
 
 	err = api.GetAndUpdateWorkflowWithNew(

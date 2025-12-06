@@ -4864,14 +4864,18 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 }
 
 func (s *engineSuite) TestSignalWorkflowExecution() {
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "Missing namespace UUID.")
-
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
+	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			WorkflowExecution: &we,
+		},
+	}
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	s.EqualError(err, "Missing namespace UUID.")
+
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
@@ -4904,14 +4908,18 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 
 // Test signal workflow task by adding request ID
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "Missing namespace UUID.")
-
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId2",
 		RunId:      tests.RunID,
 	}
+	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			WorkflowExecution: &we,
+		},
+	}
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	s.EqualError(err, "Missing namespace UUID.")
+
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name 2"
@@ -4947,14 +4955,18 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 
 // Test signal workflow task by dedup request ID & workflow finished
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "Missing namespace UUID.")
-
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId2",
 		RunId:      tests.RunID,
 	}
+	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			WorkflowExecution: &we,
+		},
+	}
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	s.EqualError(err, "Missing namespace UUID.")
+
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name 2"
@@ -4990,14 +5002,18 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 }
 
 func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "Missing namespace UUID.")
-
 	we := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
+	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			WorkflowExecution: we,
+		},
+	}
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	s.EqualError(err, "Missing namespace UUID.")
+
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
@@ -5028,14 +5044,18 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 }
 
 func (s *engineSuite) TestSignalWorkflowExecution_WorkflowTaskBackoff() {
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.EqualError(err, "Missing namespace UUID.")
-
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
+	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			WorkflowExecution: &we,
+		},
+	}
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	s.EqualError(err, "Missing namespace UUID.")
+
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
@@ -5092,14 +5112,16 @@ func (s *engineSuite) TestSignalWorkflowExecution_WorkflowTaskBackoff() {
 }
 
 func (s *engineSuite) TestRemoveSignalMutableState() {
-	removeRequest := &historyservice.RemoveSignalMutableStateRequest{}
-	_, err := s.historyEngine.RemoveSignalMutableState(context.Background(), removeRequest)
-	s.EqualError(err, "Missing namespace UUID.")
-
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
+	removeRequest := &historyservice.RemoveSignalMutableStateRequest{
+		WorkflowExecution: &execution,
+	}
+	_, err := s.historyEngine.RemoveSignalMutableState(context.Background(), removeRequest)
+	s.EqualError(err, "Missing namespace UUID.")
+
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	requestID := uuid.NewString()

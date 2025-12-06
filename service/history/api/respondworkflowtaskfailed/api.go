@@ -24,15 +24,15 @@ func Invoke(
 	tokenSerializer *tasktoken.Serializer,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (retError error) {
-	_, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-
 	request := req.FailedRequest
 	token, err := tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return consts.ErrDeserializingToken
+	}
+
+	_, err = api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	if err != nil {
+		return err
 	}
 
 	return api.GetAndUpdateWorkflowWithNew(
@@ -44,7 +44,7 @@ func Invoke(
 			token.RunId,
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+			namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
 			if err != nil {
 				return nil, err
 			}

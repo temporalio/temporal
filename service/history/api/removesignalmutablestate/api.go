@@ -17,7 +17,7 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RemoveSignalMutableStateResponse, retError error) {
-	_, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
+	_, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), req.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}

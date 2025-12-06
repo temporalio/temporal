@@ -1858,14 +1858,18 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
-	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
+	workflowID := "wId"
+	workflowType := "workflowType"
+	runID := tests.RunID
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			WorkflowId: workflowID,
+		},
+	}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
 	namespaceID := tests.NamespaceID
-	workflowID := "wId"
-	workflowType := "workflowType"
-	runID := tests.RunID
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
@@ -1906,12 +1910,17 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
-	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
+	workflowID := "wId"
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			WorkflowId: workflowID,
+		},
+	}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
 	namespaceID := tests.NamespaceID
-	workflowID := "wId"
+
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
@@ -1954,7 +1963,11 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	}
 	tl := "testTaskQueue"
 
-	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			WorkflowId: we.GetWorkflowId(),
+		},
+	}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 

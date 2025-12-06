@@ -18,7 +18,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) error {
 
-	_, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+	_, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return err
 	}
