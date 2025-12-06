@@ -17,7 +17,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -25,6 +24,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
@@ -83,6 +83,14 @@ var (
 		elastic.NewExistsQuery(sadefs.TemporalNamespaceDivision),
 	)
 )
+
+func mustEncodeValue(val interface{}, valueType enumspb.IndexedValueType) *commonpb.Payload {
+	p, err := searchattribute.EncodeValue(val, valueType)
+	if err != nil {
+		panic(fmt.Sprintf("failed to encode value %v: %v", val, err))
+	}
+	return p
+}
 
 func createTestRequest() *manager.ListWorkflowExecutionsRequest {
 	return &manager.ListWorkflowExecutionsRequest{
@@ -1053,70 +1061,46 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 		)
 	resp, err := s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
-	payload1, _ := searchattribute.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	)
-	payload2, _ := searchattribute.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	)
-	s.True(temporalproto.DeepEqual(
-		&manager.CountWorkflowExecutionsResponse{
-			Count: 110,
-			Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
-				{
-					GroupValues: []*commonpb.Payload{payload1},
-					Count:       100,
+	expectedResp := &store.InternalCountExecutionsResponse{
+		Count: 110,
+		Groups: []store.InternalAggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				},
-				{
-					GroupValues: []*commonpb.Payload{payload2},
-					Count:       10,
+				Count: 100,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				},
+				Count: 10,
 			},
 		},
-		resp),
-	)
+	}
+	s.True(temporalproto.DeepEqual(expectedResp, resp))
 
 	// test only allowed to group by a single field
 	request.Query = "GROUP BY ExecutionStatus, WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	s.Contains(err.Error(), "'GROUP BY' clause supports only a single field")
+	s.ErrorContains(err, "'GROUP BY' clause supports only a single field")
 	s.Nil(resp)
 
-	// test only allowed to group by ExecutionStatus
+	// test only allowed to group by ExecutionStatus and LowCardinalityKeyword fields
 	request.Query = "GROUP BY WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	s.Contains(err.Error(), "'GROUP BY' clause is only supported for search attributes")
+	s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
 	s.Nil(resp)
 }
 
 func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
-	statusCompletedPayload, _ := searchattribute.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	)
-	statusRunningPayload, _ := searchattribute.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	)
-	wfType1Payload, _ := searchattribute.EncodeValue("wf-type-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	wfType2Payload, _ := searchattribute.EncodeValue("wf-type-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	wfId1Payload, _ := searchattribute.EncodeValue("wf-id-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	wfId2Payload, _ := searchattribute.EncodeValue("wf-id-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	wfId3Payload, _ := searchattribute.EncodeValue("wf-id-3", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	wfId4Payload, _ := searchattribute.EncodeValue("wf-id-4", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	wfId5Payload, _ := searchattribute.EncodeValue("wf-id-5", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-
 	testCases := []struct {
 		name         string
 		groupBy      []string
 		aggName      string
 		agg          elastic.Aggregation
 		mockResponse *elastic.SearchResult
-		response     *manager.CountWorkflowExecutionsResponse
+		response     *store.InternalCountExecutionsResponse
 	}{
 		{
 			name:    "group by one field",
@@ -1141,16 +1125,20 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 					),
 				},
 			},
-			response: &manager.CountWorkflowExecutionsResponse{
+			response: &store.InternalCountExecutionsResponse{
 				Count: 110,
-				Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				Groups: []store.InternalAggregationGroup{
 					{
-						GroupValues: []*commonpb.Payload{statusCompletedPayload},
-						Count:       100,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 100,
 					},
 					{
-						GroupValues: []*commonpb.Payload{statusRunningPayload},
-						Count:       10,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 10,
 					},
 				},
 			},
@@ -1206,24 +1194,36 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 					),
 				},
 			},
-			response: &manager.CountWorkflowExecutionsResponse{
+			response: &store.InternalCountExecutionsResponse{
 				Count: 110,
-				Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				Groups: []store.InternalAggregationGroup{
 					{
-						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType1Payload},
-						Count:       75,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 75,
 					},
 					{
-						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType2Payload},
-						Count:       25,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 25,
 					},
 					{
-						GroupValues: []*commonpb.Payload{statusRunningPayload, wfType1Payload},
-						Count:       7,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 7,
 					},
 					{
-						GroupValues: []*commonpb.Payload{statusRunningPayload, wfType2Payload},
-						Count:       3,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 3,
 					},
 				},
 			},
@@ -1322,28 +1322,48 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 					),
 				},
 			},
-			response: &manager.CountWorkflowExecutionsResponse{
+			response: &store.InternalCountExecutionsResponse{
 				Count: 110,
-				Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				Groups: []store.InternalAggregationGroup{
 					{
-						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType1Payload, wfId1Payload},
-						Count:       75,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-id-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 75,
 					},
 					{
-						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType2Payload, wfId2Payload},
-						Count:       20,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-id-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 20,
 					},
 					{
-						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType2Payload, wfId3Payload},
-						Count:       5,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-id-3", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 5,
 					},
 					{
-						GroupValues: []*commonpb.Payload{statusRunningPayload, wfType1Payload, wfId4Payload},
-						Count:       7,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-id-4", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 7,
 					},
 					{
-						GroupValues: []*commonpb.Payload{statusRunningPayload, wfType2Payload, wfId5Payload},
-						Count:       3,
+						GroupValues: []*commonpb.Payload{
+							mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-type-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							mustEncodeValue("wf-id-5", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						},
+						Count: 3,
 					},
 				},
 			},
@@ -1373,7 +1393,7 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 					tc.agg,
 				).
 				Return(tc.mockResponse, nil)
-			resp, err := s.visibilityStore.countGroupByWorkflowExecutions(context.Background(), searchParams)
+			resp, err := s.visibilityStore.countGroupByExecutions(context.Background(), searchParams, nil)
 			s.NoError(err)
 			s.True(temporalproto.DeepEqual(tc.response, resp))
 		})

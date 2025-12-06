@@ -131,10 +131,6 @@ type (
 		Query       string
 	}
 
-	CountChasmExecutionsResponse struct {
-		Count int64
-	}
-
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
 		NamespaceID namespace.ID
