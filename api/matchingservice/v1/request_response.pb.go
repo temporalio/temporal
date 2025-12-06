@@ -2399,13 +2399,12 @@ type SyncDeploymentUserDataRequest struct {
 	// Ignored by the task queue if new revision number is not greater that what it has.
 	UpdateRoutingConfig *v112.RoutingConfig `protobuf:"bytes,10,opt,name=update_routing_config,json=updateRoutingConfig,proto3" json:"update_routing_config,omitempty"`
 	// Optional map of build id to upsert version data.
-	// Ignored if `update_routing_config` is present and has an outdated revision number.
 	// (-- api-linter: core::0203::required=disabled
 	//
 	//	aip.dev/not-precedent: Not following Google API format --)
 	UpsertVersionsData map[string]*v110.WorkerDeploymentVersionData `protobuf:"bytes,11,rep,name=upsert_versions_data,json=upsertVersionsData,proto3" json:"upsert_versions_data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// List of build ids to forget from task queue.
-	// Ignored if `update_routing_config` is present and has an outdated revision number.
+	// Deprecated. Use upsert_versions_data with deleted=true.
 	ForgetVersions []string `protobuf:"bytes,12,rep,name=forget_versions,json=forgetVersions,proto3" json:"forget_versions,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -2565,6 +2564,9 @@ type SyncDeploymentUserDataResponse struct {
 	// New task queue user data version. Can be used to wait for propagation.
 	Version int64 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	// If the routing config changed after applying this operation. Compared base on revision number.
+	// Deprecated. using this is not totaly safe in case of retries.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/matchingservice/v1/request_response.proto.
 	RoutingConfigChanged bool `protobuf:"varint,2,opt,name=routing_config_changed,json=routingConfigChanged,proto3" json:"routing_config_changed,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
@@ -2607,6 +2609,7 @@ func (x *SyncDeploymentUserDataResponse) GetVersion() int64 {
 	return 0
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/matchingservice/v1/request_response.proto.
 func (x *SyncDeploymentUserDataResponse) GetRoutingConfigChanged() bool {
 	if x != nil {
 		return x.RoutingConfigChanged
@@ -5244,10 +5247,10 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x17UpsertVersionsDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12T\n" +
 	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01B\v\n" +
-	"\toperation\"p\n" +
+	"\toperation\"t\n" +
 	"\x1eSyncDeploymentUserDataResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x03R\aversion\x124\n" +
-	"\x16routing_config_changed\x18\x02 \x01(\bR\x14routingConfigChanged\"\xc5\x01\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversion\x128\n" +
+	"\x16routing_config_changed\x18\x02 \x01(\bB\x02\x18\x01R\x14routingConfigChanged\"\xc5\x01\n" +
 	"-ApplyTaskQueueUserDataReplicationEventRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
