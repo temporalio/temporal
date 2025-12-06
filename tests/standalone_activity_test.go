@@ -905,6 +905,9 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 				Name: taskQueue.Name,
 			},
 			StartToCloseTimeout: durationpb.New(1 * time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1,
+			},
 		},
 		RequestId: "test-request-id",
 	})
