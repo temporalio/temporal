@@ -318,17 +318,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	// If while scheduling a workflow task and new events has come, then this workflow task cannot be a transient/speculative.
 	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for
 	// transient/speculative workflow task and will cause in timeout processing to not work for transient workflow tasks.
-	preservedAttemptDueToBufferedEvents := false
 	if m.ms.HasBufferedEvents() {
-		// Only reset attempt if we're NOT in a transient workflow task (i.e., not continuously failing).
-		// When workflow tasks are failing continuously and signals arrive, we should preserve the attempt
-		// count to properly trigger the TemporalReportedProblems search attribute.
-		wasTransient := m.ms.IsTransientWorkflowTask()
-		if !wasTransient {
-			m.ms.executionInfo.WorkflowTaskAttempt = 1
-		} else {
-			preservedAttemptDueToBufferedEvents = true
-		}
+		m.ms.executionInfo.WorkflowTaskAttempt = 1
 		workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		createWorkflowTaskScheduledEvent = true
 		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
@@ -344,14 +335,10 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 
 		// If failover happened during transient workflow task,
 		// then reset the attempt to 1, and not use transient workflow task.
-		// However, if we just preserved the attempt due to buffered events during failures,
-		// don't reset it here even if versions differ (the version change is from flushing buffered events).
 		if m.ms.GetCurrentVersion() != lastEventVersion {
-			if !preservedAttemptDueToBufferedEvents {
-				m.ms.executionInfo.WorkflowTaskAttempt = 1
-				workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-				createWorkflowTaskScheduledEvent = true
-			}
+			m.ms.executionInfo.WorkflowTaskAttempt = 1
+			workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+			createWorkflowTaskScheduledEvent = true
 		}
 	}
 
@@ -503,9 +490,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	if !workflowTaskScheduledEventCreated &&
 		(workflowTask.ScheduledEventID != m.ms.GetNextEventID() || workflowTask.Version != m.ms.GetCurrentVersion()) {
 
-		// Only reset attempt to 1 if this is NOT a transient workflow task (attempt was 1).
-		// If workflow tasks are continuously failing (attempt > 1) and new events arrive (e.g., buffered signals),
-		// preserve the attempt count to properly trigger the TemporalReportedProblems search attribute.
+		workflowTask.Attempt = 1
 		workflowTask.Type = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		workflowTaskScheduledEventCreated = true
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
