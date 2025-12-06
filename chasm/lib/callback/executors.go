@@ -7,23 +7,28 @@ import (
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
 type HTTPCaller func(*http.Request) (*http.Response, error)
-type HTTPCallerProvider func(queues.NamespaceIDAndDestination) HTTPCaller
+type HTTPCallerProvider func(common.NamespaceIDAndDestination) HTTPCaller
 
 func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTaskExecutor {
 	return &InvocationTaskExecutor{
-		InvocationTaskExecutorOptions: opts,
+		config:             opts.Config,
+		namespaceRegistry:  opts.NamespaceRegistry,
+		metricsHandler:     opts.MetricsHandler,
+		logger:             opts.Logger,
+		httpCallerProvider: opts.HTTPCallerProvider,
+		httpTraceProvider:  opts.HTTPTraceProvider,
+		historyClient:      opts.HistoryClient,
 	}
 }
 
@@ -37,18 +42,23 @@ type InvocationTaskExecutorOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
-	ChasmEngine        chasm.Engine
 }
 
 type InvocationTaskExecutor struct {
-	InvocationTaskExecutorOptions
+	config             *Config
+	namespaceRegistry  namespace.Registry
+	metricsHandler     metrics.Handler
+	logger             log.Logger
+	httpCallerProvider HTTPCallerProvider
+	httpTraceProvider  commonnexus.HTTPClientTraceProvider
+	historyClient      resource.HistoryClient
 }
 
 func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
 	return e.Invoke(ctx, ref, attrs, task)
 }
 
-func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
+func (e InvocationTaskExecutor) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
 	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
@@ -82,8 +92,7 @@ func (r invocationResultFail) error() error {
 
 // invocationResultRetry marks an invocation as failed with the intent to retry.
 type invocationResultRetry struct {
-	err         error
-	retryPolicy backoff.RetryPolicy
+	err error
 }
 
 func (invocationResultRetry) mustImplementInvocationResult() {}
@@ -106,7 +115,7 @@ func (e InvocationTaskExecutor) Invoke(
 	taskAttr chasm.TaskAttributes,
 	task *callbackspb.InvocationTask,
 ) error {
-	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(ref.NamespaceID))
 	if err != nil {
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
@@ -115,7 +124,7 @@ func (e InvocationTaskExecutor) Invoke(
 		ctx,
 		ref,
 		(*Callback).loadInvocationArgs,
-		ctx,
+		nil,
 	)
 	if err != nil {
 		return err
@@ -123,7 +132,7 @@ func (e InvocationTaskExecutor) Invoke(
 
 	callCtx, cancel := context.WithTimeout(
 		ctx,
-		e.Config.RequestTimeout(ns.Name().String(), taskAttr.Destination),
+		e.config.RequestTimeout(ns.Name().String(), taskAttr.Destination),
 	)
 	defer cancel()
 
@@ -132,13 +141,18 @@ func (e InvocationTaskExecutor) Invoke(
 		ctx,
 		ref,
 		(*Callback).saveResult,
-		result,
+		saveResultInput{
+			result:      result,
+			retryPolicy: e.config.RetryPolicy(),
+		},
 	)
 	return invokable.WrapError(result, saveErr)
 }
 
 type BackoffTaskExecutor struct {
-	BackoffTaskExecutorOptions
+	config         *Config
+	metricsHandler metrics.Handler
+	logger         log.Logger
 }
 
 type BackoffTaskExecutorOptions struct {
@@ -151,7 +165,9 @@ type BackoffTaskExecutorOptions struct {
 
 func NewBackoffTaskExecutor(opts BackoffTaskExecutorOptions) *BackoffTaskExecutor {
 	return &BackoffTaskExecutor{
-		BackoffTaskExecutorOptions: opts,
+		config:         opts.Config,
+		metricsHandler: opts.MetricsHandler,
+		logger:         opts.Logger,
 	}
 }
 

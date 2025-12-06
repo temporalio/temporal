@@ -595,44 +595,44 @@ stop-dependencies-cdc:
 start: start-sqlite
 
 start-cass-es: temporal-server
-	./temporal-server --env development-cass-es --allow-no-auth start
+	./temporal-server --config-file config/development-cass-es.yaml --allow-no-auth start
 
 start-cass-es-dual: temporal-server
-	./temporal-server --env development-cass-es-dual --allow-no-auth start
+	./temporal-server --config-file config/development-cass-es-dual.yaml --allow-no-auth start
 
 start-cass-es-custom: temporal-server
-	./temporal-server --env development-cass-es-custom --allow-no-auth start
+	./temporal-server --config-file config/development-cass-es-custom.yaml --allow-no-auth start
 
 start-es-fi: temporal-server
-	./temporal-server --env development-cass-es-fi --allow-no-auth start
+	./temporal-server --config-file config/development-cass-es-fi.yaml --allow-no-auth start
 
 start-mysql: start-mysql8
 
 start-mysql8: temporal-server
-	./temporal-server --env development-mysql8 --allow-no-auth start
+	./temporal-server --config-file config/development-mysql8.yaml --allow-no-auth start
 
 start-mysql-es: temporal-server
-	./temporal-server --env development-mysql-es --allow-no-auth start
+	./temporal-server --config-file config/development-mysql-es.yaml --allow-no-auth start
 
 start-postgres: start-postgres12
 
 start-postgres12: temporal-server
-	./temporal-server --env development-postgres12 --allow-no-auth start
+	./temporal-server --config-file config/development-postgres12.yaml --allow-no-auth start
 
 start-sqlite: temporal-server
-	./temporal-server --env development-sqlite --allow-no-auth start
+	./temporal-server --config-file config/development-sqlite.yaml --allow-no-auth start
 
 start-sqlite-file: temporal-server
-	./temporal-server --env development-sqlite-file --allow-no-auth start
+	./temporal-server --config-file config/development-sqlite-file.yaml --allow-no-auth start
 
 start-xdc-cluster-a: temporal-server
-	./temporal-server --env development-cluster-a --allow-no-auth start
+	./temporal-server --config-file config/development-cluster-a.yaml --allow-no-auth start
 
 start-xdc-cluster-b: temporal-server
-	./temporal-server --env development-cluster-b --allow-no-auth start
+	./temporal-server --config-file config/development-cluster-b.yaml --allow-no-auth start
 
 start-xdc-cluster-c: temporal-server
-	./temporal-server --env development-cluster-c --allow-no-auth start
+	./temporal-server --config-file config/development-cluster-c.yaml --allow-no-auth start
 
 ##### Grafana #####
 update-dashboards:

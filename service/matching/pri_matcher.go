@@ -110,7 +110,7 @@ func (tm *priTaskMatcher) Start() {
 
 	if tm.fwdr == nil {
 		// Root doesn't forward. But it does need something to validate tasks.
-		go tm.validateTasksOnRoot(lim, retrier)
+		go tm.validateTasksOnRoot(retrier)
 		return
 	}
 
@@ -128,8 +128,10 @@ func (tm *priTaskMatcher) Stop() {}
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
 	poller := waitingPoller{isTaskForwarder: true}
+	skipLimiter := false
+	var err error
 	for {
-		if lim.Wait(tm.tqCtx) != nil {
+		if !skipLimiter && lim.Wait(tm.tqCtx) != nil {
 			return
 		}
 
@@ -141,7 +143,7 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 			continue
 		}
 
-		err := tm.forwardTask(res.task)
+		skipLimiter, err = tm.forwardTask(res.task)
 
 		// backoff on resource exhausted errors
 		if common.IsResourceExhausted(err) {
@@ -152,7 +154,7 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 	}
 }
 
-func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
+func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	if task.forwardCtx != nil {
@@ -175,7 +177,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
 
-			return nil
+			return true, nil
 		}
 
 		// Add a timeout for forwarding.
@@ -187,30 +189,26 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 	if task.isQuery() {
 		res, err := tm.fwdr.ForwardQueryTask(ctx, task)
 		task.finishForward(res, err, true)
-		return err
+		return false, err
 	}
 
 	if task.isNexus() {
 		res, err := tm.fwdr.ForwardNexusTask(ctx, task)
 		task.finishForward(res, err, true)
-		return err
+		return false, err
 	}
 
 	// normal wf/activity task
 	err := tm.fwdr.ForwardTask(ctx, task)
 	task.finishForward(nil, err, true)
 
-	return err
+	return false, err
 }
 
-func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier backoff.Retrier) {
+func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
 	poller := &waitingPoller{isTaskForwarder: true, isTaskValidator: true}
 	for {
-		if lim.Wait(tm.tqCtx) != nil {
-			return
-		}
-
 		res := tm.data.EnqueuePollerAndWait(ctxs, poller)
 		if res.ctxErr != nil {
 			return // task queue closing
@@ -435,16 +433,11 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 		return // should not happen but for safety
 	}
 
-	priStr := ""
-	if pri := task.getPriority().GetPriorityKey(); pri > 0 {
-		priStr = strconv.Itoa(int(pri))
-	}
-
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
-		metrics.StringTag(metrics.TaskPriorityTagName, priStr),
+		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
 	)
 }
 
@@ -480,7 +473,7 @@ func (tm *priTaskMatcher) poll(
 ) (*internalTask, error) {
 	start := time.Now()
 	pollWasForwarded := false
-	priStr := ""
+	var priority int32
 
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
@@ -489,7 +482,7 @@ func (tm *priTaskMatcher) poll(
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
 				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
-				metrics.StringTag(metrics.TaskPriorityTagName, priStr),
+				metrics.MatchingTaskPriorityTag(priority),
 			)
 		}
 	}()
@@ -515,9 +508,7 @@ func (tm *priTaskMatcher) poll(
 
 	task := res.task
 	pollWasForwarded = task.isStarted()
-	if pri := task.getPriority().GetPriorityKey(); pri > 0 {
-		priStr = strconv.Itoa(int(pri))
-	}
+	priority = task.getPriority().GetPriorityKey()
 
 	if !task.isQuery() {
 		if task.isSyncMatchTask() {

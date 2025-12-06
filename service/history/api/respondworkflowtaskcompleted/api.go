@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -225,7 +226,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if retError != nil {
 			cancelled := effects.Cancel(ctx)
 			if cancelled {
-				handler.logger.Info("Canceled effects due to error.",
+				handler.logger.Info("Canceled effects due to error",
 					tag.Error(retError),
 					tag.WorkflowID(token.GetWorkflowId()),
 					tag.WorkflowRunID(token.GetRunId()),
@@ -451,7 +452,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),
 			tag.WorkflowRunID(token.GetRunId()),
-			tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
+			tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
+			tag.Attempt(currentWorkflowTask.Attempt),
+			tag.Cause(wtFailedCause.failedCause.String()),
+		)
 		if currentWorkflowTask.Attempt > 1 && wtFailedCause.failedCause != enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
@@ -594,6 +598,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 					newWorkflowExecutionInfo.WorkflowId,
 					newWorkflowExecutionState.RunId,
 				),
+				chasm.WorkflowArchetypeID,
 				handler.logger,
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),

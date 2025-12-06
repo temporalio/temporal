@@ -1,19 +1,22 @@
 package callback
 
 import (
-	"context"
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const (
-	Archetype chasm.Archetype = "Callback"
-)
+type CompletionSource interface {
+	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.OperationCompletion, error)
+}
 
 var _ chasm.Component = (*Callback)(nil)
 var _ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
@@ -26,7 +29,7 @@ type Callback struct {
 	*callbackspb.CallbackState
 
 	// Interface to retrieve Nexus operation completion data
-	CompletionSource chasm.Field[CompletionSource]
+	CompletionSource chasm.ParentPtr[CompletionSource]
 }
 
 func NewCallback(
@@ -46,8 +49,14 @@ func NewCallback(
 }
 
 func (c *Callback) LifecycleState(_ chasm.Context) chasm.LifecycleState {
-	// TODO (seankane): implement lifecycle state
-	return chasm.LifecycleStateRunning
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return chasm.LifecycleStateCompleted
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		return chasm.LifecycleStateFailed
+	default:
+		return chasm.LifecycleStateRunning
+	}
 }
 
 func (c *Callback) StateMachineState() callbackspb.CallbackStatus {
@@ -65,50 +74,50 @@ func (c *Callback) recordAttempt(ts time.Time) {
 
 //nolint:revive // context.Context is an input parameter for chasm.ReadComponent, not a function parameter
 func (c *Callback) loadInvocationArgs(
-	chasmCtx chasm.Context,
-	ctx context.Context,
+	ctx chasm.Context,
+	_ chasm.NoValue,
 ) (callbackInvokable, error) {
-	target, err := c.CompletionSource.Get(chasmCtx)
-	if err != nil {
-		return nil, err
-	}
+	target := c.CompletionSource.Get(ctx)
 
-	// TODO (seankane,yichao): we should be able to use the chasm context here.
 	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
 		return nil, err
 	}
 
-	switch variant := c.GetCallback().GetVariant().(type) {
-	case *callbackspb.Callback_Nexus_:
-		if variant.Nexus.Url == chasm.NexusCompletionHandlerURL {
-			return chasmInvocation{
-				nexus:      variant.Nexus,
-				attempt:    c.Attempt,
-				completion: completion,
-				requestID:  c.RequestId,
-			}, nil
-		}
-		return nexusInvocation{
-			nexus:      variant.Nexus,
-			completion: completion,
-			// workflowID: c.WorkflowId,
-			workflowID: chasmCtx.ExecutionKey().BusinessID,
-			runID:      chasmCtx.ExecutionKey().EntityID,
-			attempt:    c.Attempt,
-		}, nil
-	default:
-		return nil, queues.NewUnprocessableTaskError(
+	variant := c.GetCallback().GetNexus()
+	if variant == nil {
+		return nil, queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("unprocessable callback variant: %v", variant),
 		)
 	}
+
+	if variant.Url == chasm.NexusCompletionHandlerURL {
+		return chasmInvocation{
+			nexus:      variant,
+			attempt:    c.Attempt,
+			completion: completion,
+			requestID:  c.RequestId,
+		}, nil
+	}
+	return nexusInvocation{
+		nexus:      variant,
+		completion: completion,
+		workflowID: ctx.ExecutionKey().BusinessID,
+		runID:      ctx.ExecutionKey().RunID,
+		attempt:    c.Attempt,
+	}, nil
+}
+
+type saveResultInput struct {
+	result      invocationResult
+	retryPolicy backoff.RetryPolicy
 }
 
 func (c *Callback) saveResult(
 	ctx chasm.MutableContext,
-	result invocationResult,
+	input saveResultInput,
 ) (chasm.NoValue, error) {
-	switch r := result.(type) {
+	switch r := input.result.(type) {
 	case invocationResultOK:
 		err := TransitionSucceeded.Apply(c, ctx, EventSucceeded{Time: ctx.Now(c)})
 		return nil, err
@@ -116,7 +125,7 @@ func (c *Callback) saveResult(
 		err := TransitionAttemptFailed.Apply(c, ctx, EventAttemptFailed{
 			Time:        ctx.Now(c),
 			Err:         r.err,
-			RetryPolicy: r.retryPolicy,
+			RetryPolicy: input.retryPolicy,
 		})
 		return nil, err
 	case invocationResultFail:
@@ -126,8 +135,31 @@ func (c *Callback) saveResult(
 		})
 		return nil, err
 	default:
-		return nil, queues.NewUnprocessableTaskError(
-			fmt.Sprintf("unrecognized callback result %v", result),
+		return nil, queueserrors.NewUnprocessableTaskError(
+			fmt.Sprintf("unrecognized callback result %v", input.result),
 		)
 	}
+}
+
+// ToAPICallback converts a CHASM callback to API callback proto.
+func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
+	// Convert CHASM callback proto to API callback proto
+	chasmCB := c.GetCallback()
+	res := &commonpb.Callback{
+		Links: chasmCB.GetLinks(),
+	}
+
+	// CHASM currently only supports Nexus callbacks
+	if variant, ok := chasmCB.Variant.(*callbackspb.Callback_Nexus_); ok {
+		res.Variant = &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: variant.Nexus.GetHeader(),
+			},
+		}
+		return res, nil
+	}
+
+	// This should not happen as CHASM only supports Nexus callbacks currently
+	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }

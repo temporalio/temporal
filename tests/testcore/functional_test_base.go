@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -448,7 +448,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 	visibilityArchivalURI string,
 ) (namespace.ID, error) {
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
-	nsID := namespace.ID(uuid.New())
+	nsID := namespace.ID(uuid.NewString())
 	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{

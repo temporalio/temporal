@@ -129,6 +129,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":        2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":            2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":               2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PauseWorkflowExecution":                2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseWorkflowExecution":              2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,

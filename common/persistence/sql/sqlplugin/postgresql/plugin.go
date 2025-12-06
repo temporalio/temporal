@@ -29,18 +29,29 @@ var defaultDatabaseNames = []string{
 }
 
 type plugin struct {
-	d driver.Driver
+	driver         driver.Driver
+	queryConverter sqlplugin.VisibilityQueryConverter
 }
 
 var _ sqlplugin.Plugin = (*plugin)(nil)
 
 func init() {
-	sql.RegisterPlugin(PluginName, &plugin{&driver.PQDriver{}})
-	sql.RegisterPlugin(PluginNamePGX, &plugin{&driver.PGXDriver{}})
+	sql.RegisterPlugin(PluginName, &plugin{
+		driver:         &driver.PQDriver{},
+		queryConverter: &queryConverter{},
+	})
+	sql.RegisterPlugin(PluginNamePGX, &plugin{
+		driver:         &driver.PGXDriver{},
+		queryConverter: &queryConverter{},
+	})
+}
+
+func (p *plugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {
+	return p.queryConverter
 }
 
 // CreateDB initialize the db object
-func (d *plugin) CreateDB(
+func (p *plugin) CreateDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
@@ -51,11 +62,11 @@ func (d *plugin) CreateDB(
 		if cfg.Connect != nil {
 			return cfg.Connect(cfg)
 		}
-		return d.createDBConnection(cfg, r)
+		return p.createDBConnection(cfg, r)
 	}
-	needsRefresh := d.d.IsConnNeedsRefreshError
+	needsRefresh := p.driver.IsConnNeedsRefreshError
 	handle := sqlplugin.NewDatabaseHandle(dbKind, connect, needsRefresh, logger, metricsHandler, clock.NewRealTimeSource())
-	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
+	db := newDB(dbKind, cfg.DatabaseName, p.driver, handle, nil)
 	return db, nil
 }
 
@@ -63,12 +74,12 @@ func (d *plugin) CreateDB(
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
-func (d *plugin) createDBConnection(
+func (p *plugin) createDBConnection(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
 	if cfg.DatabaseName != "" {
-		postgresqlSession, err := session.NewSession(cfg, d.d, resolver)
+		postgresqlSession, err := session.NewSession(cfg, p.driver, resolver)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +95,7 @@ func (d *plugin) createDBConnection(
 		cfg.DatabaseName = databaseName
 		if postgresqlSession, err := session.NewSession(
 			cfg,
-			d.d,
+			p.driver,
 			resolver,
 		); err == nil {
 			return postgresqlSession.DB, nil

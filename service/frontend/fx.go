@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -111,6 +112,7 @@ var Module = fx.Options(
 	fx.Provide(NexusEndpointRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Invoke(EndpointRegistryLifetimeHooks),
+	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
 	activity.FrontendModule,
 )
@@ -586,6 +588,7 @@ func VisibilityManagerProvider(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -595,6 +598,7 @@ func VisibilityManagerProvider(
 		saProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -604,6 +608,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
+		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 	)
@@ -656,6 +661,7 @@ func AdminHandlerProvider(
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	matchingClient resource.MatchingClient,
+	chasmRegistry *chasm.Registry,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -684,6 +690,7 @@ func AdminHandlerProvider(
 		healthServer,
 		eventSerializer,
 		timeSource,
+		chasmRegistry,
 		taskCategoryRegistry,
 		matchingClient,
 	}
@@ -741,6 +748,7 @@ func HandlerProvider(
 	matchingClient resource.MatchingClient,
 	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentStoreClient workerdeployment.Client,
+	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
@@ -770,6 +778,7 @@ func HandlerProvider(
 		matchingClient,
 		deploymentStoreClient,
 		workerDeploymentStoreClient,
+		schedulerClient,
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,

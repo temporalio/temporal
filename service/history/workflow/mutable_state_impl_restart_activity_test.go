@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
@@ -366,7 +366,7 @@ func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencesp
 	_, err = s.mutableState.AddActivityTaskStartedEvent(
 		activityInfo,
 		activityInfo.ScheduledEventId,
-		uuid.New(),
+		uuid.NewString(),
 		"worker-identity",
 		nil,
 		nil,

@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -104,7 +104,7 @@ func (r *resetterImpl) resetWorkflow(
 		return nil, err
 	}
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.Rebuild(
 		ctx,
 		now,
@@ -150,7 +150,7 @@ func (r *resetterImpl) getBaseBranchToken(
 		r.namespaceID,
 		r.workflowID,
 		r.baseRunID,
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetypeID,
 	)
 	switch err.(type) {
 	case nil:

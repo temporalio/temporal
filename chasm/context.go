@@ -16,7 +16,7 @@ type Context interface {
 	// In a context of a transaction, this time must be used to allow for framework support of pause and time skipping.
 	Now(Component) time.Time
 	// ExecutionKey returns the execution key for the execution the context is operating on.
-	ExecutionKey() EntityKey
+	ExecutionKey() ExecutionKey
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -52,7 +52,7 @@ type immutableCtx struct {
 	// and the framework potentially needs to go to persistence to load some fields.
 	ctx context.Context
 
-	executionKey EntityKey
+	executionKey ExecutionKey
 
 	// Not embedding the Node here to avoid exposing AddTask() method on Node,
 	// so that ContextImpl won't implement MutableContext interface.
@@ -83,10 +83,10 @@ func newContext(
 	return &immutableCtx{
 		ctx:  ctx,
 		root: node.root(),
-		executionKey: EntityKey{
+		executionKey: ExecutionKey{
 			NamespaceID: workflowKey.NamespaceID,
 			BusinessID:  workflowKey.WorkflowID,
-			EntityID:    workflowKey.RunID,
+			RunID:       workflowKey.RunID,
 		},
 	}
 }
@@ -103,7 +103,7 @@ func (c *immutableCtx) Now(component Component) time.Time {
 	return c.root.Now(component)
 }
 
-func (c *immutableCtx) ExecutionKey() EntityKey {
+func (c *immutableCtx) ExecutionKey() ExecutionKey {
 	return c.executionKey
 }
 
@@ -114,7 +114,7 @@ func (c *immutableCtx) getContext() context.Context {
 // NewMutableContext creates a new MutableContext from an existing Context and root Node.
 //
 // NOTE: Library authors should not invoke this constructor directly, and instead use the [UpdateComponent],
-// [UpdateWithNewEntity], or [NewEntity] APIs.
+// [UpdateWithNewExecution], or [NewExecution] APIs.
 func NewMutableContext(
 	ctx context.Context,
 	root *Node,

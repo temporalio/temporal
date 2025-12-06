@@ -31,6 +31,8 @@ type (
 	// Plugin defines the interface for any SQL database that needs to implement
 	Plugin interface {
 		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (GenericDB, error)
+
+		GetVisibilityQueryConverter() VisibilityQueryConverter
 	}
 
 	// TableCRUD defines the API for interacting with the database tables

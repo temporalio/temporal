@@ -12,19 +12,19 @@ import (
 type NoValue = *struct{}
 
 type Engine interface {
-	NewEntity(
+	NewExecution(
 		context.Context,
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
-	) (EntityKey, []byte, error)
-	UpdateWithNewEntity(
+	) (ExecutionKey, []byte, error)
+	UpdateWithNewExecution(
 		context.Context,
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		func(MutableContext, Component) error,
 		...TransitionOption,
-	) (EntityKey, []byte, error)
+	) (ExecutionKey, []byte, error)
 
 	UpdateComponent(
 		context.Context,
@@ -62,9 +62,8 @@ type BusinessIDConflictPolicy int
 
 const (
 	BusinessIDConflictPolicyFail BusinessIDConflictPolicy = iota
-	BusinessIDConflictPolicyTermiateExisting
-	// TODO: Do we want to support UseExisting conflict policy?
-	// BusinessIDConflictPolicyUseExisting
+	BusinessIDConflictPolicyTerminateExisting
+	BusinessIDConflictPolicyUseExisting
 )
 
 type TransitionOptions struct {
@@ -78,9 +77,9 @@ type TransitionOption func(*TransitionOptions)
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
-// Compared to the EntityEphemeral() operation on RegistrableComponent,
+// Compared to the ExecutionEphemeral() operation on RegistrableComponent,
 // the scope of this operation is limited to a certain transition,
-// while the EntityEphemeral() applies to all transitions.
+// while the ExecutionEphemeral() applies to all transitions.
 // TODO: we need to figure out a way to run the tasks
 // generated in a speculative transition
 func WithSpeculative() TransitionOption {
@@ -89,7 +88,9 @@ func WithSpeculative() TransitionOption {
 	}
 }
 
-// this only applies to NewEntity and UpdateWithNewEntity
+// WithBusinessIDPolicy sets the businessID reuse and conflict policy
+// used in the transition when creating a new execution.
+// This option only applies to NewExecution() and UpdateWithNewExecution().
 func WithBusinessIDPolicy(
 	reusePolicy BusinessIDReusePolicy,
 	conflictPolicy BusinessIDConflictPolicy,
@@ -100,7 +101,8 @@ func WithBusinessIDPolicy(
 	}
 }
 
-// this only applies to NewEntity and UpdateWithNewEntity
+// WithRequestID sets the requestID used when creating a new execution.
+// This option only applies to NewExecution() and UpdateWithNewExecution().
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
@@ -116,15 +118,15 @@ func WithRequestID(
 // 	panic("not implemented")
 // }
 
-func NewEntity[C Component, I any, O any](
+func NewExecution[C Component, I any, O any](
 	ctx context.Context,
-	key EntityKey,
+	key ExecutionKey,
 	newFn func(MutableContext, I) (C, O, error),
 	input I,
 	opts ...TransitionOption,
-) (O, EntityKey, []byte, error) {
+) (O, ExecutionKey, []byte, error) {
 	var output O
-	entityKey, serializedRef, err := engineFromContext(ctx).NewEntity(
+	executionKey, serializedRef, err := engineFromContext(ctx).NewExecution(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
@@ -136,22 +138,22 @@ func NewEntity[C Component, I any, O any](
 		opts...,
 	)
 	if err != nil {
-		return output, EntityKey{}, nil, err
+		return output, ExecutionKey{}, nil, err
 	}
-	return output, entityKey, serializedRef, err
+	return output, executionKey, serializedRef, err
 }
 
-func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
+func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](
 	ctx context.Context,
-	key EntityKey,
+	key ExecutionKey,
 	newFn func(MutableContext, I) (C, O1, error),
 	updateFn func(C, MutableContext, I) (O2, error),
 	input I,
 	opts ...TransitionOption,
-) (O1, O2, EntityKey, []byte, error) {
+) (O1, O2, ExecutionKey, []byte, error) {
 	var output1 O1
 	var output2 O2
-	entityKey, serializedRef, err := engineFromContext(ctx).UpdateWithNewEntity(
+	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithNewExecution(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
@@ -168,9 +170,9 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 		opts...,
 	)
 	if err != nil {
-		return output1, output2, EntityKey{}, nil, err
+		return output1, output2, ExecutionKey{}, nil, err
 	}
-	return output1, output2, entityKey, serializedRef, err
+	return output1, output2, executionKey, serializedRef, err
 }
 
 // TODO:
@@ -181,7 +183,7 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 //
 // UpdateComponent applies updateFn to the component identified by the supplied component reference.
 // It returns the result, along with the new component reference. opts are currently ignored.
-func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
+func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
 	updateFn func(C, MutableContext, I) (O, error),
@@ -214,7 +216,7 @@ func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 
 // ReadComponent returns the result of evaluating readFn against the component identified by the
 // component reference. opts are currently ignored.
-func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
+func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
 	readFn func(C, Context, I) (O, error),
@@ -249,7 +251,7 @@ func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 // predicate must be monotonic: if it returns true at execution state transition s then it must
 // return true at all transitions t > s. If the predicate is true at the outset then PollComponent
 // returns immediately. opts are currently ignored.
-func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
+func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
 	monotonicPredicate func(C, Context, I) (O, bool, error),

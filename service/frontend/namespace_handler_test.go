@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -251,7 +251,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	isGlobalNamespace2 := true
 	namespace1 := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
-			Id:          uuid.New(),
+			Id:          uuid.NewString(),
 			State:       enumspb.NAMESPACE_STATE_REGISTERED,
 			Name:        s.getRandomNamespace(),
 			Description: description1,
@@ -272,7 +272,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	}
 	namespace2 := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
-			Id:          uuid.New(),
+			Id:          uuid.NewString(),
 			State:       enumspb.NAMESPACE_STATE_REGISTERED,
 			Name:        s.getRandomNamespace(),
 			Description: description2,
@@ -382,7 +382,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilities() {
 	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
 	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
-	s.False(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
+	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 
 	// Second call: Override the default value of dynamic configs.
@@ -536,7 +536,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod() {
-	namespace := uuid.New()
+	namespace := uuid.NewString()
 	version := int64(1)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
@@ -544,7 +544,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.New(),
+				Id:   uuid.NewString(),
 				Name: namespace,
 			},
 			Config:            &persistencespb.NamespaceConfig{},
@@ -573,7 +573,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace(
 	namespace := "local-ns-to-be-promoted"
 	clusterName := "cluster1"
 	version := int64(1)
-	nid := uuid.New()
+	nid := uuid.NewString()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
@@ -631,7 +631,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveClusterWit
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 	update1Time := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
 	namespace := "global-ns-to-be-migrated"
-	nid := uuid.New()
+	nid := uuid.NewString()
 	version := int64(100)
 	clusterName1 := "cluster1"
 	clusterName2 := "cluster2"
@@ -710,7 +710,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ChangeActiveClusterWit
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 	update1Time := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
 	namespace := "global-ns-to-be-migrated"
-	nid := uuid.New()
+	nid := uuid.NewString()
 	version := int64(100)
 	clusterName1 := "cluster1"
 	clusterName2 := "cluster2"
@@ -786,7 +786,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 	update1Time := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
 	namespace := "global-ns-to-be-migrated"
-	nid := uuid.New()
+	nid := uuid.NewString()
 	version := int64(100)
 	clusterName1 := "cluster1"
 	clusterName2 := "cluster2"
@@ -1057,7 +1057,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NoAttrSet() {
 	retention := 7 * time.Hour * 24
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
-	nid := uuid.New()
+	nid := uuid.NewString()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
@@ -1104,7 +1104,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 	activeClusterName := cluster.TestCurrentClusterName
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
-	nid := uuid.New()
+	nid := uuid.NewString()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
@@ -1288,7 +1288,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NoAttrSet() {
 	retention := 7 * time.Hour * 24
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
-	nid := uuid.New()
+	nid := uuid.NewString()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
@@ -1339,7 +1339,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_AllAttrSet() {
 	retention := durationpb.New(7 * time.Hour * 24)
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
-	nid := uuid.New()
+	nid := uuid.NewString()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
@@ -1455,7 +1455,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_NotMaster() {
 	activeClusterName := cluster.TestCurrentClusterName
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
-	nid := uuid.New()
+	nid := uuid.NewString()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
@@ -1549,7 +1549,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NotMaster() {
 	retention := durationpb.New(7 * time.Hour * 24)
 	data := map[string]string{"some random key": "some random value"}
 	version := int64(100)
-	nid := uuid.New()
+	nid := uuid.NewString()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)
@@ -1625,7 +1625,7 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 	update1Time := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
 	namespace := "global-ns-to-be-migrated"
-	nid := uuid.New()
+	nid := uuid.NewString()
 	version := int64(100)
 	clusterName1 := "cluster1"
 	clusterName2 := "cluster2"
@@ -1937,5 +1937,5 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 }
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
-	return "namespace" + uuid.New()
+	return "namespace" + uuid.NewString()
 }
