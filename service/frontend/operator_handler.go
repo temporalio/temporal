@@ -655,6 +655,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
+			IsReplicationEnabled:     request.GetEnableReplication(),
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
@@ -724,6 +725,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 			InitialFailoverVersion: clusterResp.GetInitialFailoverVersion(),
 			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
 			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),
+			IsReplicationEnabled:   clusterResp.GetIsReplicationEnabled(),
 		})
 	}
 	return &operatorservice.ListClustersResponse{
