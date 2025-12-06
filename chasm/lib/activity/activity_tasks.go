@@ -103,18 +103,12 @@ func newScheduleToCloseTimeoutTaskExecutor() *scheduleToCloseTimeoutTaskExecutor
 }
 
 func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
-	ctx chasm.Context,
+	_ chasm.Context,
 	activity *Activity,
 	_ chasm.TaskAttributes,
-	task *activitypb.ScheduleToCloseTimeoutTask,
+	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	attempt, err := activity.LastAttempt.Get(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	valid := TransitionTimedOut.Possible(activity) && task.Attempt == attempt.Count
-	return valid, nil
+	return TransitionTimedOut.Possible(activity), nil
 }
 
 func (e *scheduleToCloseTimeoutTaskExecutor) Execute(

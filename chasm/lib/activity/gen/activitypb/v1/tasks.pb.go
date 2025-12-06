@@ -115,10 +115,7 @@ func (x *ScheduleToStartTimeoutTask) GetAttempt() int32 {
 }
 
 type ScheduleToCloseTimeoutTask struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-	// need to guard against any concurrent operations where the originally intended task may be outdated.
-	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -151,13 +148,6 @@ func (x *ScheduleToCloseTimeoutTask) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ScheduleToCloseTimeoutTask.ProtoReflect.Descriptor instead.
 func (*ScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ScheduleToCloseTimeoutTask) GetAttempt() int32 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
 }
 
 type StartToCloseTimeoutTask struct {
@@ -214,9 +204,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\x14ActivityDispatchTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"6\n" +
 	"\x1aScheduleToStartTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"6\n" +
-	"\x1aScheduleToCloseTimeoutTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"3\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\x1c\n" +
+	"\x1aScheduleToCloseTimeoutTask\"3\n" +
 	"\x17StartToCloseTimeoutTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattemptBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
