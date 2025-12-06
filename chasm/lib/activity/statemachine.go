@@ -146,7 +146,7 @@ var TransitionCompleted = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) error {
 		// TODO: after rebase on main, add a helper store := a.LoadStore(ctx)
-		store := a.Store.Get(ctx)
+		store, _ := a.Store.TryGet(ctx)
 		if store == nil {
 			store = a
 		}
@@ -173,7 +173,7 @@ var TransitionFailed = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
-		store := a.Store.Get(ctx)
+		store, _ := a.Store.TryGet(ctx)
 		if store == nil {
 			store = a
 		}
@@ -203,7 +203,7 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) error {
-		store := a.Store.Get(ctx)
+		store, _ := a.Store.TryGet(ctx)
 		if store == nil {
 			store = a
 		}
@@ -251,7 +251,7 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 	func(a *Activity, ctx chasm.MutableContext, details *commonpb.Payloads) error {
-		store := a.Store.Get(ctx)
+		store, _ := a.Store.TryGet(ctx)
 		if store == nil {
 			store = a
 		}
@@ -284,7 +284,7 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
-		store := a.Store.Get(ctx)
+		store, _ := a.Store.TryGet(ctx)
 		if store == nil {
 			store = a
 		}

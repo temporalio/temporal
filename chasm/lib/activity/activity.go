@@ -151,7 +151,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 	}
 
-	store := a.Store.Get(ctx)
+	store, _ := a.Store.TryGet(ctx)
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	if store == nil {
 		if err := a.PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
