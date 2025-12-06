@@ -802,7 +802,7 @@ func (s *standaloneActivityTestSuite) TestScheduleToCloseTimeout_WithRetry() {
 		},
 	})
 	require.NoError(t, err)
-	pollTaskResp, err = s.pollActivityTaskQueue(ctx, taskQueue)
+	_, err = s.pollActivityTaskQueue(ctx, taskQueue)
 	require.NoError(t, err)
 
 	// Wait for schedule-to-close timeout.
