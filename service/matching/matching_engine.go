@@ -430,7 +430,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
-	onUserDataChanged := func() { newPM.userDataChanged() }
+	onUserDataChanged := func(to *persistencespb.VersionedTaskQueueUserData) { newPM.userDataChanged(to) }
 	userDataManager := newUserDataManager(
 		e.taskManager,
 		e.matchingRawClient,
@@ -3223,6 +3223,44 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	return &matchingservice.UpdateTaskQueueConfigResponse{
 		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
 	}, nil
+}
+
+func (e *matchingEngineImpl) UpdateFairnessState(
+	ctx context.Context,
+	req *matchingservice.UpdateFairnessStateRequest,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	partition, err := tqid.PartitionFromProto(req.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	if partition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL {
+		return nil, serviceerror.NewUnimplemented("fairness and priority not implemented for non-normal queues")
+	}
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		data := common.CloneProto(old)
+		if data.PerType == nil {
+			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+		}
+		typ := int32(pm.Partition().TaskType())
+		perType := data.PerType[typ]
+		if perType == nil {
+			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
+			perType = data.PerType[typ]
+		}
+		perType.FairnessState = req.FairnessState
+		return data, true, nil
+	}
+	_, err = pm.GetUserDataManager().UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
 // migrateOldFormatVersions moves versions present in the given deployment from the
