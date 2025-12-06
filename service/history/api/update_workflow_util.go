@@ -78,8 +78,8 @@ func UpdateWorkflowWithNew(
 
 	mutableState := workflowLease.GetMutableState()
 	if postActions.CreateWorkflowTask {
-		// Create a transfer task to schedule a workflow task
-		if !mutableState.HasPendingWorkflowTask() {
+		// Create a transfer task to schedule a workflow task only if the workflow is not paused and there is no pending workflow task.
+		if !mutableState.HasPendingWorkflowTask() && !mutableState.IsWorkflowExecutionStatusPaused() {
 			if _, err := mutableState.AddWorkflowTaskScheduledEvent(
 				false,
 				enumsspb.WORKFLOW_TASK_TYPE_NORMAL,

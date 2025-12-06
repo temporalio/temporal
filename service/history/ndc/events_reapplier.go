@@ -76,7 +76,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 		return reappliedEvents, nil
 	}
 
-	if !ms.HasPendingWorkflowTask() {
+	if !ms.HasPendingWorkflowTask() && !ms.IsWorkflowExecutionStatusPaused() {
 		if _, err := ms.AddWorkflowTaskScheduledEvent(
 			false,
 			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
