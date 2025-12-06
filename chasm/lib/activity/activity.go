@@ -266,16 +266,11 @@ func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.Te
 // getLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
 // to avoid unnecessary writes when heartbeats are not used.
 func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.ActivityHeartbeatState, error) {
-	heartbeat, err := a.LastHeartbeat.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
+	heartbeat := a.LastHeartbeat.Get(ctx)
 	if heartbeat == nil {
 		heartbeat = &activitypb.ActivityHeartbeatState{}
 		a.LastHeartbeat = chasm.NewDataField(ctx, heartbeat)
 	}
-
 	return heartbeat, nil
 }
 

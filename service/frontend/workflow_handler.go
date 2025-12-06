@@ -1476,10 +1476,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
 	var componentRef []byte
 	if workflowID == "" {
-		ref := chasm.NewComponentRef[*activity.Activity](chasm.EntityKey{
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
 			NamespaceID: namespaceID.String(),
 			BusinessID:  activityID,
-			EntityID:    runID,
+			RunID:       runID,
 		})
 
 		componentRef, err = ref.Serialize(wh.registry)
@@ -1675,10 +1675,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
 	var componentRef []byte
 	if workflowID == "" {
-		ref := chasm.NewComponentRef[*activity.Activity](chasm.EntityKey{
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
 			NamespaceID: namespaceID.String(),
 			BusinessID:  activityID,
-			EntityID:    runID,
+			RunID:       runID,
 		})
 
 		componentRef, err = ref.Serialize(wh.registry)
@@ -1866,10 +1866,10 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
 	var componentRef []byte
 	if workflowID == "" {
-		ref := chasm.NewComponentRef[*activity.Activity](chasm.EntityKey{
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
 			NamespaceID: namespaceID.String(),
 			BusinessID:  activityID,
-			EntityID:    runID,
+			RunID:       runID,
 		})
 
 		componentRef, err = ref.Serialize(wh.registry)

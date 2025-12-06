@@ -205,10 +205,10 @@ func (h *handler) TerminateActivityExecution(
 ) (response *activitypb.TerminateActivityExecutionResponse, err error) {
 	frontendReq := req.GetFrontendRequest()
 
-	ref := chasm.NewComponentRef[*Activity](chasm.EntityKey{
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
 		NamespaceID: req.GetNamespaceId(),
 		BusinessID:  frontendReq.GetActivityId(),
-		EntityID:    frontendReq.GetRunId(),
+		RunID:       frontendReq.GetRunId(),
 	})
 
 	response, _, err = chasm.UpdateComponent(
@@ -232,10 +232,10 @@ func (h *handler) RequestCancelActivityExecution(
 ) (response *activitypb.RequestCancelActivityExecutionResponse, err error) {
 	frontendReq := req.GetFrontendRequest()
 
-	ref := chasm.NewComponentRef[*Activity](chasm.EntityKey{
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
 		NamespaceID: req.GetNamespaceId(),
 		BusinessID:  frontendReq.GetActivityId(),
-		EntityID:    frontendReq.GetRunId(),
+		RunID:       frontendReq.GetRunId(),
 	})
 
 	response, _, err = chasm.UpdateComponent(
