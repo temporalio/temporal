@@ -6489,6 +6489,8 @@ func (wh *WorkflowHandler) UpdateActivityExecutionOptions(
 	request *workflowservice.UpdateActivityExecutionOptionsRequest,
 ) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
+}
+
 // PauseWorkflowExecution pauses a workflow execution.
 func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *workflowservice.PauseWorkflowExecutionRequest) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
