@@ -167,7 +167,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 
 func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error {
 	attempt := a.LastAttempt.Get(ctx)
-	lastHeartbeat := a.LastHeartbeat.Get(ctx)
+	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	requestData := a.RequestData.Get(ctx)
 
 	response.StartedTime = attempt.StartedTime
@@ -266,7 +266,7 @@ func (a *Activity) handleTerminated(ctx chasm.MutableContext, req *activitypb.Te
 // getLastHeartbeat retrieves the last heartbeat state, initializing it if not present. The heartbeat is lazily created
 // to avoid unnecessary writes when heartbeats are not used.
 func (a *Activity) getLastHeartbeat(ctx chasm.MutableContext) (*activitypb.ActivityHeartbeatState, error) {
-	heartbeat := a.LastHeartbeat.Get(ctx)
+	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	if heartbeat == nil {
 		heartbeat = &activitypb.ActivityHeartbeatState{}
 		a.LastHeartbeat = chasm.NewDataField(ctx, heartbeat)
@@ -478,7 +478,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
-	heartbeat := a.LastHeartbeat.Get(ctx)
+	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
 
 	info := &activity.ActivityExecutionInfo{
