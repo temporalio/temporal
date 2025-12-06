@@ -1,9 +1,12 @@
 package dynamicconfig
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // These two tests are in a separate file in the 'dynamicconfig' package to access the private
@@ -54,9 +57,35 @@ func TestFindMatch(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		_, err := findMatch(tc.v, tc.filters)
+		var cache sync.Map
+		_, err := findMatch(&cache, tc.v, tc.filters)
 		assert.Equal(t, tc.matched, err == nil)
 	}
+}
+
+func TestFindMatchIndexed(t *testing.T) {
+	var cvs []ConstrainedValue
+	for i := range 100 {
+		cvs = append(cvs, ConstrainedValue{
+			Constraints: Constraints{
+				Namespace: fmt.Sprintf("namespace%d", i),
+			},
+			Value: 1000 + i,
+		})
+	}
+
+	have := []Constraints{{Namespace: "namespace75"}}
+	notHave := []Constraints{{Namespace: "othernamespace"}}
+
+	var cache sync.Map
+	v, err := findMatch(&cache, cvs, have)
+	require.NoError(t, err)
+	require.NotNil(t, v)
+	assert.EqualValues(t, 1075, v.Value)
+	assert.Equal(t, &cvs[75], v)
+
+	_, err = findMatch(&cache, cvs, notHave)
+	assert.Error(t, err)
 }
 
 func TestFindMatchWithTyped(t *testing.T) {

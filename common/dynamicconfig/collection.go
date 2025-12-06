@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -45,6 +46,9 @@ type (
 		// cache converted values. use weak pointers to avoid holding on to values in the cache
 		// that are no longer in use.
 		convertCache sync.Map // map[weak.Pointer[ConstrainedValue]]any
+
+		// index by constraints
+		indexCache sync.Map // map[weak.Pointer[ConstrainedValue]]map[Constraints]int32
 	}
 
 	subscription[T any] struct {
@@ -87,6 +91,9 @@ type (
 
 const (
 	errCountLogThreshold = 1000
+	// After this many constraints, switch to a cached lookup. This value was determined
+	// empirically on my machine using BenchmarkCollectionIndexed.
+	constraintsCacheThreshold = 32
 )
 
 var (
@@ -216,10 +223,17 @@ func (c *Collection) throttleLog() bool {
 	return errCount < errCountLogThreshold || errCount%errCountLogThreshold == 0
 }
 
-func findMatch(cvs []ConstrainedValue, precedence []Constraints) (*ConstrainedValue, error) {
+func findMatch(
+	cache *sync.Map,
+	cvs []ConstrainedValue,
+	precedence []Constraints,
+) (*ConstrainedValue, error) {
 	if len(cvs) == 0 {
 		return nil, errKeyNotPresent
+	} else if len(cvs) > constraintsCacheThreshold && len(cvs) <= math.MaxInt32 {
+		return findMatchWithCache(cache, cvs, precedence)
 	}
+
 	for _, m := range precedence {
 		for idx, cv := range cvs {
 			if m == cv.Constraints {
@@ -229,6 +243,42 @@ func findMatch(cvs []ConstrainedValue, precedence []Constraints) (*ConstrainedVa
 				// Client.GetValue.
 				return &cvs[idx], nil
 			}
+		}
+	}
+	// key is present but no constraint section matches
+	return nil, errNoMatchingConstraint
+}
+
+func findMatchWithCache(
+	cache *sync.Map,
+	cvs []ConstrainedValue,
+	precedence []Constraints,
+) (*ConstrainedValue, error) {
+	var cached map[Constraints]int32
+	weakcvp := weak.Make(&cvs[0])
+	if v, ok := cache.Load(weakcvp); ok {
+		cached = v.(map[Constraints]int32) // nolint:revive // unchecked-type-assertion
+	} else {
+		cached = make(map[Constraints]int32, len(cvs))
+		for i := range cvs {
+			// pick first one to match behavior if multiple match
+			if _, ok := cached[cvs[i].Constraints]; !ok {
+				cached[cvs[i].Constraints] = int32(i)
+			}
+		}
+		cache.Store(weakcvp, cached)
+		runtime.AddCleanup(&cvs[0], func(w weak.Pointer[ConstrainedValue]) {
+			cache.Delete(w)
+		}, weakcvp)
+	}
+
+	for _, m := range precedence {
+		if i, ok := cached[m]; ok {
+			// Note: cvs here is the slice returned by Client.GetValue. We want to return a
+			// pointer into that slice so that the converted value is cached as long as the
+			// Client keeps the []ConstrainedValue alive. See the comment on
+			// Client.GetValue.
+			return &cvs[i], nil
 		}
 	}
 	// key is present but no constraint section matches
@@ -257,7 +307,7 @@ func matchAndConvertCvs[T any](
 	precedence []Constraints,
 	cvs []ConstrainedValue,
 ) (T, any) {
-	cvp, err := findMatch(cvs, precedence)
+	cvp, err := findMatch(&c.indexCache, cvs, precedence)
 	if err != nil {
 		// couldn't find a constrained match, use default
 		return def, usingDefaultValue
@@ -449,7 +499,7 @@ func dispatchUpdate[T any](
 	cvs []ConstrainedValue,
 ) {
 	var raw any
-	cvp, err := findMatch(cvs, sub.prec)
+	cvp, err := findMatch(&c.indexCache, cvs, sub.prec)
 	if err != nil {
 		raw = usingDefaultValue
 	} else {
