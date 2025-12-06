@@ -145,12 +145,7 @@ var TransitionCompleted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) error {
-		// TODO: after rebase on main, add a helper store := a.LoadStore(ctx)
-		store, _ := a.Store.TryGet(ctx)
-		if store == nil {
-			store = a
-		}
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
 			attempt.LastWorkerIdentity = request.GetCompleteRequest().GetIdentity()
@@ -173,11 +168,7 @@ var TransitionFailed = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
-		store, _ := a.Store.TryGet(ctx)
-		if store == nil {
-			store = a
-		}
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
 				heartbeat, err := a.getLastHeartbeat(ctx)
 				if err != nil {
@@ -203,11 +194,7 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) error {
-		store, _ := a.Store.TryGet(ctx)
-		if store == nil {
-			store = a
-		}
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				// TODO if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
@@ -251,11 +238,7 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 	func(a *Activity, ctx chasm.MutableContext, details *commonpb.Payloads) error {
-		store, _ := a.Store.TryGet(ctx)
-		if store == nil {
-			store = a
-		}
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				Message: "Activity canceled",

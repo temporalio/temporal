@@ -46,8 +46,9 @@ type Activity struct {
 	// Standalone only
 	RequestData chasm.Field[*activitypb.ActivityRequestData]
 	Outcome     chasm.Field[*activitypb.ActivityOutcome]
-	// Pointer to an implementation of the "store". for a workflow activity this would be a parent pointer back to
-	// the workflow. For a standalone activity this would be nil.
+	// Pointer to an implementation of the "store". For a workflow activity this would be a parent
+	// pointer back to the workflow. For a standalone activity this is nil (Activity itself
+	// implements the ActivityStore interface).
 	// TODO: revisit a standalone activity pointing to itself once we handle storing it more efficiently.
 	// TODO: figure out better naming.
 	Store chasm.Field[ActivityStore]
@@ -150,19 +151,9 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 			DeploymentName: versionDirective.GetDeploymentName(),
 		}
 	}
-
-	store, _ := a.Store.TryGet(ctx)
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	if store == nil {
-		if err := a.PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := store.PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response); err != nil {
-			return nil, err
-		}
-	}
-	return response, nil
+	err := a.GetStore(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response)
+	return response, err
 }
 
 func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error {
@@ -568,4 +559,14 @@ func (a *Activity) buildPollActivityExecutionResponse(
 	return &activitypb.PollActivityExecutionResponse{
 		FrontendResponse: response,
 	}, nil
+}
+
+// GetStore returns the store for the activity. If the store is not set as a field (e.g. standalone
+// activities), it returns the activity itself.
+func (a *Activity) GetStore(ctx chasm.MutableContext) ActivityStore {
+	store, ok := a.Store.TryGet(ctx)
+	if ok {
+		return store
+	}
+	return a
 }
