@@ -415,7 +415,7 @@ func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest any) *go
 }
 
 // NotifyChasmExecution mocks base method.
-func (m *MockEngine) NotifyChasmExecution(executionKey chasm.EntityKey, componentRef []byte) {
+func (m *MockEngine) NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyChasmExecution", executionKey, componentRef)
 }
