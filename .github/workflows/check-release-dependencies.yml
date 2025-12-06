@@ -1,16 +1,24 @@
 name: Check Release Dependencies
 on:
-  pull_request:
-    branches:
-      - release/*
-      - cloud/*
+  pull_request: {}
+
+permissions:
+  contents: read
+
 jobs:
   check-dependencies:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        if: >-
+          startsWith('release/', github.event.pull_request.base.ref) ||
+          startsWith('cloud/', github.event.pull_request.base.ref)
+
       - name: Check temporal dependencies use tagged versions
+        if: >-
+          startsWith('release/', github.event.pull_request.base.ref) ||
+          startsWith('cloud/', github.event.pull_request.base.ref)
         run: |
           echo "Checking that temporal dependencies use tagged versions..."
 
