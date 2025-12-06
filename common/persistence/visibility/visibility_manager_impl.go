@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -268,24 +269,24 @@ func (p *visibilityManagerImpl) CountChasmExecutions(
 	ctx context.Context,
 	request *manager.CountChasmExecutionsRequest,
 ) (*chasm.CountExecutionsResponse, error) {
-	response, err := p.store.CountChasmExecutions(ctx, request)
+	internalResp, err := p.store.CountChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	return &chasm.CountExecutionsResponse{Count: response.Count}, nil
+	return p.convertToCountChasmExecutionsResponse(internalResp)
 }
 
 func (p *visibilityManagerImpl) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	response, err := p.store.CountWorkflowExecutions(ctx, request)
+	internalResp, err := p.store.CountWorkflowExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	return response, err
+	return p.convertToCountWorkflowExecutionsResponse(internalResp)
 }
 
 func (p *visibilityManagerImpl) GetWorkflowExecution(
@@ -308,6 +309,44 @@ func (p *visibilityManagerImpl) AddSearchAttributes(
 	request *manager.AddSearchAttributesRequest,
 ) error {
 	return p.store.AddSearchAttributes(ctx, request)
+}
+
+func (p *visibilityManagerImpl) convertToCountWorkflowExecutionsResponse(
+	internal *store.InternalCountExecutionsResponse,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	response := &manager.CountWorkflowExecutionsResponse{
+		Count: internal.Count,
+	}
+
+	if len(internal.Groups) > 0 {
+		response.Groups = make([]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup, 0, len(internal.Groups))
+		for _, group := range internal.Groups {
+			response.Groups = append(response.Groups, &workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				GroupValues: group.GroupValues,
+				Count:       group.Count,
+			})
+		}
+	}
+
+	return response, nil
+}
+
+func (p *visibilityManagerImpl) convertToCountChasmExecutionsResponse(
+	internal *store.InternalCountExecutionsResponse,
+) (*chasm.CountExecutionsResponse, error) {
+	response := &chasm.CountExecutionsResponse{
+		Count:  internal.Count,
+		Groups: make([]chasm.Group, 0, len(internal.Groups)),
+	}
+
+	for _, group := range internal.Groups {
+		response.Groups = append(response.Groups, chasm.Group{
+			Values: group.GroupValues,
+			Count:  group.Count,
+		})
+	}
+
+	return response, nil
 }
 
 func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(

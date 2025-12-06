@@ -132,7 +132,7 @@ func (c *QueryConverterLegacy) BuildSelectStmt(
 		return nil, err
 	}
 	if len(qp.groupBy) > 0 {
-		return nil, query.NewConverterError("%s: 'group by' clause", query.NotSupportedErrMessage)
+		return nil, query.NewConverterError("%s: 'GROUP BY' clause", query.NotSupportedErrMessage)
 	}
 	queryString, queryArgs := c.buildSelectStmt(
 		c.namespaceID,
@@ -197,11 +197,11 @@ func (c *QueryConverterLegacy) convertWhereString(queryString string) (*queryPar
 
 func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 	if sel.OrderBy != nil {
-		return query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage)
+		return query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage)
 	}
 
 	if sel.Limit != nil {
-		return query.NewConverterError("%s: 'limit' clause", query.NotSupportedErrMessage)
+		return query.NewConverterError("%s: 'LIMIT' clause", query.NotSupportedErrMessage)
 	}
 
 	if sel.Where == nil {
@@ -261,7 +261,7 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 
 	if len(sel.GroupBy) > 1 {
 		return query.NewConverterError(
-			"%s: 'group by' clause supports only a single field",
+			"%s: 'GROUP BY' clause supports only a single field",
 			query.NotSupportedErrMessage,
 		)
 	}
@@ -270,11 +270,10 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 		if err != nil {
 			return err
 		}
-		if colName.fieldName != sadefs.ExecutionStatus {
+		if !query.IsGroupByFieldAllowed(colName.fieldName) {
 			return query.NewConverterError(
-				"%s: 'group by' clause is only supported for %s search attribute",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				query.NotSupportedErrMessage,
-				sadefs.ExecutionStatus,
 			)
 		}
 	}
