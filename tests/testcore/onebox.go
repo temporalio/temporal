@@ -215,14 +215,13 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
-		// If this doesn't build, make sure you're building with tags 'test_dep':
-		testHooks:                 testhooks.NewTestHooksImpl(),
-		serviceFxOptions:          params.ServiceFxOptions,
-		taskCategoryRegistry:      params.TaskCategoryRegistry,
-		hostsByProtocolByService:  params.HostsByProtocolByService,
-		grpcClientInterceptor:     grpcinject.NewInterceptor(),
-		replicationStreamRecorder: NewReplicationStreamRecorder(),
-		spanExporters:             params.SpanExporters,
+		testHooks:                        testhooks.NewTestHooks(),
+		serviceFxOptions:                 params.ServiceFxOptions,
+		taskCategoryRegistry:             params.TaskCategoryRegistry,
+		hostsByProtocolByService:         params.HostsByProtocolByService,
+		grpcClientInterceptor:            grpcinject.NewInterceptor(),
+		replicationStreamRecorder:        NewReplicationStreamRecorder(),
+		spanExporters:                    params.SpanExporters,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
