@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ProtoEncode is kept for backward compatibility.
 func ProtoEncode(m proto.Message) (*commonpb.DataBlob, error) {
 	return encodeBlob(m, enumspb.ENCODING_TYPE_PROTO3)
 }

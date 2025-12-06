@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -227,8 +228,9 @@ func (s *sqlClusterMetadataManager) PruneClusterMembership(
 func newClusterMetadataPersistence(
 	db sqlplugin.DB,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (p.ClusterMetadataStore, error) {
 	return &sqlClusterMetadataManager{
-		SqlStore: NewSqlStore(db, logger),
+		SqlStore: NewSQLStore(db, logger, serializer),
 	}, nil
 }
