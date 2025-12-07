@@ -20,9 +20,10 @@ import (
 
 type FrontendHandler interface {
 	StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error)
+	DescribeActivityExecution(ctx context.Context, req *workflowservice.DescribeActivityExecutionRequest) (*workflowservice.DescribeActivityExecutionResponse, error)
+	GetActivityExecutionOutcome(ctx context.Context, req *workflowservice.GetActivityExecutionOutcomeRequest) (*workflowservice.GetActivityExecutionOutcomeResponse, error)
 	CountActivityExecutions(context.Context, *workflowservice.CountActivityExecutionsRequest) (*workflowservice.CountActivityExecutionsResponse, error)
 	DeleteActivityExecution(context.Context, *workflowservice.DeleteActivityExecutionRequest) (*workflowservice.DeleteActivityExecutionResponse, error)
-	PollActivityExecution(context.Context, *workflowservice.PollActivityExecutionRequest) (*workflowservice.PollActivityExecutionResponse, error)
 	ListActivityExecutions(context.Context, *workflowservice.ListActivityExecutionsRequest) (*workflowservice.ListActivityExecutionsResponse, error)
 	RequestCancelActivityExecution(context.Context, *workflowservice.RequestCancelActivityExecutionRequest) (*workflowservice.RequestCancelActivityExecutionResponse, error)
 	TerminateActivityExecution(context.Context, *workflowservice.TerminateActivityExecutionRequest) (*workflowservice.TerminateActivityExecutionResponse, error)
@@ -85,32 +86,6 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 		FrontendRequest: modifiedReq,
 	})
 
-	return resp.GetFrontendResponse(), err
-}
-
-// PollActivityExecution handles PollActivityExecutionRequest. This method supports querying current
-// activity state, optionally as a long-poll that waits for certain state changes. It is used by
-// clients to poll for activity state and/or result.
-func (h *frontendHandler) PollActivityExecution(
-	ctx context.Context,
-	req *workflowservice.PollActivityExecutionRequest,
-) (*workflowservice.PollActivityExecutionResponse, error) {
-	err := ValidatePollActivityExecutionRequest(
-		req,
-		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	resp, err := h.client.PollActivityExecution(ctx, &activitypb.PollActivityExecutionRequest{
-		NamespaceId:     namespaceID.String(),
-		FrontendRequest: req,
-	})
 	return resp.GetFrontendResponse(), err
 }
 

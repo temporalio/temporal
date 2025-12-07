@@ -91,13 +91,11 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy_RejectDuplicate() {
 		ActivityType: s.tv.ActivityType(),
 		Identity:     s.tv.WorkerIdentity(),
 		Input:        defaultInput,
-		Options: &activitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-			},
-			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
 		},
-		IdReusePolicy: enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	})
 	require.Error(t, err)
 }
@@ -131,13 +129,11 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy_AllowDuplicateFailedOnly
 		ActivityType: s.tv.ActivityType(),
 		Identity:     s.tv.WorkerIdentity(),
 		Input:        defaultInput,
-		Options: &activitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-			},
-			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
 		},
-		IdReusePolicy: enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 	})
 	require.NoError(t, err)
 }
@@ -159,12 +155,10 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy_FailsIfExists() {
 		ActivityType: s.tv.ActivityType(),
 		Identity:     s.tv.WorkerIdentity(),
 		Input:        defaultInput,
-		Options: &activitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-			},
-			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
 		},
+		StartToCloseTimeout: durationpb.New(1 * time.Minute),
 	})
 	require.Error(t, err)
 }
@@ -776,16 +770,14 @@ func (s *standaloneActivityTestSuite) TestRetryWithoutScheduleToCloseTimeout() {
 
 	// Start activity without ScheduleToCloseTimeout
 	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		ActivityId:   activityID,
-		ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
-		Options: &activitypb.ActivityOptions{
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout: durationpb.New(1 * time.Minute),
-			RetryPolicy: &commonpb.RetryPolicy{
-				InitialInterval: durationpb.New(1 * time.Millisecond),
-				MaximumAttempts: 2,
-			},
+		Namespace:           s.Namespace().String(),
+		ActivityId:          activityID,
+		ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+		StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval: durationpb.New(1 * time.Millisecond),
+			MaximumAttempts: 2,
 		},
 	})
 	require.NoError(t, err)
@@ -832,16 +824,14 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 		ActivityType: &commonpb.ActivityType{
 			Name: "test-activity-type",
 		},
-		Options: &activitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-			},
-			// It's not possible to guarantee (e.g. via NextRetryDelay or RetryPolicy) that a retry
-			// will start with a delay <1s because of the use of TimerProcessorMaxTimeShift in the
-			// timer queue. Therefore we allow 1s for the ActivityDispatchTask to be executed, and
-			// time out the activity 1s into Attempt 2.
-			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
 		},
+		// It's not possible to guarantee (e.g. via NextRetryDelay or RetryPolicy) that a retry
+		// will start with a delay <1s because of the use of TimerProcessorMaxTimeShift in the
+		// timer queue. Therefore we allow 1s for the ActivityDispatchTask to be executed, and
+		// time out the activity 1s into Attempt 2.
+		ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 	})
 	require.NoError(t, err)
 
@@ -900,14 +890,12 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 			Name: "test-activity-type",
 		},
 		Input: payloads.EncodeString("test-activity-input"),
-		Options: &activitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue.Name,
-			},
-			StartToCloseTimeout: durationpb.New(1 * time.Second),
-			RetryPolicy: &commonpb.RetryPolicy{
-				MaximumAttempts: 1,
-			},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue.Name,
+		},
+		StartToCloseTimeout: durationpb.New(1 * time.Second),
+		RetryPolicy: &commonpb.RetryPolicy{
+			MaximumAttempts: 1,
 		},
 		RequestId: "test-request-id",
 	})
@@ -1583,8 +1571,8 @@ func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
 	require.Equal(t, runState, info.RunState)
 
 	// TODO(dan): This test to be finalized when full API surface area implemented.
-	if info.ScheduledTime != nil && info.ExpirationTime != nil {
-		require.Less(t, info.ScheduledTime, info.ExpirationTime)
+	if info.ScheduleTime != nil && info.ExpirationTime != nil {
+		require.Less(t, info.ScheduleTime, info.ExpirationTime)
 	}
 	// info.Attempt
 	// info.MaximumAttempts
@@ -1787,12 +1775,10 @@ func (s *standaloneActivityTestSuite) startActivity(ctx context.Context, activit
 		ActivityType: s.tv.ActivityType(),
 		Identity:     s.tv.WorkerIdentity(),
 		Input:        defaultInput,
-		Options: &activitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-			},
-			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
 		},
-		RequestId: s.tv.RequestID(),
+		StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		RequestId:           s.tv.RequestID(),
 	})
 }

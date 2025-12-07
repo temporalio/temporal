@@ -76,21 +76,18 @@ func NewStandaloneActivity(
 	visibility := chasm.NewVisibilityWithData(
 		ctx,
 		request.GetSearchAttributes().GetIndexedFields(),
-		request.GetMemo().GetFields(),
+		nil,
 	)
-
-	// TODO flatten this when API is updated
-	options := request.GetOptions()
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
 			ActivityType:           request.ActivityType,
-			TaskQueue:              options.GetTaskQueue(),
-			ScheduleToCloseTimeout: options.GetScheduleToCloseTimeout(),
-			ScheduleToStartTimeout: options.GetScheduleToStartTimeout(),
-			StartToCloseTimeout:    options.GetStartToCloseTimeout(),
-			HeartbeatTimeout:       options.GetHeartbeatTimeout(),
-			RetryPolicy:            options.GetRetryPolicy(),
+			TaskQueue:              request.GetTaskQueue(),
+			ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:    request.GetStartToCloseTimeout(),
+			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
+			RetryPolicy:            request.GetRetryPolicy(),
 			Priority:               request.Priority,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
@@ -486,7 +483,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		Priority:                a.GetPriority(),
 		RunId:                   key.RunID,
 		RunState:                runState,
-		ScheduledTime:           a.GetScheduledTime(),
+		ScheduleTime:            a.GetScheduledTime(),
 		Status:                  status,
 		// TODO(dan): populate remaining fields
 	}
@@ -494,74 +491,8 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 	return info, nil
 }
 
-func (a *Activity) buildPollActivityExecutionResponse(
-	ctx chasm.Context,
-	req *activitypb.PollActivityExecutionRequest,
-) (*activitypb.PollActivityExecutionResponse, error) {
-	request := req.GetFrontendRequest()
-
-	token, err := ctx.Ref(a)
-	if err != nil {
-		return nil, err
-	}
-
-	var info *activity.ActivityExecutionInfo
-	if request.GetIncludeInfo() {
-		info, err = a.buildActivityExecutionInfo(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var input *commonpb.Payloads
-	if request.GetIncludeInput() {
-		activityRequest := a.RequestData.Get(ctx)
-		input = activityRequest.GetInput()
-	}
-
-	response := &workflowservice.PollActivityExecutionResponse{
-		Info:                     info,
-		RunId:                    ctx.ExecutionKey().RunID,
-		Input:                    input,
-		StateChangeLongPollToken: token,
-	}
-
-	if request.GetIncludeOutcome() {
-		activityOutcome := a.Outcome.Get(ctx)
-		// There are two places where a failure might be stored but only one place where a
-		// successful outcome is stored.
-		if successful := activityOutcome.GetSuccessful(); successful != nil {
-			response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
-				Result: successful.GetOutput(),
-			}
-		} else if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
-			response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
-				Failure: failure,
-			}
-		} else {
-			shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||
-				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT ||
-				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED ||
-				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
-
-			if shouldHaveFailure {
-				attempt := a.LastAttempt.Get(ctx)
-				if details := attempt.GetLastFailureDetails(); details != nil {
-					response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
-						Failure: details.GetFailure(),
-					}
-				}
-			}
-		}
-	}
-
-	return &activitypb.PollActivityExecutionResponse{
-		FrontendResponse: response,
-	}, nil
-}
-
-// StoreOrSelf returns the store for the activity. If the store is not set as a field (e.g. standalone
-// activities), it returns the activity itself.
+// StoreOrSelf returns the store for the activity. If the store is not set as a field (e.g.
+// standalone activities), it returns the activity itself.
 func (a *Activity) StoreOrSelf(ctx chasm.MutableContext) ActivityStore {
 	store, ok := a.Store.TryGet(ctx)
 	if ok {

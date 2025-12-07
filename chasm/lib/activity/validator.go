@@ -258,30 +258,3 @@ func validateAndNormalizeSearchAttributes(
 
 	return saValidator.ValidateSize(req.SearchAttributes, namespaceName)
 }
-
-// ValidatePollActivityExecutionRequest validates the request for PollActivityExecution API.
-func ValidatePollActivityExecutionRequest(
-	req *workflowservice.PollActivityExecutionRequest,
-	maxIDLengthLimit int,
-) error {
-	if req.GetActivityId() == "" {
-		return serviceerror.NewInvalidArgument("activity ID is required")
-	}
-	if len(req.GetActivityId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
-			len(req.GetActivityId()), maxIDLengthLimit)
-	}
-	hasRunID := req.GetRunId() != ""
-	hasLongPollToken := len(req.GetWaitAnyStateChange().GetLongPollToken()) > 0
-
-	if hasLongPollToken && !hasRunID {
-		return serviceerror.NewInvalidArgument("run id is required when long poll token is provided")
-	}
-	if hasRunID {
-		_, err := uuid.Parse(req.GetRunId())
-		if err != nil {
-			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
-		}
-	}
-	return nil
-}
