@@ -89,6 +89,55 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 	return resp.GetFrontendResponse(), err
 }
 
+// DescribeActivityExecution queries current activity state, optionally as a long-poll that waits
+// for any state change.
+func (h *frontendHandler) DescribeActivityExecution(
+	ctx context.Context,
+	req *workflowservice.DescribeActivityExecutionRequest,
+) (*workflowservice.DescribeActivityExecutionResponse, error) {
+	err := ValidateDescribeActivityExecutionRequest(
+		req,
+		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.client.DescribeActivityExecution(ctx, &activitypb.DescribeActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	return resp.GetFrontendResponse(), err
+}
+
+// GetActivityExecutionOutcome long-polls for activity outcome.
+func (h *frontendHandler) GetActivityExecutionOutcome(
+	ctx context.Context,
+	req *workflowservice.GetActivityExecutionOutcomeRequest,
+) (*workflowservice.GetActivityExecutionOutcomeResponse, error) {
+	err := ValidateGetActivityExecutionOutcomeRequest(
+		req,
+		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := h.client.GetActivityExecutionOutcome(ctx, &activitypb.GetActivityExecutionOutcomeRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	return resp.GetFrontendResponse(), err
+}
+
 // TerminateActivityExecution terminates a standalone activity execution
 func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,

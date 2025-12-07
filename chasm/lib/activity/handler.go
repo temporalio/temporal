@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/contextutil"
 )
 
 var (
@@ -84,6 +86,131 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: response,
 	}, nil
+}
+
+// DescribeActivityExecution handles DescribeActivityExecutionRequest from frontend. This method
+// queries current activity state, optionally as a long-poll that waits for any state change. When
+// used to long-poll, it returns an empty non-error response on context deadline expiry, to indicate
+// that the state being waited for was not reached. Callers should interpret this as an invitation
+// to resubmit their long-poll request. This response is sent before the caller's deadline (see
+// chasm.activity.longPollBuffer) so that it is likely that the caller does indeed receive the
+// non-error response.
+func (h *handler) DescribeActivityExecution(
+	ctx context.Context,
+	req *activitypb.DescribeActivityExecutionRequest,
+) (response *activitypb.DescribeActivityExecutionResponse, err error) {
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFrontendRequest().GetActivityId(),
+		RunID:       req.GetFrontendRequest().GetRunId(),
+	})
+	defer func() {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			err = serviceerror.NewNotFound("activity execution not found")
+		}
+	}()
+
+	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
+	// deadline that causes us to send that response before the caller's own deadline (see
+	// chasm.activity.longPollBuffer). We also cap the caller's deadline at
+	// chasm.activity.longPollTimeout.
+	namespace := req.GetFrontendRequest().GetNamespace()
+	ctx, cancel := contextutil.WithDeadlineBuffer(
+		ctx,
+		h.config.LongPollTimeout(namespace),
+		h.config.LongPollBuffer(namespace),
+	)
+	defer cancel()
+
+	token := req.GetFrontendRequest().GetLongPollToken()
+	if len(token) == 0 {
+		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req, nil)
+	}
+	response, _, err = chasm.PollComponent(ctx, ref, func(
+		a *Activity,
+		ctx chasm.Context,
+		req *activitypb.DescribeActivityExecutionRequest,
+	) (*activitypb.DescribeActivityExecutionResponse, bool, error) {
+		changed, err := chasm.ExecutionStateChanged(a, ctx, token)
+		if err != nil {
+			if errors.Is(err, chasm.ErrMalformedComponentRef) {
+				return nil, false, serviceerror.NewInvalidArgument("invalid long poll token")
+			}
+			if errors.Is(err, chasm.ErrInvalidComponentRef) {
+				return nil, false, serviceerror.NewInvalidArgument("long poll token does not match execution")
+			}
+			return nil, false, err
+		}
+		if changed {
+			response, err := a.buildDescribeActivityExecutionResponse(ctx, req)
+			return response, true, err
+		}
+		return nil, false, nil
+	}, req)
+
+	if ctx.Err() != nil {
+		// Send empty non-error response on deadline expiry: caller should continue long-polling.
+		return &activitypb.DescribeActivityExecutionResponse{
+			FrontendResponse: &workflowservice.DescribeActivityExecutionResponse{},
+		}, nil
+	}
+	return response, err
+}
+
+// GetActivityExecutionOutcome handles getActivityExecutionOutcomeRequest from frontend. This method
+// long-polls for activity outcome. It returns an empty non-error response on context deadline
+// expiry, to indicate that the state being waited for was not reached. Callers should interpret
+// this as an invitation to resubmit their long-poll request. This response is sent before the
+// caller's deadline (see chasm.activity.longPollBuffer) so that it is likely that the caller does
+// indeed receive the non-error response.
+func (h *handler) GetActivityExecutionOutcome(
+	ctx context.Context,
+	req *activitypb.GetActivityExecutionOutcomeRequest,
+) (response *activitypb.GetActivityExecutionOutcomeResponse, err error) {
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFrontendRequest().GetActivityId(),
+		RunID:       req.GetFrontendRequest().GetRunId(),
+	})
+	defer func() {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			err = serviceerror.NewNotFound("activity execution not found")
+		}
+	}()
+
+	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
+	// deadline that causes us to send that response before the caller's own deadline (see
+	// chasm.activity.longPollBuffer). We also cap the caller's deadline at
+	// chasm.activity.longPollTimeout.
+	namespace := req.GetFrontendRequest().GetNamespace()
+	ctx, cancel := contextutil.WithDeadlineBuffer(
+		ctx,
+		h.config.LongPollTimeout(namespace),
+		h.config.LongPollBuffer(namespace),
+	)
+	defer cancel()
+
+	response, _, err = chasm.PollComponent(ctx, ref, func(
+		a *Activity,
+		ctx chasm.Context,
+		req *activitypb.GetActivityExecutionOutcomeRequest,
+	) (*activitypb.GetActivityExecutionOutcomeResponse, bool, error) {
+		if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
+			response, err := a.buildGetActivityExecutionOutcomeResponse(ctx)
+			return response, true, err
+		}
+		return nil, false, nil
+	}, req)
+
+	if ctx.Err() != nil {
+		// Send an empty non-error response as an invitation to resubmit the long-poll.
+		return &activitypb.GetActivityExecutionOutcomeResponse{
+			FrontendResponse: &workflowservice.GetActivityExecutionOutcomeResponse{},
+		}, nil
+	}
+	return response, err
 }
 
 // TerminateActivityExecution terminates a standalone activity execution

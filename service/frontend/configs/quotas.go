@@ -24,6 +24,8 @@ const (
 	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
 	// PollWorkflowHistoryAPIName is used instead of GetWorkflowExecutionHistory if WaitNewEvent is true in request.
 	PollWorkflowHistoryAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionHistory"
+	// PollActivityExecutionAPIName is used instead of GetActivityExecutionOutcome if LongPollToken is set in request.
+	PollActivityExecutionAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution"
 )
 
 var (
@@ -31,24 +33,24 @@ var (
 	// from their corresponding quota, which is determined by
 	// dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance. If the value is not set,
 	// then the method is not considered a long-running request and the number of concurrent
-	// requests will not be throttled. PollActivityTaskQueue and PollWorkflowTaskQueue are
-	// long-running because they block until there is a task available. PollWorkflowExecutionUpdate
-	// is long-running because it waits for an update lifecycle stage. GetWorkflowExecutionHistory
-	// is long-running when the request is configured to perform a long-poll (WaitNewEvent is true).
-	// PollActivityExecution is long-running when the request is configured to perform a long-poll
-	// (wait_policy present). The QueryWorkflow and UpdateWorkflowExecution methods are long-running
-	// because they both block until a background WFT is complete.
+	// requests will not be throttled. The Poll* methods here are long-running because they block
+	// until there is a task available. GetWorkflowExecutionHistory and DescribeActivityExecution
+	// methods are blocking only if WaitNewEvent/LongPollToken are set, otherwise they are not
+	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because
+	// they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
-		// TODO: categorize appropriately as long-poll if wait_policy is present, similar to what is
-		// done with PollWorkflowHistoryAPIName below.
-		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
+
+		// Long-running if activity outcome is not already available
+		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityExecutionOutcome": 1,
+		// Long-running if certain request parameters are set
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":   1,
 
 		// potentially long-running, depending on the operations
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
@@ -134,6 +136,7 @@ var (
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":               3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility":   3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":        3,
@@ -158,9 +161,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":          3,
 
 		// P4: Poll APIs and other low priority APIs
+		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityExecutionOutcome":        4, // TODO(dan): should it be 4 or 3?
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 4,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               4,
@@ -170,9 +173,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":                  4,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":                 4,
 
-		// P5: GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
-		// Treat as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
-		PollWorkflowHistoryAPIName: 5,
+		// P5: Low priority APIs
+		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
+		// Similarly, DescribeActivityExecution is a long poll API if LongPollToken is set.
+		// Treat these as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
+		PollWorkflowHistoryAPIName:   5,
+		PollActivityExecutionAPIName: 5,
 		// Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 5,
 		OpenAPIV2APIName: 5,

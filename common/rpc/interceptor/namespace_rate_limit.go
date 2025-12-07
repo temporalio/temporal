@@ -64,8 +64,10 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 ) (interface{}, error) {
 	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
 		method := info.FullMethod
-		if IsLongPollGetHistoryRequest(req) {
+		if IsLongPollGetWorkflowExecutionHistoryRequest(req) {
 			method = configs.PollWorkflowHistoryAPIName
+		} else if IsLongPollDescribeActivityExecutionRequest(req) {
+			method = configs.PollActivityExecutionAPIName
 		}
 		if err := ni.Allow(ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 			return nil, err
@@ -94,12 +96,22 @@ func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name,
 	return nil
 }
 
-func IsLongPollGetHistoryRequest(
+func IsLongPollGetWorkflowExecutionHistoryRequest(
 	req interface{},
 ) bool {
 	switch request := req.(type) {
 	case *workflowservice.GetWorkflowExecutionHistoryRequest:
 		return request.GetWaitNewEvent()
+	}
+	return false
+}
+
+func IsLongPollDescribeActivityExecutionRequest(
+	req interface{},
+) bool {
+	switch request := req.(type) {
+	case *workflowservice.DescribeActivityExecutionRequest:
+		return len(request.GetLongPollToken()) > 0
 	}
 	return false
 }
