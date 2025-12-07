@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	apiactivitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -193,23 +194,25 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
 
-	if req.Options.RetryPolicy == nil {
-		req.Options.RetryPolicy = &commonpb.RetryPolicy{}
+	if req.RetryPolicy == nil {
+		req.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
+	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeActivityAttributes(
 		req.ActivityId,
 		activityType,
 		dynamicconfig.DefaultActivityRetryPolicy.Get(h.dc),
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
 		namespaceID,
-		req.Options,
+		opts,
 		req.Priority,
 		durationpb.New(0),
 	)
 	if err != nil {
 		return nil, err
 	}
+	applyActivityOptionsToStartRequest(opts, req)
 
 	err = validateAndNormalizeStartActivityExecutionRequest(
 		req,
@@ -223,4 +226,28 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	return req, nil
+}
+
+// activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields
+// of a StartActivityExecutionRequest for use with shared validation logic.
+func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecutionRequest) *apiactivitypb.ActivityOptions {
+	return &apiactivitypb.ActivityOptions{
+		TaskQueue:              req.TaskQueue,
+		ScheduleToCloseTimeout: req.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: req.ScheduleToStartTimeout,
+		StartToCloseTimeout:    req.StartToCloseTimeout,
+		HeartbeatTimeout:       req.HeartbeatTimeout,
+		RetryPolicy:            req.RetryPolicy,
+	}
+}
+
+// applyActivityOptionsToStartRequest copies normalized values from ActivityOptions
+// back to the StartActivityExecutionRequest.
+func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req *workflowservice.StartActivityExecutionRequest) {
+	req.TaskQueue = opts.TaskQueue
+	req.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
+	req.ScheduleToStartTimeout = opts.ScheduleToStartTimeout
+	req.StartToCloseTimeout = opts.StartToCloseTimeout
+	req.HeartbeatTimeout = opts.HeartbeatTimeout
+	req.RetryPolicy = opts.RetryPolicy
 }
