@@ -16,19 +16,39 @@ message StartActivityExecutionResponse {
     temporal.api.workflowservice.v1.StartActivityExecutionResponse frontend_response = 1;
 }
 
-message TerminateActivityExecutionRequest {
-  string namespace_id = 1;
+message DescribeActivityExecutionRequest {
+    string namespace_id = 1;
 
-  temporal.api.workflowservice.v1.TerminateActivityExecutionRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.DescribeActivityExecutionRequest frontend_request = 2;
+}
+
+message DescribeActivityExecutionResponse {
+    temporal.api.workflowservice.v1.DescribeActivityExecutionResponse frontend_response = 1;
+}
+
+message GetActivityExecutionOutcomeRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.GetActivityExecutionOutcomeRequest frontend_request = 2;
+}
+
+message GetActivityExecutionOutcomeResponse {
+    temporal.api.workflowservice.v1.GetActivityExecutionOutcomeResponse frontend_response = 1;
+}
+
+message TerminateActivityExecutionRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.TerminateActivityExecutionRequest frontend_request = 2;
 }
 
 message TerminateActivityExecutionResponse {
 }
 
 message RequestCancelActivityExecutionRequest {
-  string namespace_id = 1;
+    string namespace_id = 1;
 
-  temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest frontend_request = 2;
 }
 
 message RequestCancelActivityExecutionResponse {

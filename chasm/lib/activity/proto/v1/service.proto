@@ -12,11 +12,19 @@ service ActivityService {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
     }
 
-    rpc TerminateActivityExecution(TerminateActivityExecutionRequest) returns (TerminateActivityExecutionResponse) {
-      option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    rpc DescribeActivityExecution(DescribeActivityExecutionRequest) returns (DescribeActivityExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
     }
 
-  rpc RequestCancelActivityExecution(RequestCancelActivityExecutionRequest) returns (RequestCancelActivityExecutionResponse) {
-    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
-  }
+    rpc GetActivityExecutionOutcome(GetActivityExecutionOutcomeRequest) returns (GetActivityExecutionOutcomeResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    }
+
+    rpc TerminateActivityExecution(TerminateActivityExecutionRequest) returns (TerminateActivityExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    }
+
+    rpc RequestCancelActivityExecution(RequestCancelActivityExecutionRequest) returns (RequestCancelActivityExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    }
 }
