@@ -21,7 +21,6 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	ActivityService_StartActivityExecution_FullMethodName         = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/StartActivityExecution"
-	ActivityService_PollActivityExecution_FullMethodName          = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/PollActivityExecution"
 	ActivityService_TerminateActivityExecution_FullMethodName     = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/TerminateActivityExecution"
 	ActivityService_RequestCancelActivityExecution_FullMethodName = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/RequestCancelActivityExecution"
 )
@@ -31,7 +30,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ActivityServiceClient interface {
 	StartActivityExecution(ctx context.Context, in *StartActivityExecutionRequest, opts ...grpc.CallOption) (*StartActivityExecutionResponse, error)
-	PollActivityExecution(ctx context.Context, in *PollActivityExecutionRequest, opts ...grpc.CallOption) (*PollActivityExecutionResponse, error)
 	TerminateActivityExecution(ctx context.Context, in *TerminateActivityExecutionRequest, opts ...grpc.CallOption) (*TerminateActivityExecutionResponse, error)
 	RequestCancelActivityExecution(ctx context.Context, in *RequestCancelActivityExecutionRequest, opts ...grpc.CallOption) (*RequestCancelActivityExecutionResponse, error)
 }
@@ -47,15 +45,6 @@ func NewActivityServiceClient(cc grpc.ClientConnInterface) ActivityServiceClient
 func (c *activityServiceClient) StartActivityExecution(ctx context.Context, in *StartActivityExecutionRequest, opts ...grpc.CallOption) (*StartActivityExecutionResponse, error) {
 	out := new(StartActivityExecutionResponse)
 	err := c.cc.Invoke(ctx, ActivityService_StartActivityExecution_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *activityServiceClient) PollActivityExecution(ctx context.Context, in *PollActivityExecutionRequest, opts ...grpc.CallOption) (*PollActivityExecutionResponse, error) {
-	out := new(PollActivityExecutionResponse)
-	err := c.cc.Invoke(ctx, ActivityService_PollActivityExecution_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +74,6 @@ func (c *activityServiceClient) RequestCancelActivityExecution(ctx context.Conte
 // for forward compatibility
 type ActivityServiceServer interface {
 	StartActivityExecution(context.Context, *StartActivityExecutionRequest) (*StartActivityExecutionResponse, error)
-	PollActivityExecution(context.Context, *PollActivityExecutionRequest) (*PollActivityExecutionResponse, error)
 	TerminateActivityExecution(context.Context, *TerminateActivityExecutionRequest) (*TerminateActivityExecutionResponse, error)
 	RequestCancelActivityExecution(context.Context, *RequestCancelActivityExecutionRequest) (*RequestCancelActivityExecutionResponse, error)
 	mustEmbedUnimplementedActivityServiceServer()
@@ -97,9 +85,6 @@ type UnimplementedActivityServiceServer struct {
 
 func (UnimplementedActivityServiceServer) StartActivityExecution(context.Context, *StartActivityExecutionRequest) (*StartActivityExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartActivityExecution not implemented")
-}
-func (UnimplementedActivityServiceServer) PollActivityExecution(context.Context, *PollActivityExecutionRequest) (*PollActivityExecutionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PollActivityExecution not implemented")
 }
 func (UnimplementedActivityServiceServer) TerminateActivityExecution(context.Context, *TerminateActivityExecutionRequest) (*TerminateActivityExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TerminateActivityExecution not implemented")
@@ -134,24 +119,6 @@ func _ActivityService_StartActivityExecution_Handler(srv interface{}, ctx contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ActivityServiceServer).StartActivityExecution(ctx, req.(*StartActivityExecutionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ActivityService_PollActivityExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PollActivityExecutionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ActivityServiceServer).PollActivityExecution(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ActivityService_PollActivityExecution_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ActivityServiceServer).PollActivityExecution(ctx, req.(*PollActivityExecutionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -202,10 +169,6 @@ var ActivityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StartActivityExecution",
 			Handler:    _ActivityService_StartActivityExecution_Handler,
-		},
-		{
-			MethodName: "PollActivityExecution",
-			Handler:    _ActivityService_PollActivityExecution_Handler,
 		},
 		{
 			MethodName: "TerminateActivityExecution",
