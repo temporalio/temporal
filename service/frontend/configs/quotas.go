@@ -106,14 +106,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                        2,
 		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":                    2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptions":                 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityExecutionOptions":        2,
 		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivity":                         2,
-		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivityExecution":                2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivity":                       2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivityExecution":              2,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivity":                         2,
-		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivityExecution":                2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions":        2,
 		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":                  2, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeploymentVersion":           2, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion":     2,
