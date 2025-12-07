@@ -119,6 +119,198 @@ func (x *StartActivityExecutionResponse) GetFrontendResponse() *v1.StartActivity
 	return nil
 }
 
+type DescribeActivityExecutionRequest struct {
+	state           protoimpl.MessageState               `protogen:"open.v1"`
+	NamespaceId     string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.DescribeActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DescribeActivityExecutionRequest) Reset() {
+	*x = DescribeActivityExecutionRequest{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeActivityExecutionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeActivityExecutionRequest) ProtoMessage() {}
+
+func (x *DescribeActivityExecutionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeActivityExecutionRequest.ProtoReflect.Descriptor instead.
+func (*DescribeActivityExecutionRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DescribeActivityExecutionRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *DescribeActivityExecutionRequest) GetFrontendRequest() *v1.DescribeActivityExecutionRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
+type DescribeActivityExecutionResponse struct {
+	state            protoimpl.MessageState                `protogen:"open.v1"`
+	FrontendResponse *v1.DescribeActivityExecutionResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *DescribeActivityExecutionResponse) Reset() {
+	*x = DescribeActivityExecutionResponse{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeActivityExecutionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeActivityExecutionResponse) ProtoMessage() {}
+
+func (x *DescribeActivityExecutionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeActivityExecutionResponse.ProtoReflect.Descriptor instead.
+func (*DescribeActivityExecutionResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *DescribeActivityExecutionResponse) GetFrontendResponse() *v1.DescribeActivityExecutionResponse {
+	if x != nil {
+		return x.FrontendResponse
+	}
+	return nil
+}
+
+type GetActivityExecutionOutcomeRequest struct {
+	state           protoimpl.MessageState                 `protogen:"open.v1"`
+	NamespaceId     string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.GetActivityExecutionOutcomeRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GetActivityExecutionOutcomeRequest) Reset() {
+	*x = GetActivityExecutionOutcomeRequest{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetActivityExecutionOutcomeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetActivityExecutionOutcomeRequest) ProtoMessage() {}
+
+func (x *GetActivityExecutionOutcomeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetActivityExecutionOutcomeRequest.ProtoReflect.Descriptor instead.
+func (*GetActivityExecutionOutcomeRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetActivityExecutionOutcomeRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *GetActivityExecutionOutcomeRequest) GetFrontendRequest() *v1.GetActivityExecutionOutcomeRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
+type GetActivityExecutionOutcomeResponse struct {
+	state            protoimpl.MessageState                  `protogen:"open.v1"`
+	FrontendResponse *v1.GetActivityExecutionOutcomeResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GetActivityExecutionOutcomeResponse) Reset() {
+	*x = GetActivityExecutionOutcomeResponse{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetActivityExecutionOutcomeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetActivityExecutionOutcomeResponse) ProtoMessage() {}
+
+func (x *GetActivityExecutionOutcomeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetActivityExecutionOutcomeResponse.ProtoReflect.Descriptor instead.
+func (*GetActivityExecutionOutcomeResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetActivityExecutionOutcomeResponse) GetFrontendResponse() *v1.GetActivityExecutionOutcomeResponse {
+	if x != nil {
+		return x.FrontendResponse
+	}
+	return nil
+}
+
 type TerminateActivityExecutionRequest struct {
 	state           protoimpl.MessageState                `protogen:"open.v1"`
 	NamespaceId     string                                `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
@@ -129,7 +321,7 @@ type TerminateActivityExecutionRequest struct {
 
 func (x *TerminateActivityExecutionRequest) Reset() {
 	*x = TerminateActivityExecutionRequest{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -141,7 +333,7 @@ func (x *TerminateActivityExecutionRequest) String() string {
 func (*TerminateActivityExecutionRequest) ProtoMessage() {}
 
 func (x *TerminateActivityExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -154,7 +346,7 @@ func (x *TerminateActivityExecutionRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use TerminateActivityExecutionRequest.ProtoReflect.Descriptor instead.
 func (*TerminateActivityExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *TerminateActivityExecutionRequest) GetNamespaceId() string {
@@ -179,7 +371,7 @@ type TerminateActivityExecutionResponse struct {
 
 func (x *TerminateActivityExecutionResponse) Reset() {
 	*x = TerminateActivityExecutionResponse{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -191,7 +383,7 @@ func (x *TerminateActivityExecutionResponse) String() string {
 func (*TerminateActivityExecutionResponse) ProtoMessage() {}
 
 func (x *TerminateActivityExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -204,7 +396,7 @@ func (x *TerminateActivityExecutionResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use TerminateActivityExecutionResponse.ProtoReflect.Descriptor instead.
 func (*TerminateActivityExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{7}
 }
 
 type RequestCancelActivityExecutionRequest struct {
@@ -217,7 +409,7 @@ type RequestCancelActivityExecutionRequest struct {
 
 func (x *RequestCancelActivityExecutionRequest) Reset() {
 	*x = RequestCancelActivityExecutionRequest{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -229,7 +421,7 @@ func (x *RequestCancelActivityExecutionRequest) String() string {
 func (*RequestCancelActivityExecutionRequest) ProtoMessage() {}
 
 func (x *RequestCancelActivityExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -242,7 +434,7 @@ func (x *RequestCancelActivityExecutionRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use RequestCancelActivityExecutionRequest.ProtoReflect.Descriptor instead.
 func (*RequestCancelActivityExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
+	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RequestCancelActivityExecutionRequest) GetNamespaceId() string {
@@ -267,7 +459,7 @@ type RequestCancelActivityExecutionResponse struct {
 
 func (x *RequestCancelActivityExecutionResponse) Reset() {
 	*x = RequestCancelActivityExecutionResponse{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[5]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -279,7 +471,7 @@ func (x *RequestCancelActivityExecutionResponse) String() string {
 func (*RequestCancelActivityExecutionResponse) ProtoMessage() {}
 
 func (x *RequestCancelActivityExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[5]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -292,7 +484,7 @@ func (x *RequestCancelActivityExecutionResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use RequestCancelActivityExecutionResponse.ProtoReflect.Descriptor instead.
 func (*RequestCancelActivityExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
+	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{9}
 }
 
 var File_temporal_server_chasm_lib_activity_proto_v1_request_response_proto protoreflect.FileDescriptor
@@ -304,7 +496,17 @@ const file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_ra
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12i\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.StartActivityExecutionRequestR\x0ffrontendRequest\"\x8e\x01\n" +
 	"\x1eStartActivityExecutionResponse\x12l\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.api.workflowservice.v1.StartActivityExecutionResponseR\x10frontendResponse\"\xb5\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.api.workflowservice.v1.StartActivityExecutionResponseR\x10frontendResponse\"\xb3\x01\n" +
+	" DescribeActivityExecutionRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12l\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2A.temporal.api.workflowservice.v1.DescribeActivityExecutionRequestR\x0ffrontendRequest\"\x94\x01\n" +
+	"!DescribeActivityExecutionResponse\x12o\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2B.temporal.api.workflowservice.v1.DescribeActivityExecutionResponseR\x10frontendResponse\"\xb7\x01\n" +
+	"\"GetActivityExecutionOutcomeRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12n\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2C.temporal.api.workflowservice.v1.GetActivityExecutionOutcomeRequestR\x0ffrontendRequest\"\x98\x01\n" +
+	"#GetActivityExecutionOutcomeResponse\x12q\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2D.temporal.api.workflowservice.v1.GetActivityExecutionOutcomeResponseR\x10frontendResponse\"\xb5\x01\n" +
 	"!TerminateActivityExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12m\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2B.temporal.api.workflowservice.v1.TerminateActivityExecutionRequestR\x0ffrontendRequest\"$\n" +
@@ -326,29 +528,41 @@ func file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_raw
 	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_goTypes = []any{
 	(*StartActivityExecutionRequest)(nil),            // 0: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest
 	(*StartActivityExecutionResponse)(nil),           // 1: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse
-	(*TerminateActivityExecutionRequest)(nil),        // 2: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest
-	(*TerminateActivityExecutionResponse)(nil),       // 3: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse
-	(*RequestCancelActivityExecutionRequest)(nil),    // 4: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest
-	(*RequestCancelActivityExecutionResponse)(nil),   // 5: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionResponse
-	(*v1.StartActivityExecutionRequest)(nil),         // 6: temporal.api.workflowservice.v1.StartActivityExecutionRequest
-	(*v1.StartActivityExecutionResponse)(nil),        // 7: temporal.api.workflowservice.v1.StartActivityExecutionResponse
-	(*v1.TerminateActivityExecutionRequest)(nil),     // 8: temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
-	(*v1.RequestCancelActivityExecutionRequest)(nil), // 9: temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
+	(*DescribeActivityExecutionRequest)(nil),         // 2: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionRequest
+	(*DescribeActivityExecutionResponse)(nil),        // 3: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionResponse
+	(*GetActivityExecutionOutcomeRequest)(nil),       // 4: temporal.server.chasm.lib.activity.proto.v1.GetActivityExecutionOutcomeRequest
+	(*GetActivityExecutionOutcomeResponse)(nil),      // 5: temporal.server.chasm.lib.activity.proto.v1.GetActivityExecutionOutcomeResponse
+	(*TerminateActivityExecutionRequest)(nil),        // 6: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest
+	(*TerminateActivityExecutionResponse)(nil),       // 7: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse
+	(*RequestCancelActivityExecutionRequest)(nil),    // 8: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest
+	(*RequestCancelActivityExecutionResponse)(nil),   // 9: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionResponse
+	(*v1.StartActivityExecutionRequest)(nil),         // 10: temporal.api.workflowservice.v1.StartActivityExecutionRequest
+	(*v1.StartActivityExecutionResponse)(nil),        // 11: temporal.api.workflowservice.v1.StartActivityExecutionResponse
+	(*v1.DescribeActivityExecutionRequest)(nil),      // 12: temporal.api.workflowservice.v1.DescribeActivityExecutionRequest
+	(*v1.DescribeActivityExecutionResponse)(nil),     // 13: temporal.api.workflowservice.v1.DescribeActivityExecutionResponse
+	(*v1.GetActivityExecutionOutcomeRequest)(nil),    // 14: temporal.api.workflowservice.v1.GetActivityExecutionOutcomeRequest
+	(*v1.GetActivityExecutionOutcomeResponse)(nil),   // 15: temporal.api.workflowservice.v1.GetActivityExecutionOutcomeResponse
+	(*v1.TerminateActivityExecutionRequest)(nil),     // 16: temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
+	(*v1.RequestCancelActivityExecutionRequest)(nil), // 17: temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_depIdxs = []int32{
-	6, // 0: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionRequest
-	7, // 1: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionResponse
-	8, // 2: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
-	9, // 3: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	10, // 0: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionRequest
+	11, // 1: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionResponse
+	12, // 2: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeActivityExecutionRequest
+	13, // 3: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeActivityExecutionResponse
+	14, // 4: temporal.server.chasm.lib.activity.proto.v1.GetActivityExecutionOutcomeRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.GetActivityExecutionOutcomeRequest
+	15, // 5: temporal.server.chasm.lib.activity.proto.v1.GetActivityExecutionOutcomeResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.GetActivityExecutionOutcomeResponse
+	16, // 6: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
+	17, // 7: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_init() }
@@ -362,7 +576,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_ini
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
