@@ -352,7 +352,6 @@ func (a *Activity) recordFailedAttempt(
 	failure *failurepb.Failure,
 	noRetriesLeft bool,
 ) error {
-	outcome := a.Outcome.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
 	currentTime := timestamppb.New(ctx.Now(a))
 
@@ -365,7 +364,6 @@ func (a *Activity) recordFailedAttempt(
 	// If the activity has exhausted retries, mark the outcome failure as well but don't store duplicate failure info.
 	// Also reset the retry interval as there won't be any more retries.
 	if noRetriesLeft {
-		outcome.Variant = &activitypb.ActivityOutcome_Failed_{}
 		attempt.CurrentRetryInterval = nil
 	} else {
 		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
