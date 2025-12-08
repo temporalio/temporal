@@ -76,21 +76,18 @@ func NewStandaloneActivity(
 	visibility := chasm.NewVisibilityWithData(
 		ctx,
 		request.GetSearchAttributes().GetIndexedFields(),
-		request.GetMemo().GetFields(),
+		nil,
 	)
-
-	// TODO flatten this when API is updated
-	options := request.GetOptions()
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
 			ActivityType:           request.ActivityType,
-			TaskQueue:              options.GetTaskQueue(),
-			ScheduleToCloseTimeout: options.GetScheduleToCloseTimeout(),
-			ScheduleToStartTimeout: options.GetScheduleToStartTimeout(),
-			StartToCloseTimeout:    options.GetStartToCloseTimeout(),
-			HeartbeatTimeout:       options.GetHeartbeatTimeout(),
-			RetryPolicy:            options.GetRetryPolicy(),
+			TaskQueue:              request.GetTaskQueue(),
+			ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:    request.GetStartToCloseTimeout(),
+			HeartbeatTimeout:       request.GetHeartbeatTimeout(),
+			RetryPolicy:            request.GetRetryPolicy(),
 			Priority:               request.Priority,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
@@ -103,7 +100,7 @@ func NewStandaloneActivity(
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
 
-	activity.ScheduledTime = timestamppb.New(ctx.Now(activity))
+	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
 
 	return activity, nil
 }
@@ -355,7 +352,6 @@ func (a *Activity) recordFailedAttempt(
 	failure *failurepb.Failure,
 	noRetriesLeft bool,
 ) error {
-	outcome := a.Outcome.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
 	currentTime := timestamppb.New(ctx.Now(a))
 
@@ -368,7 +364,6 @@ func (a *Activity) recordFailedAttempt(
 	// If the activity has exhausted retries, mark the outcome failure as well but don't store duplicate failure info.
 	// Also reset the retry interval as there won't be any more retries.
 	if noRetriesLeft {
-		outcome.Variant = &activitypb.ActivityOutcome_Failed_{}
 		attempt.CurrentRetryInterval = nil
 	} else {
 		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
@@ -407,7 +402,7 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 		return true, retryInterval, nil
 	}
 
-	deadline := a.ScheduledTime.AsTime().Add(scheduleToClose)
+	deadline := a.ScheduleTime.AsTime().Add(scheduleToClose)
 	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval, nil
 }
 
@@ -486,7 +481,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		Priority:                a.GetPriority(),
 		RunId:                   key.RunID,
 		RunState:                runState,
-		ScheduledTime:           a.GetScheduledTime(),
+		ScheduleTime:            a.GetScheduleTime(),
 		Status:                  status,
 		// TODO(dan): populate remaining fields
 	}
@@ -494,10 +489,10 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 	return info, nil
 }
 
-func (a *Activity) buildPollActivityExecutionResponse(
+func (a *Activity) buildDescribeActivityExecutionResponse(
 	ctx chasm.Context,
-	req *activitypb.PollActivityExecutionRequest,
-) (*activitypb.PollActivityExecutionResponse, error) {
+	req *activitypb.DescribeActivityExecutionRequest,
+) (*activitypb.DescribeActivityExecutionResponse, error) {
 	request := req.GetFrontendRequest()
 
 	token, err := ctx.Ref(a)
@@ -505,64 +500,77 @@ func (a *Activity) buildPollActivityExecutionResponse(
 		return nil, err
 	}
 
-	var info *activity.ActivityExecutionInfo
-	if request.GetIncludeInfo() {
-		info, err = a.buildActivityExecutionInfo(ctx)
-		if err != nil {
-			return nil, err
-		}
+	info, err := a.buildActivityExecutionInfo(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	var input *commonpb.Payloads
 	if request.GetIncludeInput() {
-		activityRequest := a.RequestData.Get(ctx)
-		input = activityRequest.GetInput()
+		input = a.RequestData.Get(ctx).GetInput()
 	}
 
-	response := &workflowservice.PollActivityExecutionResponse{
-		Info:                     info,
-		RunId:                    ctx.ExecutionKey().RunID,
-		Input:                    input,
-		StateChangeLongPollToken: token,
+	response := &workflowservice.DescribeActivityExecutionResponse{
+		Info:          info,
+		RunId:         ctx.ExecutionKey().RunID,
+		Input:         input,
+		LongPollToken: token,
 	}
 
 	if request.GetIncludeOutcome() {
-		activityOutcome := a.Outcome.Get(ctx)
-		// There are two places where a failure might be stored but only one place where a
-		// successful outcome is stored.
-		if successful := activityOutcome.GetSuccessful(); successful != nil {
-			response.Outcome = &workflowservice.PollActivityExecutionResponse_Result{
-				Result: successful.GetOutput(),
-			}
-		} else if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
-			response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
-				Failure: failure,
-			}
-		} else {
-			shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||
-				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT ||
-				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED ||
-				a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
-
-			if shouldHaveFailure {
-				attempt := a.LastAttempt.Get(ctx)
-				if details := attempt.GetLastFailureDetails(); details != nil {
-					response.Outcome = &workflowservice.PollActivityExecutionResponse_Failure{
-						Failure: details.GetFailure(),
-					}
-				}
-			}
-		}
+		response.Outcome = a.outcome(ctx)
 	}
 
-	return &activitypb.PollActivityExecutionResponse{
+	return &activitypb.DescribeActivityExecutionResponse{
 		FrontendResponse: response,
 	}, nil
 }
 
-// StoreOrSelf returns the store for the activity. If the store is not set as a field (e.g. standalone
-// activities), it returns the activity itself.
-func (a *Activity) StoreOrSelf(ctx chasm.MutableContext) ActivityStore {
+func (a *Activity) buildGetActivityExecutionOutcomeResponse(
+	ctx chasm.Context,
+) (*activitypb.GetActivityExecutionOutcomeResponse, error) {
+	return &activitypb.GetActivityExecutionOutcomeResponse{
+		FrontendResponse: &workflowservice.GetActivityExecutionOutcomeResponse{
+			RunId:   ctx.ExecutionKey().RunID,
+			Outcome: a.outcome(ctx),
+		},
+	}, nil
+}
+
+// outcome retrieves the activity outcome (result or failure) if the activity has completed.
+// Returns nil if the activity has not completed.
+func (a *Activity) outcome(ctx chasm.Context) *activity.ActivityExecutionOutcome {
+	activityOutcome := a.Outcome.Get(ctx)
+	// Check for successful outcome
+	if successful := activityOutcome.GetSuccessful(); successful != nil {
+		return &activity.ActivityExecutionOutcome{
+			Value: &activity.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
+		}
+	}
+	// Check for failure in outcome
+	if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
+		return &activity.ActivityExecutionOutcome{
+			Value: &activity.ActivityExecutionOutcome_Failure{Failure: failure},
+		}
+	}
+	// Check for failure in last attempt details
+	shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
+	if shouldHaveFailure {
+		if details := a.LastAttempt.Get(ctx).GetLastFailureDetails(); details != nil {
+			return &activity.ActivityExecutionOutcome{
+				Value: &activity.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
+			}
+		}
+	}
+	return nil
+}
+
+// StoreOrSelf returns the store for the activity. If the store is not set as a field (e.g.
+// standalone activities), it returns the activity itself.
+func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 	store, ok := a.Store.TryGet(ctx)
 	if ok {
 		return store

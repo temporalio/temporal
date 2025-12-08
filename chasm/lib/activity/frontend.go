@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -19,9 +20,10 @@ import (
 
 type FrontendHandler interface {
 	StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error)
+	DescribeActivityExecution(ctx context.Context, req *workflowservice.DescribeActivityExecutionRequest) (*workflowservice.DescribeActivityExecutionResponse, error)
+	GetActivityExecutionOutcome(ctx context.Context, req *workflowservice.GetActivityExecutionOutcomeRequest) (*workflowservice.GetActivityExecutionOutcomeResponse, error)
 	CountActivityExecutions(context.Context, *workflowservice.CountActivityExecutionsRequest) (*workflowservice.CountActivityExecutionsResponse, error)
 	DeleteActivityExecution(context.Context, *workflowservice.DeleteActivityExecutionRequest) (*workflowservice.DeleteActivityExecutionResponse, error)
-	PollActivityExecution(context.Context, *workflowservice.PollActivityExecutionRequest) (*workflowservice.PollActivityExecutionResponse, error)
 	ListActivityExecutions(context.Context, *workflowservice.ListActivityExecutionsRequest) (*workflowservice.ListActivityExecutionsResponse, error)
 	RequestCancelActivityExecution(context.Context, *workflowservice.RequestCancelActivityExecutionRequest) (*workflowservice.RequestCancelActivityExecutionResponse, error)
 	TerminateActivityExecution(context.Context, *workflowservice.TerminateActivityExecutionRequest) (*workflowservice.TerminateActivityExecutionResponse, error)
@@ -87,14 +89,13 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 	return resp.GetFrontendResponse(), err
 }
 
-// PollActivityExecution handles PollActivityExecutionRequest. This method supports querying current
-// activity state, optionally as a long-poll that waits for certain state changes. It is used by
-// clients to poll for activity state and/or result.
-func (h *frontendHandler) PollActivityExecution(
+// DescribeActivityExecution queries current activity state, optionally as a long-poll that waits
+// for any state change.
+func (h *frontendHandler) DescribeActivityExecution(
 	ctx context.Context,
-	req *workflowservice.PollActivityExecutionRequest,
-) (*workflowservice.PollActivityExecutionResponse, error) {
-	err := ValidatePollActivityExecutionRequest(
+	req *workflowservice.DescribeActivityExecutionRequest,
+) (*workflowservice.DescribeActivityExecutionResponse, error) {
+	err := ValidateDescribeActivityExecutionRequest(
 		req,
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
 	)
@@ -106,7 +107,31 @@ func (h *frontendHandler) PollActivityExecution(
 	if err != nil {
 		return nil, err
 	}
-	resp, err := h.client.PollActivityExecution(ctx, &activitypb.PollActivityExecutionRequest{
+
+	resp, err := h.client.DescribeActivityExecution(ctx, &activitypb.DescribeActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	return resp.GetFrontendResponse(), err
+}
+
+// GetActivityExecutionOutcome long-polls for activity outcome.
+func (h *frontendHandler) GetActivityExecutionOutcome(
+	ctx context.Context,
+	req *workflowservice.GetActivityExecutionOutcomeRequest,
+) (*workflowservice.GetActivityExecutionOutcomeResponse, error) {
+	err := ValidateGetActivityExecutionOutcomeRequest(
+		req,
+		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := h.client.GetActivityExecutionOutcome(ctx, &activitypb.GetActivityExecutionOutcomeRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
@@ -193,23 +218,25 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
 
-	if req.Options.RetryPolicy == nil {
-		req.Options.RetryPolicy = &commonpb.RetryPolicy{}
+	if req.RetryPolicy == nil {
+		req.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
+	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeActivityAttributes(
 		req.ActivityId,
 		activityType,
 		dynamicconfig.DefaultActivityRetryPolicy.Get(h.dc),
 		dynamicconfig.MaxIDLengthLimit.Get(h.dc)(),
 		namespaceID,
-		req.Options,
+		opts,
 		req.Priority,
 		durationpb.New(0),
 	)
 	if err != nil {
 		return nil, err
 	}
+	applyActivityOptionsToStartRequest(opts, req)
 
 	err = validateAndNormalizeStartActivityExecutionRequest(
 		req,
@@ -223,4 +250,28 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	return req, nil
+}
+
+// activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields
+// of a StartActivityExecutionRequest for use with shared validation logic.
+func activityOptionsFromStartRequest(req *workflowservice.StartActivityExecutionRequest) *apiactivitypb.ActivityOptions {
+	return &apiactivitypb.ActivityOptions{
+		TaskQueue:              req.TaskQueue,
+		ScheduleToCloseTimeout: req.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: req.ScheduleToStartTimeout,
+		StartToCloseTimeout:    req.StartToCloseTimeout,
+		HeartbeatTimeout:       req.HeartbeatTimeout,
+		RetryPolicy:            req.RetryPolicy,
+	}
+}
+
+// applyActivityOptionsToStartRequest copies normalized values from ActivityOptions
+// back to the StartActivityExecutionRequest.
+func applyActivityOptionsToStartRequest(opts *apiactivitypb.ActivityOptions, req *workflowservice.StartActivityExecutionRequest) {
+	req.TaskQueue = opts.TaskQueue
+	req.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
+	req.ScheduleToStartTimeout = opts.ScheduleToStartTimeout
+	req.StartToCloseTimeout = opts.StartToCloseTimeout
+	req.HeartbeatTimeout = opts.HeartbeatTimeout
+	req.RetryPolicy = opts.RetryPolicy
 }

@@ -6459,38 +6459,6 @@ func (wh *WorkflowHandler) TriggerWorkflowRule(context.Context, *workflowservice
 	return nil, serviceerror.NewUnimplemented("method TriggerWorkflowRule not supported")
 }
 
-// PauseActivityExecution pauses a standalone activity execution
-func (wh *WorkflowHandler) PauseActivityExecution(
-	ctx context.Context,
-	request *workflowservice.PauseActivityExecutionRequest,
-) (*workflowservice.PauseActivityExecutionResponse, error) {
-	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
-}
-
-// UnpauseActivityExecution unpauses a standalone activity execution
-func (wh *WorkflowHandler) UnpauseActivityExecution(
-	ctx context.Context,
-	request *workflowservice.UnpauseActivityExecutionRequest,
-) (*workflowservice.UnpauseActivityExecutionResponse, error) {
-	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
-}
-
-// ResetActivityExecution resets a standalone activity execution
-func (wh *WorkflowHandler) ResetActivityExecution(
-	ctx context.Context,
-	request *workflowservice.ResetActivityExecutionRequest,
-) (*workflowservice.ResetActivityExecutionResponse, error) {
-	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
-}
-
-// UpdateActivityExecutionOptions updates options for a standalone activity execution
-func (wh *WorkflowHandler) UpdateActivityExecutionOptions(
-	ctx context.Context,
-	request *workflowservice.UpdateActivityExecutionOptionsRequest,
-) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
-	return nil, serviceerror.NewUnimplemented("temporary stub during Standalone Activity prototyping")
-}
-
 // PauseWorkflowExecution pauses a workflow execution.
 func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *workflowservice.PauseWorkflowExecutionRequest) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)

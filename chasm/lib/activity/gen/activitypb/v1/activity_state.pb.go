@@ -177,7 +177,7 @@ type ActivityState struct {
 	// components on each attempt transition.
 	Status ActivityExecutionStatus `protobuf:"varint,8,opt,name=status,proto3,enum=temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatus" json:"status,omitempty"`
 	// Time the activity was originally scheduled via a StartActivityExecution request.
-	ScheduledTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
+	ScheduleTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=schedule_time,json=scheduleTime,proto3" json:"schedule_time,omitempty"`
 	// Priority metadata.
 	Priority *v1.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
 	// Set if activity cancelation was requested.
@@ -272,9 +272,9 @@ func (x *ActivityState) GetStatus() ActivityExecutionStatus {
 	return ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 }
 
-func (x *ActivityState) GetScheduledTime() *timestamppb.Timestamp {
+func (x *ActivityState) GetScheduleTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ScheduledTime
+		return x.ScheduleTime
 	}
 	return nil
 }
@@ -815,7 +815,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xef\x06\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xed\x06\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
 	"\n" +
@@ -825,8 +825,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x16start_to_close_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x13startToCloseTimeout\x12F\n" +
 	"\x11heartbeat_timeout\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\x10heartbeatTimeout\x12F\n" +
 	"\fretry_policy\x18\a \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\x12\\\n" +
-	"\x06status\x18\b \x01(\x0e2D.temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatusR\x06status\x12A\n" +
-	"\x0escheduled_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12<\n" +
+	"\x06status\x18\b \x01(\x0e2D.temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatusR\x06status\x12?\n" +
+	"\rschedule_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\fscheduleTime\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12c\n" +
 	"\fcancel_state\x18\v \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\"\xa7\x01\n" +
@@ -922,7 +922,7 @@ var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdx
 	12, // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityState.heartbeat_timeout:type_name -> google.protobuf.Duration
 	13, // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityState.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
 	0,  // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityState.status:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatus
-	14, // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityState.scheduled_time:type_name -> google.protobuf.Timestamp
+	14, // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_time:type_name -> google.protobuf.Timestamp
 	15, // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityState.priority:type_name -> temporal.api.common.v1.Priority
 	2,  // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityState.cancel_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
 	14, // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp

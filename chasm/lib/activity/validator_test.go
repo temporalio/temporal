@@ -221,10 +221,14 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 	req := &workflowservice.StartActivityExecutionRequest{
 		ActivityId:   defaultActivityID,
 		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
-		Options:      &defaultActivityOptions,
-		Namespace:    "default",
-		RequestId:    string(make([]byte, 1001)),
-		Input:        payloads.EncodeString("test-input"),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval: durationpb.New(1 * time.Second),
+		},
+		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		Namespace:              "default",
+		RequestId:              string(make([]byte, 1001)),
+		Input:                  payloads.EncodeString("test-input"),
 	}
 
 	err := validateAndNormalizeStartActivityExecutionRequest(
@@ -242,10 +246,14 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 	req := &workflowservice.StartActivityExecutionRequest{
 		ActivityId:   defaultActivityID,
 		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
-		Options:      &defaultActivityOptions,
-		Namespace:    "default",
-		RequestId:    "test-request-id",
-		Input:        payloads.EncodeString(string(make([]byte, 1000))),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval: durationpb.New(1 * time.Second),
+		},
+		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		Namespace:              "default",
+		RequestId:              "test-request-id",
+		Input:                  payloads.EncodeString(string(make([]byte, 1000))),
 	}
 
 	err := validateAndNormalizeStartActivityExecutionRequest(
@@ -266,10 +274,14 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 	req := &workflowservice.StartActivityExecutionRequest{
 		ActivityId:   defaultActivityID,
 		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
-		Options:      &defaultActivityOptions,
-		Namespace:    "default",
-		RequestId:    "test-request-id",
-		Input:        payload,
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval: durationpb.New(1 * time.Second),
+		},
+		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		Namespace:              "default",
+		RequestId:              "test-request-id",
+		Input:                  payload,
 	}
 
 	err := validateAndNormalizeStartActivityExecutionRequest(
@@ -286,9 +298,13 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 	req := &workflowservice.StartActivityExecutionRequest{
 		ActivityId:   defaultActivityID,
 		ActivityType: &commonpb.ActivityType{Name: defaultActivityType},
-		Options:      &defaultActivityOptions,
-		Namespace:    "default",
-		RequestId:    "test-request-id",
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval: durationpb.New(1 * time.Second),
+		},
+		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		Namespace:              "default",
+		RequestId:              "test-request-id",
 	}
 
 	err := validateAndNormalizeStartActivityExecutionRequest(
