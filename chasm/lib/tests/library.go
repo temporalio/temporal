@@ -20,6 +20,7 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 			chasm.WithSearchAttributes(
 				PayloadTotalCountSearchAttribute,
 				PayloadTotalSizeSearchAttribute,
+				PayloadExecutionStatusSearchAttribute,
 				chasm.SearchAttributeTemporalScheduledByID,
 			),
 		),

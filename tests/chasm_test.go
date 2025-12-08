@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
@@ -204,7 +205,7 @@ func (s *ChasmTestSuite) TestPayloadStore_PureTask() {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
+func (s *ChasmTestSuite) TestListExecutions() {
 	tv := testvars.New(s.T())
 
 	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
@@ -286,7 +287,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
-				Query:         visQuery,
+				Query:         visQuery + " AND PayloadTotalCount > 0",
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -317,7 +318,7 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
-				Query:         visQuery + " AND ExecutionStatus = 'Completed'",
+				Query:         visQuery + " AND ExecutionStatus = 'Completed' AND PayloadTotalCount > 0",
 			})
 			s.NoError(err)
 			if len(resp.Executions) != 1 {
@@ -333,6 +334,103 @@ func (s *ChasmTestSuite) TestPayloadStoreVisibility() {
 	s.Equal(int64(3), visRecord.StateTransitionCount)
 	s.NotEmpty(visRecord.CloseTime)
 	s.Empty(visRecord.HistoryLength)
+}
+
+func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	for i := 0; i < 3; i++ {
+		storeID := tv.Any().String()
+
+		_, err := tests.NewPayloadStoreHandler(
+			s.chasmContext,
+			tests.NewPayloadStoreRequest{
+				NamespaceID: s.NamespaceID(),
+				StoreID:     storeID,
+			},
+		)
+		s.NoError(err)
+	}
+
+	for i := 0; i < 2; i++ {
+		storeID := tv.Any().String()
+
+		resp, err := tests.NewPayloadStoreHandler(
+			s.chasmContext,
+			tests.NewPayloadStoreRequest{
+				NamespaceID: s.NamespaceID(),
+				StoreID:     storeID,
+			},
+		)
+		s.NoError(err)
+
+		_, err = tests.AddPayloadHandler(
+			s.chasmContext,
+			tests.AddPayloadRequest{
+				NamespaceID: s.NamespaceID(),
+				StoreID:     storeID,
+				PayloadKey:  "key1",
+				Payload:     payload.EncodeString("value1"),
+			},
+		)
+		s.NoError(err)
+
+		_, err = tests.ClosePayloadStoreHandler(
+			s.chasmContext,
+			tests.ClosePayloadStoreRequest{
+				NamespaceID: s.NamespaceID(),
+				StoreID:     storeID,
+			},
+		)
+		s.NoError(err)
+		s.NotEmpty(resp.RunID)
+	}
+
+	var countResp *chasm.CountExecutionsResponse
+	var err error
+	s.Eventually(
+		func() bool {
+			countResp, err = chasm.CountExecutions[*tests.PayloadStore](
+				ctx,
+				&chasm.CountExecutionsRequest{
+					NamespaceID:   string(s.NamespaceID()),
+					NamespaceName: s.Namespace().String(),
+					Query:         "GROUP BY `PayloadExecutionStatus`",
+				},
+			)
+			return err == nil && countResp != nil && countResp.Count > 0
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	s.NoError(err)
+	s.NotNil(countResp)
+	s.Equal(int64(5), countResp.Count)
+	s.Len(countResp.Groups, 2)
+
+	var totalCount int64
+	for _, group := range countResp.Groups {
+		s.Len(group.Values, 1)
+		totalCount += group.Count
+	}
+	s.Equal(int64(5), totalCount)
+
+	// Test that GROUP BY on unsupported field returns error
+	_, err = chasm.CountExecutions[*tests.PayloadStore](
+		ctx,
+		&chasm.CountExecutionsRequest{
+			NamespaceID:   string(s.NamespaceID()),
+			NamespaceName: s.Namespace().String(),
+			Query:         "GROUP BY `PayloadTotalCount`",
+		},
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.Contains(err.Error(), "GROUP BY")
 }
 
 // TODO: More tests here...

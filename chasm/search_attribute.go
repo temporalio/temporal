@@ -12,16 +12,20 @@ import (
 //
 // This contains CHASM search attribute field constants. These predefined fields correspond to the exact column name in Visibility storage.
 // For each root component, search attributes can be mapped from a user defined alias to these fields.
+// Each component must register its search attributes with the CHASM Registry.
 //
 // To define a CHASM search attribute, create this as a package/global scoped variable. Below is an example:
 // var testComponentCompletedSearchAttribute = NewSearchAttributeBool("Completed", SearchAttributeFieldBool01)
 // var testComponentFailedSearchAttribute = NewSearchAttributeBool("Failed", SearchAttributeFieldBool02)
 // var testComponentStartTimeSearchAttribute = NewSearchAttributeTime("StartTime", SearchAttributeFieldDateTime01)
+// var testComponentCategorySearchAttribute = NewSearchAttributeLowCardinalityKeyword("Category", SearchAttributeFieldLowCardinalityKeyword01)
 //
 // Each CHASM search attribute field is associated with a specific indexed value type. The Value() method of a search attribute
 // specifies the supported value type to set at compile time. eg. DateTime values must be set with a time.Time typed value.
 //
-// Each root component can ONLY use a predefined search attribute field ONCE. Developers should NOT reassign aliases to different fields.
+// Low Cardinality Keyword Fields: used for categorical data that support GROUP BY aggregations. Values must be limited to a small number of dimensions.
+//
+// Each root component can only use a predefined search attribute field once. Developers should not reassign aliases to different fields.
 // Reassiging aliases to different fields will result in incorrect visibility query results.
 //
 // To register these search attributes with the CHASM Registry, use the WithSearchAttributes() option when creating the component in the library.
@@ -44,6 +48,10 @@ var (
 	SearchAttributeFieldKeyword02 = newSearchAttributeFieldKeyword(2)
 	SearchAttributeFieldKeyword03 = newSearchAttributeFieldKeyword(3)
 	SearchAttributeFieldKeyword04 = newSearchAttributeFieldKeyword(4)
+
+	// SearchAttributeFieldLowCardinalityKeyword is a search attribute field for a low cardinality keyword value.
+	// Used for categorical data that support GROUP BY aggregations, eg. CHASM Execution Statuses.
+	SearchAttributeFieldLowCardinalityKeyword01 = newSearchAttributeFieldLowCardinalityKeyword(1)
 
 	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
@@ -161,6 +169,12 @@ type SearchAttributeFieldKeyword struct {
 func newSearchAttributeFieldKeyword(index int) SearchAttributeFieldKeyword {
 	return SearchAttributeFieldKeyword{
 		field: resolveFieldName(enumspb.INDEXED_VALUE_TYPE_KEYWORD, index),
+	}
+}
+
+func newSearchAttributeFieldLowCardinalityKeyword(index int) SearchAttributeFieldKeyword {
+	return SearchAttributeFieldKeyword{
+		field: fmt.Sprintf("%s%s%02d", sadefs.ReservedPrefix, "LowCardinalityKeyword", index),
 	}
 }
 

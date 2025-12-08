@@ -239,12 +239,14 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 	return fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility ev
-		LEFT JOIN custom_search_attributes
-		USING (%s, %s)
+		LEFT JOIN custom_search_attributes USING (%s, %s)
+		LEFT JOIN chasm_search_attributes USING (%s, %s)
 		WHERE %s
 		ORDER BY %s DESC, %s DESC, %s
 		LIMIT ?`,
 		strings.Join(addPrefix("ev.", sqlplugin.DbFields), ", "),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		sadefs.GetSqlDbColName(sadefs.NamespaceID),
 		sadefs.GetSqlDbColName(sadefs.RunID),
 		strings.Join(whereClauses, " AND "),
@@ -280,11 +282,13 @@ func (c *mysqlQueryConverter) buildCountStmt(
 	return fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility ev
-		LEFT JOIN custom_search_attributes
-		USING (%s, %s)
+		LEFT JOIN custom_search_attributes USING (%s, %s)
+		LEFT JOIN chasm_search_attributes USING (%s, %s)
 		WHERE %s
 		%s`,
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		sadefs.GetSqlDbColName(sadefs.NamespaceID),
 		sadefs.GetSqlDbColName(sadefs.RunID),
 		strings.Join(whereClauses, " AND "),

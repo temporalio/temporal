@@ -112,7 +112,7 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			input:  "GROUP BY ExecutionStatus, WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'group by' clause supports only a single field",
+				"%s: 'GROUP BY' clause supports only a single field",
 				query.NotSupportedErrMessage,
 			),
 		},
@@ -121,22 +121,21 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			input:  "GROUP BY WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'group by' clause is only supported for %s search attribute",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				query.NotSupportedErrMessage,
-				sadefs.ExecutionStatus,
 			),
 		},
 		{
 			name:   "order by not supported",
 			input:  "ORDER BY StartTime",
 			output: nil,
-			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+			err:    query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage),
 		},
 		{
 			name:   "group by with order by not supported",
 			input:  "GROUP BY ExecutionStatus ORDER BY StartTime",
 			output: nil,
-			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+			err:    query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage),
 		},
 	}
 

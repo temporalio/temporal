@@ -2,13 +2,13 @@ package elasticsearch
 
 import (
 	"fmt"
-	"maps"
 	"strconv"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -51,10 +51,7 @@ func NewValuesInterceptor(
 	csaTypeMap searchattribute.NameTypeMap,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *valuesInterceptor {
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, csaTypeMap.Custom())
-	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
-	saTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+	saTypeMap := store.CombineTypeMaps(csaTypeMap, chasmMapper)
 	return &valuesInterceptor{
 		namespace:   namespaceName,
 		saTypeMap:   saTypeMap,
@@ -88,10 +85,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 			)
 		}
 	case query.FieldNameGroupBy:
-		if fieldName != sadefs.ExecutionStatus {
+		if !query.IsGroupByFieldAllowed(fieldName) {
 			return "", query.NewConverterError(
-				"'group by' clause is only supported for %s search attribute",
-				sadefs.ExecutionStatus,
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				query.NotSupportedErrMessage,
 			)
 		}
 	}
