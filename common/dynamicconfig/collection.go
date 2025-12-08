@@ -266,10 +266,11 @@ func findMatchWithCache(
 				cached[cvs[i].Constraints] = int32(i)
 			}
 		}
-		cache.Store(weakcvp, cached)
-		runtime.AddCleanup(&cvs[0], func(w weak.Pointer[ConstrainedValue]) {
-			cache.Delete(w)
-		}, weakcvp)
+		if _, loaded := cache.LoadOrStore(weakcvp, cached); !loaded {
+			runtime.AddCleanup(&cvs[0], func(w weak.Pointer[ConstrainedValue]) {
+				cache.Delete(w)
+			}, weakcvp)
+		}
 	}
 
 	for _, m := range precedence {
@@ -579,11 +580,11 @@ func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error
 		return zero, err
 	}
 
-	c.convertCache.Store(weakcvp, t)
-
-	runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
-		c.convertCache.Delete(w)
-	}, weakcvp)
+	if _, loaded := c.convertCache.LoadOrStore(weakcvp, t); !loaded {
+		runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
+			c.convertCache.Delete(w)
+		}, weakcvp)
+	}
 
 	return t, nil
 }
