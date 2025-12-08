@@ -263,12 +263,7 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
-		store, _ := a.Store.TryGet(ctx)
-		if store == nil {
-			store = a
-		}
-
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:

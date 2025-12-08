@@ -157,15 +157,14 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 }
 
 func (a *Activity) PopulateRecordStartedResponse(ctx chasm.Context, key chasm.ExecutionKey, response *historyservice.RecordActivityTaskStartedResponse) error {
-	attempt := a.LastAttempt.Get(ctx)
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
-	requestData := a.RequestData.Get(ctx)
-
-	response.StartedTime = attempt.StartedTime
-	response.Attempt = attempt.GetCount()
 	if lastHeartbeat != nil {
 		response.HeartbeatDetails = lastHeartbeat.GetDetails()
 	}
+	requestData := a.RequestData.Get(ctx)
+	attempt := a.LastAttempt.Get(ctx)
+	response.StartedTime = attempt.StartedTime
+	response.Attempt = attempt.GetCount()
 	response.Priority = a.GetPriority()
 	response.RetryPolicy = a.GetRetryPolicy()
 	response.ScheduledEvent = &historypb.HistoryEvent{
