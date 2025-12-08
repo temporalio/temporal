@@ -4585,10 +4585,7 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
 		})
 		s.NoError(err)
-		if resp.GetIsMember() {
-			return false // version should not be present yet
-		}
-		return true
+		return !resp.GetIsMember() // the check should pass if no version is present
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Start v1 worker which shall register the version in the task queue
@@ -4610,9 +4607,6 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
 		})
 		s.NoError(err)
-		if !resp.GetIsMember() {
-			return false
-		}
-		return true
+		return resp.GetIsMember()
 	}, 10*time.Second, 100*time.Millisecond)
 }
