@@ -28,4 +28,9 @@ var FrontendModule = fx.Module(
 	fx.Provide(activitypb.NewActivityServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(resource.SearchAttributeValidatorProvider),
+	fx.Invoke(func(registry *chasm.Registry) error {
+		// Frontend needs to register the component in order to serialize ComponentRefs, but doesn't
+		// need task executors.
+		return registry.Register(newComponentOnlyLibrary())
+	}),
 )

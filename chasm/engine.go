@@ -47,7 +47,7 @@ type Engine interface {
 	) ([]byte, error)
 
 	// NotifyExecution notifies any PollComponent callers waiting on the execution.
-	NotifyExecution(EntityKey)
+	NotifyExecution(ExecutionKey)
 }
 
 type BusinessIDReusePolicy int

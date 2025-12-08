@@ -14,7 +14,7 @@ type subscriptionTracker struct {
 // ChasmNotifier allows subscribers to receive notifications relating to a CHASM execution.
 type ChasmNotifier struct {
 	// TODO(dan): use ShardedConcurrentTxMap
-	executions map[chasm.EntityKey]*subscriptionTracker
+	executions map[chasm.ExecutionKey]*subscriptionTracker
 	// TODO(dan): consider RWMutex
 	lock sync.Mutex
 }
@@ -22,7 +22,7 @@ type ChasmNotifier struct {
 // NewChasmNotifier creates a new instance of ChasmNotifier.
 func NewChasmNotifier() *ChasmNotifier {
 	return &ChasmNotifier{
-		executions: make(map[chasm.EntityKey]*subscriptionTracker),
+		executions: make(map[chasm.ExecutionKey]*subscriptionTracker),
 	}
 }
 
@@ -32,7 +32,7 @@ func NewChasmNotifier() *ChasmNotifier {
 // been reached and resubscribe if necessary, while holding a lock on the execution. The caller must
 // arrange for the unsubscribe function to be called when they have finished monitoring the channel
 // for notifications. It is safe to call the unsubscribe function multiple times and concurrently.
-func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (<-chan struct{}, func()) {
+func (n *ChasmNotifier) Subscribe(key chasm.ExecutionKey) (<-chan struct{}, func()) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	s, ok := n.executions[key]
@@ -54,7 +54,7 @@ func (n *ChasmNotifier) Subscribe(key chasm.EntityKey) (<-chan struct{}, func())
 }
 
 // Notify notifies all subscribers subscribed to key by closing the channel.
-func (n *ChasmNotifier) Notify(key chasm.EntityKey) {
+func (n *ChasmNotifier) Notify(key chasm.ExecutionKey) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	if s, ok := n.executions[key]; ok {

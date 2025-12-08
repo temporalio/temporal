@@ -37,11 +37,7 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		attempt, err := a.LastAttempt.Get(ctx)
-		if err != nil {
-			return err
-		}
-
+		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
 		attempt.Count += 1
 
@@ -89,15 +85,11 @@ var TransitionRescheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
-		attempt, err := a.LastAttempt.Get(ctx)
-		if err != nil {
-			return err
-		}
-
+		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
 		attempt.Count += 1
 
-		err = a.recordFailedAttempt(ctx, event.retryInterval, event.failure, false)
+		err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, false)
 		if err != nil {
 			return err
 		}
@@ -133,20 +125,14 @@ var TransitionStarted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		attempt, err := a.LastAttempt.Get(ctx)
-		if err != nil {
-			return err
-		}
-
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
 				ScheduledTime: ctx.Now(a).Add(a.GetStartToCloseTimeout().AsDuration()),
 			},
 			&activitypb.StartToCloseTimeoutTask{
-				Attempt: attempt.GetCount(),
+				Attempt: a.LastAttempt.Get(ctx).GetCount(),
 			})
-
 		return nil
 	},
 )
@@ -159,36 +145,16 @@ var TransitionCompleted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) error {
-		// TODO: after rebase on main, don't need error and add a helper store := a.LoadStore(ctx)
-		store, err := a.Store.Get(ctx)
-		if err != nil {
-			return err
-		}
-
-		if store == nil {
-			store = a
-		}
-
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			attempt, err := a.LastAttempt.Get(ctx)
-			if err != nil {
-				return err
-			}
-
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			attempt := a.LastAttempt.Get(ctx)
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
 			attempt.LastWorkerIdentity = request.GetCompleteRequest().GetIdentity()
-
-			outcome, err := a.Outcome.Get(ctx)
-			if err != nil {
-				return err
-			}
-
+			outcome := a.Outcome.Get(ctx)
 			outcome.Variant = &activitypb.ActivityOutcome_Successful_{
 				Successful: &activitypb.ActivityOutcome_Successful{
 					Output: request.GetCompleteRequest().GetResult(),
 				},
 			}
-
 			return nil
 		})
 	},
@@ -202,33 +168,14 @@ var TransitionFailed = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
-		store, err := a.Store.Get(ctx)
-		if err != nil {
-			return err
-		}
-
-		if store == nil {
-			store = a
-		}
-
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
-				heartbeat, err := a.getLastHeartbeat(ctx)
-				if err != nil {
-					return err
-				}
-
+				heartbeat := a.getLastHeartbeat(ctx)
 				heartbeat.Details = details
 				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
 			}
-
-			attempt, err := a.LastAttempt.Get(ctx)
-			if err != nil {
-				return err
-			}
-
+			attempt := a.LastAttempt.Get(ctx)
 			attempt.LastWorkerIdentity = req.GetFailedRequest().GetIdentity()
-
 			return a.recordFailedAttempt(ctx, 0, req.GetFailedRequest().GetFailure(), true)
 		})
 	},
@@ -243,33 +190,18 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) error {
-		store, err := a.Store.Get(ctx)
-		if err != nil {
-			return err
-		}
-
-		if store == nil {
-			store = a
-		}
-
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			outcome, err := a.Outcome.Get(ctx)
-			if err != nil {
-				return err
-			}
-
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				// TODO if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
 				Message:     req.GetFrontendRequest().GetReason(),
 				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
 			}
-
 			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
 				Failed: &activitypb.ActivityOutcome_Failed{
 					Failure: failure,
 				},
 			}
-
 			return nil
 		})
 	},
@@ -302,21 +234,8 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 	func(a *Activity, ctx chasm.MutableContext, details *commonpb.Payloads) error {
-		store, err := a.Store.Get(ctx)
-		if err != nil {
-			return err
-		}
-
-		if store == nil {
-			store = a
-		}
-
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			outcome, err := a.Outcome.Get(ctx)
-			if err != nil {
-				return err
-			}
-
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				Message: "Activity canceled",
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
@@ -325,13 +244,11 @@ var TransitionCanceled = chasm.NewTransition(
 					},
 				},
 			}
-
 			outcome.Variant = &activitypb.ActivityOutcome_Failed_{
 				Failed: &activitypb.ActivityOutcome_Failed{
 					Failure: failure,
 				},
 			}
-
 			return nil
 		})
 	},
@@ -346,16 +263,7 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
-		store, err := a.Store.Get(ctx)
-		if err != nil {
-			return err
-		}
-
-		if store == nil {
-			store = a
-		}
-
-		return store.RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:

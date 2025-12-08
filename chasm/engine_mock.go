@@ -62,7 +62,7 @@ func (mr *MockEngineMockRecorder) NewExecution(arg0, arg1, arg2 any, arg3 ...any
 }
 
 // NotifyExecution mocks base method.
-func (m *MockEngine) NotifyExecution(arg0 EntityKey) {
+func (m *MockEngine) NotifyExecution(arg0 ExecutionKey) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyExecution", arg0)
 }

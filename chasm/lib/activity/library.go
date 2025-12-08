@@ -6,8 +6,26 @@ import (
 	"google.golang.org/grpc"
 )
 
-type library struct {
+type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
+}
+
+func newComponentOnlyLibrary() *componentOnlyLibrary {
+	return &componentOnlyLibrary{}
+}
+
+func (l *componentOnlyLibrary) Name() string {
+	return "activity"
+}
+
+func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Activity]("activity"),
+	}
+}
+
+type library struct {
+	componentOnlyLibrary
 
 	handler                            *handler
 	activityDispatchTaskExecutor       *activityDispatchTaskExecutor
@@ -32,18 +50,8 @@ func newLibrary(
 	}
 }
 
-func (l *library) Name() string {
-	return "activity"
-}
-
 func (l *library) RegisterServices(server *grpc.Server) {
 	server.RegisterService(&activitypb.ActivityService_ServiceDesc, l.handler)
-}
-
-func (l *library) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Activity]("activity"),
-	}
 }
 
 func (l *library) Tasks() []*chasm.RegistrableTask {
