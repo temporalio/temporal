@@ -126,7 +126,11 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	incomingFirstEventID := baseEventID + 12
 	incomingVersion := baseVersion + 3
 
-	rebuiltHistorySize := int64(9999)
+	rebuildStats := RebuildStats{
+		HistorySize:          9999,
+		ExternalPayloadSize:  1234,
+		ExternalPayloadCount: 56,
+	}
 	newBranchToken := []byte("other random branch token")
 
 	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
@@ -165,8 +169,10 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		),
 		newBranchToken,
 		gomock.Any(),
-	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil)
-	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuiltHistorySize)
+	).Return(s.mockRebuiltMutableState, rebuildStats, nil)
+	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuildStats.HistorySize)
+	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
+	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)
 
 	shardID := s.mockShard.GetShardID()
 	s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{

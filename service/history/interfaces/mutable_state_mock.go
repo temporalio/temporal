@@ -298,6 +298,30 @@ func (mr *MockMutableStateMockRecorder) AddContinueAsNewEvent(arg0, arg1, arg2, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddContinueAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).AddContinueAsNewEvent), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
+// AddExternalPayloadCount mocks base method.
+func (m *MockMutableState) AddExternalPayloadCount(count int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddExternalPayloadCount", count)
+}
+
+// AddExternalPayloadCount indicates an expected call of AddExternalPayloadCount.
+func (mr *MockMutableStateMockRecorder) AddExternalPayloadCount(count any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddExternalPayloadCount", reflect.TypeOf((*MockMutableState)(nil).AddExternalPayloadCount), count)
+}
+
+// AddExternalPayloadSize mocks base method.
+func (m *MockMutableState) AddExternalPayloadSize(size int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddExternalPayloadSize", size)
+}
+
+// AddExternalPayloadSize indicates an expected call of AddExternalPayloadSize.
+func (mr *MockMutableStateMockRecorder) AddExternalPayloadSize(size any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddExternalPayloadSize", reflect.TypeOf((*MockMutableState)(nil).AddExternalPayloadSize), size)
+}
+
 // AddExternalWorkflowExecutionCancelRequested mocks base method.
 func (m *MockMutableState) AddExternalWorkflowExecutionCancelRequested(arg0 int64, arg1 namespace.Name, arg2 namespace.ID, arg3, arg4 string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -2211,6 +2235,34 @@ func (m *MockMutableState) GetExecutionState() *persistence.WorkflowExecutionSta
 func (mr *MockMutableStateMockRecorder) GetExecutionState() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionState", reflect.TypeOf((*MockMutableState)(nil).GetExecutionState))
+}
+
+// GetExternalPayloadCount mocks base method.
+func (m *MockMutableState) GetExternalPayloadCount() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPayloadCount")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetExternalPayloadCount indicates an expected call of GetExternalPayloadCount.
+func (mr *MockMutableStateMockRecorder) GetExternalPayloadCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPayloadCount", reflect.TypeOf((*MockMutableState)(nil).GetExternalPayloadCount))
+}
+
+// GetExternalPayloadSize mocks base method.
+func (m *MockMutableState) GetExternalPayloadSize() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPayloadSize")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetExternalPayloadSize indicates an expected call of GetExternalPayloadSize.
+func (mr *MockMutableStateMockRecorder) GetExternalPayloadSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPayloadSize", reflect.TypeOf((*MockMutableState)(nil).GetExternalPayloadSize))
 }
 
 // GetFirstRunID mocks base method.
