@@ -797,7 +797,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 	}
 
 	testComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
-	s.Require().True(ok)
+	s.True(ok)
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{

@@ -119,6 +119,16 @@ func (c *clientImpl) DeprecateNamespace(
 	return c.client.DeprecateNamespace(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeActivityExecution(
+	ctx context.Context,
+	request *workflowservice.DescribeActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeActivityExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeActivityExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeBatchOperation(
 	ctx context.Context,
 	request *workflowservice.DescribeBatchOperationRequest,
@@ -237,6 +247,16 @@ func (c *clientImpl) FetchWorkerConfig(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.FetchWorkerConfig(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetActivityExecutionOutcome(
+	ctx context.Context,
+	request *workflowservice.GetActivityExecutionOutcomeRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetActivityExecutionOutcomeResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetActivityExecutionOutcome(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetClusterInfo(
@@ -499,16 +519,6 @@ func (c *clientImpl) PauseActivity(
 	return c.client.PauseActivity(ctx, request, opts...)
 }
 
-func (c *clientImpl) PauseActivityExecution(
-	ctx context.Context,
-	request *workflowservice.PauseActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.PauseActivityExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.PauseActivityExecution(ctx, request, opts...)
-}
-
 func (c *clientImpl) PauseWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.PauseWorkflowExecutionRequest,
@@ -517,16 +527,6 @@ func (c *clientImpl) PauseWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.PauseWorkflowExecution(ctx, request, opts...)
-}
-
-func (c *clientImpl) PollActivityExecution(
-	ctx context.Context,
-	request *workflowservice.PollActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.PollActivityExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.PollActivityExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollActivityTaskQueue(
@@ -647,16 +647,6 @@ func (c *clientImpl) ResetActivity(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ResetActivity(ctx, request, opts...)
-}
-
-func (c *clientImpl) ResetActivityExecution(
-	ctx context.Context,
-	request *workflowservice.ResetActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ResetActivityExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.ResetActivityExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) ResetStickyTaskQueue(
@@ -949,16 +939,6 @@ func (c *clientImpl) UnpauseActivity(
 	return c.client.UnpauseActivity(ctx, request, opts...)
 }
 
-func (c *clientImpl) UnpauseActivityExecution(
-	ctx context.Context,
-	request *workflowservice.UnpauseActivityExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.UnpauseActivityExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.UnpauseActivityExecution(ctx, request, opts...)
-}
-
 func (c *clientImpl) UnpauseWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.UnpauseWorkflowExecutionRequest,
@@ -967,16 +947,6 @@ func (c *clientImpl) UnpauseWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
-}
-
-func (c *clientImpl) UpdateActivityExecutionOptions(
-	ctx context.Context,
-	request *workflowservice.UpdateActivityExecutionOptionsRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.UpdateActivityExecutionOptions(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateActivityOptions(

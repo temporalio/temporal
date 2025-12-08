@@ -6482,6 +6482,10 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 	}, nil
 }
 
+func (wh *WorkflowHandler) TriggerWorkflowRule(context.Context, *workflowservice.TriggerWorkflowRuleRequest) (*workflowservice.TriggerWorkflowRuleResponse, error) {
+	return nil, serviceerror.NewUnimplemented("method TriggerWorkflowRule not supported")
+}
+
 // PauseWorkflowExecution pauses a workflow execution.
 func (wh *WorkflowHandler) PauseWorkflowExecution(ctx context.Context, request *workflowservice.PauseWorkflowExecutionRequest) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)

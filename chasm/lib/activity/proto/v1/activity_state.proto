@@ -89,7 +89,7 @@ message ActivityState {
     ActivityExecutionStatus status = 8;
 
     // Time the activity was originally scheduled via a StartActivityExecution request.
-    google.protobuf.Timestamp scheduled_time = 9;
+    google.protobuf.Timestamp schedule_time = 9;
 
     // Priority metadata.
     temporal.api.common.v1.Priority priority = 10;
