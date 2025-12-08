@@ -29,22 +29,8 @@ var FrontendModule = fx.Module(
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(resource.SearchAttributeValidatorProvider),
 	fx.Invoke(func(registry *chasm.Registry) error {
-		return registry.Register(&componentOnlyLibrary{})
+		// Frontend needs to register the component in order to serialize ComponentRefs, but doesn't
+		// need task executors.
+		return registry.Register(newComponentOnlyLibrary())
 	}),
 )
-
-// componentOnlyLibrary only registers the Activity component. Used by frontend which needs to
-// serialize ComponentRefs but doesn't need task executors.
-type componentOnlyLibrary struct {
-	chasm.UnimplementedLibrary
-}
-
-func (l *componentOnlyLibrary) Name() string {
-	return "activity"
-}
-
-func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Activity]("activity"),
-	}
-}
