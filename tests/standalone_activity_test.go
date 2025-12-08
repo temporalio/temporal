@@ -339,7 +339,7 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
 		"expected Canceled but is %s", info.GetStatus())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
-	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
+	protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
@@ -395,7 +395,7 @@ func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
 		"expected Canceled but is %s", info.GetStatus())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
-	protorequire.ProtoEqual(t, details, activityResp.GetFailure().GetCanceledFailureInfo().GetDetails())
+	protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCancelled_FailsIfNeverRequested() {
@@ -719,7 +719,7 @@ func (s *standaloneActivityTestSuite) TestActivityTerminated() {
 		Message:     "Test Termination",
 		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
 	}
-	protorequire.ProtoEqual(t, expectedFailure, activityResp.GetFailure())
+	protorequire.ProtoEqual(t, expectedFailure, activityResp.GetOutcome().GetFailure())
 }
 
 func (s *standaloneActivityTestSuite) TestCompletedActivity_CannotTerminate() {
@@ -853,8 +853,8 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 		RunId:      startResp.RunId,
 	})
 	require.NoError(t, err)
-	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, getOutcomeResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
-		"expected ScheduleToCloseTimeout but is %s", getOutcomeResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, getOutcomeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"expected ScheduleToCloseTimeout but is %s", getOutcomeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
 // TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is
@@ -953,10 +953,10 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutFailure.GetTimeoutType(),
 		"expected StartToCloseTimeout but is %s", timeoutFailure.GetTimeoutType())
 
-	require.NotNil(t, describeResp.GetFailure())
-	protorequire.ProtoEqual(t, failure, describeResp.GetFailure())
-	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
-		"expected StartToCloseTimeout but is %s", describeResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	require.NotNil(t, describeResp.GetOutcome().GetFailure())
+	protorequire.ProtoEqual(t, failure, describeResp.GetOutcome().GetFailure())
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"expected StartToCloseTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
 func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
@@ -981,8 +981,8 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		require.NotNil(t, describeResp.LongPollToken)
 		require.Equal(t, startResp.RunId, describeResp.RunId)
 		require.Nil(t, describeResp.Input)
-		require.Nil(t, describeResp.GetResult())
-		require.Nil(t, describeResp.GetFailure())
+		require.Nil(t, describeResp.GetOutcome().GetResult())
+		require.Nil(t, describeResp.GetOutcome().GetFailure())
 	})
 
 	t.Run("FullResponse", func(t *testing.T) {
@@ -1007,8 +1007,8 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
 
 		// Activity is scheduled but not completed, so no outcome yet
-		require.Nil(t, describeResp.GetResult())
-		require.Nil(t, describeResp.GetFailure())
+		require.Nil(t, describeResp.GetOutcome().GetResult())
+		require.Nil(t, describeResp.GetOutcome().GetFailure())
 	})
 }
 
@@ -1111,7 +1111,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome() {
 				return err
 			},
 			completionValidationFn: func(t *testing.T, response *workflowservice.GetActivityExecutionOutcomeResponse) {
-				protorequire.ProtoEqual(t, defaultResult, response.GetResult())
+				protorequire.ProtoEqual(t, defaultResult, response.GetOutcome().GetResult())
 			},
 		},
 		{
@@ -1127,7 +1127,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome() {
 				return err
 			},
 			completionValidationFn: func(t *testing.T, response *workflowservice.GetActivityExecutionOutcomeResponse) {
-				protorequire.ProtoEqual(t, defaultFailure, response.GetFailure())
+				protorequire.ProtoEqual(t, defaultFailure, response.GetOutcome().GetFailure())
 			},
 		},
 	}
@@ -1733,7 +1733,7 @@ func (s *standaloneActivityTestSuite) validateCompletion(
 	require.Nil(t, info.GetLastFailure())
 	require.Nil(t, info.GetHeartbeatDetails())
 	require.Nil(t, info.GetLastHeartbeatTime())
-	protorequire.ProtoEqual(t, defaultResult, activityResp.GetResult())
+	protorequire.ProtoEqual(t, defaultResult, activityResp.GetOutcome().GetResult())
 }
 
 func (s *standaloneActivityTestSuite) validateFailure(
@@ -1764,7 +1764,7 @@ func (s *standaloneActivityTestSuite) validateFailure(
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	protorequire.ProtoEqual(t, defaultFailure, info.GetLastFailure())
-	protorequire.ProtoEqual(t, defaultFailure, activityResp.GetFailure())
+	protorequire.ProtoEqual(t, defaultFailure, activityResp.GetOutcome().GetFailure())
 
 	if expectedHeartbeatDetails != nil {
 		protorequire.ProtoEqual(t, expectedHeartbeatDetails, info.GetHeartbeatDetails())

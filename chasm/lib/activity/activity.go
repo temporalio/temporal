@@ -520,15 +520,7 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 	}
 
 	if request.GetIncludeOutcome() {
-		result, failure, err := a.outcome(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if result != nil {
-			response.Outcome = &workflowservice.DescribeActivityExecutionResponse_Result{Result: result}
-		} else if failure != nil {
-			response.Outcome = &workflowservice.DescribeActivityExecutionResponse_Failure{Failure: failure}
-		}
+		response.Outcome = a.outcome(ctx)
 	}
 
 	return &activitypb.DescribeActivityExecutionResponse{
@@ -539,34 +531,29 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 func (a *Activity) buildGetActivityExecutionOutcomeResponse(
 	ctx chasm.Context,
 ) (*activitypb.GetActivityExecutionOutcomeResponse, error) {
-	result, failure, err := a.outcome(ctx)
-	if err != nil {
-		return nil, err
-	}
-	response := &workflowservice.GetActivityExecutionOutcomeResponse{
-		RunId: ctx.ExecutionKey().RunID,
-	}
-	if result != nil {
-		response.Outcome = &workflowservice.GetActivityExecutionOutcomeResponse_Result{Result: result}
-	} else if failure != nil {
-		response.Outcome = &workflowservice.GetActivityExecutionOutcomeResponse_Failure{Failure: failure}
-	}
 	return &activitypb.GetActivityExecutionOutcomeResponse{
-		FrontendResponse: response,
+		FrontendResponse: &workflowservice.GetActivityExecutionOutcomeResponse{
+			RunId:   ctx.ExecutionKey().RunID,
+			Outcome: a.outcome(ctx),
+		},
 	}, nil
 }
 
 // outcome retrieves the activity outcome (result or failure) if the activity has completed.
-// Returns (result, failure, error) where at most one of result/failure is non-nil.
-func (a *Activity) outcome(ctx chasm.Context) (*commonpb.Payloads, *failurepb.Failure, error) {
+// Returns nil if the activity has not completed.
+func (a *Activity) outcome(ctx chasm.Context) *activity.ActivityExecutionOutcome {
 	activityOutcome := a.Outcome.Get(ctx)
 	// Check for successful outcome
 	if successful := activityOutcome.GetSuccessful(); successful != nil {
-		return successful.GetOutput(), nil, nil
+		return &activity.ActivityExecutionOutcome{
+			Value: &activity.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
+		}
 	}
 	// Check for failure in outcome
 	if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
-		return nil, failure, nil
+		return &activity.ActivityExecutionOutcome{
+			Value: &activity.ActivityExecutionOutcome_Failure{Failure: failure},
+		}
 	}
 	// Check for failure in last attempt details
 	shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||
@@ -575,10 +562,12 @@ func (a *Activity) outcome(ctx chasm.Context) (*commonpb.Payloads, *failurepb.Fa
 		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
 	if shouldHaveFailure {
 		if details := a.LastAttempt.Get(ctx).GetLastFailureDetails(); details != nil {
-			return nil, details.GetFailure(), nil
+			return &activity.ActivityExecutionOutcome{
+				Value: &activity.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
+			}
 		}
 	}
-	return nil, nil, nil
+	return nil
 }
 
 // StoreOrSelf returns the store for the activity. If the store is not set as a field (e.g.
