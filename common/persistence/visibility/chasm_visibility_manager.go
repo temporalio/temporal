@@ -18,6 +18,16 @@ type ChasmVisibilityManager struct {
 
 var _ chasm.VisibilityManager = (*ChasmVisibilityManager)(nil)
 
+func ChasmVisibilityManagerProvider(
+	chasmRegistry *chasm.Registry,
+	visibilityManager manager.VisibilityManager,
+) chasm.VisibilityManager {
+	return NewChasmVisibilityManager(
+		chasmRegistry,
+		visibilityManager,
+	)
+}
+
 func NewChasmVisibilityManager(
 	registry *chasm.Registry,
 	visibilityMgr manager.VisibilityManager,

@@ -64,7 +64,7 @@ var Module = fx.Options(
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(ChasmVisibilityManagerProvider),
+	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -310,16 +310,6 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
-	)
-}
-
-func ChasmVisibilityManagerProvider(
-	chasmRegistry *chasm.Registry,
-	visibilityManager manager.VisibilityManager,
-) chasm.VisibilityManager {
-	return visibility.NewChasmVisibilityManager(
-		chasmRegistry,
-		visibilityManager,
 	)
 }
 

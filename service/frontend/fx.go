@@ -91,6 +91,8 @@ var Module = fx.Options(
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
+	fx.Provide(visibility.ChasmVisibilityManagerProvider),
+	fx.Provide(chasm.ChasmRequestInterceptorProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
