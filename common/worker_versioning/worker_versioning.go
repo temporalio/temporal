@@ -14,6 +14,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -265,21 +266,19 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
-		resp, err := matchingClient.GetTaskQueueUserData(ctx,
-			&matchingservice.GetTaskQueueUserDataRequest{
-				NamespaceId:   namespaceID,
-				TaskQueue:     tq,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			})
+		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: version.GetDeploymentName(),
+				BuildId:        version.GetBuildId(),
+			},
+		})
 		if err != nil {
 			return false, err
 		}
-		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
-		if !ok {
-			// The TQ is unversioned
-			return false, nil
-		}
-		return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
+		return resp.GetIsMember(), nil
 	}
 }
 
