@@ -100,7 +100,7 @@ func NewStandaloneActivity(
 		Visibility: chasm.NewComponentField(ctx, visibility),
 	}
 
-	activity.ScheduledTime = timestamppb.New(ctx.Now(activity))
+	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
 
 	return activity, nil
 }
@@ -404,7 +404,7 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 		return true, retryInterval, nil
 	}
 
-	deadline := a.ScheduledTime.AsTime().Add(scheduleToClose)
+	deadline := a.ScheduleTime.AsTime().Add(scheduleToClose)
 	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval, nil
 }
 
@@ -483,7 +483,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		Priority:                a.GetPriority(),
 		RunId:                   key.RunID,
 		RunState:                runState,
-		ScheduleTime:            a.GetScheduledTime(),
+		ScheduleTime:            a.GetScheduleTime(),
 		Status:                  status,
 		// TODO(dan): populate remaining fields
 	}
