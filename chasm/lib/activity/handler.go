@@ -149,7 +149,7 @@ func (h *handler) DescribeActivityExecution(
 		return nil, false, nil
 	}, req)
 
-	if ctx.Err() != nil {
+	if err != nil && ctx.Err() != nil {
 		// Send empty non-error response on deadline expiry: caller should continue long-polling.
 		return &activitypb.DescribeActivityExecutionResponse{
 			FrontendResponse: &workflowservice.DescribeActivityExecutionResponse{},
@@ -204,7 +204,7 @@ func (h *handler) GetActivityExecutionOutcome(
 		return nil, false, nil
 	}, req)
 
-	if ctx.Err() != nil {
+	if err != nil && ctx.Err() != nil {
 		// Send an empty non-error response as an invitation to resubmit the long-poll.
 		return &activitypb.GetActivityExecutionOutcomeResponse{
 			FrontendResponse: &workflowservice.GetActivityExecutionOutcomeResponse{},
