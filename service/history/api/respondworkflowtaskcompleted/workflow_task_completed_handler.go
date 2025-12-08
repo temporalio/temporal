@@ -502,8 +502,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
 		eagerStartActivity = false
-	} else { // if not we bypass activity task generation if eager start activity is requested.
-		bypassActivityTaskGeneration = eagerStartActivity
 	}
 
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
