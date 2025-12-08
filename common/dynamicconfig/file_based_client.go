@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -36,8 +34,7 @@ type (
 	}
 
 	fileBasedClient struct {
-		keys            collection.SyncMap[Key, string] // normalized key cache
-		values          atomic.Value                    // ConfigValueMap
+		values          atomic.Value // ConfigValueMap
 		logger          log.Logger
 		reader          FileReader
 		lastUpdatedTime time.Time
@@ -67,7 +64,6 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 		reader:              reader,
 		config:              config,
 		doneCh:              doneCh,
-		keys:                collection.NewSyncMap[Key, string](),
 		NotifyingClientImpl: NewNotifyingClientImpl(),
 	}
 
@@ -80,15 +76,8 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 }
 
 func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
-	// Cache normalized keys to avoid string allocations
-	normalized, ok := fc.keys.Get(key)
-	if !ok {
-		normalized = strings.ToLower(key.String())
-		fc.keys.Set(key, normalized)
-	}
-
 	values := fc.values.Load().(ConfigValueMap) // nolint:revive // unchecked-type-assertion
-	return values[Key(normalized)]
+	return values[key]
 }
 
 func (fc *fileBasedClient) init() error {
