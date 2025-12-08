@@ -695,20 +695,6 @@ func (c *metricClient) PauseActivity(
 	return c.client.PauseActivity(ctx, request, opts...)
 }
 
-func (c *metricClient) PauseWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.PauseWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPauseWorkflowExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.PauseWorkflowExecution(ctx, request, opts...)
-}
-
 func (c *metricClient) PauseActivityExecution(
 	ctx context.Context,
 	request *workflowservice.PauseActivityExecutionRequest,
@@ -721,6 +707,20 @@ func (c *metricClient) PauseActivityExecution(
 	}()
 
 	return c.client.PauseActivityExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) PauseWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.PauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PauseWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPauseWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PauseWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) PollActivityExecution(
@@ -1325,20 +1325,6 @@ func (c *metricClient) UnpauseActivity(
 	return c.client.UnpauseActivity(ctx, request, opts...)
 }
 
-func (c *metricClient) UnpauseWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.UnpauseWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.UnpauseWorkflowExecutionResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUnpauseWorkflowExecution")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
-}
-
 func (c *metricClient) UnpauseActivityExecution(
 	ctx context.Context,
 	request *workflowservice.UnpauseActivityExecutionRequest,
@@ -1351,6 +1337,20 @@ func (c *metricClient) UnpauseActivityExecution(
 	}()
 
 	return c.client.UnpauseActivityExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) UnpauseWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.UnpauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UnpauseWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUnpauseWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateActivityExecutionOptions(

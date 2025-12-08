@@ -222,19 +222,19 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.PauseActivityResponse:
 		return nil
-	case *workflowservice.PauseWorkflowExecutionRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
-		}
-	case *workflowservice.PauseWorkflowExecutionResponse:
-		return nil
 	case *workflowservice.PauseActivityExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.PauseActivityExecutionResponse:
+		return nil
+	case *workflowservice.PauseWorkflowExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.PauseWorkflowExecutionResponse:
 		return nil
 	case *workflowservice.PollActivityExecutionRequest:
 		return []tag.Tag{
@@ -482,19 +482,19 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.UnpauseActivityResponse:
 		return nil
-	case *workflowservice.UnpauseWorkflowExecutionRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
-		}
-	case *workflowservice.UnpauseWorkflowExecutionResponse:
-		return nil
 	case *workflowservice.UnpauseActivityExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.UnpauseActivityExecutionResponse:
+		return nil
+	case *workflowservice.UnpauseWorkflowExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.UnpauseWorkflowExecutionResponse:
 		return nil
 	case *workflowservice.UpdateActivityExecutionOptionsRequest:
 		return []tag.Tag{

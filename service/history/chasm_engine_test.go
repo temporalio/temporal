@@ -580,7 +580,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 			return tests.UpdateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
-	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).Return().Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
 
 	// TODO: validate returned component once Ref() method of chasm tree is implememented.
 	_, err := s.engine.UpdateComponent(
@@ -642,17 +642,17 @@ func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    tv.RunID(),
+			RunID:       tv.RunID(),
 		},
 	)
 	expectedActivityID := tv.ActivityID()
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
 				ActivityId: expectedActivityID,
 			}),
 		}, nil).Times(1)
@@ -685,22 +685,22 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 
 	activityID := tv.ActivityID()
 	ref := chasm.NewComponentRef[*testComponent](
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			EntityID:    tv.RunID(),
+			RunID:       tv.RunID(),
 		},
 	)
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.EntityKey, &persistencespb.ActivityInfo{}),
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{}),
 		}, nil).
 		Times(1) // subsequent reads during UpdateComponent and PollComponent are from cache
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(tests.UpdateWorkflowExecutionResponse, nil).
 		Times(numUpdatesTotal)
-	s.mockEngine.EXPECT().NotifyChasmExecution(ref.EntityKey, gomock.Any()).DoAndReturn(
-		func(key chasm.EntityKey, ref []byte) {
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).DoAndReturn(
+		func(key chasm.ExecutionKey, ref []byte) {
 			s.engine.notifier.Notify(key)
 		},
 	).Times(numUpdatesTotal)
@@ -763,7 +763,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	s.NoError(err)
 	s.Equal(tests.NamespaceID.String(), newRef.NamespaceID)
 	s.Equal(tv.WorkflowID(), newRef.BusinessID)
-	s.Equal(tv.RunID(), newRef.EntityID)
+	s.Equal(tv.RunID(), newRef.RunID)
 
 	newActivityID := make(chan string, 1)
 	err = s.engine.ReadComponent(
@@ -790,23 +790,26 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
-	entityKey := chasm.EntityKey{
+	executionKey := chasm.ExecutionKey{
 		NamespaceID: string(tests.NamespaceID),
 		BusinessID:  tv.WorkflowID(),
-		EntityID:    tv.RunID(),
+		RunID:       tv.RunID(),
 	}
+
+	testComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
+	s.Require().True(ok)
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(entityKey, &persistencespb.ActivityInfo{}),
+			State: s.buildPersistenceMutableState(executionKey, &persistencespb.ActivityInfo{}),
 		}, nil).AnyTimes()
 
 	pRef := &persistencespb.ChasmComponentRef{
-		NamespaceId: entityKey.NamespaceID,
-		BusinessId:  entityKey.BusinessID,
-		EntityId:    entityKey.EntityID,
-		Archetype:   "TestLibrary.test_component",
-		EntityVersionedTransition: &persistencespb.VersionedTransition{
+		NamespaceId: executionKey.NamespaceID,
+		BusinessId:  executionKey.BusinessID,
+		RunId:       executionKey.RunID,
+		ArchetypeId: uint32(testComponentTypeID),
+		ExecutionVersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 1, // ahead of persisted state
 			TransitionCount:          testTransitionCount,
 		},

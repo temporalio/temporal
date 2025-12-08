@@ -499,16 +499,6 @@ func (c *clientImpl) PauseActivity(
 	return c.client.PauseActivity(ctx, request, opts...)
 }
 
-func (c *clientImpl) PauseWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.PauseWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.PauseWorkflowExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.PauseWorkflowExecution(ctx, request, opts...)
-}
-
 func (c *clientImpl) PauseActivityExecution(
 	ctx context.Context,
 	request *workflowservice.PauseActivityExecutionRequest,
@@ -517,6 +507,16 @@ func (c *clientImpl) PauseActivityExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.PauseActivityExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) PauseWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.PauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PauseWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PauseWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollActivityExecution(
@@ -949,16 +949,6 @@ func (c *clientImpl) UnpauseActivity(
 	return c.client.UnpauseActivity(ctx, request, opts...)
 }
 
-func (c *clientImpl) UnpauseWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.UnpauseWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.UnpauseWorkflowExecutionResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
-}
-
 func (c *clientImpl) UnpauseActivityExecution(
 	ctx context.Context,
 	request *workflowservice.UnpauseActivityExecutionRequest,
@@ -967,6 +957,16 @@ func (c *clientImpl) UnpauseActivityExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UnpauseActivityExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) UnpauseWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.UnpauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UnpauseWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateActivityExecutionOptions(
