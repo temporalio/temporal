@@ -170,11 +170,7 @@ var TransitionFailed = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
 		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
-				heartbeat, err := a.getLastHeartbeat(ctx)
-				if err != nil {
-					return err
-				}
-
+				heartbeat := a.getLastHeartbeat(ctx)
 				heartbeat.Details = details
 				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
 			}
