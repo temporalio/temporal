@@ -80,22 +80,25 @@ message ActivityState {
     google.protobuf.Duration start_to_close_timeout = 5;
     // Maximum permitted time between successful worker heartbeats.
     google.protobuf.Duration heartbeat_timeout = 6;
+    // High-water-mark for heartbeat timeout task validation. Updated when a heartbeat
+    // timeout task executes. Tasks with ScheduledTime <= this value are stale.
+    google.protobuf.Timestamp last_heartbeat_task_scheduled_time = 7;
     // The retry policy for the activity. Will never exceed `schedule_to_close_timeout`.
-    temporal.api.common.v1.RetryPolicy retry_policy = 7;
+    temporal.api.common.v1.RetryPolicy retry_policy = 8;
 
     // All of the possible activity statuses (covers both the public ActivityExecutionStatus and PendingActivityState).
     // TODO: consider moving this into ActivityAttemptState and renaming that message. This could save mutating two
     // components on each attempt transition.
-    ActivityExecutionStatus status = 8;
+    ActivityExecutionStatus status = 9;
 
     // Time the activity was originally scheduled via a StartActivityExecution request.
-    google.protobuf.Timestamp schedule_time = 9;
+    google.protobuf.Timestamp schedule_time = 10;
 
     // Priority metadata.
-    temporal.api.common.v1.Priority priority = 10;
+    temporal.api.common.v1.Priority priority = 11;
 
     // Set if activity cancelation was requested.
-    ActivityCancelState cancel_state = 11;
+    ActivityCancelState cancel_state = 12;
 }
 
 message ActivityCancelState {
