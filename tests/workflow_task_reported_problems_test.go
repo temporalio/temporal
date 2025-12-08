@@ -32,7 +32,7 @@ func TestWFTFailureReportedProblemsTestSuite(t *testing.T) {
 
 func (s *WFTFailureReportedProblemsTestSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 4)
+	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 3)
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) simpleWorkflowWithShouldFail(ctx workflow.Context) (string, error) {
@@ -184,9 +184,8 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 		require.Contains(t, saVal, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
 	}, 30*time.Second, 500*time.Millisecond)
 
-	// // Continue sending signals for a few more seconds and verify the search attribute is NOT removed
-	// // This is the key part of the test - signals should not cause the search attribute to be cleared
-	// time.Sleep(5 * time.Second)
+	// Continue sending signals for a few more seconds and verify the search attribute is NOT removed
+	// This is the key part of the test - signals should not cause the search attribute to be cleared
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())

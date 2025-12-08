@@ -3222,26 +3222,8 @@ func (ms *MutableStateImpl) GetTransientWorkflowTaskInfo(
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
 	if !ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		ms.logger.Info("DEBUG WFT: GetTransientWorkflowTaskInfo returning nil - not transient",
-			tag.NewInt64("workflow-task-attempt", int64(ms.executionInfo.WorkflowTaskAttempt)),
-			tag.NewInt64("scheduled-event-id", workflowTask.ScheduledEventID),
-			tag.NewInt64("next-event-id", ms.GetNextEventID()))
 		return nil
 	}
-
-	// If real scheduled event has already been created (not transient anymore), don't return synthetic events
-	if workflowTask.ScheduledEventID < ms.GetNextEventID() {
-		ms.logger.Info("DEBUG WFT: GetTransientWorkflowTaskInfo returning nil - real event exists",
-			tag.NewInt64("workflow-task-attempt", int64(ms.executionInfo.WorkflowTaskAttempt)),
-			tag.NewInt64("scheduled-event-id", workflowTask.ScheduledEventID),
-			tag.NewInt64("next-event-id", ms.GetNextEventID()))
-		return nil
-	}
-
-	ms.logger.Info("DEBUG WFT: GetTransientWorkflowTaskInfo returning synthetic events",
-		tag.NewInt64("workflow-task-attempt", int64(ms.executionInfo.WorkflowTaskAttempt)),
-		tag.NewInt64("scheduled-event-id", workflowTask.ScheduledEventID),
-		tag.NewInt64("next-event-id", ms.GetNextEventID()))
 	return ms.workflowTaskManager.GetTransientWorkflowTaskInfo(workflowTask, identity)
 }
 

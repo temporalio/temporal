@@ -177,8 +177,12 @@ type WorkflowExecutionInfo struct {
 	// Stamp represents the "version" of the workflow's internal state.
 	// It increases monotonically when the workflow's options are modified.
 	// It is used to check if a workflow task is still relevant to the corresponding workflow state machine.
-	WorkflowTaskStamp int32  `protobuf:"varint,109,opt,name=workflow_task_stamp,json=workflowTaskStamp,proto3" json:"workflow_task_stamp,omitempty"`
-	CancelRequested   bool   `protobuf:"varint,29,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
+	WorkflowTaskStamp int32 `protobuf:"varint,109,opt,name=workflow_task_stamp,json=workflowTaskStamp,proto3" json:"workflow_task_stamp,omitempty"`
+	// AttemptsSinceLastSuccess tracks the number of workflow task attempts since the last successful workflow task.
+	// This is carried over when buffered events are applied after workflow task failures.
+	// Used by the TemporalReportedProblems search attribute to track continuous failure count.
+	WorkflowTaskAttemptsSinceLastSuccess int32 `protobuf:"varint,110,opt,name=workflow_task_attempts_since_last_success,json=workflowTaskAttemptsSinceLastSuccess,proto3" json:"workflow_task_attempts_since_last_success,omitempty"`
+	CancelRequested                      bool  `protobuf:"varint,29,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
 	CancelRequestId   string `protobuf:"bytes,32,opt,name=cancel_request_id,json=cancelRequestId,proto3" json:"cancel_request_id,omitempty"`
 	StickyTaskQueue   string `protobuf:"bytes,33,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
@@ -598,6 +602,13 @@ func (x *WorkflowExecutionInfo) GetWorkflowTaskBuildIdRedirectCounter() int64 {
 func (x *WorkflowExecutionInfo) GetWorkflowTaskStamp() int32 {
 	if x != nil {
 		return x.WorkflowTaskStamp
+	}
+	return 0
+}
+
+func (x *WorkflowExecutionInfo) GetWorkflowTaskAttemptsSinceLastSuccess() int32 {
+	if x != nil {
+		return x.WorkflowTaskAttemptsSinceLastSuccess
 	}
 	return 0
 }
