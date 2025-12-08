@@ -1871,8 +1871,8 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
-			"expected timeout type=Heartbeat but is %s", pollResp.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+			"expected timeout type=Heartbeat but is %s", pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 	})
 
 	t.Run("ActivityRetriesOnHeartbeatTimeout", func(t *testing.T) {
@@ -1979,7 +1979,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, pollResp.GetInfo().GetStatus(),
 			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
-		protorequire.ProtoEqual(t, defaultResult, pollResp.GetResult())
+		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
 	})
 }
 
