@@ -152,7 +152,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 	}
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	err := a.GetStore(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response)
+	err := a.StoreOrSelf(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response)
 	return response, err
 }
 
@@ -560,9 +560,9 @@ func (a *Activity) buildPollActivityExecutionResponse(
 	}, nil
 }
 
-// GetStore returns the store for the activity. If the store is not set as a field (e.g. standalone
+// StoreOrSelf returns the store for the activity. If the store is not set as a field (e.g. standalone
 // activities), it returns the activity itself.
-func (a *Activity) GetStore(ctx chasm.MutableContext) ActivityStore {
+func (a *Activity) StoreOrSelf(ctx chasm.MutableContext) ActivityStore {
 	store, ok := a.Store.TryGet(ctx)
 	if ok {
 		return store

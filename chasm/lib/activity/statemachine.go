@@ -145,7 +145,7 @@ var TransitionCompleted = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RespondActivityTaskCompletedRequest) error {
-		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
 			attempt.LastWorkerIdentity = request.GetCompleteRequest().GetIdentity()
@@ -168,7 +168,7 @@ var TransitionFailed = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
-		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
 				heartbeat := a.getLastHeartbeat(ctx)
 				heartbeat.Details = details
@@ -190,7 +190,7 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 	func(a *Activity, ctx chasm.MutableContext, req *activitypb.TerminateActivityExecutionRequest) error {
-		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				// TODO if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
@@ -234,7 +234,7 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 	func(a *Activity, ctx chasm.MutableContext, details *commonpb.Payloads) error {
-		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				Message: "Activity canceled",
@@ -263,7 +263,7 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 	func(a *Activity, ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
-		return a.GetStore(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
