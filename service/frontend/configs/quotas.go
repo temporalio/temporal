@@ -24,8 +24,8 @@ const (
 	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
 	// PollWorkflowHistoryAPIName is used instead of GetWorkflowExecutionHistory if WaitNewEvent is true in request.
 	PollWorkflowHistoryAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionHistory"
-	// PollActivityExecutionAPIName is used instead of GetActivityExecutionOutcome if LongPollToken is set in request.
-	PollActivityExecutionAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution"
+	// PollActivityExecutionAPIName is used instead of DescribeActivityExecution if LongPollToken is set in request.
+	PollActivityExecutionAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecutionDescription"
 )
 
 var (
