@@ -520,7 +520,7 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 	}
 
 	if request.GetIncludeOutcome() {
-		result, failure, err := a.getOutcome(ctx)
+		result, failure, err := a.outcome(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -539,7 +539,7 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 func (a *Activity) buildGetActivityExecutionOutcomeResponse(
 	ctx chasm.Context,
 ) (*activitypb.GetActivityExecutionOutcomeResponse, error) {
-	result, failure, err := a.getOutcome(ctx)
+	result, failure, err := a.outcome(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -556,9 +556,9 @@ func (a *Activity) buildGetActivityExecutionOutcomeResponse(
 	}, nil
 }
 
-// getOutcome retrieves the activity outcome (result or failure) if the activity has completed.
+// outcome retrieves the activity outcome (result or failure) if the activity has completed.
 // Returns (result, failure, error) where at most one of result/failure is non-nil.
-func (a *Activity) getOutcome(ctx chasm.Context) (*commonpb.Payloads, *failurepb.Failure, error) {
+func (a *Activity) outcome(ctx chasm.Context) (*commonpb.Payloads, *failurepb.Failure, error) {
 	activityOutcome := a.Outcome.Get(ctx)
 	// Check for successful outcome
 	if successful := activityOutcome.GetSuccessful(); successful != nil {
