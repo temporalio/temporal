@@ -878,7 +878,7 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 			case []string:
 				// no-op
 			case string:
-				rowSearchAttributes[name] = []string{v}
+				registeredSearchAttributes[name] = []string{v}
 			default:
 				return nil, serviceerror.NewInternal(
 					fmt.Sprintf("Unexpected data type for keyword list: %T (expected list of strings)", v),
