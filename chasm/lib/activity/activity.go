@@ -572,7 +572,7 @@ func (a *Activity) outcome(ctx chasm.Context) *activity.ActivityExecutionOutcome
 
 // StoreOrSelf returns the store for the activity. If the store is not set as a field (e.g.
 // standalone activities), it returns the activity itself.
-func (a *Activity) StoreOrSelf(ctx chasm.MutableContext) ActivityStore {
+func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 	store, ok := a.Store.TryGet(ctx)
 	if ok {
 		return store
