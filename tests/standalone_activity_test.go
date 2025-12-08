@@ -880,6 +880,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 			Name: taskQueue.Name,
 		},
 		StartToCloseTimeout: durationpb.New(1 * time.Second),
+		// This test is expecting activity failure on start-to-close timeout.
 		RetryPolicy: &commonpb.RetryPolicy{
 			MaximumAttempts: 1,
 		},
