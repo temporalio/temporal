@@ -141,20 +141,20 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
 	*historyservice.RecordActivityTaskStartedResponse, error,
 ) {
-	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
-		return nil, err
-	}
-
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.StartedTime = timestamppb.New(ctx.Now(a))
 	attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
-
 	if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
 		attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
 			BuildId:        versionDirective.GetBuildId(),
 			DeploymentName: versionDirective.GetDeploymentName(),
 		}
 	}
+
+	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
+		return nil, err
+	}
+
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	err := a.StoreOrSelf(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response)
 	return response, err

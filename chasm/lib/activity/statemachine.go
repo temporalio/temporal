@@ -126,12 +126,11 @@ var TransitionStarted = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
 		attempt := a.LastAttempt.Get(ctx)
-		now := ctx.Now(a)
-
+		startTime := attempt.GetStartedTime().AsTime()
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
-				ScheduledTime: now.Add(a.GetStartToCloseTimeout().AsDuration()),
+				ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration()),
 			},
 			&activitypb.StartToCloseTimeoutTask{
 				Attempt: a.LastAttempt.Get(ctx).GetCount(),
@@ -141,7 +140,7 @@ var TransitionStarted = chasm.NewTransition(
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: now.Add(heartbeatTimeout),
+					ScheduledTime: startTime.Add(heartbeatTimeout),
 				},
 				&activitypb.HeartbeatTimeoutTask{
 					Attempt: attempt.GetCount(),
