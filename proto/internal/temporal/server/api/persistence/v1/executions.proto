@@ -292,6 +292,10 @@ message WorkflowExecutionInfo {
 
 message ExecutionStats {
     int64 history_size = 1;
+    // Total size in bytes of all external payloads referenced in the workflow history.
+    int64 external_payload_size = 2;
+    // Total count of external payloads referenced in the workflow history.
+    int64 external_payload_count = 3;
 }
 
 // execution_state column

@@ -492,6 +492,10 @@ func NewMutableStateFromDB(
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
+	if mutableState.executionInfo.ExecutionStats == nil {
+		mutableState.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
+	}
+
 	// StartTime was moved from ExecutionInfo to executionState
 	if mutableState.executionState.StartTime == nil && dbRecord.ExecutionInfo.StartTime != nil {
 		mutableState.executionState.StartTime = dbRecord.ExecutionInfo.StartTime
@@ -6399,6 +6403,22 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 	ms.executionInfo.ExecutionStats.HistorySize += size
 }
 
+func (ms *MutableStateImpl) GetExternalPayloadSize() int64 {
+	return ms.executionInfo.ExecutionStats.ExternalPayloadSize
+}
+
+func (ms *MutableStateImpl) AddExternalPayloadSize(size int64) {
+	ms.executionInfo.ExecutionStats.ExternalPayloadSize += size
+}
+
+func (ms *MutableStateImpl) GetExternalPayloadCount() int64 {
+	return ms.executionInfo.ExecutionStats.ExternalPayloadCount
+}
+
+func (ms *MutableStateImpl) AddExternalPayloadCount(count int64) {
+	ms.executionInfo.ExecutionStats.ExternalPayloadCount += count
+}
+
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
@@ -7535,6 +7555,14 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		}
 		ms.executionInfo.LastFirstEventId = eventBatch[0].GetEventId()
 		ms.executionInfo.LastFirstEventTxnId = historyNodeTxnIDs[index]
+
+		// Calculate and add the external payload size and count for this batch
+		externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		ms.AddExternalPayloadSize(externalPayloadSize)
+		ms.AddExternalPayloadCount(externalPayloadCount)
 	}
 
 	if err := ms.validateNoEventsAfterWorkflowFinish(
