@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1283,6 +1284,214 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_InvalidArg
 
 // TODO(dan): add tests that DescribeActivityExecution can wait for deletion, termination, cancellation etc
 
+func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	activityType := s.tv.ActivityType().GetName()
+	taskQueue := s.tv.TaskQueue().GetName()
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	verifyListQuery := func(t *testing.T, query string) {
+		t.Helper()
+		var resp *workflowservice.ListActivityExecutionsResponse
+		s.Eventually(
+			func() bool {
+				var err error
+				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					PageSize:  10,
+					Query:     query,
+				})
+				return err == nil && len(resp.GetExecutions()) >= 1
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+		require.Len(t, resp.GetExecutions(), 1, "expected exactly 1 result for query: %s", query)
+		exec := resp.GetExecutions()[0]
+		s.Equal(activityID, exec.GetActivityId())
+		s.Equal(runID, exec.GetRunId())
+		s.Equal(activityType, exec.GetActivityType().GetName())
+		s.Equal(taskQueue, exec.GetTaskQueue())
+		s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, exec.GetStatus())
+		s.NotNil(exec.GetScheduleTime())
+	}
+
+	t.Run("QueryByActivityId", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s'", activityID))
+	})
+
+	t.Run("QueryByActivityType", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType))
+	})
+
+	t.Run("QueryByTaskQueue", func(t *testing.T) {
+		queryAndVerify(t, fmt.Sprintf("TaskQueue = '%s'", taskQueue))
+	})
+
+	t.Run("QueryByActivityStatus", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityStatus = 'Scheduled' AND ActivityType = '%s'", activityType))
+	})
+
+	t.Run("QueryByMultipleFields", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s' AND ActivityType = '%s'", activityID, activityType))
+	})
+
+	t.Run("InvalidQuery", func(t *testing.T) {
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			PageSize:  10,
+			Query:     "invalid query syntax !!!",
+		})
+		s.Error(err)
+		_, ok := err.(*serviceerror.InvalidArgument)
+		s.True(ok, "expected InvalidArgument error, got %T", err)
+	})
+
+	t.Run("InvalidSearchAttribute", func(t *testing.T) {
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			PageSize:  10,
+			Query:     "NonExistentField = 'value'",
+		})
+		s.Error(err)
+		_, ok := err.(*serviceerror.InvalidArgument)
+		s.True(ok, "expected InvalidArgument error, got %T", err)
+	})
+
+	t.Run("NamespaceNotFound", func(t *testing.T) {
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace: "non-existent-namespace",
+			PageSize:  10,
+			Query:     "",
+		})
+		s.Error(err)
+		_, ok := err.(*serviceerror.NamespaceNotFound)
+		s.True(ok, "expected NamespaceNotFound error, got %T", err)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	activityType := s.tv.ActivityType().GetName()
+	s.startAndValidateActivity(ctx, t, activityID, s.tv.TaskQueue().GetName())
+
+	verifyCountQuery := func(t *testing.T, query string, expectedCount int) {
+		t.Helper()
+		var count int64
+		s.Eventually(
+			func() bool {
+				resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					Query:     query,
+				})
+				if err != nil || resp.GetCount() < 1 {
+					return false
+				}
+				count = resp.GetCount()
+				return true
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+		s.GreaterOrEqual(count, int64(expectedCount))
+	}
+
+	t.Run("CountByActivityId", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ActivityId = '%s'", activityID), 1)
+	})
+
+	t.Run("CountByActivityType", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType), 1)
+	})
+
+	t.Run("CountByActivityStatus", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ActivityStatus = 'Scheduled' AND ActivityType = '%s'", activityType), 1)
+	})
+
+	t.Run("GroupByActivityStatus", func(t *testing.T) {
+		groupByType := &commonpb.ActivityType{Name: "count-groupby-test-type"}
+		taskQueue := s.tv.TaskQueue().GetName()
+
+		for i := range 3 {
+			id := fmt.Sprintf("%s-%d", groupByType.Name, i)
+			resp, err := s.startActivityWithType(ctx, id, taskQueue, groupByType)
+			require.NoError(t, err)
+			require.NotEmpty(t, resp.GetRunId())
+		}
+
+		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ActivityStatus", groupByType.Name)
+		var resp *workflowservice.CountActivityExecutionsResponse
+		s.Eventually(
+			func() bool {
+				var err error
+				resp, err = s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					Query:     query,
+				})
+				return err == nil && resp.GetCount() == 3
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+
+		require.Len(t, resp.GetGroups(), 1)
+		s.Equal(int64(3), resp.GetGroups()[0].GetCount())
+		var groupValue string
+		require.NoError(t, payload.Decode(resp.GetGroups()[0].GetGroupValues()[0], &groupValue))
+		s.Equal("Scheduled", groupValue)
+	})
+
+	t.Run("GroupByUnsupportedField", func(t *testing.T) {
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "GROUP BY ActivityType",
+		})
+		s.Error(err)
+		_, ok := err.(*serviceerror.InvalidArgument)
+		s.True(ok, "expected InvalidArgument error, got %T", err)
+		s.Contains(err.Error(), "'GROUP BY' clause is only supported for ExecutionStatus")
+	})
+
+	t.Run("InvalidQuery", func(t *testing.T) {
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "invalid query syntax !!!",
+		})
+		s.Error(err)
+		_, ok := err.(*serviceerror.InvalidArgument)
+		s.True(ok, "expected InvalidArgument error, got %T", err)
+	})
+
+	t.Run("InvalidSearchAttribute", func(t *testing.T) {
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "NonExistentField = 'value'",
+		})
+		s.Error(err)
+		_, ok := err.(*serviceerror.InvalidArgument)
+		s.True(ok, "expected InvalidArgument error, got %T", err)
+	})
+
+	t.Run("NamespaceNotFound", func(t *testing.T) {
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: "non-existent-namespace",
+			Query:     "",
+		})
+		s.Error(err)
+		_, ok := err.(*serviceerror.NamespaceNotFound)
+		s.True(ok, "expected NamespaceNotFound error, got %T", err)
+	})
+}
+
 func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExceeded() {
 	t := s.T()
 	ctx := testcore.NewContext()
@@ -2190,10 +2399,14 @@ func (s *standaloneActivityTestSuite) validateBaseActivityResponse(
 }
 
 func (s *standaloneActivityTestSuite) startActivity(ctx context.Context, activityID string, taskQueue string) (*workflowservice.StartActivityExecutionResponse, error) {
+	return s.startActivityWithType(ctx, activityID, taskQueue, s.tv.ActivityType())
+}
+
+func (s *standaloneActivityTestSuite) startActivityWithType(ctx context.Context, activityID string, taskQueue string, activityType *commonpb.ActivityType) (*workflowservice.StartActivityExecutionResponse, error) {
 	return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:    s.Namespace().String(),
 		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
+		ActivityType: activityType,
 		Identity:     s.tv.WorkerIdentity(),
 		Input:        defaultInput,
 		TaskQueue: &taskqueuepb.TaskQueue{
