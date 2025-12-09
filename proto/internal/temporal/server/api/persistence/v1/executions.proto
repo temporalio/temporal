@@ -107,6 +107,8 @@ message WorkflowExecutionInfo {
     // AttemptsSinceLastSuccess tracks the number of workflow task attempts since the last successful workflow task.
     // This is carried over when buffered events are applied after workflow task failures.
     // Used by the TemporalReportedProblems search attribute to track continuous failure count.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "since" is needed here. --)
     int32 workflow_task_attempts_since_last_success = 110;
 
     bool cancel_requested = 29;
