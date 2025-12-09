@@ -3,7 +3,6 @@ package updateworkflowoptions
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -14,7 +13,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -106,21 +104,6 @@ func MergeAndApply(
 	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms))
 	if !hasChanges {
 		return mergedOpts, false, nil
-	}
-
-	// If the requested override is pinned and omitted optional pinned version, fill in the current pinned version if it exists,
-	// or error if no pinned version exists.
-	if mergedOpts.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
-		mergedOpts.GetVersioningOverride().GetPinned().GetVersion() == nil {
-		currentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(workflow.GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo()))
-		if workflow.GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED {
-			mergedOpts.GetVersioningOverride().GetPinned().Version = currentVersion
-		} else {
-			return nil, false, serviceerror.NewFailedPreconditionf("must specify a specific pinned override version because workflow with id %v has behavior %s and is not yet pinned to any version",
-				ms.GetExecutionInfo().GetWorkflowId(),
-				ms.GetExecutionInfo().GetVersioningInfo().GetBehavior().String(),
-			)
-		}
 	}
 
 	unsetOverride := false
