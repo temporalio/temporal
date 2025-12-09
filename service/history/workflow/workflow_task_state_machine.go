@@ -325,22 +325,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 			// Calculate total failures from previous WFT: AttemptsSinceLastSuccess + Attempt
 			// This becomes the new AttemptsSinceLastSuccess for the next WFT
 			previousTotalFailures := m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess + m.ms.executionInfo.WorkflowTaskAttempt
-			m.ms.logger.Info("DEBUG WFT: buffered events - preserving total failures in AttemptsSinceLastSuccess",
-				tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-				tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-				tag.NewInt32("current-attempt", m.ms.executionInfo.WorkflowTaskAttempt),
-				tag.NewInt32("previous-attempts-since-last-success", m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess),
-				tag.NewInt32("previous-total-failures", previousTotalFailures),
-				tag.NewInt32("new-attempts-since-last-success", previousTotalFailures))
 			m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess = previousTotalFailures
-		} else {
-			m.ms.logger.Info("DEBUG WFT: buffered events - not transient, not preserving",
-				tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-				tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-				tag.NewInt32("current-attempt", m.ms.executionInfo.WorkflowTaskAttempt),
-				tag.NewInt32("current-attempts-since-last-success", m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess))
 		}
 		m.ms.executionInfo.WorkflowTaskAttempt = 1
 		workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
@@ -947,15 +932,6 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		m.ms.ClearStickyTaskQueue()
 	}
 
-	m.ms.logger.Info("DEBUG WFT: failWorkflowTask called",
-		tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-		tag.NewInt32("current-attempt", m.ms.executionInfo.WorkflowTaskAttempt),
-		tag.NewInt32("current-attempts-since-last-success", m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess),
-		tag.NewBoolTag("increment-attempt", incrementAttempt),
-		tag.NewBoolTag("is-transient", m.ms.IsTransientWorkflowTask()))
-
 	// AttemptsSinceLastSuccess is the carried-over attempt count from the previous workflow task.
 	// It stays the same across failures unless buffered events reset the Attempt counter.
 	failWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
@@ -978,13 +954,6 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
-		m.ms.logger.Info("DEBUG WFT: incrementing attempt",
-			tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-			tag.NewInt32("previous-attempt", m.ms.executionInfo.WorkflowTaskAttempt),
-			tag.NewInt32("new-attempt", failWorkflowTaskInfo.Attempt),
-			tag.NewInt32("attempts-since-last-success", failWorkflowTaskInfo.AttemptsSinceLastSuccess))
 		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
 		if m.ms.config.EnableWorkflowTaskStampIncrementOnFailure() {
 			m.ms.executionInfo.WorkflowTaskStamp += 1
@@ -992,21 +961,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 
-	m.ms.logger.Info("DEBUG WFT: before UpdateWorkflowTask",
-		tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-		tag.NewInt32("failWorkflowTaskInfo.Attempt", failWorkflowTaskInfo.Attempt),
-		tag.NewInt32("failWorkflowTaskInfo.AttemptsSinceLastSuccess", failWorkflowTaskInfo.AttemptsSinceLastSuccess))
-
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
-
-	m.ms.logger.Info("DEBUG WFT: after UpdateWorkflowTask",
-		tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-		tag.NewInt32("executionInfo.Attempt", m.ms.executionInfo.WorkflowTaskAttempt),
-		tag.NewInt32("executionInfo.AttemptsSinceLastSuccess", m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess))
 
 	// Total continuous failures = AttemptsSinceLastSuccess + Attempt
 	// AttemptsSinceLastSuccess contains the sum of all previous workflow task failures.
@@ -1014,33 +969,11 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	// When this function is called, we're recording a failure, so Attempt represents at least one attempt.
 	totalContinuousFailures := failWorkflowTaskInfo.AttemptsSinceLastSuccess + failWorkflowTaskInfo.Attempt
 	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
-	m.ms.logger.Info("DEBUG WFT: checking search attribute",
-		tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-		tag.NewInt32("attempt", failWorkflowTaskInfo.Attempt),
-		tag.NewInt32("attempts-since-last-success", failWorkflowTaskInfo.AttemptsSinceLastSuccess),
-		tag.NewInt32("total-continuous-failures", totalContinuousFailures),
-		tag.NewInt32("consecutive-failures-required", int32(consecutiveFailuresRequired)),
-		tag.NewBoolTag("will-add-search-attribute", consecutiveFailuresRequired > 0 && totalContinuousFailures >= int32(consecutiveFailuresRequired)))
+
 	if consecutiveFailuresRequired > 0 && totalContinuousFailures >= int32(consecutiveFailuresRequired) {
-		m.ms.logger.Info("DEBUG WFT: adding TemporalReportedProblems search attribute",
-			tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-			tag.NewInt32("total-continuous-failures", totalContinuousFailures))
 		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
-			m.ms.logger.Error("DEBUG WFT: failed to add search attribute",
-				tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-				tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-				tag.Error(err))
 			return err
 		}
-		m.ms.logger.Info("DEBUG WFT: successfully added search attribute",
-			tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(m.ms.GetExecutionState().RunId))
 	}
 	return nil
 }
@@ -1050,14 +983,6 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 	// Get current workflow task info before deleting it, to capture timeout tasks for deletion
 	currentWorkflowTask := m.getWorkflowTaskInfo()
 	m.recordTimeoutTasksForDeletion(currentWorkflowTask)
-
-	m.ms.logger.Info("DEBUG WFT: deleteWorkflowTask called (success case)",
-		tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-		tag.NewInt32("previous-attempt", currentWorkflowTask.Attempt),
-		tag.NewInt32("previous-attempts-since-last-success", currentWorkflowTask.AttemptsSinceLastSuccess),
-		tag.NewBoolTag("resetting-to-zero", true))
 
 	// Clear in-memory timeout tasks
 	m.ms.SetWorkflowTaskScheduleToStartTimeoutTask(nil)
@@ -1088,15 +1013,6 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	workflowTask *historyi.WorkflowTaskInfo,
 ) {
-	m.ms.logger.Info("DEBUG WFT: UpdateWorkflowTask called",
-		tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-		tag.NewInt32("input.Attempt", workflowTask.Attempt),
-		tag.NewInt32("input.AttemptsSinceLastSuccess", workflowTask.AttemptsSinceLastSuccess),
-		tag.NewInt32("before.Attempt", m.ms.executionInfo.WorkflowTaskAttempt),
-		tag.NewInt32("before.AttemptsSinceLastSuccess", m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess))
-
 	if m.HasStartedWorkflowTask() && workflowTask.StartedEventID == common.EmptyEventID {
 		// reset the flag whenever started workflow task closes, there could be three cases:
 		// 1. workflow task completed:
@@ -1121,13 +1037,6 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskTimeout = durationpb.New(workflowTask.WorkflowTaskTimeout)
 	m.ms.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
 	m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess = workflowTask.AttemptsSinceLastSuccess
-
-	m.ms.logger.Info("DEBUG WFT: UpdateWorkflowTask finished",
-		tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
-		tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-		tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-		tag.NewInt32("after.Attempt", m.ms.executionInfo.WorkflowTaskAttempt),
-		tag.NewInt32("after.AttemptsSinceLastSuccess", m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess))
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
 	}
