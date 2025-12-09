@@ -13,6 +13,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.AddTasksResponse:
 		return nil
+	case *historyservice.CancelNexusOperationRequest:
+		return nil
+	case *historyservice.CancelNexusOperationResponse:
+		return nil
 	case *historyservice.CloseShardRequest:
 		return nil
 	case *historyservice.CloseShardResponse:
@@ -380,6 +384,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowRunID(r.GetSignalRequest().GetWorkflowExecution().GetRunId()),
 		}
 	case *historyservice.SignalWorkflowExecutionResponse:
+		return nil
+	case *historyservice.StartNexusOperationRequest:
+		return nil
+	case *historyservice.StartNexusOperationResponse:
 		return nil
 	case *historyservice.StartWorkflowExecutionRequest:
 		return []tag.Tag{
