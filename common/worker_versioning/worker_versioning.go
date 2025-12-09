@@ -543,7 +543,15 @@ func validatePinnedVersionInTaskQueue(pinnedVersion *deploymentpb.WorkerDeployme
 		return err
 	}
 	if !resp.GetIsMember() {
-		return serviceerror.NewFailedPrecondition("Pinned version is not present in the task queue") // TODO (Shivam): Maybe make this message a bit better.
+		return serviceerror.NewFailedPrecondition(
+			fmt.Sprintf(
+				"pinned version %s/%s is not registered with task queue %s. "+
+					"Register the version using UpdateWorkerVersioningRules before pinning workflows to it",
+				pinnedVersion.GetDeploymentName(),
+				pinnedVersion.GetBuildId(),
+				tq.GetName(),
+			),
+		)
 	}
 	return nil
 }

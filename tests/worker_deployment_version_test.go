@@ -58,10 +58,10 @@ var (
 
 func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
-	t.Run("v0", func(t *testing.T) {
+	t.Run("sync_workflows", func(t *testing.T) {
 		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion})
 	})
-	t.Run("v1", func(t *testing.T) {
+	t.Run("async_workflows", func(t *testing.T) {
 		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
 	})
 }
@@ -1350,6 +1350,9 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThe
 	defer cancel()
 	tv := testvars.New(s)
 
+	// Start a versioned poller which shall create a version; the version must be present before it can be set as an override.
+	s.startVersionWorkflow(ctx, tv)
+
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
 
@@ -1364,6 +1367,9 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_EmptyFields(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	tv := testvars.New(s)
+
+	// Start a versioned poller which shall create a version; the version must be present before it can be set as an override.
+	s.startVersionWorkflow(ctx, tv)
 
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
@@ -1388,6 +1394,10 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSet
 	tv := testvars.New(s)
 	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv.WithBuildIDNumber(2)
+
+	// Start a versioned poller which shall create the two versions; the versions must be present before they can be set as overrides.
+	s.startVersionWorkflow(ctx, tv1)
+	s.startVersionWorkflow(ctx, tv2)
 
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
@@ -1418,6 +1428,9 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedS
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	tv := testvars.New(s)
+
+	// Start a versioned poller which shall create a version; the version must be present before it can be set as an override.
+	s.startVersionWorkflow(ctx, tv)
 
 	// start an unversioned workflow
 	s.startWorkflow(tv, nil)
