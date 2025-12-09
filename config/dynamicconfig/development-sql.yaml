@@ -30,6 +30,7 @@
 
 ### Worker Versioning Replay Test configs
 ### uncomment and set the right deploymentWorkflowVersion
+#
 #matching.deploymentWorkflowVersion:
 # - value: 2 # put the integer value of the workflow version you want to target (enum DeploymentWorkflowVersion)
 #matching.PollerHistoryTTL:
@@ -38,6 +39,7 @@
 # - value: 5s
 #matching.wv.VersionDrainageStatusRefreshInterval:
 # - value: 5s
+#
 ### END of Worker Versioning Replay Test configs
 
 limit.maxIDLength:

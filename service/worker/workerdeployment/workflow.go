@@ -1249,9 +1249,9 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 	}
 
 	var reqID string
-	if rn := versionUpdateArgs.GetRoutingConfig().GetRevisionNumber(); rn > 0 {
+	if d.hasMinVersion(VersionDataRevisionNumber) && revisionNumber > 0 {
 		// Don't send repetitive sync requests for the same revision number to the same version.
-		reqID = fmt.Sprintf("SyncWorkerDeploymentVersion-%d", rn)
+		reqID = fmt.Sprintf("SyncWorkerDeploymentVersion-%d", revisionNumber)
 	} else {
 		reqID = d.newUUID(ctx)
 	}
