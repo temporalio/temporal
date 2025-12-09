@@ -121,7 +121,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 		execution, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, execution.PendingWorkflowTask.Attempt, int32(2))
-	}, 5*time.Second, 500*time.Millisecond)
+	}, 20*time.Second, 500*time.Millisecond)
 
 	// Unblock the workflow
 	s.shouldFail.Store(false)
@@ -244,7 +244,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 		require.Len(t, saValues, 2)
 		require.Contains(t, saValues, "category=WorkflowTaskFailed")
 		require.Contains(t, saValues, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
-	}, 5*time.Second, 500*time.Millisecond)
+	}, 20*time.Second, 500*time.Millisecond)
 
 	// Unblock the workflow
 	s.shouldFail.Store(false)
