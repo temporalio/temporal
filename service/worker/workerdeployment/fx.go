@@ -28,7 +28,7 @@ const (
 	InitialVersion DeploymentWorkflowVersion = iota
 	// SetCurrent and SetRamping and DeleteVersion APIs are async
 	AsyncSetCurrentAndRamping
-	// Version Data has its own revision number and Task Queue registration is async as well
+	// Version Data has its own revision number with TaskQueue registration being async as well
 	VersionDataRevisionNumber
 )
 

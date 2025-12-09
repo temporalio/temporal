@@ -52,9 +52,9 @@ type (
 		// When true, all the ongoing propagations should cancel themselves
 		// Deprecated. With version data revision number, we don't need to cancel propagations anymore.
 		cancelPropagations bool
-		// Tracks the version of the deployment version workflow when a particular run of a workflow starts base on the dynamic config of the
-		// worker who completes the first task of the workflow. `workflowVersion` remains the same until the workflow CaNs when it
-		// will get another chance to pick the latest manager version.
+		// workflowVersion is set at workflow start based on the dynamic config of the worker
+		// that completes the first task. It remains constant for the lifetime of the run and
+		// only updates when the workflow performs continue-as-new.
 		workflowVersion DeploymentWorkflowVersion
 	}
 )
@@ -1182,10 +1182,9 @@ func (d *VersionWorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion)
 // This method does not increment version data revision number.
 // Note: task queue registration does not affect WorkerDeploymentInfo.RoutingConfigUpdateState hence we do not signal
 // the deployment workflow about propagation completion.
-// TODO: should RoutingConfigUpdateState become IN_PROGRESS while registration is propagating? Current thoughts: It
-// doesn't seem useful because the following setCurrent/Ramping will set the status to IN_PROGRESS. The only case is if
-// user is calling setCurrent/Ramping before registration passing IgnoreMissingTaskQueues, but in that case still the
-// registration is likely not in control of the operator but is async all the way from the worker side.
+// TODO: Set RoutingConfigUpdateState to IN_PROGRESS when the version is already ramping or current? It's OK to do it
+// later because it's not possible normally and user has to pass IgnoreMissingTaskQueues or AllowNoPollers for it to
+// happen, or the task queue needs to be a task queue that is added in this version.
 func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) {
 	versionData := &deploymentspb.WorkerDeploymentVersionData{
 		Status:         d.VersionState.Status,

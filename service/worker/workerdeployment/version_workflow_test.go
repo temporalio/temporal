@@ -848,6 +848,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 // 2. Worker registration completes after propagation finishes
 // 3. Another delete call can be accepted after registration finishes
 func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerRegistration() {
+	s.skipFromVersion(VersionDataRevisionNumber)
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
@@ -1438,7 +1439,7 @@ func (s *VersionWorkflowSuite) Test_SyncState_SignalsPropagationComplete_WithCor
 
 	// Mock the external signal (propagation complete signal is sent after async propagation)
 	var capturedSignalArg *deploymentspb.PropagationCompletionInfo
-	expectedWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	expectedWorkflowID := GenerateDeploymentWorkflowID(tv.DeploymentSeries())
 	s.env.OnSignalExternalWorkflow(
 		mock.Anything,
 		expectedWorkflowID,
@@ -1524,7 +1525,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		s.Assert().Fail("Should not signal propagation complete for worker registration")
+		s.Fail("Should not signal propagation complete for worker registration")
 	}).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
@@ -1595,7 +1596,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_SingleBatch() {
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			syncCallCount++
-			s.Equal(5, len(req.Sync), "Should sync all 5 task queues in one batch")
+			s.Len(req.Sync, 5, "Should sync all 5 task queues in one batch")
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
 		},
 	).Maybe()
@@ -1670,7 +1671,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_MultipleBatches() {
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			syncCallCount++
-			s.Equal(25, len(req.Sync), "Each batch should contain 25 task queues")
+			s.Len(req.Sync, 25, "Each batch should contain 25 task queues")
 			taskQueuesToCheck := make(map[string]int64, 24)
 			for i, tq := range req.Sync {
 				if i == 0 {
@@ -1758,9 +1759,9 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_PartialLastBatch() {
 		func(ctx context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 			syncCallCount++
 			if syncCallCount <= 2 {
-				s.Equal(10, len(req.Sync), "First two batches should contain 10 task queues each")
+				s.Len(req.Sync, 10, "First two batches should contain 10 task queues each")
 			} else {
-				s.Equal(7, len(req.Sync), "Last batch should contain 7 task queues")
+				s.Len(req.Sync, 7, "Last batch should contain 7 task queues")
 			}
 			// Return no task queues as if none were updated
 			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
@@ -1768,7 +1769,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_PartialLastBatch() {
 	).Maybe()
 
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		s.Assert().Fail("CheckWorkerDeploymentUserDataPropagation should not be called")
+		s.Fail("CheckWorkerDeploymentUserDataPropagation should not be called")
 	}).Maybe()
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
