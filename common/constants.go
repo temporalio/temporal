@@ -42,6 +42,8 @@ const (
 const (
 	// Limit for schedule notes field
 	ScheduleNotesSizeLimit = 1000
+
+	ScheduledTaskMinPrecision = time.Millisecond
 )
 
 const (

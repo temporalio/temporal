@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -230,6 +231,7 @@ func (t *task) handleFailures(
 					WorkflowId: executionInfo.GetWorkflowId(),
 					RunId:      runID,
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 			switch err.(type) {
 			case *serviceerror.NotFound,

@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -110,7 +111,9 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		}
 
 		// Don't allow those SA's that are in predefined but not in predefinedWhiteList to be set by a user
+		predefined := sadefs.Predefined()
 		if _, ok := predefined[saFieldName]; ok {
+			predefinedWhiteList := sadefs.PredefinedWhiteList()
 			if _, ok = predefinedWhiteList[saFieldName]; !ok {
 				return serviceerror.NewInvalidArgumentf(
 					"%s attribute can't be set in SearchAttributes", saFieldName,
@@ -185,7 +188,7 @@ func (v *Validator) validationError(msg string, saFieldName string, namespace st
 }
 
 func (v *Validator) getAlias(saFieldName string, namespaceName string) (string, error) {
-	if IsMappable(saFieldName) {
+	if sadefs.IsMappable(saFieldName) {
 		mapper, err := v.searchAttributesMapperProvider.GetMapper(namespace.Name(namespaceName))
 		if err != nil {
 			return "", err

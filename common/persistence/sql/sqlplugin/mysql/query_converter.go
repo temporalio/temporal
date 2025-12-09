@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 var maxDatetime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
@@ -130,23 +129,12 @@ func (c *queryConverter) ConvertTextComparisonExpr(
 }
 
 func (c *queryConverter) BuildSelectStmt(
-	namespaceID namespace.ID,
 	queryParams *query.QueryParams[sqlparser.Expr],
 	pageSize int,
 	token *sqlplugin.VisibilityPageToken,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
-
-	// Namespace filter
-	whereClauses = append(
-		whereClauses,
-		fmt.Sprintf(
-			"%s = '%s'",
-			searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
-			namespaceID,
-		),
-	)
 
 	if queryParams.QueryExpr != nil {
 		if queryString := sqlparser.String(queryParams.QueryExpr); queryString != "" {
@@ -160,10 +148,10 @@ func (c *queryConverter) BuildSelectStmt(
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				searchattribute.GetSqlDbColName(searchattribute.RunID),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
+				sadefs.GetSqlDbColName(sadefs.RunID),
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
 				sqlparser.String(c.GetCoalesceCloseTimeExpr()),
 			),
 		)
@@ -183,15 +171,26 @@ func (c *queryConverter) BuildSelectStmt(
 		dbFields[i] = "ev." + field
 	}
 
+	whereString := ""
+	if len(whereClauses) > 0 {
+		whereString = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
 	stmt := fmt.Sprintf(
-		`SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (%s, %s) WHERE %s ORDER BY %s DESC, %s DESC, %s LIMIT ?`,
+		"SELECT %s FROM executions_visibility ev "+
+			"LEFT JOIN custom_search_attributes USING (%s, %s) "+
+			"LEFT JOIN chasm_search_attributes USING (%s, %s)"+
+			"%s "+
+			"ORDER BY %s DESC, %s DESC, %s LIMIT ?",
 		strings.Join(dbFields, ", "),
-		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
-		strings.Join(whereClauses, " AND "),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
+		whereString,
 		sqlparser.String(c.GetCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(sadefs.StartTime),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 	)
 	queryArgs = append(queryArgs, pageSize)
 
@@ -199,30 +198,19 @@ func (c *queryConverter) BuildSelectStmt(
 }
 
 func (c *queryConverter) BuildCountStmt(
-	namespaceID namespace.ID,
 	queryParams *query.QueryParams[sqlparser.Expr],
 ) (string, []any) {
-	var whereClauses []string
-
-	// Namespace filter
-	whereClauses = append(
-		whereClauses,
-		fmt.Sprintf(
-			"%s = '%s'",
-			searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
-			namespaceID,
-		),
-	)
-
+	whereString := ""
 	if queryParams.QueryExpr != nil {
-		if queryString := sqlparser.String(queryParams.QueryExpr); queryString != "" {
-			whereClauses = append(whereClauses, queryString)
+		whereString = sqlparser.String(queryParams.QueryExpr)
+		if whereString != "" {
+			whereString = " WHERE " + whereString
 		}
 	}
 
 	groupBy := make([]string, 0, len(queryParams.GroupBy)+1)
 	for _, field := range queryParams.GroupBy {
-		groupBy = append(groupBy, searchattribute.GetSqlDbColName(field.FieldName))
+		groupBy = append(groupBy, sadefs.GetSqlDbColName(field.FieldName))
 	}
 
 	groupByClause := ""
@@ -231,11 +219,17 @@ func (c *queryConverter) BuildCountStmt(
 	}
 
 	return fmt.Sprintf(
-		`SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (%s, %s) WHERE %s%s`,
+		"SELECT %s FROM executions_visibility ev "+
+			"LEFT JOIN custom_search_attributes USING (%s, %s) "+
+			"LEFT JOIN chasm_search_attributes USING (%s, %s)"+
+			"%s"+
+			"%s",
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
-		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
-		strings.Join(whereClauses, " AND "),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
+		whereString,
 		groupByClause,
 	), nil
 }

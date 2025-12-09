@@ -1,7 +1,8 @@
-package searchattribute
+package sadefs
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 
@@ -215,6 +216,26 @@ var (
 	}()
 )
 
+// System returns a clone of the system search attributes map.
+func System() map[string]enumspb.IndexedValueType {
+	return maps.Clone(system)
+}
+
+// Predefined returns a clone of the predefined search attributes map.
+func Predefined() map[string]enumspb.IndexedValueType {
+	return maps.Clone(predefined)
+}
+
+// PredefinedWhiteList returns a clone of the predefined whitelist search attributes map.
+func PredefinedWhiteList() map[string]enumspb.IndexedValueType {
+	return maps.Clone(predefinedWhiteList)
+}
+
+// Reserved returns a clone of the reserved field names map.
+func Reserved() map[string]struct{} {
+	return maps.Clone(reserved)
+}
+
 // IsSystem returns true if name is system search attribute
 func IsSystem(name string) bool {
 	_, ok := system[name]
@@ -279,7 +300,7 @@ func IsPreallocatedCSAFieldName(name string, valueType enumspb.IndexedValueType)
 	return re != nil && re.MatchString(name)
 }
 
-var chasmSearchAttributePattern = regexp.MustCompile(`^Temporal(Bool|Datetime|Int|Double|Text|Keyword|KeywordList)(0[1-9]|[1-9][0-9])$`)
+var chasmSearchAttributePattern = regexp.MustCompile(`^Temporal(Bool|Datetime|Int|Double|Text|Keyword|LowCardinalityKeyword|KeywordList)(0[1-9]|[1-9][0-9])$`)
 
 // IsChasmSearchAttribute checks if a field name matches the pattern for CHASM search attributes.
 // CHASM search attributes follow the pattern: Temporal<Type><NN> where NN is 01-99

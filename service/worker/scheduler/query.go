@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	expmaps "golang.org/x/exp/maps"
 )
 
@@ -33,7 +34,7 @@ func newFieldNameAggInterceptor(
 	saMapperProvider searchattribute.MapperProvider,
 ) *fieldNameAggInterceptor {
 	return &fieldNameAggInterceptor{
-		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider),
+		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider, nil),
 		names:           make(map[string]bool),
 	}
 }
@@ -78,7 +79,7 @@ func ValidateVisibilityQuery(
 		return err
 	}
 	for _, field := range fields {
-		if searchattribute.IsReserved(field) && field != searchattribute.TemporalSchedulePaused {
+		if sadefs.IsReserved(field) && field != sadefs.TemporalSchedulePaused {
 			return serviceerror.NewInvalidArgument(
 				fmt.Sprintf("invalid query filter for schedules: cannot filter on %q", field),
 			)
@@ -112,7 +113,7 @@ func getQueryFields(
 		return nil, err
 	}
 	if !queryConverter.SeenNamespaceDivision() {
-		delete(saInterceptor.names, searchattribute.TemporalNamespaceDivision)
+		delete(saInterceptor.names, sadefs.TemporalNamespaceDivision)
 	}
 	return expmaps.Keys(saInterceptor.names), nil
 }
@@ -124,7 +125,7 @@ func getQueryFieldsLegacy(
 	queryString string,
 ) ([]string, error) {
 	fnInterceptor := newFieldNameAggInterceptor(namespaceName, saNameType, saMapperProvider)
-	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType)
+	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType, nil)
 	_, err := queryConverter.ConvertWhereOrderBy(queryString)
 	if err != nil {
 		var converterErr *query.ConverterError

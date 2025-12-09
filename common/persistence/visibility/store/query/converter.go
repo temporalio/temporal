@@ -5,15 +5,18 @@ package query
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
 )
 
@@ -57,6 +60,8 @@ type (
 		namespaceName namespace.Name
 		saTypeMap     searchattribute.NameTypeMap
 		saMapper      searchattribute.Mapper
+		chasmMapper   *chasm.VisibilitySearchAttributesMapper
+		archetypeID   chasm.ArchetypeID
 
 		seenNamespaceDivision bool
 	}
@@ -72,8 +77,12 @@ type (
 )
 
 var (
-	groupByFieldWhitelist = []string{
-		searchattribute.ExecutionStatus,
+	groupByFieldAllowlist = []string{
+		sadefs.ExecutionStatus,
+	}
+
+	groupByFieldPrefixAllowlist = []string{
+		"TemporalLowCardinalityKeyword",
 	}
 
 	supportedComparisonOperators = []string{
@@ -149,6 +158,20 @@ func (c *QueryConverter[ExprT]) WithSearchAttributeInterceptor(
 	return c
 }
 
+func (c *QueryConverter[ExprT]) WithChasmMapper(
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+) *QueryConverter[ExprT] {
+	c.chasmMapper = chasmMapper
+	return c
+}
+
+func (c *QueryConverter[ExprT]) WithArchetypeID(
+	archetypeID chasm.ArchetypeID,
+) *QueryConverter[ExprT] {
+	c.archetypeID = archetypeID
+	return c
+}
+
 func (c *QueryConverter[ExprT]) SeenNamespaceDivision() bool {
 	return c.seenNamespaceDivision
 }
@@ -162,28 +185,35 @@ func (c *QueryConverter[ExprT]) Convert(
 	}
 
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
-	// then add "is null" query to it.
+	// try setting the namespace division filter based on the archetype ID,
+	// else filter by null (no division).
 	var namespaceDivisionExpr ExprT
 	if !c.seenNamespaceDivision {
 		nsDivisionCol := NamespaceDivisionSAColumn()
 		if err := c.saInterceptor.Intercept(nsDivisionCol); err != nil {
 			return nil, err
 		}
-		namespaceDivisionExpr, err = c.storeQC.ConvertIsExpr(
-			sqlparser.IsNullStr,
-			nsDivisionCol,
-		)
+
+		if c.archetypeID != chasm.UnspecifiedArchetypeID {
+			// For CHASM queries, filter by archetype ID
+			namespaceDivisionExpr, err = c.storeQC.ConvertComparisonExpr(
+				sqlparser.EqualStr,
+				nsDivisionCol,
+				strconv.Itoa(int(c.archetypeID)),
+			)
+		} else {
+			// For regular workflow queries, filter by null (no division)
+			namespaceDivisionExpr, err = c.storeQC.ConvertIsExpr(
+				sqlparser.IsNullStr,
+				nsDivisionCol,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	queryExpr, err := c.storeQC.BuildParenExpr(queryParams.QueryExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryExpr)
+	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -250,11 +280,10 @@ func (c *QueryConverter[ExprT]) convertSelectStmt(
 		if err != nil {
 			return nil, err
 		}
-		if !slices.Contains(groupByFieldWhitelist, colName.FieldName) {
+		if !IsGroupByFieldAllowed(colName.FieldName) {
 			return nil, NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for search attributes [%v]",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				NotSupportedErrMessage,
-				strings.Join(groupByFieldWhitelist, ", "),
 			)
 		}
 		res.GroupBy = append(res.GroupBy, colName)
@@ -453,7 +482,7 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 		return nil, err
 	}
 
-	if saFieldName == searchattribute.TemporalNamespaceDivision {
+	if saFieldName == sadefs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
 	}
 
@@ -480,25 +509,45 @@ func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
 		fieldName, fieldType = fn, ft
 		return true
 	}
+	// resolveChasmSA only returns true if `alias` is a CHASM search attribute.
+	resolveChasmSA := func(alias string) bool {
+		if c.chasmMapper == nil {
+			return false
+		}
+		fn, err := c.chasmMapper.Field(alias)
+		if err != nil {
+			return false
+		}
+		ft, err := c.chasmMapper.ValueType(fn)
+		if err != nil {
+			return false
+		}
+		fieldName, fieldType = fn, ft
+		return true
+	}
 
 	var err error
 	fieldName = alias
 	// First, check if it's a custom search attribute.
-	if searchattribute.IsMappable(alias) && resolveCSA(alias) {
+	if sadefs.IsMappable(alias) && resolveCSA(alias) {
 		return
 	}
-	// Second, check if it's a system/reserved search attribute.
+	// Second, check if it's a CHASM search attribute.
+	if resolveChasmSA(alias) {
+		return
+	}
+	// Third, check if it's a system/reserved search attribute.
 	fieldType, err = c.saTypeMap.GetType(fieldName)
 	if err == nil {
 		return
 	}
-	// Third, check for special aliases or adding/removing the `Temporal` prefix.
-	if strings.TrimPrefix(alias, searchattribute.ReservedPrefix) == searchattribute.ScheduleID {
-		fieldName = searchattribute.WorkflowID
-	} else if strings.HasPrefix(fieldName, searchattribute.ReservedPrefix) {
-		fieldName = fieldName[len(searchattribute.ReservedPrefix):]
+	// Fourth, check for special aliases or adding/removing the `Temporal` prefix.
+	if strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID {
+		fieldName = sadefs.WorkflowID
+	} else if strings.HasPrefix(fieldName, sadefs.ReservedPrefix) {
+		fieldName = fieldName[len(sadefs.ReservedPrefix):]
 	} else {
-		fieldName = searchattribute.ReservedPrefix + fieldName
+		fieldName = sadefs.ReservedPrefix + fieldName
 	}
 	fieldType, err = c.saTypeMap.GetType(fieldName)
 	if err == nil {
@@ -525,7 +574,7 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		if err != nil {
 			return nil, err
 		}
-		if saName == searchattribute.ScheduleID && saFieldName == searchattribute.WorkflowID {
+		if saName == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 		return value, nil
@@ -591,9 +640,9 @@ func (c *QueryConverter[ExprT]) parseSQLVal(
 	}
 
 	switch saName {
-	case searchattribute.ExecutionStatus:
+	case sadefs.ExecutionStatus:
 		return parseExecutionStatusValue(value)
-	case searchattribute.ExecutionDuration:
+	case sadefs.ExecutionDuration:
 		return parseExecutionDurationValue(value)
 	default:
 		return c.validateValueType(saName, saType, value)
@@ -663,6 +712,20 @@ func (c *QueryConverter[ExprT]) validateValueType(
 	}
 }
 
+func IsGroupByFieldAllowed(fieldName string) bool {
+	for _, allowedField := range groupByFieldAllowlist {
+		if fieldName == allowedField {
+			return true
+		}
+	}
+	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
+		if strings.HasPrefix(fieldName, allowedPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseExecutionStatusValue(value any) (string, error) {
 	switch v := value.(type) {
 	case int64:
@@ -672,7 +735,7 @@ func parseExecutionStatusValue(value any) (string, error) {
 		return "", NewConverterError(
 			"%s: invalid %s value %v",
 			InvalidExpressionErrMessage,
-			searchattribute.ExecutionStatus,
+			sadefs.ExecutionStatus,
 			v,
 		)
 	case string:
@@ -682,7 +745,7 @@ func parseExecutionStatusValue(value any) (string, error) {
 		return "", NewConverterError(
 			"%s: invalid %s value '%s'",
 			InvalidExpressionErrMessage,
-			searchattribute.ExecutionStatus,
+			sadefs.ExecutionStatus,
 			v,
 		)
 	default:
@@ -690,7 +753,7 @@ func parseExecutionStatusValue(value any) (string, error) {
 			"%s: unexpected value type %T for search attribute %s",
 			InvalidExpressionErrMessage,
 			v,
-			searchattribute.ExecutionStatus,
+			sadefs.ExecutionStatus,
 		)
 	}
 }
@@ -705,7 +768,7 @@ func parseExecutionDurationValue(value any) (int64, error) {
 			return 0, NewConverterError(
 				"%s: invalid duration value for search attribute %s: %v",
 				InvalidExpressionErrMessage,
-				searchattribute.ExecutionDuration,
+				sadefs.ExecutionDuration,
 				value,
 			)
 		}
@@ -715,7 +778,7 @@ func parseExecutionDurationValue(value any) (int64, error) {
 			"%s: unexpected value type %T for search attribute %s",
 			InvalidExpressionErrMessage,
 			v,
-			searchattribute.ExecutionDuration,
+			sadefs.ExecutionDuration,
 		)
 	}
 }

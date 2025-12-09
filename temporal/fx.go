@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -21,6 +21,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
@@ -45,6 +48,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
@@ -139,9 +143,15 @@ var (
 		dynamicconfig.Module,
 		pprof.Module,
 		TraceExportModule,
-		chasm.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
+	)
+
+	ChasmLibraryOptions = fx.Options(
+		chasm.Module,
+		chasmworkflow.Module,
+		chasmscheduler.Module,
+		chasmcallback.Module,
 	)
 )
 
@@ -355,7 +365,6 @@ type (
 		InstanceID                 resource.InstanceID                     `optional:"true"`
 		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
-		ChasmRegistry              *chasm.Registry
 	}
 )
 
@@ -428,14 +437,12 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() tasks.TaskCategoryRegistry {
 				return params.TaskCategoryRegistry
 			},
-			func() *chasm.Registry {
-				return params.ChasmRegistry
-			},
 		),
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
+		ChasmLibraryOptions,
 	)
 }
 
@@ -639,7 +646,7 @@ func ApplyClusterMetadataConfigProvider(
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
 		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
-			indexSearchAttributes[ds.GetIndexName()] = searchattribute.GetDBIndexSearchAttributes(visCSAOverride)
+			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 		}
 	}
 
@@ -711,11 +718,11 @@ func initCurrentClusterMetadataRecord(
 	var clusterId string
 	currentClusterName := svc.ClusterMetadata.CurrentClusterName
 	currentClusterInfo := svc.ClusterMetadata.ClusterInformation[currentClusterName]
-	if uuid.Parse(currentClusterInfo.ClusterID) == nil {
+	if uuid.Validate(currentClusterInfo.ClusterID) != nil {
 		if currentClusterInfo.ClusterID != "" {
 			logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id")
 		}
-		clusterId = uuid.New()
+		clusterId = uuid.NewString()
 	} else {
 		clusterId = currentClusterInfo.ClusterID
 	}

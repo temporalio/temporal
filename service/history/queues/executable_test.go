@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -44,6 +45,7 @@ type (
 		mockRescheduler       *queues.MockRescheduler
 		mockNamespaceRegistry *namespace.MockRegistry
 		mockClusterMetadata   *cluster.MockMetadata
+		chasmRegistry         *chasm.Registry
 		metricsHandler        *metricstest.CaptureHandler
 
 		timeSource *clock.EventTimeSource
@@ -85,6 +87,7 @@ func (s *executableSuite) SetupTest() {
 	}).AnyTimes()
 
 	s.timeSource = clock.NewEventTimeSource()
+	s.chasmRegistry = chasm.NewRegistry(log.NewTestLogger())
 }
 
 func (s *executableSuite) TearDownSuite() {
@@ -368,25 +371,50 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 }
 
 func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
-	executable := s.newTestExecutable()
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
-		ExecutionMetricTags: nil,
-		ExecutedAsActive:    true,
-		ExecutionErr:        errors.New("some random error"),
-	})
-	err := executable.Execute()
-	s.Error(err)
-	s.Error(executable.HandleErr(err))
-	s.Equal(2, executable.Attempt())
+	testCases := []struct {
+		name            string
+		executionResp   queues.ExecuteResponse
+		expectedAttempt int64
+	}{
+		{
+			name: "no failover",
+			executionResp: queues.ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        errors.New("some random error"),
+			},
+			expectedAttempt: 2,
+		},
+		{
+			name: "with failover",
+			executionResp: queues.ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    false,
+				ExecutionErr:        nil,
+			},
+			expectedAttempt: 1,
+		},
+	}
 
-	// isActive changed to false, should reset attempt
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
-		ExecutionMetricTags: nil,
-		ExecutedAsActive:    false,
-		ExecutionErr:        nil,
-	})
-	s.NoError(executable.Execute())
-	s.Equal(1, executable.Attempt())
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			executable := s.newTestExecutable()
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(tc.executionResp)
+			err := executable.Execute()
+			if tc.executionResp.ExecutionErr != nil {
+				s.Error(err)
+				s.Error(executable.HandleErr(err))
+			} else {
+				s.NoError(err)
+			}
+
+			capture := s.metricsHandler.StartCapture()
+			executable.Ack()
+			snapshot := capture.Snapshot()
+			s.Equal(tc.expectedAttempt, snapshot[metrics.TaskAttempt.Name()][0].Value)
+			s.metricsHandler.StopCapture(capture)
+		})
+	}
 }
 
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
@@ -1149,6 +1177,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.timeSource,
 		s.mockNamespaceRegistry,
 		s.mockClusterMetadata,
+		s.chasmRegistry,
 		queues.GetTaskTypeTagValue,
 		log.NewTestLogger(),
 		s.metricsHandler,

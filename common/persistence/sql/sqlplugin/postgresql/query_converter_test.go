@@ -9,10 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 func TestQueryConverter_GetCoalesceCloseTimeExpr(t *testing.T) {
@@ -186,7 +185,6 @@ func TestQueryConverter_ConvertTextComparisonExpr(t *testing.T) {
 }
 
 func TestQueryConverter_BuildSelectStmt(t *testing.T) {
-	testNamespaceID := namespace.ID("test-namespace-id")
 	closeTime := time.Date(2025, 11, 10, 13, 34, 56, 0, time.UTC)
 	startTime := time.Date(2025, 11, 10, 12, 34, 56, 0, time.UTC)
 	runID := "test-run-id"
@@ -208,9 +206,8 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 			name:     "empty",
 			pageSize: 10,
 			stmt: fmt.Sprintf(
-				"SELECT %s FROM executions_visibility WHERE namespace_id = '%s' ORDER BY coalesce(close_time, '9999-12-31 23:59:59') DESC, start_time DESC, run_id LIMIT ?",
+				"SELECT %s FROM executions_visibility ORDER BY coalesce(close_time, '9999-12-31 23:59:59') DESC, start_time DESC, run_id LIMIT ?",
 				strings.Join(sqlplugin.DbFields, ", "),
-				testNamespaceID.String(),
 			),
 			queryArgs: []any{10},
 		},
@@ -223,9 +220,8 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 			},
 			pageSize: 20,
 			stmt: fmt.Sprintf(
-				"SELECT %s FROM executions_visibility WHERE namespace_id = '%s' AND Keyword01 = 'foo' ORDER BY coalesce(close_time, '9999-12-31 23:59:59') DESC, start_time DESC, run_id LIMIT ?",
+				"SELECT %s FROM executions_visibility WHERE Keyword01 = 'foo' ORDER BY coalesce(close_time, '9999-12-31 23:59:59') DESC, start_time DESC, run_id LIMIT ?",
 				strings.Join(sqlplugin.DbFields, ", "),
-				testNamespaceID.String(),
 			),
 			queryArgs: []any{20},
 		},
@@ -243,9 +239,8 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 				RunID:     runID,
 			},
 			stmt: fmt.Sprintf(
-				"SELECT %s FROM executions_visibility WHERE namespace_id = '%s' AND Keyword01 = 'foo' AND ((coalesce(close_time, '9999-12-31 23:59:59') = ? AND start_time = ? AND run_id > ?) OR (coalesce(close_time, '9999-12-31 23:59:59') = ? AND start_time < ?) OR coalesce(close_time, '9999-12-31 23:59:59') < ?) ORDER BY coalesce(close_time, '9999-12-31 23:59:59') DESC, start_time DESC, run_id LIMIT ?",
+				"SELECT %s FROM executions_visibility WHERE Keyword01 = 'foo' AND ((coalesce(close_time, '9999-12-31 23:59:59') = ? AND start_time = ? AND run_id > ?) OR (coalesce(close_time, '9999-12-31 23:59:59') = ? AND start_time < ?) OR coalesce(close_time, '9999-12-31 23:59:59') < ?) ORDER BY coalesce(close_time, '9999-12-31 23:59:59') DESC, start_time DESC, run_id LIMIT ?",
 				strings.Join(sqlplugin.DbFields, ", "),
-				testNamespaceID.String(),
 			),
 			queryArgs: []any{
 				closeTime,
@@ -266,7 +261,7 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 			qp := &query.QueryParams[sqlparser.Expr]{
 				QueryExpr: tc.queryExpr,
 			}
-			stmt, queryArgs := qc.BuildSelectStmt(testNamespaceID, qp, tc.pageSize, tc.token)
+			stmt, queryArgs := qc.BuildSelectStmt(qp, tc.pageSize, tc.token)
 			r.Equal(tc.stmt, stmt)
 			r.Equal(tc.queryArgs, queryArgs)
 		})
@@ -274,7 +269,6 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 }
 
 func TestQueryConverter_BuildCountStmt(t *testing.T) {
-	testNamespaceID := namespace.ID("test-namespace-id")
 	keywordCol := query.NewSAColumn(
 		"AliasForKeyword01",
 		"Keyword01",
@@ -289,10 +283,7 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 	}{
 		{
 			name: "empty",
-			stmt: fmt.Sprintf(
-				"SELECT COUNT(*) FROM executions_visibility WHERE namespace_id = '%s'",
-				testNamespaceID.String(),
-			),
+			stmt: "SELECT COUNT(*) FROM executions_visibility",
 		},
 		{
 			name: "non-empty",
@@ -301,10 +292,7 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 				Left:     keywordCol,
 				Right:    query.NewUnsafeSQLString("foo"),
 			},
-			stmt: fmt.Sprintf(
-				"SELECT COUNT(*) FROM executions_visibility WHERE namespace_id = '%s' AND Keyword01 = 'foo'",
-				testNamespaceID.String(),
-			),
+			stmt: "SELECT COUNT(*) FROM executions_visibility WHERE Keyword01 = 'foo'",
 		},
 		{
 			name: "group by",
@@ -314,12 +302,9 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 				Right:    query.NewUnsafeSQLString("foo"),
 			},
 			groupBy: []*query.SAColumn{
-				query.NewSAColumn(searchattribute.ExecutionStatus, searchattribute.ExecutionStatus, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				query.NewSAColumn(sadefs.ExecutionStatus, sadefs.ExecutionStatus, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			},
-			stmt: fmt.Sprintf(
-				"SELECT status, COUNT(*) FROM executions_visibility WHERE namespace_id = '%s' AND Keyword01 = 'foo' GROUP BY status",
-				testNamespaceID.String(),
-			),
+			stmt: "SELECT status, COUNT(*) FROM executions_visibility WHERE Keyword01 = 'foo' GROUP BY status",
 		},
 	}
 
@@ -331,7 +316,7 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 				QueryExpr: tc.queryExpr,
 				GroupBy:   tc.groupBy,
 			}
-			stmt, queryArgs := qc.BuildCountStmt(testNamespaceID, qp)
+			stmt, queryArgs := qc.BuildCountStmt(qp)
 			r.Equal(tc.stmt, stmt)
 			r.Nil(queryArgs)
 		})

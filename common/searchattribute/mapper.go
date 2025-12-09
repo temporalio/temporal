@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -114,7 +115,7 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	}, nil
 }
 
-// AliasFields returns SearchAttributes struct where each search attribute name is replaced with alias.
+// AliasFields returns SearchAttributes struct where each custom search attribute name is replaced with alias.
 // If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
 func AliasFields(
 	mapperProvider MapperProvider,
@@ -133,7 +134,7 @@ func AliasFields(
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
 	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if !IsMappable(saName) {
+		if !sadefs.IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
 			continue
 		}
@@ -180,7 +181,7 @@ func UnaliasFields(
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
 	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if !IsMappable(saName) {
+		if !sadefs.IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
 			continue
 		}

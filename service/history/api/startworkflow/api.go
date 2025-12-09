@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -213,11 +214,12 @@ func (s *Starter) Invoke(
 func (s *Starter) lockCurrentWorkflowExecution(
 	ctx context.Context,
 ) (historyi.ReleaseWorkflowContextFunc, error) {
-	currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
+	currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentExecution(
 		ctx,
 		s.shardContext,
 		s.namespace.ID(),
 		s.request.StartRequest.WorkflowId,
+		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	)
 	if err != nil {
@@ -668,6 +670,8 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 					requestID,
 					completionCallbacks,
 					links,
+					"",  // identity
+					nil, // priority
 				)
 				return api.UpdateWorkflowWithoutWorkflowTask, err
 			},

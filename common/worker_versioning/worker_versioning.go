@@ -22,7 +22,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -42,21 +42,17 @@ const (
 	// WorkerDeploymentVersionIdDelimiterV31 will be deleted once we stop supporting v31 version string fields
 	// in external and internal APIs. Until then, both delimiters are banned in deployment name. All
 	// deprecated version string fields in APIs keep using the old delimiter. Workflow SA uses new delimiter.
-	WorkerDeploymentVersionIdDelimiterV31      = "."
-	WorkerDeploymentVersionIdDelimiter         = ":"
-	WorkerDeploymentVersionWorkflowIDPrefix    = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentWorkflowIDPrefix           = "temporal-sys-worker-deployment"
-	WorkerDeploymentVersionWorkflowIDDelimeter = ":"
-	WorkerDeploymentVersionWorkflowIDEscape    = "|"
-)
+	WorkerDeploymentVersionIDDelimiterV31   = "."
+	WorkerDeploymentVersionWorkflowIDEscape = "|"
 
-// EscapeChar is a helper which escapes the BuildIdSearchAttributeDelimiter character
-// in the input string
-func escapeChar(s, escape, delimiter string) string {
-	s = strings.Replace(s, escape, escape+escape, -1)
-	s = strings.Replace(s, delimiter, escape+delimiter, -1)
-	return s
-}
+	// Prefixes, Delimeters and Keys that are used in the internal entity workflows backing worker-versioning
+	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
+	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
+	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
+	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter) // 39
+	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
+	WorkerDeploymentBuildIDFieldName             = "BuildID"
+)
 
 // PinnedBuildIdSearchAttribute creates the pinned search attribute for the BuildIds list, used as a visibility optimization.
 // For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
@@ -124,7 +120,7 @@ func FindBuildId(versioningData *persistencespb.VersioningData, buildId string) 
 func WorkflowsExistForBuildId(ctx context.Context, visibilityManager manager.VisibilityManager, ns *namespace.Namespace, taskQueue, buildId string) (bool, error) {
 	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
 	escapedBuildId := sqlparser.String(sqlparser.NewStrVal([]byte(VersionedBuildIdSearchAttribute(buildId))))
-	query := fmt.Sprintf("%s = %s AND %s = %s", searchattribute.TaskQueue, escapedTaskQueue, searchattribute.BuildIds, escapedBuildId)
+	query := fmt.Sprintf("%s = %s AND %s = %s", sadefs.TaskQueue, escapedTaskQueue, sadefs.BuildIds, escapedBuildId)
 
 	response, err := visibilityManager.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: ns.ID(),
@@ -167,9 +163,9 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 		if b == "" {
 			return nil, serviceerror.NewInvalidArgumentf("versioned worker must have build id")
 		}
-		if strings.Contains(d, WorkerDeploymentVersionIdDelimiter) || strings.Contains(d, WorkerDeploymentVersionIdDelimiterV31) {
+		if strings.Contains(d, WorkerDeploymentVersionWorkflowIDDelimeter) || strings.Contains(d, WorkerDeploymentVersionIDDelimiterV31) {
 			// TODO: allow '.' once we get rid of v31 stuff
-			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIdDelimiter, WorkerDeploymentVersionIdDelimiterV31)
+			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31)
 		}
 		return &deploymentpb.Deployment{
 			SeriesName: d,
@@ -428,9 +424,9 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 		return serviceerror.NewInvalidArgument("deployment name cannot be empty")
 	}
 	// TODO: remove '.' restriction once the v31 version strings are completely cleaned from external and internal API
-	if strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIdDelimiterV31) ||
-		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIdDelimiter) {
-		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIdDelimiterV31, WorkerDeploymentVersionIdDelimiter)
+	if strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIDDelimiterV31) ||
+		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionWorkflowIDDelimeter) {
+		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIDDelimiterV31, WorkerDeploymentVersionWorkflowIDDelimeter)
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
@@ -438,18 +434,56 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 	return nil
 }
 
-// ValidateDeploymentVersion returns error if the deployment version is nil or it has empty version
-// or deployment name.
-func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion) error {
+// ValidateDeploymentVersion returns error if the deployment version is not a valid entity.
+func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion, maxIDLengthLimit int) error {
 	if version == nil {
 		return serviceerror.NewInvalidArgument("deployment version cannot be nil")
 	}
-	if version.GetDeploymentName() == "" {
-		return serviceerror.NewInvalidArgument("deployment name cannot be empty")
+
+	// Validate deployment name
+	err := ValidateDeploymentVersionFields(WorkerDeploymentNameFieldName, version.GetDeploymentName(), maxIDLengthLimit)
+	if err != nil {
+		return err
 	}
-	if version.GetBuildId() == "" {
-		return serviceerror.NewInvalidArgument("build id cannot be empty")
+
+	// Validate build ID
+	err = ValidateDeploymentVersionFields(WorkerDeploymentBuildIDFieldName, version.GetBuildId(), maxIDLengthLimit)
+	if err != nil {
+		return err
 	}
+
+	return nil
+}
+
+// ValidateDeploymentVersionFields is a helper that verifies if the fields within a
+// Worker Deployment Version are valid
+func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLengthLimit int) error {
+	// Length checks
+	if field == "" {
+		return serviceerror.NewInvalidArgumentf("%v cannot be empty", fieldName)
+	}
+
+	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
+	// Note: Using the same initial size for both the fields since they are used together to generate the version workflow's ID
+	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
+		return serviceerror.NewInvalidArgumentf("size of %v larger than the maximum allowed", fieldName)
+	}
+
+	// deploymentName cannot have "."
+	// TODO: remove this restriction once the old version strings are completely cleaned from external and internal API
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionIDDelimiterV31) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionIDDelimiterV31)
+	}
+	// deploymentName cannot have ":"
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionWorkflowIDDelimeter) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionWorkflowIDDelimeter)
+	}
+
+	// buildID or deployment name cannot start with "__"
+	if strings.HasPrefix(field, "__") {
+		return serviceerror.NewInvalidArgumentf("%v cannot start with '__'", fieldName)
+	}
+
 	return nil
 }
 
@@ -767,6 +801,8 @@ func ValidateTaskVersionDirective(
 	wfDeployment *deploymentpb.Deployment,
 	scheduledDeployment *deploymentpb.Deployment,
 ) error {
+	// TODO: consider using activity and wft Stamp for simplifying validation here.
+
 	// Effective behavior and deployment of the workflow when History scheduled the WFT.
 	directiveBehavior := directive.GetBehavior()
 	if directiveBehavior != wfBehavior &&
@@ -879,32 +915,32 @@ func WorkerDeploymentVersionToStringV31(v *deploymentspb.WorkerDeploymentVersion
 	if v == nil {
 		return UnversionedVersionId
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiterV31 + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionIDDelimiterV31 + v.GetBuildId()
 }
 
 func WorkerDeploymentVersionToStringV32(v *deploymentspb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return ""
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionWorkflowIDDelimeter + v.GetBuildId()
 }
 
 func BuildIDToStringV32(deploymentName, buildID string) string {
-	return deploymentName + WorkerDeploymentVersionIdDelimiter + buildID
+	return deploymentName + WorkerDeploymentVersionWorkflowIDDelimeter + buildID
 }
 
 func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return ""
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionWorkflowIDDelimeter + v.GetBuildId()
 }
 
 func ExternalWorkerDeploymentVersionToStringV31(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return UnversionedVersionId
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiterV31 + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionIDDelimiterV31 + v.GetBuildId()
 }
 
 func ExternalWorkerDeploymentVersionFromStringV31(s string) *deploymentpb.WorkerDeploymentVersion {
@@ -925,11 +961,11 @@ func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploy
 	if s == UnversionedVersionId {
 		return nil, nil
 	}
-	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiterV31)
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionIDDelimiterV31)
 	// Also try parsing via the v32 delimiter in case user is using an old CLI/SDK but passing new version strings.
-	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
+	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
 	if !found && !found32 {
-		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionIdDelimiter, WorkerDeploymentVersionIdDelimiterV31, s)
+		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31, s)
 	}
 	if found && found32 && len(before32) < len(before) {
 		// choose the values based on the delimiter appeared first to ensure that deployment name does not contain any of the banned delimiters
@@ -952,9 +988,9 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 	if s == UnversionedVersionId {
 		return nil, nil
 	}
-	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
 	if !found {
-		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionIdDelimiter, s)
+		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, s)
 	}
 	if len(before) == 0 {
 		return nil, fmt.Errorf("deployment name is empty in version string %s", s)
@@ -966,25 +1002,4 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 		DeploymentName: before,
 		BuildId:        after,
 	}, nil
-}
-
-// GenerateDeploymentWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment workflows
-func GenerateDeploymentWorkflowID(deploymentName string) string {
-	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + deploymentName
-}
-
-func GetDeploymentNameFromWorkflowID(workflowID string) string {
-	_, deploymentName, _ := strings.Cut(workflowID, WorkerDeploymentVersionWorkflowIDDelimeter)
-	return deploymentName
-}
-
-// GenerateVersionWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment Version workflows
-func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	versionString := ExternalWorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
-	})
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + versionString
 }

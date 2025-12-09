@@ -7,7 +7,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -44,9 +44,9 @@ var (
 	maxDatetimeValue = getMaxDatetimeValue()
 
 	closeTimeSaColName = newSAColName(
-		searchattribute.GetSqlDbColName(searchattribute.CloseTime),
-		searchattribute.CloseTime,
-		searchattribute.CloseTime,
+		sadefs.GetSqlDbColName(sadefs.CloseTime),
+		sadefs.CloseTime,
+		sadefs.CloseTime,
 		enumspb.INDEXED_VALUE_TYPE_DATETIME,
 	)
 )
