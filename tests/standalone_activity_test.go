@@ -15,7 +15,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -51,10 +50,10 @@ func TestStandaloneActivityTestSuite(t *testing.T) {
 
 func (s *standaloneActivityTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuite()
-	s.OverrideDynamicConfig(
-		dynamicconfig.EnableChasm,
-		true,
-	)
+	//s.OverrideDynamicConfig(
+	//	dynamicconfig.EnableChasm,
+	//	true,
+	//)
 }
 
 func (s *standaloneActivityTestSuite) SetupTest() {

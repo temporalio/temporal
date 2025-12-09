@@ -141,7 +141,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 		10*time.Millisecond)
 
 	// Enable CHASM mid-workflow
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
 	// Unblock the workflow by sending the continue signal
@@ -192,7 +191,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	)
 
 	// Enable CHASM for this test
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
 	tv := testvars.New(s.T())
@@ -423,7 +421,6 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 		10*time.Millisecond)
 
 	// Enable CHASM mid-workflow
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 
 	// Add a second callback using the USE_EXISTING conflict policy

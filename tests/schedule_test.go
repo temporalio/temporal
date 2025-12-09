@@ -102,7 +102,6 @@ func (s *ScheduleV1FunctionalSuite) SetupTest() {
 }
 
 func (s *scheduleFunctionalSuiteBase) SetupTest() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"})
 	s.FunctionalTestBase.SetupTest()
 	s.dataConverter = testcore.NewTestDataConverter()

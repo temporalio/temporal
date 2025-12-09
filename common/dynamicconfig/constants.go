@@ -2636,7 +2636,7 @@ that task will be sent to DLQ.`,
 
 	EnableChasm = NewNamespaceBoolSetting(
 		"history.enableChasm",
-		false,
+		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
 
