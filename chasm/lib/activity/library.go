@@ -20,7 +20,13 @@ func (l *componentOnlyLibrary) Name() string {
 
 func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Activity]("activity"),
+		chasm.NewRegistrableComponent[*Activity]("activity",
+			chasm.WithSearchAttributes(
+				ActivityTypeSearchAttribute,
+				TaskQueueSearchAttribute,
+				ActivityStatusSearchAttribute,
+			),
+		),
 	}
 }
 

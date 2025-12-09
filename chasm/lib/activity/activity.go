@@ -20,9 +20,25 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/payload"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const (
+	ActivityTypeSAAlias   = "ActivityType"
+	TaskQueueSAAlias      = "TaskQueue"
+	ActivityStatusSAAlias = "ActivityStatus"
+)
+
+var (
+	ActivityTypeSearchAttribute   = chasm.NewSearchAttributeKeyword(ActivityTypeSAAlias, chasm.SearchAttributeFieldKeyword01)
+	TaskQueueSearchAttribute      = chasm.NewSearchAttributeKeyword(TaskQueueSAAlias, chasm.SearchAttributeFieldKeyword02)
+	ActivityStatusSearchAttribute = chasm.NewSearchAttributeKeyword(ActivityStatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
+)
+
+var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
+var _ chasm.VisibilityMemoProvider = (*Activity)(nil)
 
 type ActivityStore interface {
 	// PopulateRecordStartedResponse populates the response for RecordActivityTaskStarted
@@ -637,4 +653,24 @@ func (a *Activity) validateActivityTaskToken(
 		return serviceerror.NewNotFound("activity task not found")
 	}
 	return nil
+}
+
+// SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
+// Returns the current search attribute values for this activity execution.
+func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
+	return []chasm.SearchAttributeKeyValue{
+		ActivityTypeSearchAttribute.Value(a.ActivityType.GetName()),
+		TaskQueueSearchAttribute.Value(a.TaskQueue.GetName()),
+		ActivityStatusSearchAttribute.Value(a.Status.String()),
+	}
+}
+
+// Memo implements chasm.VisibilityMemoProvider interface.
+// Returns the memo data to be stored in visibility for list responses.
+func (a *Activity) Memo(_ chasm.Context) proto.Message {
+	return &activitypb.ActivityListMemo{
+		ActivityType: a.ActivityType.GetName(),
+		TaskQueue:    a.TaskQueue.Name,
+		Status:       a.Status,
+	}
 }

@@ -38,6 +38,12 @@ func ResolveSearchAttributeAlias(
 			return sadefs.WorkflowID, saType, nil
 		}
 
+		// Handle ActivityId → WorkflowID transformation for standalone activities
+		if name == sadefs.ActivityId {
+			saType, _ := saTypeMap.GetType(sadefs.WorkflowID)
+			return sadefs.WorkflowID, saType, nil
+		}
+
 		fieldName, fieldType = tryChasmMapper(name, chasmMapper)
 		if fieldName != "" {
 			return fieldName, fieldType, nil
