@@ -522,6 +522,46 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		Messages:                   historyResponse.Messages,
 		History:                    historyResponse.History,
 		NextPageToken:              historyResponse.NextPageToken,
+		RawHistory:                 historyResponse.RawHistory,
+	}
+
+	return matchingResp
+}
+
+// CreateMatchingPollWorkflowTaskQueueResponseWithRawHistory create response with raw history for matching's PollWorkflowTaskQueue
+// This function handles two cases based on which history fields are populated by history service:
+// Priority 1: RawHistoryBytes (when feature flag is enabled) - use as-is without serialization
+// Priority 2: History (when feature flag is disabled) - serialize to bytes
+func CreateMatchingPollWorkflowTaskQueueResponseWithRawHistory(historyResponse *historyservice.RecordWorkflowTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
+	matchingResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
+		TaskToken:                  token,
+		WorkflowExecution:          workflowExecution,
+		WorkflowType:               historyResponse.WorkflowType,
+		PreviousStartedEventId:     historyResponse.PreviousStartedEventId,
+		StartedEventId:             historyResponse.StartedEventId,
+		Attempt:                    historyResponse.GetAttempt(),
+		NextEventId:                historyResponse.NextEventId,
+		StickyExecutionEnabled:     historyResponse.StickyExecutionEnabled,
+		TransientWorkflowTask:      historyResponse.TransientWorkflowTask,
+		WorkflowExecutionTaskQueue: historyResponse.WorkflowExecutionTaskQueue,
+		BranchToken:                historyResponse.BranchToken,
+		ScheduledTime:              historyResponse.ScheduledTime,
+		StartedTime:                historyResponse.StartedTime,
+		Queries:                    historyResponse.Queries,
+		Messages:                   historyResponse.Messages,
+		NextPageToken:              historyResponse.NextPageToken,
+	}
+
+	// Priority 1: Use RawHistoryBytes if available (optimized path when feature flag is enabled).
+	// History service populates this field with raw bytes that were NOT auto-deserialized.
+	// We store it in the raw_history field (field 22) which frontend will auto-deserialize.
+	if len(historyResponse.RawHistoryBytes) > 0 {
+		matchingResp.RawHistory = historyResponse.RawHistoryBytes
+	} else if historyResponse.History != nil {
+		// Priority 2: Use History if available (when feature flag is disabled).
+		// History service populates the History field when feature flag is disabled.
+		// We just pass it through in the history field (field 19) without serialization.
+		matchingResp.History = historyResponse.History
 	}
 
 	return matchingResp

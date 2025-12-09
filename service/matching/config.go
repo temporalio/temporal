@@ -124,7 +124,8 @@ type (
 
 		FairnessCounter dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
 
-		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		LogAllReqErrors                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		SendRawHistoryBetweenInternalServices dynamicconfig.BoolPropertyFn
 	}
 
 	forwarderConfig struct {
@@ -333,7 +334,8 @@ func NewConfig(
 
 		FairnessCounter: dynamicconfig.MatchingFairnessCounter.Get(dc),
 
-		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+		LogAllReqErrors:                       dynamicconfig.LogAllReqErrors.Get(dc),
+		SendRawHistoryBetweenInternalServices: dynamicconfig.SendRawHistoryBetweenInternalServices.Get(dc),
 	}
 }
 
