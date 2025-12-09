@@ -987,14 +987,14 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 	m.ms.SetWorkflowTaskStartToCloseTimeoutTask(nil)
 
 	resetWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
-		Version:                  common.EmptyVersion,
-		ScheduledEventID:         common.EmptyEventID,
-		StartedEventID:           common.EmptyEventID,
-		RequestID:                emptyUUID,
-		WorkflowTaskTimeout:      time.Duration(0),
-		Attempt:                  1,
-		StartedTime:              time.Unix(0, 0).UTC(),
-		ScheduledTime:            time.Unix(0, 0).UTC(),
+		Version:             common.EmptyVersion,
+		ScheduledEventID:    common.EmptyEventID,
+		StartedEventID:      common.EmptyEventID,
+		RequestID:           emptyUUID,
+		WorkflowTaskTimeout: time.Duration(0),
+		Attempt:             1,
+		StartedTime:         time.Unix(0, 0).UTC(),
+		ScheduledTime:       time.Unix(0, 0).UTC(),
 
 		TaskQueue: nil,
 		// Keep the last original scheduled Timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
