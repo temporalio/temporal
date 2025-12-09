@@ -408,6 +408,11 @@ func generateStateReplicationTask(
 	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
 	case nil:
+		if ms != nil {
+			if ms.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+				return nil, nil
+			}
+		}
 		return action(ms, release) // do not access mutable state after this point
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil
