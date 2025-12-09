@@ -127,6 +127,13 @@ func telemetryUnaryOverrideOperationTag(fullName, operation string, req any) str
 		}
 		return operation
 	} else if strings.HasPrefix(fullName, api.HistoryServicePrefix) {
+		// Special handling for Nexus operations to include service and operation in metric tag since the API is generic for all Nexus operations.
+		if request, ok := req.(*historyservice.StartNexusOperationRequest); ok {
+			return "StartNexusOperation_" + request.GetRequest().GetService() + "_" + request.GetRequest().GetOperation()
+		}
+		if request, ok := req.(*historyservice.CancelNexusOperationRequest); ok {
+			return "CancelNexusOperation_" + request.GetRequest().GetService() + "_" + request.GetRequest().GetOperation()
+		}
 		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 		// remove this "if" case when that is done.

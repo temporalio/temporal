@@ -135,11 +135,14 @@ func readTasks(
 
 func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
 	// TODO: find a better way to create a history handler
-	historyHandler := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
+	historyHandler, err := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
 		TaskQueueManager:     historyTaskQueueManager,
 		TracerProvider:       fakeTracerProvider{},
 		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
 	})
+	if err != nil {
+		panic(err) // nolint:forbidigo // Panic is acceptable in test setup code.
+	}
 	grpcServer := grpc.NewServer()
 	historyservice.RegisterHistoryServiceServer(grpcServer, historyHandler)
 	return grpcServer

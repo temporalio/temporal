@@ -62,7 +62,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -757,7 +756,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		}
 	}
-	startLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(link)
+	startLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(link)
 
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:

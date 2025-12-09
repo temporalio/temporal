@@ -24,6 +24,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protopath"
@@ -732,4 +734,32 @@ func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string
 		}
 	}
 	return "", serviceerror.NewInternal("field not found in the struct")
+}
+
+// IsRetryableRPCError checks if the error is a retryable gRPC error.
+func IsRetryableRPCError(err error) bool {
+	var st *status.Status
+	stGetter, ok := err.(interface{ Status() *status.Status })
+	if ok {
+		st = stGetter.Status()
+	} else {
+		st, ok = status.FromError(err)
+		if !ok {
+			// Not a gRPC induced error
+			return false
+		}
+	}
+	// nolint:exhaustive
+	switch st.Code() {
+	case codes.Canceled,
+		codes.Unknown,
+		codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Internal:
+		return true
+	default:
+		return false
+	}
 }
