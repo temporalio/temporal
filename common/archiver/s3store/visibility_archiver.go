@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/api/serviceerror"
@@ -66,13 +65,7 @@ func newVisibilityArchiver(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	config *config.S3Archiver) (*visibilityArchiver, error) {
-	s3Config := &aws.Config{
-		Endpoint:         config.Endpoint,
-		Region:           aws.String(config.Region),
-		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
-		LogLevel:         (*aws.LogLevelType)(&config.LogLevel),
-	}
-	sess, err := session.NewSession(s3Config)
+	sess, err := createS3Session(config)
 	if err != nil {
 		return nil, err
 	}
