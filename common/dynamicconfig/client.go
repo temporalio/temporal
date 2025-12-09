@@ -88,9 +88,9 @@ type (
 		Namespace     string
 		NamespaceID   string
 		TaskQueueName string
+		Destination   string
 		TaskQueueType enumspb.TaskQueueType
 		ShardID       int32
 		TaskType      enumsspb.TaskType
-		Destination   string
 	}
 )
