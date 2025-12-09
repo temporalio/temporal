@@ -12,10 +12,6 @@ var Module = fx.Options(
 	fx.Provide(NewTestHooks),
 )
 
-type testHooksData struct {
-	m sync.Map
-}
-
 // TestHooks holds a registry of active test hooks. It should be obtained through fx and
 // used with Get and Set.
 //
@@ -23,11 +19,11 @@ type testHooksData struct {
 // concerns into production code. In general you should prefer other ways of writing tests
 // wherever possible, and only use TestHooks sparingly, as a last resort.
 type TestHooks struct {
-	data *testHooksData
+	data *sync.Map
 }
 
 func NewTestHooks() TestHooks {
-	return TestHooks{data: &testHooksData{}}
+	return TestHooks{data: &sync.Map{}}
 }
 
 // Get gets the value of a test hook from the registry.
@@ -38,7 +34,7 @@ func Get[T any](th TestHooks, key Key) (T, bool) {
 	if th.data == nil {
 		return zero, false
 	}
-	if val, ok := th.data.m.Load(key); ok {
+	if val, ok := th.data.Load(key); ok {
 		// this is only used in test so we want to panic on type mismatch:
 		return val.(T), ok //nolint:revive
 	}
@@ -57,6 +53,6 @@ func Call(th TestHooks, key Key) {
 // Set sets a test hook to a value and returns a cleanup function to unset it.
 // Calls to Set and the cleanup function should form a stack.
 func Set[T any](th TestHooks, key Key, val T) func() {
-	th.data.m.Store(key, val)
-	return func() { th.data.m.Delete(key) }
+	th.data.Store(key, val)
+	return func() { th.data.Delete(key) }
 }
