@@ -243,44 +243,23 @@ func SetupNewWorkflowForRetryOrCron(
 		}
 	}
 
-	// Retries and Cron workflows initiated by workflows with a Pinning Behavior (Pinned or PinnedUntilContinueAsNew) will inherit
-	// the initiator's version if the resulting workflow's Task Queue belongs to that version.
 	var pinnedOverride *workflowpb.VersioningOverride
-	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) &&
-		worker_versioning.BehaviorIsPinning(GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo())) {
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
 		pinnedOverride = o
 		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
 	}
 
-	// New run initiated by workflow Cron will never inherit a non-override version.
+	// New run initiated by workflow Cron will never inherit.
 	//
-	// New run initiated by workflow Retry will only inherit if the retried run is effectively Pinned or PinnedUntilContinueAsNew
-	// at the time of retry, and the retried run inherited a pinned version when it started (ie. it is a child of a parent
-	// with Pinned or PinnedUntilContinueAsNew behavior, or a CaN of run with Pinned behavior, and is running on a Task
-	// Queue in the inherited version).
+	// New run initiated by workflow Retry will only inherit if the retried run is effectively pinned at the time
+	// of retry, and the retried run inherited a pinned version when it started (ie. it is a child of a pinned
+	// parent, or a CaN of a pinned run, and is running on a Task Queue in the inherited version).
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
-	// If the previous run had an AutoUpgrade behavior, we pass down the source deployment version and revision number to the new run.
-	// Note: We only pass down one of inheritedPinnedVersion or inheritedAutoUpgradeInfo, but not both!
-	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
-
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY &&
+		GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		startAttr.GetInheritedPinnedVersion() != nil {
+		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
 		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
-
-		if worker_versioning.BehaviorIsPinning(GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo())) &&
-			startAttr.GetInheritedPinnedVersion() != nil {
-			inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
-		} else if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
-			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
-
-			// Only set inherited auto upgrade info if source deployment version and revision number are not nil.
-			if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
-				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
-					SourceDeploymentVersion:        sourceDeploymentVersion,
-					SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
-				}
-			}
-		}
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -334,7 +313,6 @@ func SetupNewWorkflowForRetryOrCron(
 		RootExecutionInfo:        rootInfo,
 		InheritedBuildId:         startAttr.InheritedBuildId,
 		InheritedPinnedVersion:   inheritedPinnedVersion,
-		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

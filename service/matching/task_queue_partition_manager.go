@@ -1045,7 +1045,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		targetDeployment = worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)
 	}
 
-	if worker_versioning.BehaviorIsPinning(wfBehavior) {
+	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
 			return pm.defaultQueue, pm.defaultQueue, userDataChanged, 0, targetDeploymentVersion, nil

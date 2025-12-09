@@ -466,18 +466,10 @@ func ValidateDeploymentVersionStringV31(version string) (*deploymentspb.WorkerDe
 	return v, nil
 }
 
-// OverrideIsPinned is true if the override behavior is any of the Pinned override behaviors.
 func OverrideIsPinned(override *workflowpb.VersioningOverride) bool {
 	//nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
 	return override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED ||
-		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED
-}
-
-func BehaviorIsPinning(behavior enumspb.VersioningBehavior) bool {
-	if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED || behavior == enumspb.VERSIONING_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW {
-		return true
-	}
-	return false
+		override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED
 }
 
 func GetOverridePinnedVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
@@ -510,17 +502,12 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override.GetAutoUpgrade() { // v0.32
 		return nil
 	} else if p := override.GetPinned(); p != nil {
-		switch p.GetBehavior() {
-		case workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED:
-			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
-		case workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_KEEP_IF_PINNING:
-			if p.GetIfNotPinning() == workflowpb.VersioningOverride_NON_PINNING_POLICY_UNSPECIFIED {
-				return serviceerror.NewInvalidArgument("must specify non-pinning policy if behavior is 'KEEP_IF_PINNING'")
-			}
+		if p.GetVersion() == nil {
+			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
 		}
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
+			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-
 		return nil
 	}
 

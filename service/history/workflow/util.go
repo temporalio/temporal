@@ -249,30 +249,7 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 			if override.GetAutoUpgrade() {
 				return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 			}
-			switch override.GetPinned().GetBehavior() {
-			case workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED, workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED:
-				return enumspb.VERSIONING_BEHAVIOR_PINNED
-			case workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW:
-				return enumspb.VERSIONING_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW
-			case workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_KEEP_IF_PINNING:
-				if versioningInfo.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED ||
-					versioningInfo.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW {
-					return versioningInfo.GetBehavior()
-				} else {
-					switch override.GetPinned().GetIfNotPinning() {
-					case workflowpb.VersioningOverride_NON_PINNING_POLICY_REJECT, workflowpb.VersioningOverride_NON_PINNING_POLICY_UNSPECIFIED:
-						// this should never happen, but if it does, treat it as ignore
-						//TODO(carlydf): do an antithesis-compatible assertion here
-						return versioningInfo.GetBehavior()
-					case workflowpb.VersioningOverride_NON_PINNING_POLICY_IGNORE:
-						return versioningInfo.GetBehavior()
-					case workflowpb.VersioningOverride_NON_PINNING_POLICY_PINNED:
-						return enumspb.VERSIONING_BEHAVIOR_PINNED
-					case workflowpb.VersioningOverride_NON_PINNING_POLICY_PINNED_UNTIL_CONTINUE_AS_NEW:
-						return enumspb.VERSIONING_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW
-					}
-				}
-			}
+			return enumspb.VERSIONING_BEHAVIOR_PINNED
 		}
 		return override.GetBehavior() // //nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
 	}

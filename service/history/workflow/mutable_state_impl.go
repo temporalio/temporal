@@ -2445,12 +2445,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// the first matching task-queue-in-version check.
 	newTQInPinnedVersion := false
 
-	// New run initiated by workflow ContinueAsNew of a Pinned run, will inherit the previous run's version if the
-	// new run's Task Queue belongs to that version.
-	// If the initiating workflow is PinnedUntilContinueAsNew, the new run will start as AutoUpgrade in the first task
-	// and then assume the SDK-sent behavior on first workflow task completion.
+	// By default, the new run initiated by workflow ContinueAsNew of a Pinned run, will inherit the previous run's
+	// version if the new run's Task Queue belongs to that version.
+	// If the continue-as-new command says to use InitialVersioningBehavior AutoUpgrade, the new run will start as
+	// AutoUpgrade in the first task and then assume the SDK-sent behavior on first workflow task completion.
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
-	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		command.GetInitialVersioningBehavior() != enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() {
@@ -2465,8 +2466,6 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
-	// For continue-as-new, the effective versioning behavior of the workflow must be strictly Pinned (not
-	// PinnedUntilContinueAsNew) to inherit the pinned override version.
 	var pinnedOverride *workflowpb.VersioningOverride
 	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) &&
 		GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED {
@@ -2477,13 +2476,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
-	// New run initiated by ContinueAsNew of an AUTO_UPGRADE or PINNED_UNTIL_CONTINUE_AS_NEW workflow execution will
-	// inherit the previous run's deployment version and revision number iff the new run's Task Queue belongs to the
-	// source deployment version.
+	// New run initiated by ContinueAsNew of an AUTO_UPGRADE workflow execution will inherit the previous run's
+	// deployment version and revision number iff the new run's Task Queue belongs to the source deployment version.
 	var sourceDeploymentVersion *deploymentpb.WorkerDeploymentVersion
 	var sourceDeploymentRevisionNumber int64
 	if previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE ||
-		previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW {
+		(previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+			command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE) {
 		sourceDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousExecutionState.GetEffectiveDeployment())
 		sourceDeploymentRevisionNumber = previousExecutionState.GetVersioningRevisionNumber()
 
@@ -2875,7 +2874,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		}
 		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedPinnedVersion()
-		// TODO(carlydf): Can't just assume this anymore -- the behavior might need to be PINNED_UNTIL_CONTINUE_AS_NEW, could add a new field called InheritedPinningBehavior.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	}
 
@@ -2917,7 +2915,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		}
 		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
-		// TODO(carlydf): Decide whether it's ok for continued-as-new workflows whose previous workflow had PINNED_UNTIL_CONTINUE_AS_NEW behavior to start with AUTO_UPGRADE behavior, or if they should instead start with blank or PINNED_UNTIL_CONTINUE_AS_NEW behavior.
 		// Assume AutoUpgrade behavior for the first workflow task.
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	}

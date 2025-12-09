@@ -481,7 +481,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	if m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED_UNTIL_CONTINUE_AS_NEW && targetDeploymentVersion != nil {
+	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
 			currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName {
 			suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
