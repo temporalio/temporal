@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -18,7 +17,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -411,7 +409,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 func (s *VisibilityStore) CountChasmExecutions(
 	ctx context.Context,
 	request *manager.CountChasmExecutionsRequest,
-) (*manager.CountChasmExecutionsResponse, error) {
+) (*store.InternalCountExecutionsResponse, error) {
 	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeID)
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeID))
@@ -433,18 +431,22 @@ func (s *VisibilityStore) CountChasmExecutions(
 		queryParams = (*esQueryParams)(queryParamsLegacy)
 	}
 
+	if len(queryParams.GroupBy) > 0 {
+		return s.countGroupByExecutions(ctx, queryParams, mapper)
+	}
+
 	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
 	if err != nil {
 		return nil, ConvertElasticsearchClientError("CountChasmExecutions failed", err)
 	}
 
-	return &manager.CountChasmExecutionsResponse{Count: count}, nil
+	return &store.InternalCountExecutionsResponse{Count: count}, nil
 }
 
 func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
-) (*manager.CountWorkflowExecutionsResponse, error) {
+) (*store.InternalCountExecutionsResponse, error) {
 	var queryParams *esQueryParams
 	var err error
 	if s.enableUnifiedQueryConverter() {
@@ -461,7 +463,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	}
 
 	if len(queryParams.GroupBy) > 0 {
-		return s.countGroupByWorkflowExecutions(ctx, queryParams)
+		return s.countGroupByExecutions(ctx, queryParams, nil)
 	}
 
 	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
@@ -469,14 +471,14 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err)
 	}
 
-	response := &manager.CountWorkflowExecutionsResponse{Count: count}
-	return response, nil
+	return &store.InternalCountExecutionsResponse{Count: count}, nil
 }
 
-func (s *VisibilityStore) countGroupByWorkflowExecutions(
+func (s *VisibilityStore) countGroupByExecutions(
 	ctx context.Context,
 	queryParams *esQueryParams,
-) (*manager.CountWorkflowExecutionsResponse, error) {
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+) (*store.InternalCountExecutionsResponse, error) {
 	groupByFields := queryParams.GroupBy
 
 	// Elasticsearch aggregation is nested. so need to loop backwards to build it.
@@ -513,7 +515,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 	if err != nil {
 		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err)
 	}
-	return s.parseCountGroupByResponse(esResponse, groupByFields)
+	return s.parseCountGroupByResponse(esResponse, groupByFields, chasmMapper)
 }
 
 func (s *VisibilityStore) GetWorkflowExecution(
@@ -996,10 +998,7 @@ func (s *VisibilityStore) ParseESDoc(
 		return nil, serviceerror.NewInternalf("unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err)
 	}
 
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, saTypeMap.Custom())
-	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
-	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+	combinedTypeMap := store.CombineTypeMaps(saTypeMap, chasmMapper)
 
 	var (
 		isValidType         bool
@@ -1031,7 +1030,7 @@ func (s *VisibilityStore) ParseESDoc(
 			continue
 		}
 
-		fieldType, err := finalTypeMap.GetType(fieldName)
+		fieldType, err := combinedTypeMap.GetType(fieldName)
 		if err != nil {
 			// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
 			if errors.Is(err, searchattribute.ErrInvalidName) {
@@ -1092,7 +1091,7 @@ func (s *VisibilityStore) ParseESDoc(
 	}
 
 	var err error
-	record.SearchAttributes, err = searchattribute.Encode(allSearchAttributes, &finalTypeMap)
+	record.SearchAttributes, err = searchattribute.Encode(allSearchAttributes, &combinedTypeMap)
 	if err != nil {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf(
@@ -1123,17 +1122,21 @@ func (s *VisibilityStore) ParseESDoc(
 func (s *VisibilityStore) parseCountGroupByResponse(
 	searchResult *elastic.SearchResult,
 	groupByFields []string,
-) (*manager.CountWorkflowExecutionsResponse, error) {
-	response := &manager.CountWorkflowExecutionsResponse{}
-	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+) (*store.InternalCountExecutionsResponse, error) {
+	response := &store.InternalCountExecutionsResponse{}
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(
 			"unable to read search attribute types: %v", err,
 		)
 	}
+
+	combinedTypeMap := store.CombineTypeMaps(saTypeMap, chasmMapper)
+
 	groupByTypes := make([]enumspb.IndexedValueType, len(groupByFields))
 	for i, saName := range groupByFields {
-		tp, err := typeMap.GetType(saName)
+		tp, err := combinedTypeMap.GetType(saName)
 		if err != nil {
 			return nil, err
 		}
@@ -1159,7 +1162,7 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 			copy(groupValues, bucketValues)
 			response.Groups = append(
 				response.Groups,
-				&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				store.InternalAggregationGroup{
 					GroupValues: groupValues,
 					Count:       cnt,
 				},

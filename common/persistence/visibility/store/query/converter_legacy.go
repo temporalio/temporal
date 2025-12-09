@@ -4,13 +4,13 @@ package query
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/sqlquery"
 )
@@ -51,7 +51,7 @@ type (
 		fnInterceptor    FieldNameInterceptor
 		fvInterceptor    FieldValuesInterceptor
 		allowedOperators map[string]struct{}
-		finalTypeMap     searchattribute.NameTypeMap
+		combinedTypeMap  searchattribute.NameTypeMap
 		chasmMapper      *chasm.VisibilitySearchAttributesMapper
 	}
 
@@ -157,16 +157,13 @@ func NewComparisonExprConverter(
 		fvInterceptor = &NopFieldValuesInterceptor{}
 	}
 
-	combinedTypeMap := make(map[string]enumspb.IndexedValueType)
-	maps.Copy(combinedTypeMap, customSaNameType.Custom())
-	maps.Copy(combinedTypeMap, chasmMapper.SATypeMap())
-	finalTypeMap := searchattribute.NewNameTypeMap(combinedTypeMap)
+	combinedTypeMap := store.CombineTypeMaps(customSaNameType, chasmMapper)
 
 	return &comparisonExprConverter{
 		fnInterceptor:    fnInterceptor,
 		fvInterceptor:    fvInterceptor,
 		allowedOperators: allowedOperators,
-		finalTypeMap:     finalTypeMap,
+		combinedTypeMap:  combinedTypeMap,
 		chasmMapper:      chasmMapper,
 	}
 }
@@ -462,7 +459,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		return nil, NewConverterError("operator '%v' not allowed in comparison expression", comparisonExpr.Operator)
 	}
 
-	tp, err := c.finalTypeMap.GetType(colName)
+	tp, err := c.combinedTypeMap.GetType(colName)
 	if err != nil {
 		return nil, err
 	}

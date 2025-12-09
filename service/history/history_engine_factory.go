@@ -44,6 +44,7 @@ type (
 		ReplicationDLQWriter            replication.DLQWriter
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 	}
 
@@ -77,6 +78,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ReplicationDLQWriter,
 		f.CommandHandlerRegistry,
 		f.OutboundQueueCBPool,
+		f.PersistenceRateLimiter,
 		f.TestHooks,
 	)
 }
