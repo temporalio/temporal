@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
@@ -162,6 +163,7 @@ func NewEngineWithShardContext(
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 ) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -255,6 +257,7 @@ func NewEngineWithShardContext(
 			workflowCache,
 			historyEngImpl.eventsReapplier,
 			eventSerializer,
+			persistenceRateLimiter,
 			logger,
 		)
 		historyEngImpl.nDCHSMStateReplicator = ndc.NewHSMStateReplicator(
