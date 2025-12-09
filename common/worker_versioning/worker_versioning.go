@@ -527,7 +527,32 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
-func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
+func validatePinnedVersionInTaskQueue(pinnedVersion *deploymentpb.WorkerDeploymentVersion,
+	matchingClient resource.MatchingClient,
+	tq *taskqueuepb.TaskQueue,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) error {
+
+	resp, err := matchingClient.CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		NamespaceId:   namespaceID,
+		TaskQueue:     tq,
+		TaskQueueType: tqType,
+		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(pinnedVersion)),
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.GetIsMember() {
+		return serviceerror.NewFailedPrecondition("Pinned version is not present in the task queue") // TODO (Shivam): Maybe make this message a bit better.
+	}
+	return nil
+}
+
+func ValidateVersioningOverride(override *workflowpb.VersioningOverride,
+	matchingClient resource.MatchingClient,
+	tq *taskqueuepb.TaskQueue,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) error {
 	if override == nil {
 		return nil
 	}
@@ -541,7 +566,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return nil
+		return validatePinnedVersionInTaskQueue(p.GetVersion(), matchingClient, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -551,7 +576,12 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 			return ValidateDeployment(override.GetDeployment())
 		} else if override.GetPinnedVersion() != "" {
 			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
-			return err
+			if err != nil {
+				return err
+			}
+
+			return validatePinnedVersionInTaskQueue(ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, tq, tqType, namespaceID)
+
 		} else {
 			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
 		}

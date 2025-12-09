@@ -8,11 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
@@ -140,6 +143,7 @@ type (
 
 		currentContext      *historyi.MockWorkflowContext
 		currentMutableState *historyi.MockMutableState
+		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
 	}
 )
 
@@ -185,6 +189,8 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 		s.shardContext,
 		s.workflowCache,
 	)
+
+	s.mockMatchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 }
 
 func (s *updateWorkflowOptionsSuite) TearDownTest() {
@@ -195,11 +201,24 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 
 	expectedOverrideOptions := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: "X.A",
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version: &deploymentpb.WorkerDeploymentVersion{
+						DeploymentName: "X",
+						BuildId:        "A",
+					},
+				},
+			},
 		},
 	}
 	s.currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMatchingClient.EXPECT().CheckTaskQueueVersionMembership(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+		IsMember: true,
+	}, nil)
 	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.VersioningOverride, false, "", nil, nil, "", expectedOverrideOptions.Priority).Return(&historypb.HistoryEvent{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
 
@@ -221,6 +240,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		updateReq,
 		s.shardContext,
 		s.workflowConsistencyChecker,
+		s.mockMatchingClient,
 	)
 	s.NoError(err)
 	s.NotNil(resp)

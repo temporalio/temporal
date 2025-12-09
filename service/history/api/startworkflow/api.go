@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -53,6 +55,7 @@ type Starter struct {
 	metricsHandler             metrics.Handler
 	shardContext               historyi.ShardContext
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
+	matchingClient             matchingservice.MatchingServiceClient
 	tokenSerializer            *tasktoken.Serializer
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
@@ -85,6 +88,7 @@ func NewStarter(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	request *historyservice.StartWorkflowExecutionRequest,
+	matchingClient matchingservice.MatchingServiceClient,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
@@ -97,6 +101,7 @@ func NewStarter(
 		metricsHandler:             nil,
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
+		matchingClient:             matchingClient,
 		tokenSerializer:            tokenSerializer,
 		request:                    request,
 		namespace:                  namespaceEntry,
@@ -126,6 +131,12 @@ func (s *Starter) prepare(ctx context.Context) error {
 	)
 
 	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
+	if err != nil {
+		return err
+	}
+
+	// Validation for versioning override, if any.
+	err = worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride(), s.matchingClient, request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
 	if err != nil {
 		return err
 	}

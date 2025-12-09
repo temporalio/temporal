@@ -1306,6 +1306,30 @@ func (s *DeploymentVersionSuite) setAndCheckOverride(ctx context.Context, tv *te
 	s.checkWorkflowUpdateOptionsEventIdentity(ctx, tv.WorkflowExecution(), tv.ClientIdentity())
 }
 
+// The following tests test the VersioningOverride functionality when passed via the UpdateWorkflowExecutionOptions API.
+func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_VersionDoesNotExist() {
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// start an unversioned workflow
+	s.startWorkflow(tv, nil)
+
+	opts := &workflowpb.WorkflowExecutionOptions{VersioningOverride: s.makePinnedOverride(tv)}
+
+	// Setting a pinned override should fail since the version does not exist
+	resp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace().String(),
+		WorkflowExecution:        tv.WorkflowExecution(),
+		WorkflowExecutionOptions: opts,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+		Identity:                 tv.ClientIdentity(),
+	})
+	s.Error(err)
+	s.Nil(resp)
+}
+
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
