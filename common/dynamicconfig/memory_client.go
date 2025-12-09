@@ -3,8 +3,6 @@ package dynamicconfig
 import (
 	"sync"
 	"sync/atomic"
-
-	expmaps "golang.org/x/exp/maps"
 )
 
 type (
@@ -12,8 +10,7 @@ type (
 		lock      sync.RWMutex
 		overrides []kvpair
 
-		subscriptionIdx int
-		subscriptions   map[int]ClientUpdateFunc
+		NotifyingClientImpl
 	}
 
 	kvpair struct {
@@ -25,7 +22,7 @@ type (
 
 // NewMemoryClient - returns a memory based dynamic config client
 func NewMemoryClient() *MemoryClient {
-	return &MemoryClient{subscriptions: make(map[int]ClientUpdateFunc)}
+	return &MemoryClient{NotifyingClientImpl: NewNotifyingClientImpl()}
 }
 
 func (d *MemoryClient) GetValue(key Key) []ConstrainedValue {
@@ -47,21 +44,6 @@ func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
 	return nil
 }
 
-func (d *MemoryClient) Subscribe(f ClientUpdateFunc) (cancel func()) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	d.subscriptionIdx++
-	id := d.subscriptionIdx
-	d.subscriptions[id] = f
-
-	return func() {
-		d.lock.Lock()
-		defer d.lock.Unlock()
-		delete(d.subscriptions, id)
-	}
-}
-
 func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (cleanup func()) {
 	return d.OverrideValue(setting.Key(), value)
 }
@@ -76,14 +58,11 @@ func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
 
 	newValue := d.getValueLocked(key)
 	changed := map[Key][]ConstrainedValue{key: newValue}
-	subscriptions := expmaps.Values(d.subscriptions)
 
 	d.lock.Unlock()
 
 	// do not hold lock while notifying subscriptions
-	for _, update := range subscriptions {
-		update(changed)
-	}
+	d.PublishUpdates(changed)
 
 	return func() {
 		// only do this once
@@ -107,12 +86,9 @@ func (d *MemoryClient) remove(idx int) {
 
 	newValue := d.getValueLocked(key)
 	changed := map[Key][]ConstrainedValue{key: newValue}
-	subscriptions := expmaps.Values(d.subscriptions)
 
 	d.lock.Unlock()
 
 	// do not hold lock while notifying subscriptions
-	for _, update := range subscriptions {
-		update(changed)
-	}
+	d.PublishUpdates(changed)
 }

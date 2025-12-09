@@ -741,7 +741,7 @@ func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 // Sync version summary with the WorkerDeployment workflow.
 func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 	err := workflow.SignalExternalWorkflow(ctx,
-		worker_versioning.GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
+		GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
 		"",
 		SyncVersionSummarySignal,
 		versionStateToSummary(d.GetVersionState()),
@@ -1154,7 +1154,7 @@ func (d *VersionWorkflowRunner) executePropagationBatch(
 func (d *VersionWorkflowRunner) signalPropagationComplete(ctx workflow.Context, revisionNumber int64) {
 	err := workflow.SignalExternalWorkflow(
 		ctx,
-		worker_versioning.GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
+		GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
 		"",
 		PropagationCompleteSignal,
 		&deploymentspb.PropagationCompletionInfo{

@@ -192,31 +192,33 @@ CREATE TABLE chasm_search_attributes (
       '+00:00'
     )
   ),
-  TemporalDouble01          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble01"),
-  TemporalDouble02          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble02"),
-  TemporalInt01             BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt01"),
-  TemporalInt02             BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt02"),
-  TemporalKeyword01         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword01"),
-  TemporalKeyword02         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword02"),
-  TemporalKeyword03         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword03"),
-  TemporalKeyword04         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword04"),
-  TemporalKeywordList01     JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList01"),
-  TemporalKeywordList02     JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList02"),
+  TemporalDouble01                DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble01"),
+  TemporalDouble02                DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble02"),
+  TemporalInt01                   BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt01"),
+  TemporalInt02                   BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt02"),
+  TemporalKeyword01               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword01"),
+  TemporalKeyword02               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword02"),
+  TemporalKeyword03               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword03"),
+  TemporalKeyword04               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword04"),
+  TemporalLowCardinalityKeyword01 VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalLowCardinalityKeyword01"),
+  TemporalKeywordList01           JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList01"),
+  TemporalKeywordList02           JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList02"),
 
   PRIMARY KEY (namespace_id, run_id)
 );
 
-CREATE INDEX by_temporal_bool_01           ON chasm_search_attributes (namespace_id, TemporalBool01);
-CREATE INDEX by_temporal_bool_02           ON chasm_search_attributes (namespace_id, TemporalBool02);
-CREATE INDEX by_temporal_datetime_01       ON chasm_search_attributes (namespace_id, TemporalDatetime01);
-CREATE INDEX by_temporal_datetime_02       ON chasm_search_attributes (namespace_id, TemporalDatetime02);
-CREATE INDEX by_temporal_double_01         ON chasm_search_attributes (namespace_id, TemporalDouble01);
-CREATE INDEX by_temporal_double_02         ON chasm_search_attributes (namespace_id, TemporalDouble02);
-CREATE INDEX by_temporal_int_01            ON chasm_search_attributes (namespace_id, TemporalInt01);
-CREATE INDEX by_temporal_int_02            ON chasm_search_attributes (namespace_id, TemporalInt02);
-CREATE INDEX by_temporal_keyword_01        ON chasm_search_attributes (namespace_id, TemporalKeyword01);
-CREATE INDEX by_temporal_keyword_02        ON chasm_search_attributes (namespace_id, TemporalKeyword02);
-CREATE INDEX by_temporal_keyword_03        ON chasm_search_attributes (namespace_id, TemporalKeyword03);
-CREATE INDEX by_temporal_keyword_04        ON chasm_search_attributes (namespace_id, TemporalKeyword04);
-CREATE INDEX by_temporal_keyword_list_01   ON chasm_search_attributes (namespace_id, (CAST(TemporalKeywordList01 AS CHAR(255) ARRAY)));
-CREATE INDEX by_temporal_keyword_list_02   ON chasm_search_attributes (namespace_id, (CAST(TemporalKeywordList02 AS CHAR(255) ARRAY)));
+CREATE INDEX by_temporal_bool_01                    ON chasm_search_attributes (namespace_id, TemporalBool01);
+CREATE INDEX by_temporal_bool_02                    ON chasm_search_attributes (namespace_id, TemporalBool02);
+CREATE INDEX by_temporal_datetime_01                ON chasm_search_attributes (namespace_id, TemporalDatetime01);
+CREATE INDEX by_temporal_datetime_02                ON chasm_search_attributes (namespace_id, TemporalDatetime02);
+CREATE INDEX by_temporal_double_01                  ON chasm_search_attributes (namespace_id, TemporalDouble01);
+CREATE INDEX by_temporal_double_02                  ON chasm_search_attributes (namespace_id, TemporalDouble02);
+CREATE INDEX by_temporal_int_01                     ON chasm_search_attributes (namespace_id, TemporalInt01);
+CREATE INDEX by_temporal_int_02                     ON chasm_search_attributes (namespace_id, TemporalInt02);
+CREATE INDEX by_temporal_keyword_01                 ON chasm_search_attributes (namespace_id, TemporalKeyword01);
+CREATE INDEX by_temporal_keyword_02                 ON chasm_search_attributes (namespace_id, TemporalKeyword02);
+CREATE INDEX by_temporal_keyword_03                 ON chasm_search_attributes (namespace_id, TemporalKeyword03);
+CREATE INDEX by_temporal_keyword_04                 ON chasm_search_attributes (namespace_id, TemporalKeyword04);
+CREATE INDEX by_temporal_low_cardinality_keyword_01 ON chasm_search_attributes (namespace_id, TemporalLowCardinalityKeyword01);
+CREATE INDEX by_temporal_keyword_list_01            ON chasm_search_attributes (namespace_id, (CAST(TemporalKeywordList01 AS CHAR(255) ARRAY)));
+CREATE INDEX by_temporal_keyword_list_02            ON chasm_search_attributes (namespace_id, (CAST(TemporalKeywordList02 AS CHAR(255) ARRAY)));
