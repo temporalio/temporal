@@ -13,7 +13,7 @@ import "google/protobuf/timestamp.proto";
 
 // CHASM scheduler top-level state.
 message SchedulerState {
-    // Scheduler request parameters and metadata.
+    // Scheduler request parameters and metadata. 
     temporal.api.schedule.v1.Schedule schedule = 2;
     temporal.api.schedule.v1.ScheduleInfo info = 3;
 
