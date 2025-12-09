@@ -27,8 +27,8 @@ import (
 type (
 	WorkflowTaskReportedProblemsReplicationSuite struct {
 		xdcBaseSuite
-		shouldFail   atomic.Bool
-		failureCount atomic.Int32
+		shouldFail  atomic.Bool
+		stopSignals atomic.Bool
 	}
 )
 
@@ -290,6 +290,262 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.NoError(workflowRun.Get(ctx, &out))
 
 	// verify search attributes are cleared in cluster1 using the helper function
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[1].Host().AdminClient(),
+		standbyClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"",
+		"",
+		false,
+	)
+}
+
+func (s *WorkflowTaskReportedProblemsReplicationSuite) simpleActivity() (string, error) {
+	return "done!", nil
+}
+
+// workflowWithSignalsThatFails creates a workflow that listens for signals and fails on each workflow task.
+func (s *WorkflowTaskReportedProblemsReplicationSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) {
+	signalChan := workflow.GetSignalChannel(ctx, "test-signal")
+
+	var signalValue string
+	signalChan.Receive(ctx, &signalValue)
+
+	// Always fail after receiving a signal, unless shouldFail is false
+	if s.shouldFail.Load() {
+		panic("forced-panic-after-signal")
+	}
+
+	// If we reach here, shouldFail is false, so we can complete
+	return "done!", nil
+}
+
+// workflowWithActivity creates a workflow that executes an activity before potentially failing.
+func (s *WorkflowTaskReportedProblemsReplicationSuite) workflowWithActivity(ctx workflow.Context) (string, error) {
+	var ret string
+	err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 1 * time.Second,
+	}), s.simpleActivity).Get(ctx, &ret)
+	if err != nil {
+		return "", err
+	}
+
+	if s.shouldFail.Load() {
+		panic("forced-panic-to-fail-wft")
+	}
+
+	return "done!", nil
+}
+
+func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblems_NotClearedBySignals() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ns := s.createGlobalNamespace()
+	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+		Logger:    log.NewSdkLogger(s.logger),
+	})
+	s.NoError(err)
+
+	s.shouldFail.Store(true)
+	s.stopSignals.Store(false)
+
+	taskQueue := testcore.RandomizeStr("tq")
+	worker1 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
+	worker1.RegisterWorkflow(s.workflowWithSignalsThatFails)
+	s.NoError(worker1.Start())
+	defer worker1.Stop()
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wfid-" + s.T().Name()),
+		TaskQueue: taskQueue,
+	}
+
+	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.workflowWithSignalsThatFails)
+	s.NoError(err)
+
+	// Start sending signals every second in a goroutine
+	signalDone := make(chan struct{})
+	go func() {
+		defer close(signalDone)
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if s.stopSignals.Load() {
+					return
+				}
+				_ = activeSDKClient.SignalWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test-signal", "ping")
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// Wait for the search attribute to be set due to consecutive failures
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[0].Host().AdminClient(),
+		activeSDKClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"WorkflowTaskFailed",
+		"WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure",
+		true,
+	)
+
+	// Continue sending signals for a few more seconds and verify the search attribute is NOT removed
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		s.NoError(err)
+		saVal, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
+		s.True(ok, "Search attribute should still be present after receiving signals")
+		s.NotEmpty(saVal, "Search attribute should not be empty after receiving signals")
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// get standby client
+	standbyClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+	})
+	s.NoError(err)
+	s.NotNil(standbyClient)
+
+	// verify search attributes are replicated to cluster1
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[1].Host().AdminClient(),
+		standbyClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"WorkflowTaskFailed",
+		"WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure",
+		true,
+	)
+
+	// Stop signals and unblock the workflow for cleanup
+	s.stopSignals.Store(true)
+	s.shouldFail.Store(false)
+
+	// Send one final signal to trigger workflow completion
+	err = activeSDKClient.SignalWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test-signal", "final")
+	s.NoError(err)
+
+	var out string
+	s.NoError(workflowRun.Get(ctx, &out))
+
+	// Wait for signal goroutine to finish
+	<-signalDone
+
+	// Verify search attribute is cleared after successful completion in both clusters
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[0].Host().AdminClient(),
+		activeSDKClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"",
+		"",
+		false,
+	)
+
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[1].Host().AdminClient(),
+		standbyClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"",
+		"",
+		false,
+	)
+}
+
+func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblems_SetAndClear_FailAfterActivity() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	ns := s.createGlobalNamespace()
+	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+		Logger:    log.NewSdkLogger(s.logger),
+	})
+	s.NoError(err)
+
+	s.shouldFail.Store(true)
+
+	taskQueue := testcore.RandomizeStr("tq")
+	worker1 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
+	worker1.RegisterWorkflow(s.workflowWithActivity)
+	worker1.RegisterActivity(s.simpleActivity)
+	s.NoError(worker1.Start())
+	defer worker1.Stop()
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wfid-" + s.T().Name()),
+		TaskQueue: taskQueue,
+	}
+
+	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.workflowWithActivity)
+	s.NoError(err)
+
+	// Validate the search attributes are set after activity completes
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[0].Host().AdminClient(),
+		activeSDKClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"WorkflowTaskFailed",
+		"WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure",
+		true,
+	)
+
+	// get standby client
+	standbyClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+	})
+	s.NoError(err)
+	s.NotNil(standbyClient)
+
+	// verify search attributes are replicated to cluster1
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[1].Host().AdminClient(),
+		standbyClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"WorkflowTaskFailed",
+		"WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure",
+		true,
+	)
+
+	// Unblock the workflow
+	s.shouldFail.Store(false)
+
+	var out string
+	s.NoError(workflowRun.Get(ctx, &out))
+
+	// Verify search attribute is cleared after successful completion in both clusters
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[0].Host().AdminClient(),
+		activeSDKClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"",
+		"",
+		false,
+	)
+
 	s.checkReportedProblemsSearchAttribute(
 		s.clusters[1].Host().AdminClient(),
 		standbyClient,

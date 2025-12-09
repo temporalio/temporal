@@ -52,22 +52,15 @@ func (s *WFTFailureReportedProblemsTestSuite) simpleActivity() (string, error) {
 func (s *WFTFailureReportedProblemsTestSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) {
 	signalChan := workflow.GetSignalChannel(ctx, "test-signal")
 
-	for {
-		var signalValue string
-		more := signalChan.Receive(ctx, &signalValue)
-		if !more {
-			break
-		}
+	var signalValue string
+	signalChan.Receive(ctx, &signalValue)
 
-		// Always fail after receiving a signal
-		if s.shouldFail.Load() {
-			panic("forced-panic-after-signal")
-		}
-
-		// If we reach here, shouldFail is false, so we can complete
-		return "done!", nil
+	// Always fail after receiving a signal, unless shouldFail is false
+	if s.shouldFail.Load() {
+		panic("forced-panic-after-signal")
 	}
 
+	// If we reach here, shouldFail is false, so we can complete
 	return "done!", nil
 }
 

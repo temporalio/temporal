@@ -19,11 +19,11 @@ type WorkflowTaskInfo struct {
 	TaskQueue *taskqueuepb.TaskQueue
 
 	// Attempt is the number of attempts for this workflow task.
-	Attempt   int32
+	Attempt int32
 	// AttemptsSinceLastSuccess is the number of attempts since the last successful workflow task.
 	// This is used by the `TemporalReportedProblems` search attribute to check latest WFT failure count,
-	// this will only differ from attempts above when the previous workflow tasks failed and there was a 
-	// buffered event (like a signal or activity finishing) applied to the workflow which causes the 
+	// this will only differ from attempts above when the previous workflow tasks failed and there was a
+	// buffered event (like a signal or activity finishing) applied to the workflow which causes the
 	// new workflow task to have an attempt of 1 again.
 	AttemptsSinceLastSuccess int32
 
