@@ -1045,6 +1045,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	if err != nil {
 		nsName = namespace.EmptyName
 	}
+	quotaRequest := quotas.NewRequest(
+		"AppendRawHistoryNodes",
+		1,
+		nsName.String(),
+		headers.CallerTypePreemptable,
+		0,
+		"",
+	)
 
 	prevTxnID := localMutableState.GetExecutionInfo().LastFirstEventTxnId
 	fetchFromRemoteAndAppend := func(
@@ -1085,13 +1093,6 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				localMutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 			}
-			quotaRequest := quotas.NewRequest(
-				"AppendRawHistoryNodes",
-				1,
-				nsName.String(),
-				headers.CallerTypePreemptable,
-				0,
-				"")
 			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 				return err
 			}
@@ -1149,13 +1150,6 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			localMutableState.AddReapplyCandidateEvent(event)
 			r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 		}
-		quotaRequest := quotas.NewRequest(
-			"AppendRawHistoryNodes",
-			1,
-			nsName.String(),
-			headers.CallerTypePreemptable,
-			0,
-			"")
 		if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 			return newBranchToken, err
 		}
@@ -1526,6 +1520,13 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	if err != nil {
 		nsName = namespace.EmptyName
 	}
+	quotaRequest := quotas.NewRequest(
+		"AppendRawHistoryNodes",
+		1,
+		nsName.String(),
+		headers.CallerTypePreemptable,
+		0,
+		"")
 
 	prevTxnID := common.EmptyEventTaskID
 	var prevBranchID string
@@ -1607,13 +1608,6 @@ BackfillLoop:
 			return err
 		}
 
-		quotaRequest := quotas.NewRequest(
-			"AppendRawHistoryNodes",
-			1,
-			nsName.String(),
-			headers.CallerTypePreemptable,
-			0,
-			"")
 		if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 			return err
 		}
