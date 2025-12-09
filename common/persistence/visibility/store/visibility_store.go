@@ -34,8 +34,8 @@ type (
 		// Read APIs.
 		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListExecutionsResponse, error)
 		ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
-		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
-		CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*manager.CountChasmExecutionsResponse, error)
+		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*InternalCountExecutionsResponse, error)
+		CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 
 		// Admin APIs
@@ -74,6 +74,18 @@ type (
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
+	}
+
+	// InternalCountExecutionsResponse is response from CountWorkflowExecutions and CountChasmExecutions
+	InternalCountExecutionsResponse struct {
+		Count  int64
+		Groups []InternalAggregationGroup
+	}
+
+	// InternalAggregationGroup represents a GROUP BY aggregation result
+	InternalAggregationGroup struct {
+		GroupValues []*commonpb.Payload
+		Count       int64
 	}
 
 	// InternalGetWorkflowExecutionResponse is response from GetWorkflowExecution

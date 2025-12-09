@@ -15,6 +15,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -884,7 +885,8 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -1000,9 +1002,11 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errIdentityTooLong
 	}
 
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if err := wh.validateVersioningInfo(
 		request.Namespace,
 		request.WorkerVersionStamp,
+		request.DeploymentOptions,
 		request.StickyAttributes.GetWorkerTaskQueue(),
 	); err != nil {
 		return nil, err
@@ -1133,7 +1137,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	//nolint:staticcheck // SA1019: worker versioning v0.31
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -5232,7 +5237,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.DeploymentOptions, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -5582,12 +5587,16 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, deploymentOptions *deploymentpb.WorkerDeploymentOptions, tq *taskqueuepb.TaskQueue) error {
+	// TODO: Deprecate old versioning checks
 	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
 		return errWorkerVersioningWorkflowAPIsNotAllowed
 	}
-	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
-		return errUseVersioningWithoutNormalName
+	if tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+		if id.GetUseVersioning() || deploymentOptions != nil {
+			// Versioned pollers require a normal name to be set when polling on a sticky queue
+			return errUseVersioningWithoutNormalName
+		}
 	}
 	if id.GetUseVersioning() && len(id.GetBuildId()) == 0 {
 		return errUseVersioningWithoutBuildId
@@ -5595,7 +5604,22 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 		return errBuildIdTooLong
 	}
-	return nil
+
+	return wh.validateDeploymentOptions(deploymentOptions)
+}
+
+func (wh *WorkflowHandler) validateDeploymentOptions(deploymentOptions *deploymentpb.WorkerDeploymentOptions) error {
+	if deploymentOptions == nil {
+		return nil
+	}
+	if deploymentOptions.GetDeploymentName() == "" || deploymentOptions.GetBuildId() == "" {
+		return errDeploymentOptionsNotSet
+	}
+	deploymentVersion := &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: deploymentOptions.GetDeploymentName(),
+		BuildId:        deploymentOptions.GetBuildId(),
+	}
+	return worker_versioning.ValidateDeploymentVersion(deploymentVersion, wh.config.MaxIDLengthLimit())
 }
 
 //nolint:revive // cyclomatic complexity

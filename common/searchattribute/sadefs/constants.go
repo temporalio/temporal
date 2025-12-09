@@ -300,7 +300,7 @@ func IsPreallocatedCSAFieldName(name string, valueType enumspb.IndexedValueType)
 	return re != nil && re.MatchString(name)
 }
 
-var chasmSearchAttributePattern = regexp.MustCompile(`^Temporal(Bool|Datetime|Int|Double|Text|Keyword|KeywordList)(0[1-9]|[1-9][0-9])$`)
+var chasmSearchAttributePattern = regexp.MustCompile(`^Temporal(Bool|Datetime|Int|Double|Text|Keyword|LowCardinalityKeyword|KeywordList)(0[1-9]|[1-9][0-9])$`)
 
 // IsChasmSearchAttribute checks if a field name matches the pattern for CHASM search attributes.
 // CHASM search attributes follow the pattern: Temporal<Type><NN> where NN is 01-99

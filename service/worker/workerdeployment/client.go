@@ -217,7 +217,7 @@ func (d *ClientImpl) SetManager(
 	defer d.record("SetManager", &retErr, newManagerID, request.GetIdentity())()
 
 	// validating params
-	err := validateVersionWfParams(WorkerDeploymentNameFieldName, request.GetDeploymentName(), d.maxIDLengthLimit())
+	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, request.GetDeploymentName(), d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (d *ClientImpl) SetManager(
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
-		worker_versioning.GenerateDeploymentWorkflowID(request.GetDeploymentName()),
+		GenerateDeploymentWorkflowID(request.GetDeploymentName()),
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetManagerIdentity, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: request.GetIdentity()},
@@ -372,16 +372,16 @@ func (d *ClientImpl) DescribeVersion(
 	defer d.record("DescribeVersion", &retErr, deploymentName, buildID)()
 
 	// validate deployment name
-	if err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit()); err != nil {
+	if err = validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit()); err != nil {
 		return nil, nil, err
 	}
 
 	// validate buildID
-	if err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit()); err != nil {
+	if err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit()); err != nil {
 		return nil, nil, err
 	}
 
-	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
+	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -457,7 +457,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 		return nil, err
 	}
 
-	workflowID := worker_versioning.GenerateVersionWorkflowID(versionObj.GetDeploymentName(), versionObj.GetBuildId())
+	workflowID := GenerateVersionWorkflowID(versionObj.GetDeploymentName(), versionObj.GetBuildId())
 	outcome, err := d.update(ctx, namespaceEntry, workflowID, &updatepb.Request{
 		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
@@ -494,12 +494,12 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
 
 	// validating params
-	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, nil, err
 	}
 
-	deploymentWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+	deploymentWorkflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -552,7 +552,7 @@ func (d *ClientImpl) workerDeploymentExists(
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
 ) (bool, error) {
-	deploymentWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+	deploymentWorkflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	res, err := d.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -613,7 +613,7 @@ func (d *ClientImpl) ListWorkerDeployments(
 			// There is a race condition where the Deployment workflow exists, but has not yet
 			// upserted the memo. If that is the case, we handle it here.
 			workerDeploymentInfo = &deploymentspb.WorkerDeploymentWorkflowMemo{
-				DeploymentName: worker_versioning.GetDeploymentNameFromWorkflowID(ex.GetExecution().GetWorkflowId()),
+				DeploymentName: GetDeploymentNameFromWorkflowID(ex.GetExecution().GetWorkflowId()),
 				CreateTime:     ex.GetStartTime(),
 				RoutingConfig:  &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId},
 			}
@@ -653,7 +653,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, serviceerror.NewInvalidArgumentf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName)
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -697,7 +697,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		outcome, err = d.update(
 			ctx,
 			namespaceEntry,
-			worker_versioning.GenerateDeploymentWorkflowID(deploymentName),
+			GenerateDeploymentWorkflowID(deploymentName),
 			&updatepb.Request{
 				Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
@@ -765,12 +765,12 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetRampingVersionArgs{
 		Identity:                identity,
@@ -889,12 +889,12 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		return err
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
 
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	outcome, err := d.update(
 		ctx,
@@ -937,7 +937,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	defer d.record("DeleteWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
 	// validating params
-	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
@@ -950,11 +950,11 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		return err
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	outcome, err := d.update(
 		ctx,
@@ -995,7 +995,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  namespaceEntry.Name().String(),
@@ -1027,16 +1027,16 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
-	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
-	err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
 
-	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
+	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
 	if err != nil {
 		return err
@@ -1073,7 +1073,7 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 		return nil, err
 	}
 
-	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
+	workflowID := GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
 
 	// updates an already existing deployment version workflow.
 	outcome, err := d.update(
@@ -1130,7 +1130,7 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 		return err
 	}
 
-	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
+	workflowID := GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
 		Identity:         identity,
 		Version:          version,
@@ -1227,16 +1227,16 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 	requestID string,
 	syncBatchSize int32,
 ) (*updatepb.Outcome, error) {
-	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	exists, err := d.workerDeploymentExists(ctx, namespaceEntry, deploymentName)
 	if err != nil {
@@ -1307,16 +1307,16 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	identity string,
 	requestID string,
 ) (*updatepb.Outcome, error) {
-	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
+	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
 	if err != nil {
 		return nil, err
