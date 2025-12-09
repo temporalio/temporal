@@ -50,10 +50,6 @@ func TestStandaloneActivityTestSuite(t *testing.T) {
 
 func (s *standaloneActivityTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuite()
-	//s.OverrideDynamicConfig(
-	//	dynamicconfig.EnableChasm,
-	//	true,
-	//)
 }
 
 func (s *standaloneActivityTestSuite) SetupTest() {
