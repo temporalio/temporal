@@ -951,7 +951,6 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		// need to retain Build ID of failed WF task to compare it with the build ID of next attempt
 		BuildId: m.ms.executionInfo.WorkflowTaskBuildId,
 	}
-
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
 		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
@@ -960,7 +959,6 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		}
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
-
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
 	// Total continuous failures = AttemptsSinceLastSuccess + Attempt
@@ -995,7 +993,6 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 		RequestID:                emptyUUID,
 		WorkflowTaskTimeout:      time.Duration(0),
 		Attempt:                  1,
-		AttemptsSinceLastSuccess: 0,
 		StartedTime:              time.Unix(0, 0).UTC(),
 		ScheduledTime:            time.Unix(0, 0).UTC(),
 
