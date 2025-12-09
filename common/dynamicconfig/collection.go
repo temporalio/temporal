@@ -44,11 +44,12 @@ type (
 		poller goro.Group
 
 		// cache converted values. use weak pointers to avoid holding on to values in the cache
-		// that are no longer in use.
-		convertCache sync.Map // map[weak.Pointer[ConstrainedValue]]any
+		// that are no longer in use. this must be a pointer since the cleanup closures need to
+		// reference this without referencing Collection.
+		convertCache *sync.Map // map[weak.Pointer[ConstrainedValue]]any
 
 		// index by constraints
-		indexCache sync.Map // map[weak.Pointer[ConstrainedValue]]map[Constraints]int32
+		indexCache *sync.Map // map[weak.Pointer[ConstrainedValue]]map[Constraints]int32
 	}
 
 	subscription[T any] struct {
@@ -119,6 +120,8 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 		logger:        logger,
 		errCount:      -1,
 		subscriptions: make(map[Key]map[int]any),
+		convertCache:  new(sync.Map),
+		indexCache:    new(sync.Map),
 	}
 }
 
@@ -308,7 +311,7 @@ func matchAndConvertCvs[T any](
 	precedence []Constraints,
 	cvs []ConstrainedValue,
 ) (T, any) {
-	cvp, err := findMatch(&c.indexCache, cvs, precedence)
+	cvp, err := findMatch(c.indexCache, cvs, precedence)
 	if err != nil {
 		// couldn't find a constrained match, use default
 		return def, usingDefaultValue
@@ -500,7 +503,7 @@ func dispatchUpdate[T any](
 	cvs []ConstrainedValue,
 ) {
 	var raw any
-	cvp, err := findMatch(&c.indexCache, cvs, sub.prec)
+	cvp, err := findMatch(c.indexCache, cvs, sub.prec)
 	if err != nil {
 		raw = usingDefaultValue
 	} else {
@@ -581,8 +584,9 @@ func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error
 	}
 
 	if _, loaded := c.convertCache.LoadOrStore(weakcvp, t); !loaded {
+		cc := c.convertCache // capture only this pointer, not the whole Collection
 		runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
-			c.convertCache.Delete(w)
+			cc.Delete(w)
 		}, weakcvp)
 	}
 
