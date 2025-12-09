@@ -10,6 +10,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -26,16 +27,15 @@ const (
 	NamespaceDivision = "TemporalScheduler"
 )
 
-var (
-	VisibilityBaseListQuery = fmt.Sprintf(
-		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		sadefs.WorkflowType,
-		WorkflowType,
-		sadefs.TemporalNamespaceDivision,
-		NamespaceDivision,
-		sadefs.ExecutionStatus,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-	)
+// VisibilityBaseListQuery will select schedules handled by both V1 scheduler and
+// V2 CHASM scheduler.
+var VisibilityBaseListQuery = fmt.Sprintf(
+	"%s IN ('%s', '%d') AND %s = '%s'",
+	sadefs.TemporalNamespaceDivision,
+	NamespaceDivision,
+	chasm.SchedulerArchetypeID,
+	sadefs.ExecutionStatus,
+	enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 )
 
 type (

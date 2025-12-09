@@ -177,8 +177,14 @@ func (c *queryConverter) BuildSelectStmt(
 	}
 
 	stmt := fmt.Sprintf(
-		`SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (%s, %s)%s ORDER BY %s DESC, %s DESC, %s LIMIT ?`,
+		"SELECT %s FROM executions_visibility ev "+
+			"LEFT JOIN custom_search_attributes USING (%s, %s) "+
+			"LEFT JOIN chasm_search_attributes USING (%s, %s)"+
+			"%s "+
+			"ORDER BY %s DESC, %s DESC, %s LIMIT ?",
 		strings.Join(dbFields, ", "),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		sadefs.GetSqlDbColName(sadefs.NamespaceID),
 		sadefs.GetSqlDbColName(sadefs.RunID),
 		whereString,
@@ -213,8 +219,14 @@ func (c *queryConverter) BuildCountStmt(
 	}
 
 	return fmt.Sprintf(
-		`SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (%s, %s)%s%s`,
+		"SELECT %s FROM executions_visibility ev "+
+			"LEFT JOIN custom_search_attributes USING (%s, %s) "+
+			"LEFT JOIN chasm_search_attributes USING (%s, %s)"+
+			"%s"+
+			"%s",
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
+		sadefs.GetSqlDbColName(sadefs.NamespaceID),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 		sadefs.GetSqlDbColName(sadefs.NamespaceID),
 		sadefs.GetSqlDbColName(sadefs.RunID),
 		whereString,

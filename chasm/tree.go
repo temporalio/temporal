@@ -144,7 +144,7 @@ type (
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
 		currentSA   map[string]VisibilityValue
-		currentMemo map[string]VisibilityValue
+		currentMemo proto.Message
 
 		needsPointerResolution bool
 	}
@@ -156,9 +156,6 @@ type (
 
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
 	// including the node n itself.
-	//
-	// TODO: Return tree size changes in NodesMutation as well. MutateState needs to
-	// track the overall size of itself and terminate workflow if it exceeds the limit.
 	NodesMutation struct {
 		UpdatedNodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
 		DeletedNodes map[string]struct{}
@@ -465,7 +462,7 @@ func (n *Node) prepareComponentValue(
 				fmt.Errorf("actual attributes: %v", metadata.Attributes))
 		}
 
-		registrableComponent, ok := n.registry.componentByID(componentAttr.GetTypeId())
+		registrableComponent, ok := n.registry.ComponentByID(componentAttr.GetTypeId())
 		if !ok {
 			return softassert.UnexpectedInternalErr(
 				n.logger,
@@ -1498,7 +1495,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
 		newMemo := memoProvider.Memo(immutableContext)
-		if !maps.EqualFunc(n.currentMemo, newMemo, isVisibilityValueEqual) {
+		if !proto.Equal(n.currentMemo, newMemo) {
 			needUpdate = true
 		}
 		n.currentMemo = newMemo

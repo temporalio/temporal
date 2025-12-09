@@ -373,17 +373,8 @@ func (a *activities) generateWorkflowReplicationTask(
 
 	var stateTransitionCount, historyLength int64
 	if generateViaFrontend {
-		archetype, ok := a.chasmRegistry.ComponentFqnByID(execution.ArchetypeId)
-		if !ok {
-			activityInfo := activity.GetInfo(ctx)
-			err := fmt.Errorf("unknown archetypeID: %v", execution.ArchetypeId)
-			a.logger.Error("force-replication failed to translate archetypeID to name",
-				tag.Error(err),
-				tag.ArchetypeID(execution.ArchetypeId),
-				tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
-				tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-				tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
-			)
+		archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeId)
+		if err != nil {
 			return err
 		}
 
@@ -780,17 +771,8 @@ func (a *activities) verifySingleReplicationTask(
 	s := time.Now()
 	// Check if execution exists on remote cluster
 
-	archetype, ok := a.chasmRegistry.ComponentFqnByID(execution.ArchetypeId)
-	if !ok {
-		activityInfo := activity.GetInfo(ctx)
-		err := fmt.Errorf("unknown archetypeID: %v", execution.ArchetypeId)
-		a.logger.Error("force-replication failed to translate archetypeID to name",
-			tag.Error(err),
-			tag.ArchetypeID(execution.ArchetypeId),
-			tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
-			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
-		)
+	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeId)
+	if err != nil {
 		return verifyResult{
 			status: notVerified,
 		}, err
@@ -1075,4 +1057,28 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 	}
 
 	return readyShardCount == expectedShardCount, nil
+}
+
+func (a *activities) archetypeIDToName(ctx context.Context, archetypeID chasm.ArchetypeID) (chasm.Archetype, error) {
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		// For backward compatibility reason, the archetypeID is set to 0 in MigrationExecutionInfo
+		// for workflows. But 0 is not a valid archetypeID in chasm.Registry, so explicitly return
+		//  WorkflowArchetype here.
+		return chasm.WorkflowArchetype, nil
+	}
+
+	archetype, ok := a.chasmRegistry.ComponentFqnByID(archetypeID)
+	if !ok {
+		activityInfo := activity.GetInfo(ctx)
+		err := fmt.Errorf("unknown archetypeID: %v", archetypeID)
+		a.logger.Error("force-replication failed to translate archetypeID to name",
+			tag.Error(err),
+			tag.ArchetypeID(archetypeID),
+			tag.WorkflowNamespace(activityInfo.WorkflowNamespace),
+			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
+		)
+		return "", err
+	}
+	return archetype, nil
 }

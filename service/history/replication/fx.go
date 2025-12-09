@@ -41,6 +41,7 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
+	PersistenceRateLimiterProvider,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{
@@ -108,7 +109,7 @@ func replicationTaskExecutorProvider() TaskExecutorProvider {
 		return NewTaskExecutor(
 			params.RemoteCluster,
 			params.Shard,
-			params.HistoryResender,
+			params.RemoteHistoryFetcher,
 			params.DeleteManager,
 			params.WorkflowCache,
 		)

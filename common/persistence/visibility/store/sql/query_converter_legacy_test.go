@@ -11,6 +11,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
@@ -52,6 +53,8 @@ func (s *queryConverterSuite) SetupTest() {
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 		"",
+		nil,
+		chasm.UnspecifiedArchetypeID,
 	)
 }
 
@@ -109,7 +112,7 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			input:  "GROUP BY ExecutionStatus, WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'group by' clause supports only a single field",
+				"%s: 'GROUP BY' clause supports only a single field",
 				query.NotSupportedErrMessage,
 			),
 		},
@@ -118,22 +121,21 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			input:  "GROUP BY WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'group by' clause is only supported for %s search attribute",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				query.NotSupportedErrMessage,
-				sadefs.ExecutionStatus,
 			),
 		},
 		{
 			name:   "order by not supported",
 			input:  "ORDER BY StartTime",
 			output: nil,
-			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+			err:    query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage),
 		},
 		{
 			name:   "group by with order by not supported",
 			input:  "GROUP BY ExecutionStatus ORDER BY StartTime",
 			output: nil,
-			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+			err:    query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage),
 		},
 	}
 
@@ -146,6 +148,8 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 				"",
+				nil,
+				chasm.UnspecifiedArchetypeID,
 			)
 			qp, err := qc.convertWhereString(tc.input)
 			if tc.err == nil {
@@ -1085,4 +1089,185 @@ func (m *FlexibleMapper) GetAlias(fieldName, ns string) (string, error) {
 
 func (m *FlexibleMapper) GetFieldName(alias, ns string) (string, error) {
 	return m.GetFieldNameFunc(alias, ns)
+}
+
+func (s *queryConverterSuite) TestConvertColName_WithChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":    "ChasmCompleted",
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	qc := newQueryConverterInternal(
+		s.pqc,
+		testNamespaceName,
+		testNamespaceID,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+		"",
+		chasmMapper,
+		chasm.UnspecifiedArchetypeID,
+	)
+
+	testCases := []struct {
+		name              string
+		input             string
+		expectedFieldName string
+		expectedFieldType enumspb.IndexedValueType
+		expectedErr       bool
+	}{
+		{
+			name:              "ChasmCompleted",
+			input:             "ChasmCompleted",
+			expectedFieldName: "TemporalBool01",
+			expectedFieldType: enumspb.INDEXED_VALUE_TYPE_BOOL,
+			expectedErr:       false,
+		},
+		{
+			name:              "ChasmStatus",
+			input:             "ChasmStatus",
+			expectedFieldName: "TemporalKeyword01",
+			expectedFieldType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			expectedErr:       false,
+		},
+		{
+			name:              "NonExistentChasmAlias",
+			input:             "NonExistentChasmAlias",
+			expectedFieldName: "",
+			expectedFieldType: enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
+			expectedErr:       true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			sql := fmt.Sprintf("select * from table1 where %s = 'value'", tc.input)
+			stmt, err := sqlparser.Parse(sql)
+			s.NoError(err)
+			expr := stmt.(*sqlparser.Select).Where.Expr.(*sqlparser.ComparisonExpr).Left
+			colName, err := qc.convertColName(&expr)
+			if tc.expectedErr {
+				s.Error(err)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.expectedFieldName, colName.fieldName)
+				s.Equal(tc.expectedFieldType, colName.valueType)
+			}
+		})
+	}
+}
+
+func (s *queryConverterSuite) TestConvertWhereString_WithChasmMapper() {
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	qc := newQueryConverterInternal(
+		s.pqc,
+		testNamespaceName,
+		testNamespaceID,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+		"",
+		chasmMapper,
+		chasm.UnspecifiedArchetypeID,
+	)
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+		err      error
+	}{
+		{
+			name:     "CHASM search attribute",
+			input:    "ChasmStatus = 'active'",
+			expected: "(TemporalKeyword01 = 'active') and TemporalNamespaceDivision is null",
+			err:      nil,
+		},
+		{
+			name:     "CHASM search attribute with namespace division",
+			input:    "ChasmStatus = 'active' AND TemporalNamespaceDivision = '123'",
+			expected: "(TemporalKeyword01 = 'active' and TemporalNamespaceDivision = '123')",
+			err:      nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			qp, err := qc.convertWhereString(tc.input)
+			if tc.err == nil {
+				s.NoError(err)
+				s.Equal(tc.expected, qp.queryString)
+			} else {
+				s.Error(err)
+				s.Equal(tc.err, err)
+			}
+		})
+	}
+}
+
+func (s *queryConverterSuite) TestConvertWhereString_WithArchetypeID() {
+	testCases := []struct {
+		name        string
+		input       string
+		archetypeID chasm.ArchetypeID
+		expected    string
+		err         error
+	}{
+		{
+			name:        "with archetypeID",
+			input:       "AliasForInt01 = 1",
+			archetypeID: 123,
+			expected:    "(Int01 = 1) and TemporalNamespaceDivision = '123'",
+			err:         nil,
+		},
+		{
+			name:        "with UnspecifiedArchetypeID",
+			input:       "AliasForInt01 = 1",
+			archetypeID: chasm.UnspecifiedArchetypeID,
+			expected:    "(Int01 = 1) and TemporalNamespaceDivision is null",
+			err:         nil,
+		},
+		{
+			name:        "with explicit namespace division and archetypeID",
+			input:       "AliasForInt01 = 1 AND TemporalNamespaceDivision = '456'",
+			archetypeID: 123,
+			expected:    "(Int01 = 1 and TemporalNamespaceDivision = '456')",
+			err:         nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			qc := newQueryConverterInternal(
+				s.pqc,
+				testNamespaceName,
+				testNamespaceID,
+				searchattribute.TestNameTypeMap(),
+				&searchattribute.TestMapper{},
+				"",
+				nil,
+				tc.archetypeID,
+			)
+			qp, err := qc.convertWhereString(tc.input)
+			if tc.err == nil {
+				s.NoError(err)
+				s.Equal(tc.expected, qp.queryString)
+			} else {
+				s.Error(err)
+				s.Equal(tc.err, err)
+			}
+		})
+	}
 }
