@@ -48,10 +48,12 @@ func TestChasmRequestInterceptor_ShouldRespond(t *testing.T) {
 	mockEngine := chasm.NewMockEngine(ctrl)
 	mockVisibilityManager := chasm.NewMockVisibilityManager(ctrl)
 	requestInterceptor := chasm.ChasmRequestInterceptorProvider(
-		mockEngine,
-		mockVisibilityManager,
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
+		chasm.ChasmRequestInterceptorParams{
+			Engine:         mockEngine,
+			VisibilityMgr:  mockVisibilityManager,
+			Logger:         log.NewNoopLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
 	)
 
 	server, address := startTestServer(t, grpc.UnaryInterceptor(requestInterceptor.Intercept))

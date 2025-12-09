@@ -697,19 +697,8 @@ func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyVa
 // Memo returns the scheduler's info block for visibility.
 func (s *Scheduler) Memo(
 	ctx chasm.Context,
-) map[string]chasm.VisibilityValue {
-	newInfo := s.ListInfo(ctx)
-
-	infoPayload, err := proto.MarshalOptions{
-		Deterministic: true,
-	}.Marshal(newInfo)
-	if err != nil {
-		return nil
-	}
-
-	return map[string]chasm.VisibilityValue{
-		visibilityMemoFieldInfo: chasm.VisibilityValueByteSlice(infoPayload),
-	}
+) proto.Message {
+	return s.ListInfo(ctx)
 }
 
 // ListInfo returns the ScheduleListInfo, used as the visibility memo, and to

@@ -93,6 +93,7 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmRequestInterceptorProvider),
+	fx.Provide(FrontendAdditionalInterceptorsProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -939,4 +940,10 @@ func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegis
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func FrontendAdditionalInterceptorsProvider(
+	chasmRequestInterceptor *chasm.ChasmRequestInterceptor,
+) []grpc.UnaryServerInterceptor {
+	return []grpc.UnaryServerInterceptor{chasmRequestInterceptor.Intercept}
 }

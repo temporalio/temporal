@@ -75,11 +75,10 @@ type (
 func TestScheduleFunctionalSuite(t *testing.T) {
 	t.Parallel()
 
-	// TODO: Enable CHASM tests once frontend has chasm visibility engine.
 	// CHASM tests must run as a separate suite, with a separate cluster/functional environment, because the tests
 	// assume a fully clean state. For example, TestBasics has assertions on visibility entries for workflow runs
 	// started by the scheduler, which would not be cleaned up even when the associated scheduler has been deleted.
-	// suite.Run(t, new(ScheduleCHASMFunctionalSuite))
+	suite.Run(t, new(ScheduleCHASMFunctionalSuite))
 
 	suite.Run(t, new(ScheduleV1FunctionalSuite))
 }

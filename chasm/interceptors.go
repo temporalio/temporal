@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -32,22 +33,32 @@ func (i *ChasmRequestInterceptor) Intercept(
 		defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
 	}
 
-	ctx = NewEngineContext(ctx, i.engine)
-	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
+	if i.engine != nil {
+		ctx = NewEngineContext(ctx, i.engine)
+	}
+	if i.visibilityMgr != nil {
+		ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
+	}
 
 	return handler(ctx, req)
 }
 
+type ChasmRequestInterceptorParams struct {
+	fx.In
+
+	Engine         Engine            `optional:"true"`
+	VisibilityMgr  VisibilityManager `optional:"true"`
+	Logger         log.Logger
+	MetricsHandler metrics.Handler
+}
+
 func ChasmRequestInterceptorProvider(
-	engine Engine,
-	visibilityMgr VisibilityManager,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
+	params ChasmRequestInterceptorParams,
 ) *ChasmRequestInterceptor {
 	return &ChasmRequestInterceptor{
-		engine:         engine,
-		visibilityMgr:  visibilityMgr,
-		logger:         logger,
-		metricsHandler: metricsHandler,
+		engine:         params.Engine,
+		visibilityMgr:  params.VisibilityMgr,
+		logger:         params.Logger,
+		metricsHandler: params.MetricsHandler,
 	}
 }
