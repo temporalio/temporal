@@ -5,6 +5,7 @@ option go_package = "go.temporal.io/server/api/batch/v1;batch";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/api/enums/v1/batch_operation.proto";
+import "temporal/server/api/adminservice/v1/request_response.proto";
 import "google/protobuf/duration.proto";
 
 message BatchOperationInput { 
@@ -22,4 +23,7 @@ message BatchOperationInput {
 
   // The request to start the batch operation.
   temporal.api.workflowservice.v1.StartBatchOperationRequest request = 7;
+
+  // The request to start an admin batch operation.
+  temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest admin_request = 8;
 }

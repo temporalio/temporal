@@ -604,3 +604,41 @@ message ForceUnloadTaskQueuePartitionRequest {
 message ForceUnloadTaskQueuePartitionResponse {
   bool was_loaded = 1;
 }
+
+// StartAdminBatchOperationRequest starts an admin batch operation.
+message StartAdminBatchOperationRequest {
+  // Namespace that contains the batch operation.
+  string namespace = 1;
+
+  // Visibility query defines the group of workflows to apply the batch operation.
+  // This field and `executions` are mutually exclusive.
+  string visibility_query = 2;
+
+  // A unique job identifier for this batch operation.
+  string job_id = 3;
+
+  // Reason for the operation.
+  string reason = 4;
+
+  // List of workflow executions to apply the batch operation to.
+  // This field and `visibility_query` are mutually exclusive.
+  repeated temporal.api.common.v1.WorkflowExecution executions = 5;
+
+  // The admin batch operation to perform.
+  oneof operation {
+    BatchOperationRefreshWorkflowTasks refresh_workflow_tasks_operation = 10;
+  }
+}
+
+message StartAdminBatchOperationResponse {
+}
+
+// BatchOperationRefreshWorkflowTasks refreshes workflow tasks for batch workflows.
+// This regenerates all pending tasks for each workflow.
+message BatchOperationRefreshWorkflowTasks {
+  // The identity of the worker/client.
+  string identity = 1;
+
+  // Archetype to use for the refresh operation. If not specified, defaults to workflow archetype.
+  string archetype = 2;
+}

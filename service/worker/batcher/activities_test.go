@@ -2,6 +2,7 @@ package batcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"testing"
@@ -15,10 +16,14 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
+	"golang.org/x/time/rate"
 )
 
 type activitiesSuite struct {
@@ -346,4 +351,168 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
 	}
+}
+
+func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
+	a := activities{}
+
+	s.Run("Empty query", func() {
+		adminReq := &adminservice.StartAdminBatchOperationRequest{
+			VisibilityQuery: "",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
+				RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{},
+			},
+		}
+		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		s.Equal("", adjustedQuery)
+	})
+
+	s.Run("RefreshWorkflowTasks adds running filter", func() {
+		adminReq := &adminservice.StartAdminBatchOperationRequest{
+			VisibilityQuery: "WorkflowType='MyWorkflow'",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
+				RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
+					Identity: "test",
+				},
+			},
+		}
+		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		s.Equal(fmt.Sprintf("(WorkflowType='MyWorkflow') AND (%s)", statusRunningQueryFilter), adjustedQuery)
+	})
+
+	s.Run("RefreshWorkflowTasks with complex query", func() {
+		adminReq := &adminservice.StartAdminBatchOperationRequest{
+			VisibilityQuery: "(WorkflowType='MyWorkflow') OR (WorkflowType='OtherWorkflow')",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
+				RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{},
+			},
+		}
+		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		s.Equal(fmt.Sprintf("((WorkflowType='MyWorkflow') OR (WorkflowType='OtherWorkflow')) AND (%s)", statusRunningQueryFilter), adjustedQuery)
+	})
+
+	s.Run("Nil operation returns query unchanged", func() {
+		adminReq := &adminservice.StartAdminBatchOperationRequest{
+			VisibilityQuery: "WorkflowType='MyWorkflow'",
+		}
+		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		s.Equal("WorkflowType='MyWorkflow'", adjustedQuery)
+	})
+}
+
+func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
+	ctx := context.Background()
+	mockAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+
+	a := &activities{
+		activityDeps: activityDeps{
+			AdminClient: mockAdminClient,
+		},
+	}
+
+	namespaceID := "test-namespace-id"
+	workflowID := "test-workflow-id"
+	runID := "test-run-id"
+	archetype := "test-archetype"
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: namespaceID,
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: "test-namespace",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
+				RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
+					Identity:  "test-identity",
+					Archetype: archetype,
+				},
+			},
+		},
+	}
+
+	testTask := task{
+		execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+	}
+
+	limiter := rate.NewLimiter(rate.Limit(100), 1)
+
+	// Expect RefreshWorkflowTasks to be called with correct parameters
+	mockAdminClient.EXPECT().RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
+		NamespaceId: namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		Archetype: archetype,
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
+
+	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
+	s.NoError(err)
+}
+
+func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
+	ctx := context.Background()
+	mockAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+
+	a := &activities{
+		activityDeps: activityDeps{
+			AdminClient: mockAdminClient,
+		},
+	}
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "test-namespace-id",
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: "test-namespace",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
+				RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
+					Identity: "test-identity",
+				},
+			},
+		},
+	}
+
+	testTask := task{
+		execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      "test-run-id",
+		},
+	}
+
+	limiter := rate.NewLimiter(rate.Limit(100), 1)
+
+	expectedErr := errors.New("refresh failed")
+	mockAdminClient.EXPECT().RefreshWorkflowTasks(ctx, gomock.Any()).Return(nil, expectedErr)
+
+	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
+	s.Require().Error(err)
+	s.Equal(expectedErr, err)
+}
+
+func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
+	ctx := context.Background()
+
+	a := &activities{}
+
+	// AdminRequest with nil operation
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "test-namespace-id",
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: "test-namespace",
+		},
+	}
+
+	testTask := task{
+		execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      "test-run-id",
+		},
+	}
+
+	limiter := rate.NewLimiter(rate.Limit(100), 1)
+
+	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "unknown admin batch type")
 }

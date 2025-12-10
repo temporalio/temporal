@@ -4,6 +4,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -33,6 +34,7 @@ type (
 		Logger         log.Logger
 		ClientFactory  sdk.ClientFactory
 		FrontendClient workflowservice.WorkflowServiceClient
+		AdminClient    adminservice.AdminServiceClient
 	}
 
 	fxResult struct {
