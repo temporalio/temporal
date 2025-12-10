@@ -30,10 +30,6 @@ variable "TAG_LATEST" {
   default = false
 }
 
-variable "ENABLE_CACHE" {
-  default = false
-}
-
 # Legacy targets (legacy-admin-tools, legacy-server) are for building images with server versions
 # older than v1.27.0 (3 minor versions behind v1.30.0). Once support for pre-1.27.0 versions is
 # no longer needed, these legacy targets can be removed and only the standard targets should be used.
@@ -47,8 +43,6 @@ target "admin-tools" {
     TAG_LATEST ? "${IMAGE_REPO}/admin-tools:latest" : "",
   ])
   platforms = ["linux/amd64", "linux/arm64"]
-  cache-from = ENABLE_CACHE ? ["type=registry,ref=${IMAGE_REPO}/admin-tools:buildcache"] : []
-  cache-to = ENABLE_CACHE ? ["type=registry,ref=${IMAGE_REPO}/admin-tools:buildcache,mode=max"] : []
   labels = {
     "org.opencontainers.image.title" = "admin-tools"
     "org.opencontainers.image.description" = "Temporal admin tools"
@@ -72,8 +66,6 @@ target "server" {
     TAG_LATEST ? "${IMAGE_REPO}/server:latest" : "",
   ])
   platforms = ["linux/amd64", "linux/arm64"]
-  cache-from = ENABLE_CACHE ? ["type=registry,ref=${IMAGE_REPO}/server:buildcache"] : []
-  cache-to = ENABLE_CACHE ? ["type=registry,ref=${IMAGE_REPO}/server:buildcache,mode=max"] : []
   labels = {
     "org.opencontainers.image.title" = "server"
     "org.opencontainers.image.description" = "Temporal Server"
