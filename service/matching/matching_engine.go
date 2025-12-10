@@ -1898,7 +1898,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	if req.Deployment == nil && req.GetOperation() == nil && req.GetDeploymentName() == "" {
+	if req.GetOperation() == nil && req.GetDeploymentName() == "" {
 		return nil, errMissingDeploymentVersion
 	}
 
@@ -1926,10 +1926,6 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
 		}
 
-		if req.TaskQueueType != enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-			req.TaskQueueTypes = append(req.TaskQueueTypes, req.TaskQueueType)
-		}
-
 		changed := false
 		for _, t := range req.TaskQueueTypes {
 			if data.PerType[int32(t)] == nil {
@@ -1942,20 +1938,8 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			// set/append the new data
 			deploymentData := data.PerType[int32(t)].DeploymentData
 
-			if d := req.Deployment; d != nil {
-				// [cleanup-old-wv]
-				//nolint:staticcheck
-				if idx := worker_versioning.FindDeployment(deploymentData, req.Deployment); idx >= 0 {
-					deploymentData.Deployments[idx].Data = req.Data
-				} else {
-					deploymentData.Deployments = append(
-						deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
-							Deployment: req.Deployment,
-							Data:       req.Data,
-						})
-				}
-				changed = true
-			} else if vd := req.GetUpdateVersionData(); vd != nil {
+			//nolint:staticcheck // SA1019
+			if vd := req.GetUpdateVersionData(); vd != nil {
 				// [cleanup-public-preview-versioning]
 				if vd.GetVersion() == nil { // unversioned ramp
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
