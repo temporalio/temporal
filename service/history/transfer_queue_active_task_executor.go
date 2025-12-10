@@ -1106,6 +1106,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	}
 
 	childsParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
+
 	// Check if the child's parent was the base run for the current run.
 	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
 		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
