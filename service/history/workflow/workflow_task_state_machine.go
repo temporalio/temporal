@@ -959,9 +959,8 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
-	totalContinuousFailures := failWorkflowTaskInfo.AttemptsSinceLastSuccess
 	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
-	if consecutiveFailuresRequired > 0 && totalContinuousFailures >= int32(consecutiveFailuresRequired) {
+	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.AttemptsSinceLastSuccess >= int32(consecutiveFailuresRequired) {
 		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
 			return err
 		}
