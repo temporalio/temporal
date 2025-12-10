@@ -586,3 +586,193 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanupOldDeletedVersions(t *testing.T) {
+	now := time.Now()
+	eightDaysAgo := now.Add(-time.Hour * 24 * 8)
+	sixDaysAgo := now.Add(-time.Hour * 24 * 6)
+	fiveDaysAgo := now.Add(-time.Hour * 24 * 5)
+	oneDayAgo := now.Add(-time.Hour * 24 * 1)
+
+	tests := []struct {
+		name        string
+		versions    map[string]*deploymentspb.WorkerDeploymentVersionData
+		maxVersions int
+		wantCleaned bool
+		wantRemoved []string
+	}{
+		{
+			name: "removes only deleted versions older than 7 days when not exceeding limit",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
+				"v2": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+				"v3": {Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+			},
+			maxVersions: 10,
+			wantCleaned: true,
+			wantRemoved: []string{"v1"},
+		},
+		{
+			name: "removes deleted versions when exceeding limit due to deleted versions",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
+				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+				"v3": {Deleted: false, UpdateTime: timestamp.TimePtr(fiveDaysAgo)},
+				"v4": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+				"v5": {Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+			},
+			maxVersions: 3,
+			wantCleaned: true,
+			wantRemoved: []string{"v4", "v5"},
+		},
+		{
+			name: "can exceed limit due to undeleted versions",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
+				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+				"v3": {Deleted: false, UpdateTime: timestamp.TimePtr(fiveDaysAgo)},
+				"v4": {Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+				"v5": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+			},
+			maxVersions: 3,
+			wantCleaned: true,
+			wantRemoved: []string{"v5"},
+		},
+		{
+			name: "removes deleted versions from oldest to newest",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
+				"v2": {Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+				"v3": {Deleted: true, UpdateTime: timestamp.TimePtr(fiveDaysAgo)},
+				"v4": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
+			},
+			maxVersions: 2,
+			wantCleaned: true,
+			wantRemoved: []string{"v4", "v3"},
+		},
+		{
+			name: "stops when no deleted version older than 7 days and not exceeding limit",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
+				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+				"v3": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+				"v4": {Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+			},
+			maxVersions: 10,
+			wantCleaned: false,
+			wantRemoved: []string{},
+		},
+		{
+			name: "removes nothing when all deleted versions are recent and within limit",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {Deleted: true, UpdateTime: timestamp.TimePtr(oneDayAgo)},
+				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
+			},
+			maxVersions: 10,
+			wantCleaned: false,
+			wantRemoved: []string{},
+		},
+		{
+			name:        "handles empty versions map",
+			versions:    map[string]*deploymentspb.WorkerDeploymentVersionData{},
+			maxVersions: 10,
+			wantCleaned: false,
+			wantRemoved: []string{},
+		},
+		{
+			name: "handles only undeleted versions",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
+				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
+			},
+			maxVersions: 10,
+			wantCleaned: false,
+			wantRemoved: []string{},
+		},
+		{
+			name: "removes enough old deleted versions when significantly exceeding limit",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
+				"d1": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo)},
+				"d2": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour))},
+				"d3": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour * 2))},
+				"d4": {Deleted: true, UpdateTime: timestamp.TimePtr(eightDaysAgo.Add(-time.Hour * 3))},
+				"d5": {Deleted: true, UpdateTime: timestamp.TimePtr(sixDaysAgo)},
+			},
+			maxVersions: 2,
+			wantCleaned: true,
+			wantRemoved: []string{"d4", "d3", "d2", "d1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deploymentData := &persistencespb.WorkerDeploymentData{
+				Versions: tt.versions,
+			}
+
+			// Make a copy of the original keys to verify removals
+			originalKeys := make(map[string]bool)
+			for k := range tt.versions {
+				originalKeys[k] = true
+			}
+
+			cleaned := CleanupOldDeletedVersions(deploymentData, tt.maxVersions)
+
+			// Check if cleaned flag matches expectation
+			assert.Equal(t, tt.wantCleaned, cleaned, "cleaned flag mismatch")
+
+			// Check that expected versions were removed
+			for _, removed := range tt.wantRemoved {
+				_, exists := deploymentData.Versions[removed]
+				assert.False(t, exists, "version %s should have been removed but still exists", removed)
+			}
+
+			// Check that only expected versions were removed
+			for k := range originalKeys {
+				_, exists := deploymentData.Versions[k]
+				shouldBeRemoved := false
+				for _, removed := range tt.wantRemoved {
+					if k == removed {
+						shouldBeRemoved = true
+						break
+					}
+				}
+				if shouldBeRemoved {
+					assert.False(t, exists, "version %s should have been removed", k)
+				} else {
+					assert.True(t, exists, "version %s should not have been removed", k)
+				}
+			}
+
+			// Verify invariants after cleanup
+			deletedCount := 0
+			undeletedCount := 0
+			for _, v := range deploymentData.Versions {
+				if v.GetDeleted() {
+					deletedCount++
+				} else {
+					undeletedCount++
+				}
+			}
+
+			// After cleanup, we should not exceed the limit because of deleted versions
+			// (though we may exceed it due to undeleted versions, which is acceptable)
+			if undeletedCount <= tt.maxVersions {
+				// If undeleted count is within limit, check that remaining deleted versions
+				// are either recent (< 30 days) or we're still within total limit
+				for _, v := range deploymentData.Versions {
+					if v.GetDeleted() {
+						age := now.Sub(v.GetUpdateTime().AsTime())
+						totalCount := undeletedCount + deletedCount
+						if age >= time.Hour*24*30 {
+							// Old deleted version should only remain if we're at or under the limit
+							assert.LessOrEqual(t, totalCount, tt.maxVersions,
+								"old deleted version remains but exceeding limit")
+						}
+					}
+				}
+			}
+		})
+	}
+}
