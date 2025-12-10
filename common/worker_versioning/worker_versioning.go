@@ -527,13 +527,13 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 func validatePinnedVersionInTaskQueue(pinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	matchingClient resource.MatchingClient,
 	versionMembershipCache cache.Cache,
-	tq *taskqueuepb.TaskQueue,
+	tq string,
 	tqType enumspb.TaskQueueType,
 	namespaceID string) error {
 
 	// Check if we have recently queried matching recently to validate if this version exists in the task queue.
 	// Key format: namespaceID:taskQueue:DeploymentName:BuildID
-	key := fmt.Sprintf("%s:%s:%s:%s", namespaceID, tq.Name, pinnedVersion.DeploymentName, pinnedVersion.BuildId)
+	key := fmt.Sprintf("%s:%s:%s:%s", namespaceID, tq, pinnedVersion.DeploymentName, pinnedVersion.BuildId)
 	if cached := versionMembershipCache.Get(key); cached != nil {
 		if isMember, ok := cached.(bool); ok && isMember {
 			return nil
@@ -566,7 +566,7 @@ func validatePinnedVersionInTaskQueue(pinnedVersion *deploymentpb.WorkerDeployme
 func ValidateVersioningOverride(override *workflowpb.VersioningOverride,
 	matchingClient resource.MatchingClient,
 	versionMembershipCache cache.Cache,
-	tq *taskqueuepb.TaskQueue,
+	tq string,
 	tqType enumspb.TaskQueueType,
 	namespaceID string) error {
 	if override == nil {

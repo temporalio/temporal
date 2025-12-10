@@ -6,7 +6,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -54,10 +53,7 @@ func Invoke(
 			}
 
 			// Validate versioning override, if any.
-			err = worker_versioning.ValidateVersioningOverride(req.GetWorkflowExecutionOptions().GetVersioningOverride(), matchingClient, versionMembershipCache, &taskqueuepb.TaskQueue{
-				Name: mutableState.GetExecutionInfo().GetTaskQueue(),
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			}, enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			err = worker_versioning.ValidateVersioningOverride(req.GetWorkflowExecutionOptions().GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
 			if err != nil {
 				return nil, err
 			}

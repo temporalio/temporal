@@ -225,7 +225,7 @@ func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostRese
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
+			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
 				return err
 			}
 		default:
