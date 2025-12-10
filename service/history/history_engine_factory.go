@@ -35,8 +35,7 @@ type (
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
 		ReplicationProgressCache        replication.ProgressCache
-		EventSerializer                 serialization.Serializer
-		TaskSerializer                  serialization.TaskSerializer
+		Serializer                      serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
@@ -72,8 +71,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.RawMatchingClient,
 		f.WorkflowCache,
 		f.ReplicationProgressCache,
-		f.EventSerializer,
-		f.TaskSerializer,
+		f.Serializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,
 		f.ReplicationTaskExecutorProvider,

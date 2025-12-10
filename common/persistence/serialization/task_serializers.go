@@ -14,12 +14,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TaskSerializer is an interface for serializing and deserializing tasks.
-type TaskSerializer interface {
-	SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
-	DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
-}
-
 func serializeTransferTask(
 	encoder Encoder,
 	task tasks.Task,

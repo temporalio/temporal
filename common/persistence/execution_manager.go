@@ -1248,14 +1248,14 @@ func getCurrentBranchLastWriteVersion(
 }
 
 func serializeTasks(
-	taskSerializer serialization.TaskSerializer,
+	serializer serialization.Serializer,
 	inputTasks map[tasks.Category][]tasks.Task,
 ) (map[tasks.Category][]InternalHistoryTask, error) {
 	outputTasks := make(map[tasks.Category][]InternalHistoryTask)
 	for category, tasks := range inputTasks {
 		serializedTasks := make([]InternalHistoryTask, 0, len(tasks))
 		for _, task := range tasks {
-			blob, err := taskSerializer.SerializeTask(task)
+			blob, err := serializer.SerializeTask(task)
 			if err != nil {
 				return nil, err
 			}
