@@ -10,15 +10,16 @@ snapshot:
 
 archives:
   - id: default
-    builds:
+    ids:
       - temporal-server
       - temporal-cassandra-tool
       - temporal-sql-tool
       - temporal-elasticsearch-tool
+      - tdbg
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - ./config/*
 
