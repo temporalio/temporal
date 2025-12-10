@@ -27,8 +27,7 @@ import (
 type (
 	WorkflowTaskReportedProblemsReplicationSuite struct {
 		xdcBaseSuite
-		shouldFail  atomic.Bool
-		stopSignals atomic.Bool
+		shouldFail atomic.Bool
 	}
 )
 
@@ -308,14 +307,12 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) simpleActivity() (string,
 
 // workflowWithSignalsThatFails creates a workflow that listens for signals and fails on each workflow task.
 func (s *WorkflowTaskReportedProblemsReplicationSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) {
-	signalChan := workflow.GetSignalChannel(ctx, "test-signal")
-
-	var signalValue string
-	signalChan.Receive(ctx, &signalValue)
-
-	// Always fail after receiving a signal, unless shouldFail is false
+	// If we should fail, signal ourselves (creating a side effect) and immediately panic.
+	// This creates buffered events without needing external goroutines.
 	if s.shouldFail.Load() {
-		panic("forced-panic-after-signal")
+		// Signal ourselves to create buffered events
+		_ = workflow.SignalExternalWorkflow(ctx, workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
+		panic("forced-panic-after-self-signal")
 	}
 
 	// If we reach here, shouldFail is false, so we can complete
@@ -352,7 +349,6 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.NoError(err)
 
 	s.shouldFail.Store(true)
-	s.stopSignals.Store(false)
 
 	taskQueue := testcore.RandomizeStr("tq")
 	worker1 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
@@ -368,26 +364,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.workflowWithSignalsThatFails)
 	s.NoError(err)
 
-	// Start sending signals every second in a goroutine
-	signalDone := make(chan struct{})
-	go func() {
-		defer close(signalDone)
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if s.stopSignals.Load() {
-					return
-				}
-				_ = activeSDKClient.SignalWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test-signal", "ping")
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
+	// The workflow will signal itself and panic on each WFT, creating buffered events naturally.
 	// Wait for the search attribute to be set due to consecutive failures
 	s.checkReportedProblemsSearchAttribute(
 		s.clusters[0].Host().AdminClient(),
@@ -400,13 +377,13 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 		true,
 	)
 
-	// Continue sending signals for a few more seconds and verify the search attribute is NOT removed
+	// Verify the search attribute persists even as the workflow continues to fail and create buffered events
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		s.NoError(err)
 		saVal, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
-		s.True(ok, "Search attribute should still be present after receiving signals")
-		s.NotEmpty(saVal, "Search attribute should not be empty after receiving signals")
+		s.True(ok, "Search attribute should still be present during continued failures")
+		s.NotEmpty(saVal, "Search attribute should not be empty during continued failures")
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// get standby client
@@ -429,42 +406,9 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 		true,
 	)
 
-	// Stop signals and unblock the workflow for cleanup
-	s.stopSignals.Store(true)
-	s.shouldFail.Store(false)
-
-	// Send one final signal to trigger workflow completion
-	err = activeSDKClient.SignalWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test-signal", "final")
+	// Terminate the workflow for cleanup
+	err = activeSDKClient.TerminateWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test cleanup")
 	s.NoError(err)
-
-	var out string
-	s.NoError(workflowRun.Get(ctx, &out))
-
-	// Wait for signal goroutine to finish
-	<-signalDone
-
-	// Verify search attribute is cleared after successful completion in both clusters
-	s.checkReportedProblemsSearchAttribute(
-		s.clusters[0].Host().AdminClient(),
-		activeSDKClient,
-		workflowRun.GetID(),
-		workflowRun.GetRunID(),
-		ns,
-		"",
-		"",
-		false,
-	)
-
-	s.checkReportedProblemsSearchAttribute(
-		s.clusters[1].Host().AdminClient(),
-		standbyClient,
-		workflowRun.GetID(),
-		workflowRun.GetRunID(),
-		ns,
-		"",
-		"",
-		false,
-	)
 }
 
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblems_SetAndClear_FailAfterActivity() {

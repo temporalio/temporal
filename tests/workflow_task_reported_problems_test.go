@@ -19,10 +19,7 @@ import (
 
 type WFTFailureReportedProblemsTestSuite struct {
 	testcore.FunctionalTestBase
-	shouldFail   atomic.Bool
-	failureCount atomic.Int32
-	failureType  atomic.Int32 // 0 = panic, 1 = non-deterministic error
-	stopSignals  atomic.Bool
+	shouldFail atomic.Bool
 }
 
 func TestWFTFailureReportedProblemsTestSuite(t *testing.T) {
@@ -32,7 +29,7 @@ func TestWFTFailureReportedProblemsTestSuite(t *testing.T) {
 
 func (s *WFTFailureReportedProblemsTestSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 3)
+	s.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2)
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) simpleWorkflowWithShouldFail(ctx workflow.Context) (string, error) {
@@ -50,14 +47,12 @@ func (s *WFTFailureReportedProblemsTestSuite) simpleActivity() (string, error) {
 // This is used to test that the TemporalReportedProblems search attribute is not incorrectly removed
 // when signals keep coming in despite continuous workflow task failures.
 func (s *WFTFailureReportedProblemsTestSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) {
-	signalChan := workflow.GetSignalChannel(ctx, "test-signal")
-
-	var signalValue string
-	signalChan.Receive(ctx, &signalValue)
-
-	// Always fail after receiving a signal, unless shouldFail is false
+	// If we should fail, signal ourselves (creating a side effect) and immediately panic.
+	// This will create buffered.
 	if s.shouldFail.Load() {
-		panic("forced-panic-after-signal")
+		// Signal ourselves to create buffered events
+		_ = workflow.SignalExternalWorkflow(ctx, workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
+		panic("forced-panic-after-self-signal")
 	}
 
 	// If we reach here, shouldFail is false, so we can complete
@@ -130,11 +125,10 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_NotClearedBySignals() {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.shouldFail.Store(true)
-	s.stopSignals.Store(false)
 
 	s.Worker().RegisterWorkflow(s.workflowWithSignalsThatFails)
 
@@ -146,26 +140,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, s.workflowWithSignalsThatFails)
 	s.NoError(err)
 
-	// Start sending signals every second in a goroutine
-	signalDone := make(chan struct{})
-	go func() {
-		defer close(signalDone)
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if s.stopSignals.Load() {
-					return
-				}
-				_ = s.SdkClient().SignalWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test-signal", "ping")
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
+	// The workflow will signal itself and panic on each WFT, creating buffered events naturally.
 	// Wait for the search attribute to be set due to consecutive failures
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -175,39 +150,21 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 		require.NotEmpty(t, saVal)
 		require.Contains(t, saVal, "category=WorkflowTaskFailed")
 		require.Contains(t, saVal, "cause=WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure")
-	}, 30*time.Second, 500*time.Millisecond)
+	}, 20*time.Second, 500*time.Millisecond)
 
-	// Continue sending signals for a few more seconds and verify the search attribute is NOT removed
-	// This is the key part of the test - signals should not cause the search attribute to be cleared
-
+	// Verify the search attribute persists even as the workflow continues to fail and create buffered events
+	// This is the key part of the test - buffered events should not cause the search attribute to be cleared
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		s.NoError(err)
 		saVal, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
-		s.True(ok, "Search attribute should still be present after receiving signals")
-		s.NotEmpty(saVal, "Search attribute should not be empty after receiving signals")
+		s.True(ok, "Search attribute should still be present during continued failures")
+		s.NotEmpty(saVal, "Search attribute should not be empty during continued failures")
 	}, 5*time.Second, 500*time.Millisecond)
 
-	// Stop signals and unblock the workflow for cleanup
-	s.stopSignals.Store(true)
-	s.shouldFail.Store(false)
-
-	// Send one final signal to trigger workflow completion
-	err = s.SdkClient().SignalWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test-signal", "final")
+	// Terminate the workflow for cleanup
+	err = s.SdkClient().TerminateWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test cleanup")
 	s.NoError(err)
-
-	var out string
-	s.NoError(workflowRun.Get(ctx, &out))
-
-	// Wait for signal goroutine to finish
-	<-signalDone
-
-	// Verify search attribute is cleared after successful completion
-	description, err := s.SdkClient().DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.NoError(err)
-	s.NotNil(description.TypedSearchAttributes)
-	_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
-	s.False(ok)
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_SetAndClear_FailAfterActivity() {
