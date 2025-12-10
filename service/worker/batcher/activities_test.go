@@ -364,7 +364,7 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 			},
 		}
 		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
-		s.Equal("", adjustedQuery)
+		s.Empty(adjustedQuery)
 	})
 
 	s.Run("RefreshWorkflowTasks adds running filter", func() {

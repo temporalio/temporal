@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
@@ -59,6 +61,9 @@ type (
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
 
+	AdminRawClient adminservice.AdminServiceClient
+	AdminClient    adminservice.AdminServiceClient
+
 	RuntimeMetricsReporterParams struct {
 		fx.In
 
@@ -90,6 +95,8 @@ var Module = fx.Options(
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
+	fx.Provide(AdminRawClientProvider),
+	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
@@ -238,6 +245,18 @@ func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServ
 	frontendRawClient := clientBean.GetFrontendClient()
 	return frontend.NewRetryableClient(
 		frontendRawClient,
+		common.CreateFrontendClientRetryPolicy(),
+		common.IsServiceClientTransientError,
+	)
+}
+
+func AdminRawClientProvider(clientBean client.Bean, clusterMetadata cluster.Metadata) (AdminRawClient, error) {
+	return clientBean.GetRemoteAdminClient(clusterMetadata.GetCurrentClusterName())
+}
+
+func AdminClientProvider(adminRawClient AdminRawClient) AdminClient {
+	return admin.NewRetryableClient(
+		adminRawClient,
 		common.CreateFrontendClientRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)

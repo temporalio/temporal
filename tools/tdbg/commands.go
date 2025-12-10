@@ -718,7 +718,8 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory)
 		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
 	}
 
-	fmt.Fprintf(c.App.Writer, "Batch job %s started successfully.\n", color.MagentaString(jobID))
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintln(c.App.Writer, "Batch Refresh Workflow Tasks started successfully.")
 	return nil
 }
 
