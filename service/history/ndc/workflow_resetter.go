@@ -101,10 +101,22 @@ func NewWorkflowResetter(
 	}
 }
 
-// ResetWorkflow resets the given base run and creates a new run that would start after baseNextEventID. It additionally does the following
-// - cherry-picks the relevant events from base run and reapplies them to the new run.
-// - Terminates the current run if one is running. Also cherry picks and reapplies any relevant events generated due to termination of current run.
-// - Performs other bookkeeping like linking base->new run, marking current as terminated due to reset etc.
+// ResetWorkflow resets the given base run and creates a new run that would start after baseRebuildLastEventID.
+//
+// The reset process consists of two phases:
+// 1. State Rebuild: Reconstructs mutable state by replaying events from the beginning up to the reset point (baseRebuildLastEventID).
+//    This creates a consistent workflow state at the desired reset point.
+// 2. Event Reapplication: Selectively reapplies certain events that occurred AFTER the reset point (from baseRebuildLastEventID+1 to baseNextEventID).
+//    This preserves important external interactions like signals, timers, and updates that should carry forward.
+//
+// Additionally, ResetWorkflow:
+// - Cherry-picks relevant events from the base run and reapplies them to the new run (excluding certain event types as configured).
+// - Terminates the current run if one is running, and cherry-picks relevant events from that termination.
+// - Performs bookkeeping like linking base->new run, marking current as terminated due to reset, etc.
+//
+// Note on child workflows: During cascade reset scenarios where both parent and child are reset, child completion events
+// are intentionally NOT reapplied to prevent the parent from having stale child RunID information. This allows the
+// reset parent to properly wait for and connect to the reset child's new execution.
 func (r *workflowResetterImpl) ResetWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
@@ -824,6 +836,27 @@ func (r *workflowResetterImpl) reapplyEvents(
 	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "", true)
 }
 
+// reapplyEvents selectively reapplies events to the mutable state during reset or conflict resolution.
+//
+// This function is crucial for the second phase of the reset process. After the mutable state has been
+// rebuilt to the reset point, this function reapplies certain events that occurred AFTER the reset point
+// to preserve important external interactions.
+//
+// Events that are typically reapplied include:
+// - Signals sent to the workflow
+// - Updates to the workflow
+// - Timers that have fired
+// - Activity completions (in some cases)
+//
+// Events that are NOT reapplied during reset (when isReset=true) include:
+// - Child workflow completion events (COMPLETED, FAILED, CANCELED, TIMED_OUT, TERMINATED)
+//   This is critical for cascade reset scenarios where both parent and child are reset.
+//   If we reapplied the old child completion, the parent would have stale RunID information
+//   and wouldn't be able to receive completion from the reset child with its new RunID.
+//
+// Parameters:
+// - isReset: When true, indicates this is being called during workflow reset (not conflict resolution),
+//   which triggers special handling for child completion events.
 func reapplyEvents(
 	ctx context.Context,
 	mutableState historyi.MutableState,
@@ -989,15 +1022,28 @@ func reapplyEvents(
 			if isDuplicate(event) {
 				continue
 			}
-			// Skip child completion events during reset if they shouldn't be reapplied
-			// This helps with cascade reset scenarios where the child has been reset
+			// CRITICAL: Skip child completion events during reset to enable cascade reset scenarios.
+			//
+			// Why this is necessary:
+			// During workflow reset, events are processed in two phases:
+			// 1. State rebuild: Events from start to reset point are replayed to rebuild mutable state
+			// 2. Event reapplication: Selected events AFTER the reset point are reapplied (this code)
+			//
+			// In cascade reset scenarios where both parent and child are reset:
+			// - The child gets a new RunID after reset
+			// - If we reapplied the old child completion event here, the parent's mutable state would
+			//   contain the OLD child RunID from the completion event
+			// - This would prevent the parent from receiving completion from the reset child with its NEW RunID
+			// - By skipping these events, the parent's mutable state correctly shows the child as pending,
+			//   allowing it to wait for and receive the new completion from the reset child
+			//
+			// This fix is essential for cascade reset to work correctly when the child had completed
+			// before both workflows were reset.
 			if isReset && (event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED ||
 				event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED ||
 				event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED ||
 				event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT ||
 				event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED) {
-				// During reset, skip reapplying child completion events
-				// The parent will wait for new completion from potentially reset children
 				continue
 			}
 			err := reapplyChildEvents(mutableState, event)

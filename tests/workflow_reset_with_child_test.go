@@ -1,3 +1,38 @@
+// Package tests contains functional tests for workflow reset with child workflows.
+//
+// CASCADE RESET OVERVIEW:
+// Cascade reset refers to scenarios where both parent and child workflows are reset, potentially
+// to different points in their execution history. This is a complex operation that requires careful
+// handling of parent-child relationships.
+//
+// THE TWO-PHASE RESET PROCESS:
+// When a workflow is reset, the process occurs in two distinct phases:
+//
+// 1. State Rebuild Phase:
+//    - Events from the beginning up to the reset point are replayed
+//    - This reconstructs the workflow's mutable state at the desired reset point
+//    - Only events UP TO the reset point are processed
+//
+// 2. Event Reapplication Phase:
+//    - Selected events that occurred AFTER the reset point are reapplied
+//    - This preserves important external interactions (signals, updates, timers)
+//    - Child completion events are intentionally SKIPPED during this phase
+//
+// CHILD WORKFLOW HANDLING:
+// The key challenge in cascade reset is maintaining correct parent-child linkage when both are reset:
+// - When a child is reset, it gets a new RunID
+// - The parent must be able to receive completion from the reset child's new RunID
+// - Without proper handling, the parent would have stale RunID information from the old child
+//
+// The fix implemented in workflow_resetter.go ensures that child completion events are not
+// reapplied during the second phase of parent reset, allowing the parent to properly wait for
+// and connect to the reset child's new execution.
+//
+// TEST CATEGORIES:
+// 1. Reset before child initialization (tests marked as TODO for phase 2)
+// 2. Reset with running children (tests marked as TODO for phase 2)
+// 3. Cascade reset scenarios (both parent and child reset) - validated by current tests
+// 4. Reset with completed children - key focus of the cascade reset fix
 package tests
 
 import (
@@ -980,15 +1015,23 @@ func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_AfterCompletion()
 }
 
 // TestResetChildThenParent_ChildCompletedParentBlocked tests cascade reset when child has completed
-// but parent is still running (blocked on a signal). This helps determine if the cascade reset
-// limitation is specific to both workflows being completed, or if it occurs whenever the child
-// has completed (regardless of parent state).
+// but parent is still running (blocked on a signal). This test validates the fix for cascade reset
+// scenarios where both parent and child workflows are reset.
 //
-// FINDING: This test reveals that the cascade reset limitation occurs whenever a child has completed,
-// regardless of whether the parent has completed. When we reset the parent to a point after child
-// start but before child completion, the parent replays the original child's completion event from
-// its history rather than waiting for the reset child. This is because parent-child linkages in
-// history are tied to specific RunIds and reset doesn't update these linkages.
+// THE ISSUE (before fix):
+// During workflow reset, the process occurs in two phases:
+// 1. State rebuild: Events from start to reset point are replayed to rebuild mutable state
+// 2. Event reapplication: Selected events AFTER the reset point are reapplied
+//
+// When a parent was reset to a point before the child completed, the child completion event
+// (which occurred after the reset point) was being reapplied in phase 2. This caused the parent's
+// mutable state to contain the OLD child RunID, preventing it from receiving completion from the
+// reset child with its NEW RunID.
+//
+// THE FIX:
+// We now skip reapplying child completion events during reset. This ensures the parent's mutable
+// state correctly shows the child as pending, allowing it to wait for and receive the new completion
+// from the reset child. The fix is implemented in workflow_resetter.go's reapplyEvents function.
 //
 // Flow:
 // 1. Parent starts child with fixed WorkflowID
@@ -998,7 +1041,7 @@ func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_AfterCompletion()
 // 5. Reset child to before signal -> creates ChildRun2
 // 6. Reset parent to after child started but before child completed -> creates ParentRun2
 // 7. Signal reset child to complete (ChildRun2)
-// 8. ParentRun2 receives ChildRun2's result (FIXED - now works correctly!)
+// 8. ParentRun2 correctly receives ChildRun2's result (validates the fix)
 // 9. Signal parent to complete
 func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_ChildCompletedParentBlocked() {
 	wfID := "reset-child-then-parent-child-completed-parent-blocked"
