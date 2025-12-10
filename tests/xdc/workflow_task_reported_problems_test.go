@@ -197,6 +197,95 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	)
 }
 
+func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblems_SetAndClear() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	ns := s.createGlobalNamespace()
+	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+		Logger:    log.NewSdkLogger(s.logger),
+	})
+	s.NoError(err)
+
+	standbyClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+		Logger:    log.NewSdkLogger(s.logger),
+	})
+	s.NoError(err)
+
+	s.shouldFail.Store(true)
+
+	taskQueue := testcore.RandomizeStr("tq")
+	worker1 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
+	worker1.RegisterWorkflow(s.simpleWorkflow)
+	s.NoError(worker1.Start())
+	defer worker1.Stop()
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wfid-" + s.T().Name()),
+		TaskQueue: taskQueue,
+	}
+
+	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
+	s.NoError(err)
+
+	// Check if the search attributes are not empty and has TemporalReportedProblems
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[0].Host().AdminClient(),
+		activeSDKClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"WorkflowTaskFailed",
+		"WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure",
+		true,
+	)
+
+	// Verify the search attribute is replicated to the standby cluster
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[1].Host().AdminClient(),
+		standbyClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"WorkflowTaskFailed",
+		"WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure",
+		true,
+	)
+
+	// Unblock the workflow
+	s.shouldFail.Store(false)
+
+	var out string
+	s.NoError(workflowRun.Get(ctx, &out))
+
+	// Verify search attribute is cleared after successful completion in both clusters
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[0].Host().AdminClient(),
+		activeSDKClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"",
+		"",
+		false,
+	)
+
+	s.checkReportedProblemsSearchAttribute(
+		s.clusters[1].Host().AdminClient(),
+		standbyClient,
+		workflowRun.GetID(),
+		workflowRun.GetRunID(),
+		ns,
+		"",
+		"",
+		false,
+	)
+}
+
 func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedProblems_DynamicConfigChanges() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
