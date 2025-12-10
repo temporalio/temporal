@@ -4580,7 +4580,7 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 	s.Eventually(func() bool {
 		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     &taskqueuepb.TaskQueue{Name: tv1.TaskQueue().GetName()},
+			TaskQueue:     tv1.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
 		})
@@ -4602,7 +4602,7 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 	s.Eventually(func() bool {
 		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     &taskqueuepb.TaskQueue{Name: tv1.TaskQueue().GetName()},
+			TaskQueue:     tv1.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
 		})
