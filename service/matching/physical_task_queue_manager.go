@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -712,8 +713,17 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return nil
 	}
 
-	// we need to update the deployment workflow to tell it about this task queue
-	// TODO: add some backoff here if we got an error last time
+	limit := c.config.MaxVersionsInTaskQueue()
+	if worker_versioning.CountDeploymentVersions(deploymentData) >= limit {
+		// Before retrying the error, hold the poller for some time so it does not retry immediately
+		// Parallel polls are already serialized using the lock.
+		time.Sleep(deploymentRegisterErrorBackoff)
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("exceeding maximum number of Deployment Versions in this task queue (limit = %d)", limit),
+		}
+	}
 
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),

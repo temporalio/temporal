@@ -39,6 +39,7 @@ type (
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		MaxVersionsInTaskQueue               dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
 
 		// task queue configuration
@@ -203,7 +204,8 @@ type (
 
 		FairnessCounter func() counter.CounterParams
 
-		loadCause loadCause
+		loadCause              loadCause
+		MaxVersionsInTaskQueue func() int
 	}
 
 	loadCause   int
@@ -257,6 +259,7 @@ func NewConfig(
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
 		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
+		MaxVersionsInTaskQueue:                   dynamicconfig.MatchingMaxVersionsInTaskQueue.Get(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		EnableMigration:                          dynamicconfig.MatchingEnableMigration.Get(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
@@ -475,6 +478,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
 		},
+		MaxVersionsInTaskQueue: func() int { return config.MaxVersionsInTaskQueue(ns.String()) },
 	}
 }
 
