@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -35,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/consts"
@@ -60,15 +62,16 @@ type (
 	}
 
 	WorkflowStateReplicatorImpl struct {
-		shardContext      historyi.ShardContext
-		namespaceRegistry namespace.Registry
-		workflowCache     wcache.Cache
-		clusterMetadata   cluster.Metadata
-		executionMgr      persistence.ExecutionManager
-		historySerializer serialization.Serializer
-		transactionMgr    TransactionManager
-		logger            log.Logger
-		taskRefresher     workflow.TaskRefresher
+		shardContext           historyi.ShardContext
+		namespaceRegistry      namespace.Registry
+		workflowCache          wcache.Cache
+		clusterMetadata        cluster.Metadata
+		executionMgr           persistence.ExecutionManager
+		historySerializer      serialization.Serializer
+		transactionMgr         TransactionManager
+		persistenceRateLimiter quotas.RequestRateLimiter
+		logger                 log.Logger
+		taskRefresher          workflow.TaskRefresher
 	}
 )
 
@@ -77,20 +80,22 @@ func NewWorkflowStateReplicator(
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	eventSerializer serialization.Serializer,
+	persistenceRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 ) *WorkflowStateReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
 	return &WorkflowStateReplicatorImpl{
-		shardContext:      shardContext,
-		namespaceRegistry: shardContext.GetNamespaceRegistry(),
-		workflowCache:     workflowCache,
-		clusterMetadata:   shardContext.GetClusterMetadata(),
-		executionMgr:      shardContext.GetExecutionManager(),
-		historySerializer: eventSerializer,
-		transactionMgr:    NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
-		logger:            logger,
-		taskRefresher:     workflow.NewTaskRefresher(shardContext),
+		shardContext:           shardContext,
+		namespaceRegistry:      shardContext.GetNamespaceRegistry(),
+		workflowCache:          workflowCache,
+		clusterMetadata:        shardContext.GetClusterMetadata(),
+		executionMgr:           shardContext.GetExecutionManager(),
+		historySerializer:      eventSerializer,
+		transactionMgr:         NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
+		persistenceRateLimiter: persistenceRateLimiter,
+		logger:                 logger,
+		taskRefresher:          workflow.NewTaskRefresher(shardContext),
 	}
 }
 
@@ -1036,6 +1041,19 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		historyEvents = append(historyEvents, events)
 	}
 
+	nsName, err := r.namespaceRegistry.GetNamespaceName(namespaceID)
+	if err != nil {
+		nsName = namespace.EmptyName
+	}
+	quotaRequest := quotas.NewRequest(
+		"AppendRawHistoryNodes",
+		1,
+		nsName.String(),
+		headers.CallerTypePreemptable,
+		0,
+		"",
+	)
+
 	prevTxnID := localMutableState.GetExecutionInfo().LastFirstEventTxnId
 	fetchFromRemoteAndAppend := func(
 		startID, // exclusive
@@ -1074,6 +1092,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				}
 				localMutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(localMutableState.GetWorkflowKey(), event)
+			}
+			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
+				return err
 			}
 			_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 				ShardID:           r.shardContext.GetShardID(),
@@ -1128,6 +1149,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			}
 			localMutableState.AddReapplyCandidateEvent(event)
 			r.addEventToCache(localMutableState.GetWorkflowKey(), event)
+		}
+		if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
+			return newBranchToken, err
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
@@ -1492,6 +1516,18 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		return err
 	}
 
+	nsName, err := r.namespaceRegistry.GetNamespaceName(namespaceID)
+	if err != nil {
+		nsName = namespace.EmptyName
+	}
+	quotaRequest := quotas.NewRequest(
+		"AppendRawHistoryNodes",
+		1,
+		nsName.String(),
+		headers.CallerTypePreemptable,
+		0,
+		"")
+
 	prevTxnID := common.EmptyEventTaskID
 	var prevBranchID string
 	sortedAncestors := sortAncestors(historyBranch.GetAncestors())
@@ -1572,6 +1608,9 @@ BackfillLoop:
 			return err
 		}
 
+		if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
+			return err
+		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
 			IsNewBranch:       prevBranchID != branchID,
