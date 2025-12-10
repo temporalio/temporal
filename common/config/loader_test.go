@@ -12,82 +12,6 @@ import (
 
 const fileMode = os.FileMode(0644)
 
-func TestRenderTemplateWithEnvVars(t *testing.T) {
-	templateContent := []byte(`# enable-template
-log:
-  level: {{ default .Env.LOG_LEVEL "info" }}
-persistence:
-  numHistoryShards: {{ default .Env.NUM_HISTORY_SHARDS "4" }}`)
-
-	testCases := []struct {
-		name              string
-		envMap            map[string]string
-		expectedLogLevel  string
-		expectedNumShards string
-	}{
-		{
-			name: "with environment variables set",
-			envMap: map[string]string{
-				"LOG_LEVEL":          "debug",
-				"NUM_HISTORY_SHARDS": "8",
-			},
-			expectedLogLevel:  "debug",
-			expectedNumShards: "8",
-		},
-		{
-			name:              "with no environment variables - uses defaults",
-			envMap:            map[string]string{},
-			expectedLogLevel:  "info",
-			expectedNumShards: "4",
-		},
-		{
-			name: "with partial environment variables",
-			envMap: map[string]string{
-				"LOG_LEVEL": "warn",
-			},
-			expectedLogLevel:  "warn",
-			expectedNumShards: "4",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			rendered, err := renderTemplate(templateContent, "test.yaml", tc.envMap)
-			require.NoError(t, err)
-
-			renderedStr := string(rendered)
-			require.Contains(t, renderedStr, "level: "+tc.expectedLogLevel)
-			require.Contains(t, renderedStr, "numHistoryShards: "+tc.expectedNumShards)
-		})
-	}
-}
-
-func TestProcessConfigFile(t *testing.T) {
-	content := []byte(`log:
-  level: info`)
-
-	envMap := map[string]string{"LOG_LEVEL": "debug"}
-	processed, err := processConfigFile(content, "test.yaml", envMap)
-	require.NoError(t, err)
-	require.Equal(t, content, processed)
-}
-
-func TestLoadWithEmbeddedTemplate(t *testing.T) {
-	envMap := map[string]string{
-		"DB":             "postgres12",
-		"POSTGRES_SEEDS": "localhost",
-	}
-
-	cfg, err := Load(WithEmbedded(), WithEnvMap(envMap))
-	require.NoError(t, err)
-
-	// Verify embedded template loaded with defaults
-	require.Equal(t, "info", cfg.Log.Level)
-	require.Equal(t, int32(4), cfg.Persistence.NumHistoryShards)
-	require.NotNil(t, cfg.Services["frontend"])
-	require.Equal(t, 7233, cfg.Services["frontend"].RPC.GRPCPort)
-}
-
 func TestLoad(t *testing.T) {
 	const staticConfig = `log:
   level: warn
@@ -110,9 +34,9 @@ services:
 
 	const templateConfig = `# enable-template
 log:
-  level: {{ default .Env.LOG_LEVEL "info" }}
+  level: {{ default "info" (env "LOG_LEVEL") }}
 persistence:
-  numHistoryShards: {{ default .Env.NUM_HISTORY_SHARDS "4" }}
+  numHistoryShards: {{ default "4" (env "NUM_HISTORY_SHARDS") }}
   defaultStore: default
   datastores:
     default:
@@ -124,7 +48,7 @@ persistence:
 services:
   frontend:
     rpc:
-      grpcPort: {{ default .Env.FRONTEND_GRPC_PORT "7233" }}
+      grpcPort: {{ default "7233" (env "FRONTEND_GRPC_PORT") }}
       bindOnIP: "127.0.0.1"
 `
 
@@ -154,37 +78,6 @@ services:
 				require.Equal(t, "warn", cfg.Log.Level)
 				require.Equal(t, int32(16), cfg.Persistence.NumHistoryShards)
 				require.Equal(t, 9233, cfg.Services["frontend"].RPC.GRPCPort)
-			},
-		},
-		{
-			name:          "template config with custom env vars",
-			configContent: templateConfig,
-			loadOptions: func(configPath string) []loadOption {
-				envMap := map[string]string{
-					"LOG_LEVEL":          "debug",
-					"NUM_HISTORY_SHARDS": "8",
-					"FRONTEND_GRPC_PORT": "8233",
-				}
-				return []loadOption{WithConfigDir(filepath.Dir(configPath)), WithEnvMap(envMap)}
-			},
-			expectError: false,
-			validateConfig: func(t *testing.T, cfg *Config) {
-				require.Equal(t, "debug", cfg.Log.Level)
-				require.Equal(t, int32(8), cfg.Persistence.NumHistoryShards)
-				require.Equal(t, 8233, cfg.Services["frontend"].RPC.GRPCPort)
-			},
-		},
-		{
-			name:          "template config uses defaults when env vars not set",
-			configContent: templateConfig,
-			loadOptions: func(configPath string) []loadOption {
-				return []loadOption{WithConfigDir(filepath.Dir(configPath))}
-			},
-			expectError: false,
-			validateConfig: func(t *testing.T, cfg *Config) {
-				require.Equal(t, "info", cfg.Log.Level)
-				require.Equal(t, int32(4), cfg.Persistence.NumHistoryShards)
-				require.Equal(t, 7233, cfg.Services["frontend"].RPC.GRPCPort)
 			},
 		},
 		{

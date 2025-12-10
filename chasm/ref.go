@@ -93,7 +93,7 @@ func (r *ComponentRef) ShardingKey(
 		return "", err
 	}
 
-	rc, ok := registry.componentByID(archetypeID)
+	rc, ok := registry.ComponentByID(archetypeID)
 	if !ok {
 		return "", serviceerror.NewInternalf("unknown chasm component type id: %d", archetypeID)
 	}

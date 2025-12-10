@@ -29,6 +29,7 @@ const (
 	PriorityTagName             = "priority"
 	PersistenceDBKindTagName    = "db_kind"
 	WorkerPluginNameTagName     = "worker_plugin_name"
+	headerCallsiteTagName       = "header_callsite"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -280,10 +281,14 @@ const (
 	VisibilityPersistenceDeleteWorkflowExecutionScope = "DeleteWorkflowExecution"
 	// VisibilityPersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceListWorkflowExecutionsScope = "ListWorkflowExecutions"
+	// VisibilityPersistenceListChasmExecutionsScope tracks ListChasmExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListChasmExecutionsScope = "ListChasmExecutions"
 	// VisibilityPersistenceScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceScanWorkflowExecutionsScope = "ScanWorkflowExecutions"
 	// VisibilityPersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceCountWorkflowExecutionsScope = "CountWorkflowExecutions"
+	// VisibilityPersistenceCountChasmExecutionsScope tracks CountChasmExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceCountChasmExecutionsScope = "CountChasmExecutions"
 	// VisibilityPersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to visibility persistence layer
 	VisibilityPersistenceGetWorkflowExecutionScope = "GetWorkflowExecution"
 	// VisibilityPersistenceAddSearchAttributesScope tracks AddSearchAttributes calls made by service to visibility persistence layer
@@ -636,6 +641,7 @@ var (
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
+	HeaderSize                               = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
 	LockRequests                             = NewCounterDef("lock_requests")
 	LockLatency                              = NewTimerDef("lock_latency")
 	SemaphoreRequests                        = NewCounterDef("semaphore_requests")

@@ -29,13 +29,10 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if typeMap != nil {
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
-			if err != nil && !sadefs.IsChasmSearchAttribute(saName) {
+			if err != nil {
 				lastErr = err
 				continue
 			}
-			// TODO: CHASM search attributes read from visibility stores (e.g., during queries)
-			// will not have type metadata set, which may cause issues on the decode path.
-			// This is acceptable for now as CHASM query support is not yet implemented.
 			sadefs.SetMetadataType(valPayload, saType)
 		}
 	}
@@ -62,6 +59,7 @@ func Decode(
 		if typeMap != nil {
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
+			// TODO: Evaluate if we should get the chasm search attribute mapper when upserting search attributes.
 			if err != nil && !sadefs.IsChasmSearchAttribute(saName) {
 				lastErr = err
 			}

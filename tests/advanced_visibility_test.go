@@ -59,11 +59,18 @@ type AdvancedVisibilitySuite struct {
 
 	// client for the system namespace
 	sysSDKClient sdkclient.Client
+
+	enableUnifiedQueryConverter bool
 }
 
 func TestAdvancedVisibilitySuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(AdvancedVisibilitySuite))
+	suite.Run(t, &AdvancedVisibilitySuite{enableUnifiedQueryConverter: true})
+}
+
+func TestAdvancedVisibilitySuiteLegacy(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &AdvancedVisibilitySuite{enableUnifiedQueryConverter: false})
 }
 
 // This cluster use customized threshold for history config
@@ -79,7 +86,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 		// Enable the unified query converter
-		dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): true,
+		dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): s.enableUnifiedQueryConverter,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
@@ -980,13 +987,13 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(err.Error(), "'GROUP BY' clause is only supported for search attributes")
+	s.Contains(strings.ToLower(err.Error()), "'group by' clause is only supported for")
 
 	query = `GROUP BY ExecutionStatus, WorkflowType`
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(err.Error(), "'GROUP BY' clause supports only a single field")
+	s.Contains(strings.ToLower(err.Error()), "'group by' clause supports only a single field")
 }
 
 func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {

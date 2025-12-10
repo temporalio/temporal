@@ -10,6 +10,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -496,7 +497,7 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			name: "fail not supported group by field",
 			in:   "select * from t group by RunId",
 			err: fmt.Sprintf(
-				"%s: 'GROUP BY' clause is only supported for search attributes",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				NotSupportedErrMessage,
 			),
 		},
@@ -2526,4 +2527,133 @@ func parseWhereString(where string) sqlparser.Expr {
 		panic(err)
 	}
 	return stmt.(*sqlparser.Select).Where.Expr
+}
+
+func TestQueryConverter_WithChasmMapper(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctrl := gomock.NewController(t)
+	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	c := NewQueryConverter(
+		storeQCMock,
+		testNamespaceName,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+	)
+	r.Nil(c.chasmMapper)
+
+	c = c.WithChasmMapper(chasmMapper)
+	r.Equal(chasmMapper, c.chasmMapper)
+
+	c = c.WithChasmMapper(nil)
+	r.Nil(c.chasmMapper)
+}
+
+func TestQueryConverter_WithArchetypeID(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctrl := gomock.NewController(t)
+	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+
+	c := NewQueryConverter(
+		storeQCMock,
+		testNamespaceName,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+	)
+	r.Equal(chasm.UnspecifiedArchetypeID, c.archetypeID)
+
+	c = c.WithArchetypeID(123)
+	r.Equal(chasm.ArchetypeID(123), c.archetypeID)
+
+	c = c.WithArchetypeID(chasm.UnspecifiedArchetypeID)
+	r.Equal(chasm.UnspecifiedArchetypeID, c.archetypeID)
+}
+
+func TestQueryConverter_ResolveSearchAttributeAlias_WithChasmMapper(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":    "ChasmCompleted",
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	queryConverter := NewQueryConverter(
+		storeQCMock,
+		testNamespaceName,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+	).WithChasmMapper(chasmMapper)
+
+	testCases := []struct {
+		name                    string
+		expectedFieldName       string
+		expectedFieldType       enumspb.IndexedValueType
+		expectedErr             bool
+		expectNamespaceDivision bool
+	}{
+		{
+			name:                    "ChasmCompleted",
+			expectedFieldName:       "TemporalBool01",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_BOOL,
+			expectedErr:             false,
+			expectNamespaceDivision: false,
+		},
+		{
+			name:                    "ChasmStatus",
+			expectedFieldName:       "TemporalKeyword01",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			expectedErr:             false,
+			expectNamespaceDivision: false,
+		},
+		{
+			name:                    "TemporalNamespaceDivision",
+			expectedFieldName:       "TemporalNamespaceDivision",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			expectedErr:             false,
+			expectNamespaceDivision: true,
+		},
+		{
+			name:                    "NonExistentChasmAlias",
+			expectedFieldName:       "",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
+			expectedErr:             true,
+			expectNamespaceDivision: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			fieldName, fieldType, err := queryConverter.resolveSearchAttributeAlias(tc.name)
+			if tc.expectedErr {
+				r.Error(err)
+				// Note: fieldName may have been set during resolution attempts
+				r.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fieldType)
+			} else {
+				r.NoError(err)
+				r.Equal(tc.expectedFieldName, fieldName)
+				r.Equal(tc.expectedFieldType, fieldType)
+				// Note: seenNamespaceDivision is only set in convertColName, not resolveSearchAttributeAlias
+			}
+		})
+	}
 }

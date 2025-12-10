@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -15,7 +14,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
@@ -30,10 +28,6 @@ func Invoke(
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := validatePostResetOperationInputs(resetRequest.ResetRequest.PostResetOperations); err != nil {
 		return nil, err
 	}
 
@@ -202,20 +196,4 @@ func GetResetReapplyExcludeTypes(
 		exclude[e] = struct{}{}
 	}
 	return exclude
-}
-
-// validatePostResetOperationInputs validates the optional post reset operation inputs.
-func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
-	for _, operation := range postResetOperations {
-		switch op := operation.GetVariant().(type) {
-		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
-				return err
-			}
-		default:
-			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
-		}
-	}
-	return nil
 }

@@ -384,15 +384,12 @@ func (*BackfillerState_BackfillRequest) isBackfillerState_Request() {}
 
 func (*BackfillerState_TriggerRequest) isBackfillerState_Request() {}
 
-// CHASM scheduler retains the payload data for the last completed workflow
-// (either failure or success).
+// CHASM scheduler retains the payload data for the last completed workflow. Both
+// last success and failure are stored simultaneously.
 type LastCompletionResult struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Outcome:
-	//
-	//	*LastCompletionResult_Success
-	//	*LastCompletionResult_Failure
-	Outcome       isLastCompletionResult_Outcome `protobuf_oneof:"outcome"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       *v12.Payload           `protobuf:"bytes,1,opt,name=success,proto3" json:"success,omitempty"`
+	Failure       *v13.Failure           `protobuf:"bytes,2,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -427,46 +424,19 @@ func (*LastCompletionResult) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *LastCompletionResult) GetOutcome() isLastCompletionResult_Outcome {
-	if x != nil {
-		return x.Outcome
-	}
-	return nil
-}
-
 func (x *LastCompletionResult) GetSuccess() *v12.Payload {
 	if x != nil {
-		if x, ok := x.Outcome.(*LastCompletionResult_Success); ok {
-			return x.Success
-		}
+		return x.Success
 	}
 	return nil
 }
 
 func (x *LastCompletionResult) GetFailure() *v13.Failure {
 	if x != nil {
-		if x, ok := x.Outcome.(*LastCompletionResult_Failure); ok {
-			return x.Failure
-		}
+		return x.Failure
 	}
 	return nil
 }
-
-type isLastCompletionResult_Outcome interface {
-	isLastCompletionResult_Outcome()
-}
-
-type LastCompletionResult_Success struct {
-	Success *v12.Payload `protobuf:"bytes,1,opt,name=success,proto3,oneof"`
-}
-
-type LastCompletionResult_Failure struct {
-	Failure *v13.Failure `protobuf:"bytes,2,opt,name=failure,proto3,oneof"`
-}
-
-func (*LastCompletionResult_Success) isLastCompletionResult_Outcome() {}
-
-func (*LastCompletionResult_Failure) isLastCompletionResult_Outcome() {}
 
 var File_temporal_server_chasm_lib_scheduler_proto_v1_message_proto protoreflect.FileDescriptor
 
@@ -501,11 +471,10 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"backfillId\x12J\n" +
 	"\x13last_processed_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12\x18\n" +
 	"\aattempt\x18\b \x01(\x03R\aattemptB\t\n" +
-	"\arequest\"\x9c\x01\n" +
-	"\x14LastCompletionResult\x12;\n" +
-	"\asuccess\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadH\x00R\asuccess\x12<\n" +
-	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureH\x00R\afailureB\t\n" +
-	"\aoutcomeBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\arequest\"\x8d\x01\n" +
+	"\x14LastCompletionResult\x129\n" +
+	"\asuccess\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\asuccess\x12:\n" +
+	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailureBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescOnce sync.Once
@@ -567,10 +536,6 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_init() {
 	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[3].OneofWrappers = []any{
 		(*BackfillerState_BackfillRequest)(nil),
 		(*BackfillerState_TriggerRequest)(nil),
-	}
-	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_msgTypes[4].OneofWrappers = []any{
-		(*LastCompletionResult_Success)(nil),
-		(*LastCompletionResult_Failure)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

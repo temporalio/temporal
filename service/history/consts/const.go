@@ -91,6 +91,8 @@ var (
 	ErrChildExecutionNotFound = serviceerror.NewNotFound("Pending child execution not found.")
 	// ErrWorkflowNotReady is error indicating workflow mutable state is missing necessary information for handling the request
 	ErrWorkflowNotReady = serviceerror.NewWorkflowNotReady("Workflow state is not ready to handle the request.")
+	// ErrWorkflowTaskNotFound is error indicating workflow task is not found, either due to it has already completed or attempt/stamp mismatch
+	ErrWorkflowTaskNotFound = serviceerror.NewNotFound("workflow task not found.")
 	// ErrWorkflowTaskNotScheduled is error indicating workflow task is not scheduled yet.
 	ErrWorkflowTaskNotScheduled = serviceerror.NewWorkflowNotReady("Workflow task is not scheduled yet.")
 	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.

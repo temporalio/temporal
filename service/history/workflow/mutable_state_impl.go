@@ -162,6 +162,7 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
+		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -318,6 +319,7 @@ func NewMutableState(
 		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
+		chasmNodeSizes:               make(map[string]int),
 		totalTombstones:              0,
 		currentVersion:               namespaceEntry.FailoverVersion(),
 		bufferEventsInDB:             nil,
@@ -395,7 +397,7 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
-	if s.config.EnableChasm() {
+	if s.config.EnableChasm(namespaceEntry.Name().String()) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
 			shard.GetTimeSource(),
@@ -530,7 +532,17 @@ func NewMutableStateFromDB(
 
 	mutableState.mustInitHSM()
 
-	if shard.GetConfig().EnableChasm() {
+	// Track chasm node size even if chasm is not enabled,
+	// because those nodes are still stored in the mutable state,
+	// and should be taken into account when deciding if execution
+	// should be terminated based on mutable state size.
+	for key, node := range dbRecord.ChasmNodes {
+		nodeSize := len(key) + node.Size()
+		mutableState.approximateSize += nodeSize
+		mutableState.chasmNodeSizes[key] = nodeSize
+	}
+
+	if shard.GetConfig().EnableChasm(namespaceEntry.Name().String()) {
 		var err error
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
@@ -542,9 +554,6 @@ func NewMutableStateFromDB(
 		)
 		if err != nil {
 			return nil, err
-		}
-		for key, node := range dbRecord.ChasmNodes {
-			mutableState.approximateSize += len(key) + node.Size()
 		}
 	}
 
@@ -5194,6 +5203,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
 	identity string,
+	priority *commonpb.Priority,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
@@ -5205,6 +5215,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		attachCompletionCallbacks,
 		links,
 		identity,
+		priority,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	prevEffectiveDeployment := ms.GetEffectiveDeployment()
@@ -5255,6 +5266,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		attributes.GetAttachedCompletionCallbacks(),
 	); err != nil {
 		return err
+	}
+
+	// Update priority.
+	if attributes.GetPriority() != nil {
+		if !proto.Equal(ms.executionInfo.Priority, attributes.GetPriority()) {
+			requestReschedulePendingWorkflowTask = true
+		}
+		ms.executionInfo.Priority = attributes.GetPriority()
 	}
 
 	// Finally, reschedule the pending workflow task if so requested.
@@ -6412,6 +6431,17 @@ func (ms *MutableStateImpl) processCloseCallbacksHsm() error {
 
 // processCloseCallbacksChasm triggers "WorkflowClosed" callbacks using the CHASM implementation.
 func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+
+	// Return early if there are no chasm callbacks to process.
+	if len(wf.Callbacks) == 0 {
+		return nil
+	}
+
+	// If there are callbacks to process, create a writable workflow component.
 	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
 	if err != nil {
 		return err
@@ -6789,11 +6819,18 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
-	//
-	// TODO: update approximateSize once chasm.NodesMutation returns size change as well.
 	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
 	if err != nil {
 		return closeTransactionResult{}, err
+	}
+	for nodePath := range chasmNodesMutation.DeletedNodes {
+		ms.approximateSize -= ms.chasmNodeSizes[nodePath]
+		delete(ms.chasmNodeSizes, nodePath)
+	}
+	for nodePath, node := range chasmNodesMutation.UpdatedNodes {
+		newSize := len(nodePath) + node.Size()
+		ms.approximateSize += newSize - ms.chasmNodeSizes[nodePath]
+		ms.chasmNodeSizes[nodePath] = newSize
 	}
 
 	if isStateDirty {
