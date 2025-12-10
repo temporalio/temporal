@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -62,16 +63,17 @@ type (
 
 		// internal services clients
 
-		SDKClientFactory     *sdk.MockClientFactory
-		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
-		MatchingClient       *matchingservicemock.MockMatchingServiceClient
-		HistoryClient        *historyservicemock.MockHistoryServiceClient
-		RemoteAdminClient    *adminservicemock.MockAdminServiceClient
-		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
-		ClientBean           *client.MockBean
-		ClientFactory        *client.MockFactory
-		ESClient             *esclient.MockClient
-		VisibilityManager    *manager.MockVisibilityManager
+		SDKClientFactory       *sdk.MockClientFactory
+		FrontendClient         *workflowservicemock.MockWorkflowServiceClient
+		MatchingClient         *matchingservicemock.MockMatchingServiceClient
+		HistoryClient          *historyservicemock.MockHistoryServiceClient
+		RemoteAdminClient      *adminservicemock.MockAdminServiceClient
+		RemoteFrontendClient   *workflowservicemock.MockWorkflowServiceClient
+		ClientBean             *client.MockBean
+		ClientFactory          *client.MockFactory
+		ESClient               *esclient.MockClient
+		VisibilityManager      *manager.MockVisibilityManager
+		ChasmVisibilityManager *chasm.MockVisibilityManager
 
 		// persistence clients
 
@@ -164,16 +166,17 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 
 		// internal services clients
 
-		SDKClientFactory:     sdk.NewMockClientFactory(controller),
-		FrontendClient:       frontendClient,
-		MatchingClient:       matchingClient,
-		HistoryClient:        historyClient,
-		RemoteAdminClient:    remoteAdminClient,
-		RemoteFrontendClient: remoteFrontendClient,
-		ClientBean:           clientBean,
-		ClientFactory:        clientFactory,
-		ESClient:             esclient.NewMockClient(controller),
-		VisibilityManager:    manager.NewMockVisibilityManager(controller),
+		SDKClientFactory:       sdk.NewMockClientFactory(controller),
+		FrontendClient:         frontendClient,
+		MatchingClient:         matchingClient,
+		HistoryClient:          historyClient,
+		RemoteAdminClient:      remoteAdminClient,
+		RemoteFrontendClient:   remoteFrontendClient,
+		ClientBean:             clientBean,
+		ClientFactory:          clientFactory,
+		ESClient:               esclient.NewMockClient(controller),
+		VisibilityManager:      manager.NewMockVisibilityManager(controller),
+		ChasmVisibilityManager: chasm.NewMockVisibilityManager(controller),
 
 		// persistence clients
 
@@ -349,6 +352,11 @@ func (t *Test) GetClientFactory() client.Factory {
 // GetVisibilityManager for testing
 func (t *Test) GetVisibilityManager() manager.VisibilityManager {
 	return t.VisibilityManager
+}
+
+// GetChasmVisibilityManager for testing
+func (t *Test) GetChasmVisibilityManager() chasm.VisibilityManager {
+	return t.ChasmVisibilityManager
 }
 
 // persistence clients

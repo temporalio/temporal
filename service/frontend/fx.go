@@ -113,6 +113,8 @@ var Module = fx.Options(
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
+	fx.Provide(ChasmVisibilityManagerProvider),
+	fx.Provide(chasm.ChasmRequestInterceptorProvider),
 )
 
 func NewServiceProvider(
@@ -736,6 +738,7 @@ func HandlerProvider(
 	versionChecker *VersionChecker,
 	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
+	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
@@ -765,6 +768,7 @@ func HandlerProvider(
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
+		chasmVisibilityMgr,
 		logger,
 		throttledLogger,
 		persistenceExecutionManager.GetName(),
@@ -937,4 +941,14 @@ func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegis
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func ChasmVisibilityManagerProvider(
+	chasmRegistry *chasm.Registry,
+	visibilityManager manager.VisibilityManager,
+) chasm.VisibilityManager {
+	return visibility.NewChasmVisibilityManager(
+		chasmRegistry,
+		visibilityManager,
+	)
 }

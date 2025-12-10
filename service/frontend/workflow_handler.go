@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
@@ -122,6 +123,7 @@ type (
 		namespaceHandler                *namespaceHandler
 		getDefaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 		visibilityMgr                   manager.VisibilityManager
+		chasmVisibilityMgr              chasm.VisibilityManager
 		logger                          log.Logger
 		throttledLogger                 log.Logger
 		persistenceExecutionName        string
@@ -154,6 +156,7 @@ func NewWorkflowHandler(
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
+	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.Logger,
 	throttledLogger log.Logger,
 	persistenceExecutionName string,
@@ -195,6 +198,7 @@ func NewWorkflowHandler(
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,
+		chasmVisibilityMgr:              chasmVisibilityMgr,
 		logger:                          logger,
 		throttledLogger:                 throttledLogger,
 		persistenceExecutionName:        persistenceExecutionName,
