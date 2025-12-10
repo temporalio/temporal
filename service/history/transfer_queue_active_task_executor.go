@@ -914,7 +914,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// the first matching task-queue-in-version check.
 	newTQInPinnedVersion := false
 
-	// Child of a parent with Pinned behavior will inherit the parent's version if the Child's Task Queue belongs to that version.
+	// Child of pinned parent will inherit the parent's version if the Child's Task Queue belongs to that version.
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
 	if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
@@ -933,7 +933,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
-	// Effective versioning behavior of the workflow must be Pinned to inherit the pinned override version.
 	var inheritedPinnedOverride *workflowpb.VersioningOverride
 	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) &&
 		workflow.GetEffectiveVersioningBehavior(mutableState.GetExecutionInfo().GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED {

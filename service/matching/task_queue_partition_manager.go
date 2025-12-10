@@ -1039,7 +1039,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	var currentRevisionNumber, rampingRevisionNumber int64
 	var rampingPercentage float32
 	var targetDeployment *deploymentpb.Deployment //nolint:staticcheck // SA1019: [cleanup-wv-3.1]
-	if wfBehavior != enumspb.VERSIONING_BEHAVIOR_PINNED {
+	if wfBehavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ = worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
 		targetDeploymentVersion, targetDeploymentRevisionNumber = worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
 		targetDeployment = worker_versioning.DeploymentFromDeploymentVersion(targetDeploymentVersion)

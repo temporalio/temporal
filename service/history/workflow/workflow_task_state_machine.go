@@ -519,7 +519,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// Create WorkflowTaskStartedEvent only if WorkflowTaskScheduledEvent was created.
 	// (it wasn't created for transient/speculative WT).
 	var startedEvent *historypb.HistoryEvent
-	if workflowTaskScheduledEventCreated { // TODO(carlydf): put reasons into history event
+	if workflowTaskScheduledEventCreated {
 		startedEvent = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
 			requestID,
@@ -529,6 +529,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			historySizeBytes,
 			versioningStamp,
 			redirectCounter,
+			suggestContinueAsNewReasons,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
@@ -720,6 +721,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.HistorySizeBytes,
 			request.WorkerVersionStamp,
 			workflowTask.BuildIdRedirectCounter,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -808,6 +810,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.HistorySizeBytes,
 			versioningStamp,
 			workflowTask.BuildIdRedirectCounter,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -879,6 +882,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.HistorySizeBytes,
 			nil,
 			workflowTask.BuildIdRedirectCounter,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -1408,6 +1412,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.HistorySizeBytes,
 			nil,
 			wt.BuildIdRedirectCounter,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 
