@@ -311,7 +311,7 @@ jobs:
         env:
           FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_unit_test_suites }} -count=10"
-          TEST_TIMEOUT: 19
+          TEST_TIMEOUT: 35
 
   integration-test:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
