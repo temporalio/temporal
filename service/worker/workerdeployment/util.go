@@ -77,6 +77,8 @@ const (
 	ErrManagerIdentityMismatch                = "ManagerIdentity '%s' is set and does not match user identity '%s'; to proceed, set your own identity as the ManagerIdentity, remove the ManagerIdentity, or wait for the other client to do so"
 	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name '%s'; does your Worker Deployment have pollers?"
 	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
+	ErrTooManyDeploymentsInNamespacePrefix    = "reached maximum deployments in namespace"
+	errTooManyDeploymentsInNamespace          = ErrTooManyDeploymentsInNamespacePrefix + " (%d)"
 )
 
 var (
