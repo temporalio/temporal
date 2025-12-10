@@ -872,13 +872,8 @@ func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_ParentReusesReset
 }
 
 // TestResetChildThenParent_AfterCompletion tests cascade reset after both workflows have completed.
-// This test validates that after resetting both parent and child, the reset parent connects to
-// and receives the result from the reset child.
-//
-// KNOWN LIMITATION: When the parent is reset after completion, it replays its history which
-// includes the original child's execution info. The reset parent connects to the original
-// child execution (which already completed), not the reset child. This is because the
-// parent-child linkage in history uses the specific run ID from when the child was started.
+// This test validates that after resetting both parent and child, the reset parent correctly
+// connects to and receives the result from the reset child.
 //
 // Flow:
 // 1. Parent starts child with fixed WorkflowID
@@ -887,12 +882,9 @@ func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_ParentReusesReset
 // 4. Parent completes with ChildRun1's RunId
 // 5. Reset child to before signal -> creates ChildRun2
 // 6. Reset parent to after child started -> creates ParentRun2
-// 7. ParentRun2 connects to original child (ChildRun1), not reset child (ChildRun2)
-//
-// TODO: This test documents current behavior. Cascade reset after completion may require
-// additional server-side support to automatically update parent-child linkages.
+// 7. Signal reset child (ChildRun2) to complete
+// 8. ParentRun2 correctly receives ChildRun2's RunId (not ChildRun1's)
 func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_AfterCompletion() {
-	s.T().Skip("Cascade reset after completion is not currently supported - parent connects to original child, not reset child")
 	wfID := "reset-child-then-parent-after-completion"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1001,11 +993,9 @@ func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_AfterCompletion()
 // 5. Reset child to before signal -> creates ChildRun2
 // 6. Reset parent to after child started but before child completed -> creates ParentRun2
 // 7. Signal reset child to complete (ChildRun2)
-// 8. ParentRun2 receives ChildRun1's result (NOT ChildRun2's result) - THIS IS THE ISSUE
+// 8. ParentRun2 receives ChildRun2's result (FIXED - now works correctly!)
 // 9. Signal parent to complete
 func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_ChildCompletedParentBlocked() {
-	// TODO: Enable this test when cascade reset is properly implemented
-	s.T().Skip("Cascade reset doesn't work when child has completed - parent receives original child result instead of reset child result")
 	wfID := "reset-child-then-parent-child-completed-parent-blocked"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
