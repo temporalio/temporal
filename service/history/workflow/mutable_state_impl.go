@@ -2467,8 +2467,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
 	var pinnedOverride *workflowpb.VersioningOverride
-	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) &&
-		GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED {
+	if o := previousExecutionInfo.GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
 		pinnedOverride = o
 		newTQ := command.GetTaskQueue().GetName()
 		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {

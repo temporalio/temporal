@@ -482,8 +482,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	}
 
 	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
-		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
-			currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName {
+		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
+			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
+				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
 			suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
 			suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)
 		}
