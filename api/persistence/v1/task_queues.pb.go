@@ -785,14 +785,14 @@ const file_temporal_server_api_persistence_v1_task_queues_proto_rawDesc = "" +
 	"\x0eVersioningData\x12[\n" +
 	"\fversion_sets\x18\x01 \x03(\v28.temporal.server.api.persistence.v1.CompatibleVersionSetR\vversionSets\x12]\n" +
 	"\x10assignment_rules\x18\x02 \x03(\v22.temporal.server.api.persistence.v1.AssignmentRuleR\x0fassignmentRules\x12W\n" +
-	"\x0eredirect_rules\x18\x03 \x03(\v20.temporal.server.api.persistence.v1.RedirectRuleR\rredirectRules\"\xce\x03\n" +
+	"\x0eredirect_rules\x18\x03 \x03(\v20.temporal.server.api.persistence.v1.RedirectRuleR\rredirectRules\"\xd4\x03\n" +
 	"\x0eDeploymentData\x12X\n" +
 	"\bversions\x18\x02 \x03(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataB\x02\x18\x01R\bversions\x12p\n" +
 	"\x15unversioned_ramp_data\x18\x03 \x01(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataB\x02\x18\x01R\x13unversionedRampData\x12r\n" +
 	"\x10deployments_data\x18\x04 \x03(\v2G.temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntryR\x0fdeploymentsData\x1a|\n" +
 	"\x14DeploymentsDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12N\n" +
-	"\x05value\x18\x02 \x01(\v28.temporal.server.api.persistence.v1.WorkerDeploymentDataR\x05value:\x028\x01\"\xc9\x02\n" +
+	"\x05value\x18\x02 \x01(\v28.temporal.server.api.persistence.v1.WorkerDeploymentDataR\x05value:\x028\x01J\x04\b\x01\x10\x02\"\xc9\x02\n" +
 	"\x14WorkerDeploymentData\x12P\n" +
 	"\x0erouting_config\x18\x01 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\x12b\n" +
 	"\bversions\x18\x02 \x03(\v2F.temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntryR\bversions\x1a{\n" +

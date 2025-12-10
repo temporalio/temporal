@@ -5192,7 +5192,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\rwait_new_data\x18\x04 \x01(\bR\vwaitNewData\x12$\n" +
 	"\x0eonly_if_loaded\x18\x06 \x01(\bR\fonlyIfLoaded\"\x81\x01\n" +
 	"\x1cGetTaskQueueUserDataResponse\x12[\n" +
-	"\tuser_data\x18\x02 \x01(\v2>.temporal.server.api.persistence.v1.VersionedTaskQueueUserDataR\buserDataJ\x04\b\x01\x10\x02\"\xe2\x06\n" +
+	"\tuser_data\x18\x02 \x01(\v2>.temporal.server.api.persistence.v1.VersionedTaskQueueUserDataR\buserDataJ\x04\b\x01\x10\x02\"\xf4\x06\n" +
 	"\x1dSyncDeploymentUserDataRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
@@ -5208,7 +5208,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x17UpsertVersionsDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12T\n" +
 	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01B\v\n" +
-	"\toperation\"p\n" +
+	"\toperationJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"p\n" +
 	"\x1eSyncDeploymentUserDataResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x124\n" +
 	"\x16routing_config_changed\x18\x02 \x01(\bR\x14routingConfigChanged\"\xc5\x01\n" +
