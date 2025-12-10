@@ -675,6 +675,53 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 	return nil
 }
 
+// AdminBatchRefreshWorkflowTasks starts a batch job to refresh workflow tasks for multiple workflows
+func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	query, err := getRequiredOption(c, FlagVisibilityQuery)
+	if err != nil {
+		return err
+	}
+
+	reason, err := getRequiredOption(c, FlagReason)
+	if err != nil {
+		return err
+	}
+
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       nsName,
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          reason,
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
+			RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
+				Identity:  getCurrentUserFromEnv(),
+				Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
+	}
+
+	fmt.Fprintf(c.App.Writer, "Batch job %s started successfully.\n", color.MagentaString(jobID))
+	return nil
+}
+
 // AdminRebuildMutableState rebuild a workflow mutable state using persisted history events
 func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error {
 	adminClient := clientFactory.AdminClient(c)

@@ -186,6 +186,41 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 			},
 		},
 		{
+			Name:    "batch-refresh-tasks",
+			Aliases: []string{"brt"},
+			Usage:   "Start a batch job to refresh workflow tasks for multiple workflows",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagNamespace,
+					Aliases:  FlagNamespaceAlias,
+					Usage:    "Namespace",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagVisibilityQuery,
+					Usage:    "Visibility query to select workflows",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagReason,
+					Usage:    "Reason for starting the batch job",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "Optional job ID (auto-generated if not provided)",
+				},
+				&cli.StringFlag{
+					Name:        FlagArchetype,
+					Usage:       "Fully qualified archetype name of the executions",
+					DefaultText: chasm.WorkflowArchetype,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminBatchRefreshWorkflowTasks(c, clientFactory)
+			},
+		},
+		{
 			Name:    "rebuild",
 			Aliases: []string{},
 			Usage:   "Rebuild a workflow mutable state using persisted history events",
