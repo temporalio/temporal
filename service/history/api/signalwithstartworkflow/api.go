@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
@@ -23,6 +24,7 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache cache.Cache,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()))
 	if err != nil {
@@ -74,7 +76,7 @@ func Invoke(
 	}
 
 	// Validation for versioning override, if any.
-	err = worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride(), matchingClient, request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
+	err = worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride(), matchingClient, versionMembershipCache, request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
 	if err != nil {
 		return nil, err
 	}

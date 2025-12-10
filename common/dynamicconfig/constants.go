@@ -2667,6 +2667,13 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 instead of the previous HSM backed implementation.`,
 	)
 
+	VersionMembershipCacheTTL = NewGlobalDurationSetting(
+		"history.versionMembershipCacheTTL",
+		1*time.Second,
+		`VersionMembershipCacheTTL is the TTL of the version membership cache which is used to cache the presence of a version 
+		in a task queue`,
+	)
+
 	// keys for worker
 
 	WorkerPersistenceMaxQPS = NewGlobalIntSetting(

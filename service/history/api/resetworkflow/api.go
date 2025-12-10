@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -29,6 +30,7 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache cache.Cache,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -62,7 +64,7 @@ func Invoke(
 	}
 
 	// Validate versioning override, if any.
-	err = validatePostResetOperationInputs(request.GetPostResetOperations(), matchingClient,
+	err = validatePostResetOperationInputs(request.GetPostResetOperations(), matchingClient, versionMembershipCache,
 		&taskqueuepb.TaskQueue{
 			Name: baseMutableState.GetExecutionInfo().GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -216,13 +218,14 @@ func GetResetReapplyExcludeTypes(
 // validatePostResetOperationInputs validates the optional post reset operation inputs.
 func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache cache.Cache,
 	taskQueue *taskqueuepb.TaskQueue,
 	namespaceID string) error {
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride(), matchingClient, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
+			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
 				return err
 			}
 		default:

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/locks"
@@ -241,6 +242,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.shardContext,
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
+		cache.NewSimple(&cache.SimpleOptions{}), // cache.Cache is not meant to be used in the test which is why we are passing an empty dummy cache here.
 	)
 	s.NoError(err)
 	s.NotNil(resp)

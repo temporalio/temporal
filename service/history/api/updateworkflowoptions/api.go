@@ -10,6 +10,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -27,6 +28,7 @@ func Invoke(
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache cache.Cache,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
@@ -52,7 +54,7 @@ func Invoke(
 			}
 
 			// Validate versioning override, if any.
-			err = worker_versioning.ValidateVersioningOverride(req.GetWorkflowExecutionOptions().GetVersioningOverride(), matchingClient, &taskqueuepb.TaskQueue{
+			err = worker_versioning.ValidateVersioningOverride(req.GetWorkflowExecutionOptions().GetVersioningOverride(), matchingClient, versionMembershipCache, &taskqueuepb.TaskQueue{
 				Name: mutableState.GetExecutionInfo().GetTaskQueue(),
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}, enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())

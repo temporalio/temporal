@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -61,6 +62,7 @@ type Starter struct {
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
 	enableRequestIdRefLinks    dynamicconfig.BoolPropertyFn
+	versionMembershipCache     cache.Cache
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -89,6 +91,7 @@ func NewStarter(
 	tokenSerializer *tasktoken.Serializer,
 	request *historyservice.StartWorkflowExecutionRequest,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache cache.Cache,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
@@ -107,6 +110,7 @@ func NewStarter(
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
 		enableRequestIdRefLinks:    shardContext.GetConfig().EnableRequestIdRefLinks,
+		versionMembershipCache:     versionMembershipCache,
 	}, nil
 }
 
@@ -136,7 +140,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	// Validation for versioning override, if any.
-	err = worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride(), s.matchingClient, request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
+	err = worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride(), s.matchingClient, s.versionMembershipCache, request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
 	if err != nil {
 		return err
 	}
