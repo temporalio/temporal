@@ -197,6 +197,8 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
+	externalPayloadSizeBytes int64,
+	externalPayloadCount int64,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskStartedEvent(
 		scheduledEventID,
@@ -207,6 +209,8 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 		historySizeBytes,
 		versioningStamp,
 		buildIdRedirectCounter,
+		externalPayloadSizeBytes,
+		externalPayloadCount,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
