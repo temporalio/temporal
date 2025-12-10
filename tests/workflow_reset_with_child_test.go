@@ -870,6 +870,117 @@ func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_ParentReusesReset
 		"Reset parent should receive completion from reset child (RunId: %s), but got: %s", resetChildRunId, parentResult)
 }
 
+// TestResetChildThenParent_AfterCompletion tests cascade reset after both workflows have completed.
+// This test validates that after resetting both parent and child, the reset parent connects to
+// and receives the result from the reset child.
+//
+// KNOWN LIMITATION: When the parent is reset after completion, it replays its history which
+// includes the original child's execution info. The reset parent connects to the original
+// child execution (which already completed), not the reset child. This is because the
+// parent-child linkage in history uses the specific run ID from when the child was started.
+//
+// Flow:
+// 1. Parent starts child with fixed WorkflowID
+// 2. Child waits on signal
+// 3. Signal child -> child completes with ChildRun1's RunId
+// 4. Parent completes with ChildRun1's RunId
+// 5. Reset child to before signal -> creates ChildRun2
+// 6. Reset parent to after child started -> creates ParentRun2
+// 7. ParentRun2 connects to original child (ChildRun1), not reset child (ChildRun2)
+//
+// TODO: This test documents current behavior. Cascade reset after completion may require
+// additional server-side support to automatically update parent-child linkages.
+func (s *WorkflowResetWithChildSuite) TestResetChildThenParent_AfterCompletion() {
+	s.T().Skip("Cascade reset after completion is not currently supported - parent connects to original child, not reset child")
+	wfID := "reset-child-then-parent-after-completion"
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	options := s.startWorkflowOptions(wfID)
+	parentRun, err := s.SdkClient().ExecuteWorkflow(ctx, options, s.ParentWithWaitingChildReturningRunId)
+	s.NoError(err)
+	initialParentRunId := parentRun.GetRunID()
+
+	childWfID := wfID + "/cascade-test-child"
+
+	// Wait for child to start
+	var initialChildRunId string
+	s.Eventually(func() bool {
+		childExecutions := s.getChildWFIDsFromHistory(ctx, wfID, initialParentRunId)
+		if len(childExecutions) == 0 {
+			return false
+		}
+		initialChildRunId = childExecutions[0].RunId
+		return initialChildRunId != ""
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// Signal the original child to complete
+	err = s.SdkClient().SignalWorkflow(ctx, childWfID, initialChildRunId, "continue", "")
+	s.NoError(err)
+
+	// Wait for original parent to complete
+	var originalParentResult string
+	err = parentRun.Get(ctx, &originalParentResult)
+	s.NoError(err)
+
+	// Validate original flow: parent received ChildRun1's RunId
+	s.Equal(initialChildRunId, originalParentResult,
+		"Original parent should receive completion from original child")
+
+	// Now both workflows have completed. Get reset points.
+	childResetEventId := s.getFirstWorkflowTaskFinishEventId(ctx, childWfID, initialChildRunId)
+	s.NotZero(childResetEventId, "Should find a reset point in child workflow history")
+
+	parentResetEventId := s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, initialParentRunId, childWfID)
+	s.NotZero(parentResetEventId, "Should find a reset point in parent workflow history")
+
+	// Step 1: Reset child to before the signal
+	childResetReq := &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: childWfID,
+			RunId:      initialChildRunId,
+		},
+		Reason:                    "cascade reset after completion - reset child",
+		RequestId:                 "reset-child-after-completion",
+		WorkflowTaskFinishEventId: childResetEventId,
+	}
+	childResetResp, err := s.SdkClient().ResetWorkflowExecution(ctx, childResetReq)
+	s.NoError(err)
+	resetChildRunId := childResetResp.GetRunId()
+	s.NotEqual(initialChildRunId, resetChildRunId, "Reset should create a new child RunId")
+
+	// Step 2: Reset parent to after child started
+	parentResetReq := &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: wfID,
+			RunId:      initialParentRunId,
+		},
+		Reason:                    "cascade reset after completion - reset parent",
+		RequestId:                 "reset-parent-after-completion",
+		WorkflowTaskFinishEventId: parentResetEventId,
+	}
+	parentResetResp, err := s.SdkClient().ResetWorkflowExecution(ctx, parentResetReq)
+	s.NoError(err)
+	resetParentRunId := parentResetResp.GetRunId()
+	s.NotEqual(initialParentRunId, resetParentRunId, "Reset should create a new parent RunId")
+
+	// Wait for reset parent to complete (the child may have already completed due to signal replay)
+	var resetParentResult string
+	err = s.SdkClient().GetWorkflow(ctx, wfID, resetParentRunId).Get(ctx, &resetParentResult)
+	s.NoError(err)
+
+	// Validate: reset parent received completion from the RESET child (not the original)
+	// The reset child's RunId is in the result
+	s.NotEqual(originalParentResult, resetParentResult,
+		"Reset parent result (%s) should be different from original parent result (%s)", resetParentResult, originalParentResult)
+
+	// The result should be the reset child's RunId (signals may have been replayed)
+	s.Equal(resetChildRunId, resetParentResult,
+		"Reset parent should receive completion from reset child (RunId: %s), but got: %s", resetChildRunId, resetParentResult)
+}
+
 func (s *WorkflowResetWithChildSuite) startWorkflowOptions(wfID string) sdkclient.StartWorkflowOptions {
 	var wfOptions = sdkclient.StartWorkflowOptions{
 		ID:                       wfID,
