@@ -1052,9 +1052,8 @@ func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentDa
 	})
 
 	cleaned := false
+	totalCount := undeletedCount + len(deletedVersions)
 	for _, dv := range deletedVersions {
-		totalCount := undeletedCount + len(deletedVersions)
-
 		// Stop if:
 		// 1. This version is not older than 7 days AND
 		// 2. We're not exceeding the limit because of deleted versions
@@ -1064,7 +1063,7 @@ func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentDa
 
 		// Remove this deleted version
 		delete(deploymentData.Versions, dv.buildID)
-		deletedVersions = deletedVersions[1:] // Remove from slice to keep count accurate
+		totalCount--
 		cleaned = true
 	}
 

@@ -185,6 +185,7 @@ type (
 
 		// TTL for cache holding TaskQueueInfoByBuildID
 		TaskQueueInfoByBuildIdTTL func() time.Duration
+		MaxVersionsInTaskQueue    func() int
 
 		// Rate limiting
 		RateLimiterRefreshInterval    time.Duration
@@ -204,8 +205,7 @@ type (
 
 		FairnessCounter func() counter.CounterParams
 
-		loadCause              loadCause
-		MaxVersionsInTaskQueue func() int
+		loadCause loadCause
 	}
 
 	loadCause   int
@@ -255,11 +255,11 @@ func NewConfig(
 		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
 		UseRevisionNumberForWorkerVersioning:     dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
 		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		MaxVersionsInTaskQueue:                   dynamicconfig.MatchingMaxVersionsInTaskQueue.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
 		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
-		MaxVersionsInTaskQueue:                   dynamicconfig.MatchingMaxVersionsInTaskQueue.Get(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		EnableMigration:                          dynamicconfig.MatchingEnableMigration.Get(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
