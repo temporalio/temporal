@@ -331,6 +331,7 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 }
 
 func CountDeploymentVersions(deployments *persistencespb.DeploymentData) int {
+	//nolint:staticcheck // SA1019
 	res := len(deployments.GetDeployments()) + len(deployments.GetVersions())
 
 	// Check for the presence of the version in the new DeploymentData format.

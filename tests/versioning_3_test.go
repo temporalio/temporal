@@ -4625,7 +4625,7 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 	// Verify we got the expected resource exhausted error
 	s.Error(pollErr)
 	var resourceExhausted *serviceerror.ResourceExhausted
-	s.True(errors.As(pollErr, &resourceExhausted), "Expected ResourceExhausted error, got: %v", pollErr)
+	s.ErrorAs(pollErr, &resourceExhausted)
 	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, resourceExhausted.Cause,
 		"Expected RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS")
 	s.Contains(resourceExhausted.Message, "exceeding maximum number of Deployment Versions in this task queue",
