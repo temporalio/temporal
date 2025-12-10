@@ -477,11 +477,11 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 
 func TestValidateVersioningOverride(t *testing.T) {
 	testNamespaceID := "test-namespace-id"
-	testTaskQueue := "test-task-queue"
 	testVersion := &deploymentpb.WorkerDeploymentVersion{
 		DeploymentName: "test-deployment",
 		BuildId:        "test-build-id",
 	}
+	testTaskQueue := "test-task-queue"
 
 	tests := []struct {
 		name          string
