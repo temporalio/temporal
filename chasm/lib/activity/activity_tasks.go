@@ -165,7 +165,7 @@ func (e *heartbeatTimeoutTaskExecutor) Validate(
 	// Let T = user-configured heartbeat timeout and let hb_i be the time of the ith user-submitted
 	// heartbeat request. (hb_0 = 0 since we always start a timer task when an attempt starts).
 
-	// There are two concurrent processes:
+	// There are two concurrent sequences of events:
 	// 1. A worker is sending heartbeats at times hb_i.
 	// 2. This task is being executed at (shortly after) times hb_i + T.
 
@@ -196,14 +196,14 @@ func (e *heartbeatTimeoutTaskExecutor) Validate(
 	return true, nil
 }
 
-// Execute executes a HeartbeatTimeoutTask.
+// Execute executes a HeartbeatTimeoutTask. It fails the attempt due to heartbeat timeout, leading
+// to retry or activity failure.
 func (e *heartbeatTimeoutTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
 	_ *activitypb.HeartbeatTimeoutTask,
 ) error {
-	// Fail this attempt due to heartbeat timeout.
 	shouldRetry, retryInterval, err := activity.shouldRetry(ctx, 0)
 	if err != nil {
 		return err
