@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const StandaloneActivityDisabledError = "Standalone activity is disabled"
@@ -40,6 +42,7 @@ type frontendHandler struct {
 	namespaceRegistry namespace.Registry
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
+	visibilityManager chasm.VisibilityManager
 }
 
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
@@ -51,6 +54,7 @@ func NewFrontendHandler(
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	visibilityManager chasm.VisibilityManager,
 ) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
@@ -60,6 +64,7 @@ func NewFrontendHandler(
 		namespaceRegistry: namespaceRegistry,
 		saMapperProvider:  saMapperProvider,
 		saValidator:       saValidator,
+		visibilityManager: visibilityManager,
 	}
 }
 
@@ -155,6 +160,88 @@ func (h *frontendHandler) PollActivityExecution(
 		FrontendRequest: req,
 	})
 	return resp.GetFrontendResponse(), err
+}
+
+// ListActivityExecutions lists activity executions matching the query in the request.
+func (h *frontendHandler) ListActivityExecutions(
+	ctx context.Context,
+	req *workflowservice.ListActivityExecutionsRequest,
+) (*workflowservice.ListActivityExecutionsResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	ctx = chasm.NewVisibilityManagerContext(ctx, h.visibilityManager)
+
+	resp, err := chasm.ListExecutions[*Activity, *activitypb.ActivityListMemo](ctx, &chasm.ListExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		NamespaceName: req.GetNamespace(),
+		PageSize:      int(req.GetPageSize()),
+		NextPageToken: req.GetNextPageToken(),
+		Query:         req.GetQuery(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	executions := make([]*apiactivitypb.ActivityExecutionListInfo, 0, len(resp.Executions))
+	for _, exec := range resp.Executions {
+		info := &apiactivitypb.ActivityExecutionListInfo{
+			ActivityId:           exec.BusinessID,
+			RunId:                exec.RunID,
+			ScheduleTime:         timestamppb.New(exec.StartTime),
+			CloseTime:            timestamppb.New(exec.CloseTime),
+			StateTransitionCount: exec.StateTransitionCount,
+			StateSizeBytes:       exec.HistorySizeBytes,
+			// TODO(dan): exec.CustomSearchAttributes
+			ActivityType: &commonpb.ActivityType{Name: exec.ChasmMemo.GetActivityType()},
+			TaskQueue:    exec.ChasmMemo.GetTaskQueue(),
+			Status:       InternalStatusToAPIStatus(exec.ChasmMemo.GetStatus()),
+		}
+		if !exec.CloseTime.IsZero() && !exec.StartTime.IsZero() {
+			info.ExecutionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
+		}
+		executions = append(executions, info)
+	}
+
+	return &workflowservice.ListActivityExecutionsResponse{
+		Executions:    executions,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+// CountActivityExecutions counts activity executions matching the query in the request.
+func (h *frontendHandler) CountActivityExecutions(
+	ctx context.Context,
+	req *workflowservice.CountActivityExecutionsRequest,
+) (*workflowservice.CountActivityExecutionsResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	ctx = chasm.NewVisibilityManagerContext(ctx, h.visibilityManager)
+
+	resp, err := chasm.CountExecutions[*Activity](ctx, &chasm.CountExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		NamespaceName: req.GetNamespace(),
+		Query:         req.GetQuery(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountActivityExecutionsResponse_AggregationGroup, 0, len(resp.Groups))
+	for _, g := range resp.Groups {
+		groups = append(groups, &workflowservice.CountActivityExecutionsResponse_AggregationGroup{
+			GroupValues: g.Values,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountActivityExecutionsResponse{
+		Count:  resp.Count,
+		Groups: groups,
+	}, nil
 }
 
 // TerminateActivityExecution terminates a standalone activity execution
@@ -265,6 +352,21 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	applyActivityOptionsToStartRequest(opts, req)
 
+	// TODO: Unalias for validation, then restore aliased SA for CHASM visibility storage. The
+	// validator requires unaliased format but CHASM visibility expects aliased format.
+	originalSA := req.SearchAttributes
+	if originalSA != nil {
+		unaliasedSA, err := searchattribute.UnaliasFields(
+			h.saMapperProvider,
+			originalSA,
+			req.GetNamespace(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		req.SearchAttributes = unaliasedSA
+	}
+
 	err = validateAndNormalizeStartActivityExecutionRequest(
 		req,
 		h.config.BlobSizeLimitError,
@@ -275,6 +377,8 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	if err != nil {
 		return nil, err
 	}
+
+	req.SearchAttributes = originalSA
 
 	return req, nil
 }

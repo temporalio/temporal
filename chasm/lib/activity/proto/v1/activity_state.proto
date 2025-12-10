@@ -177,3 +177,11 @@ message ActivityOutcome {
         Failed failed = 2;
     }
 }
+
+// ActivityListMemo is stored in visibility and returned in ListActivityExecutions responses.
+// Contains fields needed to populate ActivityExecutionListInfo without reading the full execution.
+message ActivityListMemo {
+    string activity_type = 1;
+    string task_queue = 2;
+    ActivityExecutionStatus status = 3;
+}

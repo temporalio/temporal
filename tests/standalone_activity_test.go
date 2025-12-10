@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -1287,6 +1289,310 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument(
 
 // TODO(dan): add tests that DescribeActivityExecution can wait for deletion, termination, cancellation etc
 
+func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	activityType := s.tv.ActivityType().GetName()
+	startResp := s.startAndValidateActivity(ctx, t, activityID, s.tv.TaskQueue().GetName())
+	runID := startResp.RunId
+
+	verifyListQuery := func(t *testing.T, query string) {
+		t.Helper()
+		var resp *workflowservice.ListActivityExecutionsResponse
+		s.Eventually(
+			func() bool {
+				var err error
+				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					PageSize:  10,
+					Query:     query,
+				})
+				return err == nil && len(resp.GetExecutions()) >= 1
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+		require.Len(t, resp.GetExecutions(), 1, "expected exactly 1 result for query: %s", query)
+		exec := resp.GetExecutions()[0]
+		s.Equal(activityID, exec.GetActivityId())
+		s.Equal(runID, exec.GetRunId())
+		s.Equal(activityType, exec.GetActivityType().GetName())
+		s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, exec.GetStatus())
+		s.NotNil(exec.GetScheduleTime())
+	}
+
+	t.Run("QueryByActivityId", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s'", activityID))
+	})
+
+	t.Run("QueryByActivityType", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType))
+	})
+
+	t.Run("QueryByActivityStatus", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityStatus = 'Scheduled' AND ActivityType = '%s'", activityType))
+	})
+
+	t.Run("QueryByTaskQueue", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", s.tv.TaskQueue().GetName(), activityType))
+	})
+
+	t.Run("QueryByMultipleFields", func(t *testing.T) {
+		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s' AND ActivityType = '%s'", activityID, activityType))
+	})
+
+	t.Run("QueryByCustomSearchAttribute", func(t *testing.T) {
+		customSAName := "ActivityCustomKeyword"
+		customSAValue := "custom-sa-test-value"
+
+		_, err := s.OperatorClient().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+			Namespace: s.Namespace().String(),
+			SearchAttributes: map[string]enumspb.IndexedValueType{
+				customSAName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+		})
+		require.NoError(t, err)
+
+		s.Eventually(func() bool {
+			descResp, err := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
+				Namespace: s.Namespace().String(),
+			})
+			if err != nil {
+				return false
+			}
+			_, exists := descResp.CustomAttributes[customSAName]
+			return exists
+		}, 10*time.Second, 100*time.Millisecond)
+
+		customSAActivityID := "custom-sa-activity-id"
+		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          customSAActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: "custom-sa-activity-type"},
+			Identity:            s.tv.WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: s.tv.TaskQueue().GetName()},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			RequestId:           s.tv.RequestID(),
+			SearchAttributes: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					customSAName: payload.EncodeString(customSAValue),
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		var resp *workflowservice.ListActivityExecutionsResponse
+		s.Eventually(
+			func() bool {
+				var err error
+				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					PageSize:  10,
+					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
+				})
+				return err == nil && len(resp.GetExecutions()) >= 1
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+		require.Len(t, resp.GetExecutions(), 1)
+		s.Equal(customSAActivityID, resp.GetExecutions()[0].GetActivityId())
+	})
+
+	t.Run("InvalidQuery", func(t *testing.T) {
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			PageSize:  10,
+			Query:     "invalid query syntax !!!",
+		})
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	})
+
+	t.Run("InvalidSearchAttribute", func(t *testing.T) {
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			PageSize:  10,
+			Query:     "NonExistentField = 'value'",
+		})
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	})
+
+	t.Run("NamespaceNotFound", func(t *testing.T) {
+		_, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace: "non-existent-namespace",
+			PageSize:  10,
+			Query:     "",
+		})
+		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	activityType := s.tv.ActivityType().GetName()
+	s.startAndValidateActivity(ctx, t, activityID, s.tv.TaskQueue().GetName())
+
+	verifyCountQuery := func(t *testing.T, query string, expectedCount int) {
+		t.Helper()
+		s.Eventually(
+			func() bool {
+				resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					Query:     query,
+				})
+				return err == nil && resp.GetCount() == int64(expectedCount)
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+	}
+
+	t.Run("CountByActivityId", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ActivityId = '%s'", activityID), 1)
+	})
+
+	t.Run("CountByActivityType", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ActivityType = '%s'", activityType), 1)
+	})
+
+	t.Run("CountByActivityStatus", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ActivityStatus = 'Scheduled' AND ActivityType = '%s'", activityType), 1)
+	})
+
+	t.Run("CountByTaskQueue", func(t *testing.T) {
+		verifyCountQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", s.tv.TaskQueue().GetName(), activityType), 1)
+	})
+
+	t.Run("GroupByActivityStatus", func(t *testing.T) {
+		groupByType := &commonpb.ActivityType{Name: "count-groupby-test-type"}
+		taskQueue := s.tv.TaskQueue().GetName()
+
+		for i := range 3 {
+			id := fmt.Sprintf("%s-%d", groupByType.Name, i)
+			resp, err := s.startActivityWithType(ctx, id, taskQueue, groupByType)
+			require.NoError(t, err)
+			require.NotEmpty(t, resp.GetRunId())
+		}
+
+		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ActivityStatus", groupByType.Name)
+		var resp *workflowservice.CountActivityExecutionsResponse
+		s.Eventually(
+			func() bool {
+				var err error
+				resp, err = s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					Query:     query,
+				})
+				return err == nil && resp.GetCount() == 3
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+
+		require.Len(t, resp.GetGroups(), 1)
+		s.Equal(int64(3), resp.GetGroups()[0].GetCount())
+		var groupValue string
+		require.NoError(t, payload.Decode(resp.GetGroups()[0].GetGroupValues()[0], &groupValue))
+		s.Equal("Scheduled", groupValue)
+	})
+
+	t.Run("CountByCustomSearchAttribute", func(t *testing.T) {
+		customSAName := "ActivityCountCustomKeyword"
+		customSAValue := "count-custom-sa-value"
+
+		_, err := s.OperatorClient().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+			Namespace: s.Namespace().String(),
+			SearchAttributes: map[string]enumspb.IndexedValueType{
+				customSAName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+		})
+		require.NoError(t, err)
+
+		s.Eventually(func() bool {
+			descResp, err := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
+				Namespace: s.Namespace().String(),
+			})
+			if err != nil {
+				return false
+			}
+			_, ok := descResp.CustomAttributes[customSAName]
+			return ok
+		}, 10*time.Second, 100*time.Millisecond)
+
+		for i := range 2 {
+			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:           s.Namespace().String(),
+				ActivityId:          fmt.Sprintf("count-custom-sa-%d", i),
+				ActivityType:        &commonpb.ActivityType{Name: "count-custom-sa-type"},
+				Identity:            s.tv.WorkerIdentity(),
+				Input:               defaultInput,
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: s.tv.TaskQueue().GetName()},
+				StartToCloseTimeout: durationpb.New(1 * time.Minute),
+				RequestId:           s.tv.RequestID(),
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						customSAName: payload.EncodeString(customSAValue),
+					},
+				},
+			})
+			require.NoError(t, err)
+		}
+
+		s.Eventually(
+			func() bool {
+				resp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+					Namespace: s.Namespace().String(),
+					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
+				})
+				return err == nil && resp.GetCount() == 2
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+	})
+
+	t.Run("GroupByUnsupportedField", func(t *testing.T) {
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "GROUP BY ActivityType",
+		})
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		s.Contains(err.Error(), "'GROUP BY' clause is only supported for ExecutionStatus")
+	})
+
+	t.Run("InvalidQuery", func(t *testing.T) {
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "invalid query syntax !!!",
+		})
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	})
+
+	t.Run("InvalidSearchAttribute", func(t *testing.T) {
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     "NonExistentField = 'value'",
+		})
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	})
+
+	t.Run("NamespaceNotFound", func(t *testing.T) {
+		_, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: "non-existent-namespace",
+			Query:     "",
+		})
+		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
+	})
+}
+
 func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExceeded() {
 	t := s.T()
 	ctx := testcore.NewContext()
@@ -2194,10 +2500,14 @@ func (s *standaloneActivityTestSuite) validateBaseActivityResponse(
 }
 
 func (s *standaloneActivityTestSuite) startActivity(ctx context.Context, activityID string, taskQueue string) (*workflowservice.StartActivityExecutionResponse, error) {
+	return s.startActivityWithType(ctx, activityID, taskQueue, s.tv.ActivityType())
+}
+
+func (s *standaloneActivityTestSuite) startActivityWithType(ctx context.Context, activityID string, taskQueue string, activityType *commonpb.ActivityType) (*workflowservice.StartActivityExecutionResponse, error) {
 	return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:    s.Namespace().String(),
 		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
+		ActivityType: activityType,
 		Identity:     s.tv.WorkerIdentity(),
 		Input:        defaultInput,
 		TaskQueue: &taskqueuepb.TaskQueue{
