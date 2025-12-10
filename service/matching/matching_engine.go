@@ -59,7 +59,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -115,7 +114,6 @@ type (
 		fairTaskManager               persistence.FairTaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
-		deploymentStoreClient         deployment.DeploymentStoreClient
 		workerDeploymentClient        workerdeployment.Client
 		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
@@ -198,7 +196,6 @@ func NewEngine(
 	fairTaskManager persistence.FairTaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient deployment.DeploymentStoreClient, // [wv-cleanup-pre-release]
 	workerDeploymentClient workerdeployment.Client,
 	config *Config,
 	logger log.Logger,
@@ -223,7 +220,6 @@ func NewEngine(
 		fairTaskManager:               fairTaskManager,
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
-		deploymentStoreClient:         deploymentStoreClient,
 		tokenSerializer:               tasktoken.NewSerializer(),
 		workerDeploymentClient:        workerDeploymentClient,
 		historySerializer:             serialization.NewSerializer(),

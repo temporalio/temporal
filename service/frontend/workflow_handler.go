@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -73,7 +73,6 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/grpc/codes"
@@ -129,7 +128,6 @@ type (
 		clusterMetadata                 cluster.Metadata
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
-		deploymentStoreClient           deployment.DeploymentStoreClient
 		workerDeploymentClient          workerdeployment.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
 		archiverProvider                provider.ArchiverProvider
@@ -161,7 +159,6 @@ func NewWorkflowHandler(
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -202,7 +199,6 @@ func NewWorkflowHandler(
 		clusterMetadata:                 clusterMetadata,
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
-		deploymentStoreClient:           deploymentStoreClient,
 		workerDeploymentClient:          workerDeploymentClient,
 		schedulerClient:                 schedulerClient,
 		archiverProvider:                archiverProvider,
