@@ -10,6 +10,7 @@ type (
 	settingType struct {
 		Name      string
 		GoType    string
+		TypeName  string // lowercase type name for documentation
 		IsGeneric bool
 	}
 	settingPrecedence struct {
@@ -31,32 +32,39 @@ var (
 	data = dynamicConfigData{
 		Types: []settingType{
 			{
-				Name:   "Bool",
-				GoType: "bool",
+				Name:     "Bool",
+				GoType:   "bool",
+				TypeName: "bool",
 			},
 			{
-				Name:   "Int",
-				GoType: "int",
+				Name:     "Int",
+				GoType:   "int",
+				TypeName: "int",
 			},
 			{
-				Name:   "Float",
-				GoType: "float64",
+				Name:     "Float",
+				GoType:   "float64",
+				TypeName: "float",
 			},
 			{
-				Name:   "String",
-				GoType: "string",
+				Name:     "String",
+				GoType:   "string",
+				TypeName: "string",
 			},
 			{
-				Name:   "Duration",
-				GoType: "time.Duration",
+				Name:     "Duration",
+				GoType:   "time.Duration",
+				TypeName: "duration",
 			},
 			{
-				Name:   "Map",
-				GoType: "map[string]any",
+				Name:     "Map",
+				GoType:   "map[string]any",
+				TypeName: "map",
 			},
 			{
 				Name:      "Typed",
 				GoType:    "<generic>",
+				TypeName:  "typed",
 				IsGeneric: true, // this one is treated differently
 			},
 		},

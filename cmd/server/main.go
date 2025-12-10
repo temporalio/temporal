@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	stdlog "log"
 	"os"
@@ -103,6 +104,28 @@ func buildCLI() *cli.App {
 					return fmt.Errorf("%d total errors", total)
 				}
 				return nil
+			},
+		},
+		{
+			Name:  "config",
+			Usage: "Configuration related commands",
+			Subcommands: []*cli.Command{
+				{
+					Name:      "dynamic",
+					Usage:     "Show all available dynamic configuration keys",
+					ArgsUsage: " ",
+					Flags: []cli.Flag{
+						&cli.BoolFlag{
+							Name:    "json",
+							Aliases: []string{"j"},
+							Usage:   "Output as JSON",
+						},
+					},
+					Action: func(c *cli.Context) error {
+						jsonOutput := c.Bool("json")
+						return showDynamicConfig(jsonOutput)
+					},
+				},
 			},
 		},
 		{
@@ -257,4 +280,97 @@ func buildCLI() *cli.App {
 		},
 	}
 	return app
+}
+
+func showDynamicConfig(jsonOutput bool) error {
+	// Get all settings from the registry
+	settings := dynamicconfig.ListAllSettings()
+
+	if jsonOutput {
+		return outputJSON(settings)
+	}
+	return outputTable(settings)
+}
+
+func outputTable(settings []dynamicconfig.GenericSetting) error {
+	// Find max widths for table columns across all settings
+	maxKeyLen := len("KEY")
+	maxTypeLen := len("TYPE")
+	maxScopeLen := len("SCOPE")
+
+	for _, setting := range settings {
+		doc := setting.Documentation()
+		if len(doc.Key) > maxKeyLen {
+			maxKeyLen = len(doc.Key)
+		}
+		if len(doc.Type) > maxTypeLen {
+			maxTypeLen = len(doc.Type)
+		}
+		if len(doc.Precedence) > maxScopeLen {
+			maxScopeLen = len(doc.Precedence)
+		}
+	}
+
+	// Print table header
+	fmt.Printf("%-*s  %-*s  %-*s  %s\n",
+		maxKeyLen, "KEY",
+		maxTypeLen, "TYPE",
+		maxScopeLen, "SCOPE",
+		"DEFAULT")
+	fmt.Printf("%s  %s  %s  %s\n",
+		strings.Repeat("─", maxKeyLen),
+		strings.Repeat("─", maxTypeLen),
+		strings.Repeat("─", maxScopeLen),
+		strings.Repeat("─", 20))
+
+	// Print table rows
+	for _, setting := range settings {
+		doc := setting.Documentation()
+		defaultStr := fmt.Sprintf("%v", doc.DefaultValue)
+		if len(defaultStr) > 50 {
+			defaultStr = defaultStr[:47] + "..."
+		}
+
+		fmt.Printf("%-*s  %-*s  %-*s  %s\n",
+			maxKeyLen, doc.Key,
+			maxTypeLen, doc.Type,
+			maxScopeLen, doc.Precedence,
+			defaultStr)
+	}
+
+	fmt.Println()
+	return nil
+}
+
+func outputJSON(settings []dynamicconfig.GenericSetting) error {
+	type jsonSetting struct {
+		Key          string `json:"key"`
+		Type         string `json:"type"`
+		Precedence   string `json:"precedence"`
+		Description  string `json:"description"`
+		DefaultValue any    `json:"default,omitempty"`
+	}
+
+	var jsonSettings []jsonSetting
+	for _, setting := range settings {
+		doc := setting.Documentation()
+
+		// Try to encode default value, use string representation if it fails
+		defaultValue := doc.DefaultValue
+		if _, err := json.Marshal(defaultValue); err != nil {
+			defaultValue = fmt.Sprintf("%v", defaultValue)
+		}
+
+		jsonSettings = append(jsonSettings, jsonSetting{
+			Key:          doc.Key,
+			Type:         doc.Type,
+			Precedence:   doc.Precedence,
+			Description:  doc.Description,
+			DefaultValue: defaultValue,
+		})
+	}
+
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(jsonSettings)
 }
