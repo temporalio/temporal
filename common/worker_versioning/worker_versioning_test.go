@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -478,7 +477,7 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 
 func TestValidateVersioningOverride(t *testing.T) {
 	testNamespaceID := "test-namespace-id"
-	testTaskQueue := &taskqueuepb.TaskQueue{Name: "test-task-queue"}
+	testTaskQueue := "test-task-queue"
 	testVersion := &deploymentpb.WorkerDeploymentVersion{
 		DeploymentName: "test-deployment",
 		BuildId:        "test-build-id",
@@ -521,7 +520,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				},
 			},
 			setupCache: func(c cache.Cache) {
-				key := testNamespaceID + ":" + testTaskQueue.Name + ":" + testVersion.DeploymentName + ":" + testVersion.BuildId
+				key := testNamespaceID + ":" + testTaskQueue + ":" + testVersion.DeploymentName + ":" + testVersion.BuildId
 				c.Put(key, true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
@@ -540,7 +539,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				},
 			},
 			setupCache: func(c cache.Cache) {
-				key := testNamespaceID + ":" + testTaskQueue.Name + ":" + testVersion.DeploymentName + ":" + testVersion.BuildId
+				key := testNamespaceID + ":" + testTaskQueue + ":" + testVersion.DeploymentName + ":" + testVersion.BuildId
 				c.Put(key, false)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
@@ -663,7 +662,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c cache.Cache) {
-				key := testNamespaceID + ":" + testTaskQueue.Name + ":test-deployment:test-build-id"
+				key := testNamespaceID + ":" + testTaskQueue + ":test-deployment:test-build-id"
 				c.Put(key, true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
@@ -678,7 +677,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c cache.Cache) {
-				key := testNamespaceID + ":" + testTaskQueue.Name + ":test-deployment:test-build-id"
+				key := testNamespaceID + ":" + testTaskQueue + ":test-deployment:test-build-id"
 				c.Put(key, false)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {

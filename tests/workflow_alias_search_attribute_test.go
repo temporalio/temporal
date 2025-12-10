@@ -10,10 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testvars"
@@ -39,11 +43,60 @@ func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Contex
 	return "done!", nil
 }
 
+func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
+	ctx context.Context,
+	taskQueueName string,
+	deploymentName string,
+	buildID string,
+) {
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: taskQueueName,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+
+	// Start versioned poller in background
+	go func() {
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: taskQueue,
+			Identity:  "versioned-poller",
+			DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       deploymentName,
+				BuildId:              buildID,
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
+		})
+	}()
+
+	// Validate version is present via matching RPC
+	version := &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildID,
+	}
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
+			ctx,
+			&matchingservice.CheckTaskQueueVersionMembershipRequest{
+				NamespaceId:   s.NamespaceID().String(),
+				TaskQueue:     taskQueueName,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				Version:       version,
+			},
+		)
+		a.NoError(err)
+		a.True(resp.GetIsMember())
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	ctx context.Context,
 	tv *testvars.TestVars,
 	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
+	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
+	s.startVersionedPollerAndValidate(ctx, tv.TaskQueue().Name, tv.DeploymentSeries(), tv.BuildID())
+
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
 		Namespace:          s.Namespace().String(),
