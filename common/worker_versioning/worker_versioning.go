@@ -269,10 +269,7 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 			NamespaceId:   namespaceID,
 			TaskQueue:     tq,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			Version: &deploymentspb.WorkerDeploymentVersion{
-				DeploymentName: version.GetDeploymentName(),
-				BuildId:        version.GetBuildId(),
-			},
+			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
 		})
 		if err != nil {
 			return false, err
