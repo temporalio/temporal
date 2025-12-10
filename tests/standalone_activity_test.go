@@ -1944,7 +1944,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NotEmpty(t, pollTaskResp.TaskToken)
 
 		// Heartbeat before timeout
-		time.Sleep(600 * time.Millisecond)
+		time.Sleep(600 * time.Millisecond) //nolint:forbidigo
 		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: pollTaskResp.TaskToken,
@@ -1953,7 +1953,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NoError(t, err)
 
 		// Wait again, then heartbeat again
-		time.Sleep(600 * time.Millisecond)
+		time.Sleep(600 * time.Millisecond) //nolint:forbidigo
 		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: pollTaskResp.TaskToken,

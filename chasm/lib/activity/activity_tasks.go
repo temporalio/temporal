@@ -172,8 +172,8 @@ func (e *heartbeatTimeoutTaskExecutor) Validate(
 	// On the i-th execution of this function, we look back into the past and determine whether the
 	// last heartbeat was received after hb_i. If so, we reject this timeout task. Otherwise, the
 	// Execute function runs and we fail the attempt.
-	if !(activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
-		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) {
+	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		return false, nil
 	}
 	// Task attempt must still match current attempt.
