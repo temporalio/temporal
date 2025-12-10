@@ -978,20 +978,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	shouldTerminateAndStartChild := false
 	resetChildID := fmt.Sprintf("%s:%s", attributes.GetWorkflowType().Name, attributes.GetWorkflowId())
 	baseWorkflowInfo := mutableState.GetBaseWorkflowInfo()
-	t.logger.Error("DEBUG: Checking if should verify child",
-		tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-		tag.NewBoolTag("is_reset_run", mutableState.IsResetRun()),
-		tag.NewBoolTag("has_base_info", baseWorkflowInfo != nil),
-		tag.NewInt64("child_initiated_id", childInfo.InitiatedEventId))
-	if baseWorkflowInfo != nil {
-		t.logger.Error("DEBUG: Base workflow info details",
-			tag.NewInt64("lowest_common_ancestor", baseWorkflowInfo.LowestCommonAncestorEventId),
-			tag.NewInt64("child_initiated_id", childInfo.InitiatedEventId))
-	}
 	if mutableState.IsResetRun() && baseWorkflowInfo != nil && baseWorkflowInfo.LowestCommonAncestorEventId >= childInfo.InitiatedEventId { // child was started before the reset point.
-		t.logger.Error("DEBUG: Calling verifyChildWorkflow for reset parent",
-			tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-			tag.NewStringTag("child_workflow_id", attributes.WorkflowId))
 		childRunID, childFirstRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
 		if err != nil {
 			return err
@@ -1151,17 +1138,9 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	}
 
 	childsParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
-	t.logger.Error("DEBUG: verifyChildWorkflow checking child",
-		tag.WorkflowID(childWorkflowID),
-		tag.WorkflowRunID(response.WorkflowExecutionInfo.Execution.RunId),
-		tag.NewStringTag("child_parent_run_id", childsParentRunID),
-		tag.NewStringTag("parent_original_run_id", mutableState.GetExecutionInfo().OriginalExecutionRunId))
 
 	// Check if the child's parent was the base run for the current run.
 	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
-		t.logger.Error("DEBUG: Child's parent matches our original run, returning child",
-			tag.WorkflowID(childWorkflowID),
-			tag.WorkflowRunID(response.WorkflowExecutionInfo.Execution.RunId))
 		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
 	}
 
@@ -1187,14 +1166,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	}
 
 	// now check if the child's parent's original run id and the current run's original run ID are the same.
-	t.logger.Error("DEBUG: Checking if child's parent's original matches ours",
-		tag.NewStringTag("child_parent_original", childsParentMutableState.GetExecutionInfo().OriginalExecutionRunId),
-		tag.NewStringTag("our_original", mutableState.GetExecutionInfo().OriginalExecutionRunId))
-
 	if childsParentMutableState.GetExecutionInfo().OriginalExecutionRunId == mutableState.GetExecutionInfo().OriginalExecutionRunId {
-		t.logger.Error("DEBUG: Child's parent's original matches ours, returning child",
-			tag.WorkflowID(childWorkflowID),
-			tag.WorkflowRunID(response.WorkflowExecutionInfo.Execution.RunId))
 		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
 	}
 

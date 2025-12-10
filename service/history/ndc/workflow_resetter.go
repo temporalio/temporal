@@ -989,6 +989,17 @@ func reapplyEvents(
 			if isDuplicate(event) {
 				continue
 			}
+			// Skip child completion events during reset if they shouldn't be reapplied
+			// This helps with cascade reset scenarios where the child has been reset
+			if isReset && (event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED ||
+				event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED ||
+				event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED ||
+				event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT ||
+				event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED) {
+				// During reset, skip reapplying child completion events
+				// The parent will wait for new completion from potentially reset children
+				continue
+			}
 			err := reapplyChildEvents(mutableState, event)
 			if err != nil {
 				return nil, err
@@ -1056,10 +1067,23 @@ func reapplyChildEvents(mutableState historyi.MutableState, event *historypb.His
 		}
 	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 		childEventAttributes := event.GetChildWorkflowExecutionCompletedEventAttributes()
-		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		childInfo, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
 		if !childExists {
 			return nil
 		}
+
+		// If this child workflow has been reset (cascade reset scenario),
+		// we should skip replaying the completion event.
+		// The parent will wait for the reset child to complete instead.
+		// Check if the child's StartedRunId is empty (not yet started in this reset)
+		// or different from the completed child's RunId (child was reset)
+		if childInfo.GetStartedRunId() == "" ||
+		   (childInfo.GetStartedRunId() != childEventAttributes.WorkflowExecution.GetRunId() &&
+		    childInfo.GetStartedWorkflowId() == childEventAttributes.WorkflowExecution.GetWorkflowId()) {
+			// Skip replaying this completion event - parent will wait for reset child
+			return nil
+		}
+
 		attributes := &historypb.WorkflowExecutionCompletedEventAttributes{
 			Result: childEventAttributes.Result,
 		}

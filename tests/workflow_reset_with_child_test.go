@@ -14,6 +14,11 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
+func TestWorkflowResetWithChildSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(WorkflowResetWithChildSuite))
+}
+
 // Tests workflow reset feature. This suite executes the following scenarios:
 //  1. Reset point is before the child init and child is not running (i.e. child already completed)
 //     a: If the parent uses random ChildIDs (i.e. SDK generated): Expect it to make progress by starting a completely new
