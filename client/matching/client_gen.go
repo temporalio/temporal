@@ -79,7 +79,7 @@ func (c *clientImpl) CheckTaskQueueVersionMembership(
 	opts ...grpc.CallOption,
 ) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error) {
 
-	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}

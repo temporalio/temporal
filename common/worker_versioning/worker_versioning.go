@@ -14,7 +14,6 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -268,7 +267,7 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
 		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   namespaceID,
-			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:     tq,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			Version: &deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: version.GetDeploymentName(),

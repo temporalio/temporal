@@ -644,7 +644,7 @@ message DescribeWorkerResponse {
 
 message CheckTaskQueueVersionMembershipRequest {
     string namespace_id = 1;
-    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    string task_queue = 2;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
     temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 4;
 }

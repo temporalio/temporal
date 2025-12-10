@@ -3143,7 +3143,10 @@ func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueVersionMembershipRequest,
 ) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error) {
-	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	partition, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{
+		Name: request.GetTaskQueue(),
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}, request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
