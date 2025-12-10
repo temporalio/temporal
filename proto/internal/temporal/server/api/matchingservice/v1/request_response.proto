@@ -346,6 +346,7 @@ message SyncDeploymentUserDataRequest {
     // (-- api-linter: core::0203::required=disabled
     //     aip.dev/not-precedent: Not following Google API format --)
     string deployment_name = 9;
+    reserved 3, 4, 5;
     repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 8;
 
     oneof operation {

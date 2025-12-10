@@ -86,6 +86,7 @@ message VersioningData {
 }
 
 message DeploymentData {
+    reserved 1;
     // Set of worker deployment versions that this task queue belongs to.
     // Current Version is defined implicitly as the version with `current_since_time!=nil` and the most
     // recent `routing_update_time`.
