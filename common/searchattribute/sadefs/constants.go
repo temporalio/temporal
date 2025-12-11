@@ -59,6 +59,8 @@ const (
 	// any other custom search attribute.
 	ScheduleID = "ScheduleId"
 
+	ActivityId = "ActivityId"
+
 	// TemporalPauseInfo is a search attribute that stores the information about paused entities in the workflow.
 	// Format of a single paused entity: "<key>:<value>".
 	//  * <key> is something that can be used to identify the filtering condition

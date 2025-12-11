@@ -20,9 +20,25 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/payload"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const (
+	ActivityTypeSAAlias      = "ActivityType"
+	ActivityStatusSAAlias    = "ActivityStatus"
+	ActivityTaskQueueSAAlias = "ActivityTaskQueue"
+)
+
+var (
+	ActivityTypeSearchAttribute      = chasm.NewSearchAttributeKeyword(ActivityTypeSAAlias, chasm.SearchAttributeFieldKeyword01)
+	ActivityStatusSearchAttribute    = chasm.NewSearchAttributeKeyword(ActivityStatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	ActivityTaskQueueSearchAttribute = chasm.NewSearchAttributeKeyword(ActivityTaskQueueSAAlias, chasm.SearchAttributeFieldKeyword02)
+)
+
+var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
+var _ chasm.VisibilityMemoProvider = (*Activity)(nil)
 
 type ActivityStore interface {
 	// PopulateRecordStartedResponse populates the response for RecordActivityTaskStarted
@@ -461,41 +477,55 @@ func (a *Activity) RecordHeartbeat(
 	}, nil
 }
 
+// InternalStatusToAPIStatus converts internal activity execution status to API status.
+func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumspb.ActivityExecutionStatus {
+	switch status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		return enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
+		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED:
+		return enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
+		return enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED:
+		return enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
+		return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
+	default:
+		panic(fmt.Sprintf("unknown activity execution status: %v", status))
+	}
+}
+
+func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb.PendingActivityState {
+	switch status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+		return enumspb.PENDING_ACTIVITY_STATE_STARTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
+		return enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
+	default:
+		panic(fmt.Sprintf("unknown activity execution status: %v", status))
+	}
+}
+
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.ActivityExecutionInfo, error) {
 	// TODO(dan): support pause states
-	var status enumspb.ActivityExecutionStatus
-	var runState enumspb.PendingActivityState
-	switch a.GetStatus() {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
-		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
-		runState = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
-		runState = enumspb.PENDING_ACTIVITY_STATE_STARTED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
-		runState = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
-		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
-		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
-		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED
-		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
-		status = enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
-		runState = enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	default:
-		return nil, serviceerror.NewInternalf("unknown activity execution status: %s", a.GetStatus())
-	}
+	status := InternalStatusToAPIStatus(a.GetStatus())
+	runState := internalStatusToRunState(a.GetStatus())
 
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
@@ -627,4 +657,24 @@ func (a *Activity) validateActivityTaskToken(
 		return serviceerror.NewNotFound("activity task not found")
 	}
 	return nil
+}
+
+// SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
+// Returns the current search attribute values for this activity execution.
+func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
+	return []chasm.SearchAttributeKeyValue{
+		ActivityTypeSearchAttribute.Value(a.GetActivityType().GetName()),
+		ActivityStatusSearchAttribute.Value(a.GetStatus().String()),
+		ActivityTaskQueueSearchAttribute.Value(a.GetTaskQueue().GetName()),
+	}
+}
+
+// Memo implements chasm.VisibilityMemoProvider interface.
+// Returns the memo data to be stored in visibility for list responses.
+func (a *Activity) Memo(_ chasm.Context) proto.Message {
+	return &activitypb.ActivityListMemo{
+		ActivityType: a.GetActivityType().GetName(),
+		TaskQueue:    a.GetTaskQueue().GetName(),
+		Status:       a.GetStatus(),
+	}
 }
