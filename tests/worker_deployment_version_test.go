@@ -1624,12 +1624,12 @@ func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(ctx context.
 	}, 10*time.Second, 50*time.Millisecond)
 }
 
-func (s *DeploymentVersionSuite) checkBatchOperationFails(ctx context.Context, jobId string, numWorkflows int) {
+func (s *DeploymentVersionSuite) checkBatchOperationFails(ctx context.Context, jobID string, numWorkflows int) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
 			Namespace: s.Namespace().String(),
-			JobId:     jobId,
+			JobId:     jobID,
 		})
 		a.NoError(err)
 		// All workflows should have failed validation
