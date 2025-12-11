@@ -27,13 +27,11 @@ import (
 
 const (
 	ActivityTypeSAAlias   = "ActivityType"
-	TaskQueueSAAlias      = "TaskQueue"
 	ActivityStatusSAAlias = "ActivityStatus"
 )
 
 var (
 	ActivityTypeSearchAttribute   = chasm.NewSearchAttributeKeyword(ActivityTypeSAAlias, chasm.SearchAttributeFieldKeyword01)
-	TaskQueueSearchAttribute      = chasm.NewSearchAttributeKeyword(TaskQueueSAAlias, chasm.SearchAttributeFieldKeyword02)
 	ActivityStatusSearchAttribute = chasm.NewSearchAttributeKeyword(ActivityStatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
 )
 
@@ -660,7 +658,6 @@ func (a *Activity) validateActivityTaskToken(
 func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
 		ActivityTypeSearchAttribute.Value(a.ActivityType.GetName()),
-		TaskQueueSearchAttribute.Value(a.TaskQueue.GetName()),
 		ActivityStatusSearchAttribute.Value(a.Status.String()),
 	}
 }
