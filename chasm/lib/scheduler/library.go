@@ -44,7 +44,10 @@ func (l *Library) Name() string {
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Scheduler](chasm.SchedulerComponentName),
+		chasm.NewRegistrableComponent[*Scheduler](
+			chasm.SchedulerComponentName,
+			chasm.WithBusinessIDAlias("ScheduleId"),
+		),
 		chasm.NewRegistrableComponent[*Generator]("generator"),
 		chasm.NewRegistrableComponent[*Invoker]("invoker"),
 		chasm.NewRegistrableComponent[*Backfiller]("backfiller"),
