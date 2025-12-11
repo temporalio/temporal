@@ -223,7 +223,8 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 	deploymentName := "testing"
 	buildID := "v.123"
 
-	// Setup runs with versioning enabled so the version is present in the task queue
+	// Setup runs with versioning enabled so that the version is present in the task queue before the
+	// versioning override is set.
 	runs := s.setupRuns(ctx, workflowID, 1, true, versioningConfig{
 		Required:       true,
 		DeploymentName: deploymentName,
