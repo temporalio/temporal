@@ -782,7 +782,8 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	namespaceEntry := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
 			Id:   namespaceID,
 			Name: namespaceName,
@@ -795,7 +796,9 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 				cluster.TestAlternativeClusterName,
 			},
 		},
-	})
+	}
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
@@ -807,7 +810,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	namespaceEntry := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
 			Id:   namespaceID,
 			Name: namespaceName,
@@ -819,7 +823,9 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 				cluster.TestAlternativeClusterName,
 			},
 		},
-	})
+	}
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
@@ -831,7 +837,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	namespaceEntry := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
 			Id:    namespaceID,
 			Name:  namespaceName,
@@ -845,7 +852,9 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
 				cluster.TestAlternativeClusterName,
 			},
 		},
-	})
+	}
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
@@ -865,21 +874,23 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_SyncFromRemoteSuccess() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	namespaceEntry := namespace.FromPersistentState(
-		&persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   namespaceID,
-				Name: namespaceName,
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespaceID,
+			Name: namespaceName,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
-			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestAlternativeClusterName,
-				Clusters: []string{
-					cluster.TestCurrentClusterName,
-					cluster.TestAlternativeClusterName,
-				},
-			},
-		})
+		},
+	}
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	s.NoError(err)
 	// enable feature flag
 
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
@@ -921,38 +932,41 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
 		},
 	)
-	namespaceEntryOld := namespace.FromPersistentState(
-		&persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   namespaceID,
-				Name: namespaceName,
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detailOld := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespaceID,
+			Name: namespaceName,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
-			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestAlternativeClusterName,
-				Clusters: []string{
-					cluster.TestCurrentClusterName,
-					cluster.TestAlternativeClusterName,
-				},
+		},
+		FailoverVersion: 10,
+	}
+	namespaceEntryOld, err := namespace.FromPersistentState(detailOld, factory(detailOld))
+	s.NoError(err)
+	detailNew := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespaceID,
+			Name: namespaceName,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
-			FailoverVersion: 10,
-		})
-	namespaceEntryNew := namespace.FromPersistentState(
-		&persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   namespaceID,
-				Name: namespaceName,
-			},
-			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestAlternativeClusterName,
-				Clusters: []string{
-					cluster.TestCurrentClusterName,
-					cluster.TestAlternativeClusterName,
-				},
-			},
-			FailoverVersion: 100,
-		})
+		},
+		FailoverVersion: 100,
+	}
+	namespaceEntryNew, err := namespace.FromPersistentState(detailNew, factory(detailNew))
+	s.NoError(err)
 
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryNew, nil).Times(1)
@@ -993,7 +1007,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
 		},
 	)
-	namespaceEntryOld := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detailOld := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
 			Id:   namespaceID,
 			Name: namespaceName,
@@ -1007,7 +1022,9 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 			},
 		},
 		FailoverVersion: 10,
-	})
+	}
+	namespaceEntryOld, err := namespace.FromPersistentState(detailOld, factory(detailOld))
+	s.NoError(err)
 
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)

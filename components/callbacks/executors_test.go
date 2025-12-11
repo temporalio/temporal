@@ -124,16 +124,17 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
-			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
-				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
-					Info: &persistencespb.NamespaceInfo{
-						Id:   "namespace-id",
-						Name: "namespace-name",
-					},
-					Config: &persistencespb.NamespaceConfig{},
-				}),
-				nil,
-			)
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:   "namespace-id",
+					Name: "namespace-name",
+				},
+				Config: &persistencespb.NamespaceConfig{},
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
+			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil)
 			metricsHandler := metrics.NewMockHandler(ctrl)
 			counter := metrics.NewMockCounterIface(ctrl)
 			timer := metrics.NewMockTimerIface(ctrl)
@@ -473,16 +474,17 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
-			namespaceRegistryMock.EXPECT().GetNamespaceByID(gomock.Any()).Return(
-				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
-					Info: &persistencespb.NamespaceInfo{
-						Id:   "namespace-id",
-						Name: "namespace-name",
-					},
-					Config: &persistencespb.NamespaceConfig{},
-				}),
-				nil,
-			)
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:   "namespace-id",
+					Name: "namespace-name",
+				},
+				Config: &persistencespb.NamespaceConfig{},
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
+			namespaceRegistryMock.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 			historyClient := tc.setupHistoryClient(t, ctrl)
 
 			headers := nexus.Header{}
