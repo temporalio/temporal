@@ -4410,7 +4410,7 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 		// versions can be returned.
 		listInfo := ex.ChasmMemo // V2
 		customMemo := ex.Memo
-		if listInfo == nil {
+		if listInfo.GetSpec() == nil {
 			listInfo = wh.decodeScheduleListInfo(customMemo) // V1
 			wh.cleanScheduleMemo(customMemo)
 		} else {

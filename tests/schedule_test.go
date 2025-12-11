@@ -676,6 +676,52 @@ func (s *scheduleFunctionalSuiteBase) TestLastCompletionAndError() {
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
 }
 
+// Tests that a schedule created in the V1 stack will also be visible in the V2 stack.
+func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
+	sid := "schedule-created-on-v1"
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-",
+					WorkflowType: &commonpb.WorkflowType{Name: "action"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	// Create on V1 stack.
+	_, err := s.FrontendClient().CreateSchedule(s.newContext(), req)
+	s.NoError(err)
+
+	// Sanity test, list with V1 handler.
+	v1Entry := s.getScheduleEntryFomVisibility(sid, nil)
+	s.NotNil(v1Entry.GetInfo())
+
+	// Flip on CHASM experiment and make sure we can still list.
+	s.newContext = func() context.Context {
+		return metadata.NewOutgoingContext(testcore.NewContext(), metadata.Pairs(
+			headers.ExperimentHeaderName, "chasm-scheduler",
+		))
+	}
+	chasmEntry := s.getScheduleEntryFomVisibility(sid, nil)
+	s.NotNil(chasmEntry.GetInfo())
+	s.ProtoEqual(chasmEntry.GetInfo(), v1Entry.GetInfo())
+}
+
 // TestRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
 func (s *ScheduleV1FunctionalSuite) TestRefresh() {
 	sid := "sched-test-refresh"
