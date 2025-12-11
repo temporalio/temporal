@@ -265,21 +265,16 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
-		resp, err := matchingClient.GetTaskQueueUserData(ctx,
-			&matchingservice.GetTaskQueueUserDataRequest{
-				NamespaceId:   namespaceID,
-				TaskQueue:     tq,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			})
+		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     tq,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
+		})
 		if err != nil {
 			return false, err
 		}
-		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
-		if !ok {
-			// The TQ is unversioned
-			return false, nil
-		}
-		return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
+		return resp.GetIsMember(), nil
 	}
 }
 
