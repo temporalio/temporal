@@ -27,7 +27,9 @@ import (
 type (
 	WorkflowTaskReportedProblemsReplicationSuite struct {
 		xdcBaseSuite
-		shouldFail atomic.Bool
+		shouldFail       atomic.Bool
+		activeSDKClient  sdkclient.Client
+		standbySDKClient sdkclient.Client
 	}
 )
 
@@ -202,7 +204,8 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	defer cancel()
 
 	ns := s.createGlobalNamespace()
-	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.activeSDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(s.logger),
@@ -210,7 +213,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.NoError(err)
 
 	taskQueue := testcore.RandomizeStr("tq")
-	worker1 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
+	worker1 := sdkworker.New(s.activeSDKClient, taskQueue, sdkworker.Options{})
 
 	worker1.RegisterWorkflow(s.simpleWorkflow)
 
@@ -227,12 +230,12 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 		TaskQueue: taskQueue,
 	}
 
-	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
+	workflowRun, err := s.activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.simpleWorkflow)
 	s.NoError(err)
 
 	// Verify search attributes are NOT set in cluster0 when config is 0
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := s.activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		_, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
 		require.False(t, ok)
@@ -240,7 +243,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 
 	// Verify workflow task attempts are accumulating
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		exec, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		exec, err := s.activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, exec.PendingWorkflowTask.Attempt, int32(2))
 	}, 5*time.Second, 500*time.Millisecond)
@@ -251,7 +254,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 
 	// Verify search attributes are now set in cluster0
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := s.activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		saValues, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
 		require.True(t, ok)
@@ -262,17 +265,17 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	}, 15*time.Second, 500*time.Millisecond)
 
 	// get standby client
-	standbyClient, err := sdkclient.Dial(sdkclient.Options{
+	s.standbySDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
-	s.NotNil(standbyClient)
+	s.NotNil(s.standbySDKClient)
 
 	// verify search attributes are replicated to cluster1 using the helper function
 	s.checkReportedProblemsSearchAttribute(
 		s.clusters[1].Host().AdminClient(),
-		standbyClient,
+		s.standbySDKClient,
 		workflowRun.GetID(),
 		workflowRun.GetRunID(),
 		ns,
@@ -291,7 +294,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	// verify search attributes are cleared in cluster1 using the helper function
 	s.checkReportedProblemsSearchAttribute(
 		s.clusters[1].Host().AdminClient(),
-		standbyClient,
+		s.standbySDKClient,
 		workflowRun.GetID(),
 		workflowRun.GetRunID(),
 		ns,
@@ -302,12 +305,14 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 }
 
 // workflowWithSignalsThatFails creates a workflow that listens for signals and fails on each workflow task.
-func (s *WorkflowTaskReportedProblemsReplicationSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) {
-	// If we should fail, signal ourselves (creating a side effect) and immediately panic.
-	// This creates buffered events.
+func (s *WorkflowTaskReportedProblemsReplicationSuite) workflowWithSignalsThatFails(ctx workflow.Context) (string, error) { // If we should fail, signal ourselves (creating a side effect) and immediately panic.
+	// This will create buffered.
 	if s.shouldFail.Load() {
 		// Signal ourselves to create buffered events
-		_ = workflow.SignalExternalWorkflow(ctx, workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
+		err := s.activeSDKClient.SignalWorkflow(context.Background(), workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
+		if err != nil {
+			return "", err
+		}
 		panic("forced-panic-after-self-signal")
 	}
 
@@ -320,7 +325,8 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	defer cancel()
 
 	ns := s.createGlobalNamespace()
-	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.activeSDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(s.logger),
@@ -330,7 +336,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	s.shouldFail.Store(true)
 
 	taskQueue := testcore.RandomizeStr("tq")
-	worker1 := sdkworker.New(activeSDKClient, taskQueue, sdkworker.Options{})
+	worker1 := sdkworker.New(s.activeSDKClient, taskQueue, sdkworker.Options{})
 	worker1.RegisterWorkflow(s.workflowWithSignalsThatFails)
 	s.NoError(worker1.Start())
 	defer worker1.Stop()
@@ -340,14 +346,14 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 		TaskQueue: taskQueue,
 	}
 
-	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.workflowWithSignalsThatFails)
+	workflowRun, err := s.activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, s.workflowWithSignalsThatFails)
 	s.NoError(err)
 
 	// The workflow will signal itself and panic on each WFT, creating buffered events naturally.
 	// Wait for the search attribute to be set due to consecutive failures
 	s.checkReportedProblemsSearchAttribute(
 		s.clusters[0].Host().AdminClient(),
-		activeSDKClient,
+		s.activeSDKClient,
 		workflowRun.GetID(),
 		workflowRun.GetRunID(),
 		ns,
@@ -358,7 +364,7 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 
 	// Verify the search attribute persists even as the workflow continues to fail and create buffered events
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := s.activeSDKClient.DescribeWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		s.NoError(err)
 		saVal, ok := description.TypedSearchAttributes.GetKeywordList(temporal.NewSearchAttributeKeyKeywordList(sadefs.TemporalReportedProblems))
 		s.True(ok, "Search attribute should still be present during continued failures")
@@ -366,17 +372,17 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// get standby client
-	standbyClient, err := sdkclient.Dial(sdkclient.Options{
+	s.standbySDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
-	s.NotNil(standbyClient)
+	s.NotNil(s.standbySDKClient)
 
 	// verify search attributes are replicated to cluster1
 	s.checkReportedProblemsSearchAttribute(
 		s.clusters[1].Host().AdminClient(),
-		standbyClient,
+		s.standbySDKClient,
 		workflowRun.GetID(),
 		workflowRun.GetRunID(),
 		ns,
@@ -386,6 +392,6 @@ func (s *WorkflowTaskReportedProblemsReplicationSuite) TestWFTFailureReportedPro
 	)
 
 	// Terminate the workflow for cleanup
-	err = activeSDKClient.TerminateWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test cleanup")
+	err = s.activeSDKClient.TerminateWorkflow(ctx, workflowRun.GetID(), workflowRun.GetRunID(), "test cleanup")
 	s.NoError(err)
 }

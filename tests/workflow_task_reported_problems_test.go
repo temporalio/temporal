@@ -51,7 +51,10 @@ func (s *WFTFailureReportedProblemsTestSuite) workflowWithSignalsThatFails(ctx w
 	// This will create buffered.
 	if s.shouldFail.Load() {
 		// Signal ourselves to create buffered events
-		_ = workflow.SignalExternalWorkflow(ctx, workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
+		err := s.SdkClient().SignalWorkflow(context.Background(), workflow.GetInfo(ctx).WorkflowExecution.ID, "", "test-signal", "self-signal")
+		if err != nil {
+			return "", err
+		}
 		panic("forced-panic-after-self-signal")
 	}
 
