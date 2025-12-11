@@ -202,7 +202,7 @@ func (a *Activity) HandleCompleted(
 	input WithToken[*historyservice.RespondActivityTaskCompletedRequest],
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
 	// TODO(dan): add test coverage for this validation
-	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, input.Token); err != nil {
 		return nil, err
 	}
 
@@ -220,7 +220,7 @@ func (a *Activity) HandleFailed(
 	input WithToken[*historyservice.RespondActivityTaskFailedRequest],
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
 	// TODO(dan): add test coverage for this validation
-	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, input.Token); err != nil {
 		return nil, err
 	}
 
@@ -256,7 +256,7 @@ func (a *Activity) HandleCanceled(
 	input WithToken[*historyservice.RespondActivityTaskCanceledRequest],
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	// TODO(dan): add test coverage for this validation
-	if err := ValidateActivityTaskToken(ctx, a, input.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, input.Token); err != nil {
 		return nil, err
 	}
 
@@ -460,7 +460,7 @@ func (a *Activity) RecordHeartbeat(
 	ctx chasm.MutableContext,
 	input WithToken[*historyservice.RecordActivityTaskHeartbeatRequest],
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
-	err := ValidateActivityTaskToken(ctx, a, input.Token)
+	err := a.validateActivityTaskToken(ctx, input.Token)
 	if err != nil {
 		return nil, err
 	}
@@ -634,4 +634,19 @@ func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 		return store
 	}
 	return a
+}
+
+// validateActivityTaskToken validates a task token against the current activity state.
+func (a *Activity) validateActivityTaskToken(
+	ctx chasm.Context,
+	token *tokenspb.Task,
+) error {
+	if a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return serviceerror.NewNotFound("activity task not found")
+	}
+	if token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
+		return serviceerror.NewNotFound("activity task not found")
+	}
+	return nil
 }
