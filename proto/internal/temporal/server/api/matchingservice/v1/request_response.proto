@@ -9,6 +9,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
@@ -488,11 +489,13 @@ message DispatchNexusTaskResponse {
     message Timeout {}
 
     oneof outcome {
-        // Set if the worker's handler failed the nexus task.
-        temporal.api.nexus.v1.HandlerError handler_error = 1;
+        // Deprecated. Use failure field instead.
+        temporal.api.nexus.v1.HandlerError handler_error = 1 [deprecated = true];
         // Set if the worker's handler responded successfully to the nexus task.
         temporal.api.nexus.v1.Response response = 2;
         Timeout request_timeout = 3;
+        // Set if the worker's handler failed the nexus task. Must contain a NexusHandlerFailureInfo object.
+        temporal.api.failure.v1.Failure failure = 4;
     }
 }
 

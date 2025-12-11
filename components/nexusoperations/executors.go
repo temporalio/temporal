@@ -436,11 +436,11 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
 	var handlerErr *nexus.HandlerError
-	var opFailedErr *nexus.OperationError
+	var opErr *nexus.OperationError
 
 	switch {
-	case errors.As(callErr, &opFailedErr):
-		return handleOperationError(node, operation, opFailedErr)
+	case errors.As(callErr, &opErr):
+		return handleOperationError(node, operation, opErr)
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 		// Although Failure is nullable, Nexus SDK is expected to always populate this field
@@ -863,44 +863,11 @@ func isDestinationDown(err error) bool {
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
-		var retryBehavior enumspb.NexusHandlerErrorRetryBehavior
-		// nolint:exhaustive // unspecified is the default
-		switch handlerErr.RetryBehavior {
-		case nexus.HandlerErrorRetryBehaviorRetryable:
-			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
-		case nexus.HandlerErrorRetryBehaviorNonRetryable:
-			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
+		nf, err := nexus.DefaultFailureConverter().ErrorToFailure(handlerErr)
+		if err != nil {
+			return nil, err
 		}
-		failure := &failurepb.Failure{
-			Message: handlerErr.Error(),
-			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type:          string(handlerErr.Type),
-					RetryBehavior: retryBehavior,
-				},
-			},
-		}
-		var failureError *nexus.FailureError
-		if errors.As(handlerErr.Cause, &failureError) {
-			var err error
-			failure.Cause, err = commonnexus.NexusFailureToAPIFailure(failureError.Failure, retryable)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			cause := handlerErr.Cause
-			if cause == nil {
-				cause = errors.New("unknown cause")
-			}
-			failure.Cause = &failurepb.Failure{
-				Message: cause.Error(),
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
-				},
-			}
-		}
-
-		return failure, nil
+		return commonnexus.NexusFailureToAPIFailure(nf)
 	}
 
 	return &failurepb.Failure{

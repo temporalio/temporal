@@ -112,19 +112,19 @@ type customFailureConverter struct{}
 var errCustom = errors.New("custom")
 
 // ErrorToFailure implements FailureConverter.
-func (c customFailureConverter) ErrorToFailure(err error) nexus.Failure {
+func (c customFailureConverter) ErrorToFailure(err error) (nexus.Failure, error) {
 	return nexus.Failure{
 		Message: err.Error(),
 		Metadata: map[string]string{
 			"type": "custom",
 		},
-	}
+	}, nil
 }
 
 // FailureToError implements FailureConverter.
-func (c customFailureConverter) FailureToError(f nexus.Failure) error {
+func (c customFailureConverter) FailureToError(f nexus.Failure) (error, error) {
 	if f.Metadata["type"] != "custom" {
-		return errors.New(f.Message)
+		return errors.New(f.Message), nil
 	}
-	return fmt.Errorf("%w: %s", errCustom, f.Message)
+	return fmt.Errorf("%w: %s", errCustom, f.Message), nil
 }

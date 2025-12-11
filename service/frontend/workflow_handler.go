@@ -5425,8 +5425,13 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
-	if details := request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
-		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	if opErr := request.GetResponse().GetStartOperation().GetOperationError(); opErr != nil {
+		if details := opErr.GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+		}
+	}
+	if f := request.GetResponse().GetStartOperation().GetFailure(); f != nil && f.GetNexusSdkOperationFailureInfo() == nil {
+		return nil, serviceerror.NewInvalidArgument("request StartOperation Failure must contain failure with NexusSdkOperationFailureInfo")
 	}
 
 	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
@@ -5466,8 +5471,16 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
 
-	if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
-		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	if request.Error == nil && request.Failure == nil {
+		return nil, serviceerror.NewInvalidArgument("request must contain error or failure")
+	}
+	if request.GetError() != nil {
+		if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+		}
+	}
+	if request.GetFailure() != nil && request.GetFailure().GetNexusHandlerFailureInfo() == nil {
+		return nil, serviceerror.NewInvalidArgument("request Failure must contain error or failure with NexusHandlerFailureInfo")
 	}
 
 	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this

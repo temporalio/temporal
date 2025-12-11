@@ -178,10 +178,10 @@ func TestFailureCompletion(t *testing.T) {
 
 	ctx, callbackURL, teardown := setupForCompletion(t, &failureExpectingCompletionHandler{
 		errorChecker: func(err error) error {
-			if err.Error() != "expected message" {
-				return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure: %v", err)
+			if opErr, ok := err.(*nexus.OperationError); ok && opErr.Message == "expected message" {
+				return nil
 			}
-			return nil
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure: %v", err)
 		},
 		expectedStartTime: startTime,
 		expectedCloseTime: closeTime,
