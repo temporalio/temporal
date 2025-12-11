@@ -113,6 +113,8 @@ var Module = fx.Options(
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
+	fx.Provide(visibility.ChasmVisibilityManagerProvider),
+	fx.Provide(chasm.ChasmRequestVisibilityInterceptorProvider),
 )
 
 func NewServiceProvider(
@@ -213,6 +215,7 @@ func GrpcServerOptionsProvider(
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
+	chasmRequestVisibilityInterceptor *chasm.ChasmRequestVisibilityInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
@@ -266,6 +269,7 @@ func GrpcServerOptionsProvider(
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
 		slowRequestLoggerInterceptor.Intercept,
+		chasmRequestVisibilityInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
@@ -736,6 +740,7 @@ func HandlerProvider(
 	versionChecker *VersionChecker,
 	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
+	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,

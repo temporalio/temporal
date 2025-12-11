@@ -11,18 +11,19 @@ import (
 
 const chasmRequestPrefix = "/temporal.server.chasm"
 
-// ChasmRequestInterceptor Interceptor that intercepts RPC requests, detects Chasm-specific calls and does additional
-// boilerplate processing before handing off.
-type ChasmRequestInterceptor struct {
+// ChasmRequestEngineInterceptor Interceptor that intercepts RPC requests,
+// detects CHASM-specific calls and does additional boilerplate processing before
+// handing off. Visibility is injected separately with
+// ChasmRequestVisibilityInterceptor.
+type ChasmRequestEngineInterceptor struct {
 	engine         Engine
-	visibilityMgr  VisibilityManager
 	logger         log.Logger
 	metricsHandler metrics.Handler
 }
 
-var _ grpc.UnaryServerInterceptor = (*ChasmRequestInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*ChasmRequestEngineInterceptor)(nil).Intercept
 
-func (i *ChasmRequestInterceptor) Intercept(
+func (i *ChasmRequestEngineInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -33,21 +34,41 @@ func (i *ChasmRequestInterceptor) Intercept(
 	}
 
 	ctx = NewEngineContext(ctx, i.engine)
-	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
-
 	return handler(ctx, req)
 }
 
-func ChasmRequestInterceptorProvider(
+func ChasmRequestEngineInterceptorProvider(
 	engine Engine,
-	visibilityMgr VisibilityManager,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) *ChasmRequestInterceptor {
-	return &ChasmRequestInterceptor{
+) *ChasmRequestEngineInterceptor {
+	return &ChasmRequestEngineInterceptor{
 		engine:         engine,
-		visibilityMgr:  visibilityMgr,
 		logger:         logger,
 		metricsHandler: metricsHandler,
+	}
+}
+
+// ChasmRequestVisibilityInterceptor intercepts RPC requests and adds the CHASM
+// VisibilityManager to their context.
+type ChasmRequestVisibilityInterceptor struct {
+	visibilityMgr VisibilityManager
+}
+
+var _ grpc.UnaryServerInterceptor = (*ChasmRequestVisibilityInterceptor)(nil).Intercept
+
+func (i *ChasmRequestVisibilityInterceptor) Intercept(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (resp interface{}, retError error) {
+	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
+	return handler(ctx, req)
+}
+
+func ChasmRequestVisibilityInterceptorProvider(visibilityMgr VisibilityManager) *ChasmRequestVisibilityInterceptor {
+	return &ChasmRequestVisibilityInterceptor{
+		visibilityMgr: visibilityMgr,
 	}
 }
