@@ -94,7 +94,7 @@ func Invoke(
 			workflowConsistencyChecker,
 			tokenSerializer,
 			startReq,
-			matchingClient, // TODO (Shivam): Can MultiOperation ever have versioning override?
+			matchingClient,
 			versionMembershipCache,
 			uws.workflowLeaseCallback(ctx),
 		)
