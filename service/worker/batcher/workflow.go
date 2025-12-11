@@ -185,7 +185,7 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		if op.UpdateWorkflowOptionsOperation.GetUpdateMask() == nil {
 			return errors.New("must provide UpdateMask")
 		}
-		// Validation for the Override, if any, happens in history.
+		// Validation for Versioning Override, if present, happens in history.
 		return nil
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation,
 		*workflowservice.StartBatchOperationRequest_TerminationOperation,

@@ -2670,8 +2670,7 @@ instead of the previous HSM backed implementation.`,
 	VersionMembershipCacheTTL = NewGlobalDurationSetting(
 		"history.versionMembershipCacheTTL",
 		1*time.Second,
-		`VersionMembershipCacheTTL is the TTL of the version membership cache which is used to cache the presence of a version 
-		in a task queue`,
+		`TTL for caching RPC results that check whether a version is present in a task queue.`,
 	)
 
 	// keys for worker
