@@ -71,6 +71,7 @@ type TransitionOptions struct {
 	ConflictPolicy BusinessIDConflictPolicy
 	RequestID      string
 	Speculative    bool
+	TaskQueue      string
 }
 
 type TransitionOption func(*TransitionOptions)
@@ -108,6 +109,15 @@ func WithRequestID(
 ) TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.RequestID = requestID
+	}
+}
+
+// WithTaskQueue sets the task queue on the execution.
+func WithTaskQueue(
+	taskQueue string,
+) TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.TaskQueue = taskQueue
 	}
 }
 

@@ -24,7 +24,6 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 			chasm.WithSearchAttributes(
 				ActivityTypeSearchAttribute,
 				ActivityStatusSearchAttribute,
-				ActivityTaskQueueSearchAttribute,
 			),
 		),
 	}

@@ -440,6 +440,9 @@ func (e *ChasmEngine) createNewExecution(
 		shardContext.GetTimeSource().Now(),
 	)
 	mutableState.AttachRequestID(options.RequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, 0)
+	if options.TaskQueue != "" {
+		mutableState.GetExecutionInfo().TaskQueue = options.TaskQueue
+	}
 
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
 	if !ok {
