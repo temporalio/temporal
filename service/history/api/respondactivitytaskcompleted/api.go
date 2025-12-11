@@ -44,7 +44,10 @@ func Invoke(
 			ctx,
 			componentRef,
 			(*activity.Activity).HandleCompleted,
-			req,
+			activity.WithToken[*historyservice.RespondActivityTaskCompletedRequest]{
+				Token:   token,
+				Request: req,
+			},
 		)
 
 		if err != nil {

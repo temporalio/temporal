@@ -24,8 +24,7 @@ const (
 
 type ActivityDispatchTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-	// need to guard against any concurrent operations where the originally intended task may be outdated.
+	// The current attempt number for this activity execution. Used for task validation.
 	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -70,8 +69,7 @@ func (x *ActivityDispatchTask) GetAttempt() int32 {
 
 type ScheduleToStartTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-	// need to guard against any concurrent operations where the originally intended task may be outdated.
+	// The current attempt number for this activity execution. Used for task validation.
 	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -152,8 +150,7 @@ func (*ScheduleToCloseTimeoutTask) Descriptor() ([]byte, []int) {
 
 type StartToCloseTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current attempt number for this activity execution. Since task validation/exec happen outside of a lock, we
-	// need to guard against any concurrent operations where the originally intended task may be outdated.
+	// The current attempt number for this activity execution. Used for task validation.
 	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -196,6 +193,52 @@ func (x *StartToCloseTimeoutTask) GetAttempt() int32 {
 	return 0
 }
 
+// HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
+type HeartbeatTimeoutTask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The current attempt number for this activity execution. Used for task validation.
+	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatTimeoutTask) Reset() {
+	*x = HeartbeatTimeoutTask{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatTimeoutTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatTimeoutTask) ProtoMessage() {}
+
+func (x *HeartbeatTimeoutTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatTimeoutTask.ProtoReflect.Descriptor instead.
+func (*HeartbeatTimeoutTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *HeartbeatTimeoutTask) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" +
@@ -207,6 +250,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\x1c\n" +
 	"\x1aScheduleToCloseTimeoutTask\"3\n" +
 	"\x17StartToCloseTimeoutTask\x12\x18\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"0\n" +
+	"\x14HeartbeatTimeoutTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattemptBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var (
@@ -221,12 +266,13 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP() 
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any{
 	(*ActivityDispatchTask)(nil),       // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask
 	(*ScheduleToStartTimeoutTask)(nil), // 1: temporal.server.chasm.lib.activity.proto.v1.ScheduleToStartTimeoutTask
 	(*ScheduleToCloseTimeoutTask)(nil), // 2: temporal.server.chasm.lib.activity.proto.v1.ScheduleToCloseTimeoutTask
 	(*StartToCloseTimeoutTask)(nil),    // 3: temporal.server.chasm.lib.activity.proto.v1.StartToCloseTimeoutTask
+	(*HeartbeatTimeoutTask)(nil),       // 4: temporal.server.chasm.lib.activity.proto.v1.HeartbeatTimeoutTask
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -247,7 +293,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

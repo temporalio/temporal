@@ -5,6 +5,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -124,15 +125,37 @@ var TransitionStarted = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-	func(a *Activity, ctx chasm.MutableContext, _ any) error {
+	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
+		attempt := a.LastAttempt.Get(ctx)
+		attempt.StartedTime = timestamppb.New(ctx.Now(a))
+		attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
+		if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
+			attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+				BuildId:        versionDirective.GetBuildId(),
+				DeploymentName: versionDirective.GetDeploymentName(),
+			}
+		}
+		startTime := attempt.GetStartedTime().AsTime()
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
-				ScheduledTime: ctx.Now(a).Add(a.GetStartToCloseTimeout().AsDuration()),
+				ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration()),
 			},
 			&activitypb.StartToCloseTimeoutTask{
 				Attempt: a.LastAttempt.Get(ctx).GetCount(),
 			})
+
+		if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
+			ctx.AddTask(
+				a,
+				chasm.TaskAttributes{
+					ScheduledTime: startTime.Add(heartbeatTimeout),
+				},
+				&activitypb.HeartbeatTimeoutTask{
+					Attempt: attempt.GetCount(),
+				})
+		}
+
 		return nil
 	},
 )
@@ -170,7 +193,7 @@ var TransitionFailed = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, req *historyservice.RespondActivityTaskFailedRequest) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			if details := req.GetFailedRequest().GetLastHeartbeatDetails(); details != nil {
-				heartbeat := a.getLastHeartbeat(ctx)
+				heartbeat := a.getOrCreateLastHeartbeat(ctx)
 				heartbeat.Details = details
 				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
 			}
@@ -270,6 +293,9 @@ var TransitionTimedOut = chasm.NewTransition(
 				return a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
+				return a.recordFailedAttempt(ctx, 0, failure, true)
+			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
+				failure := createHeartbeatTimeoutFailure()
 				return a.recordFailedAttempt(ctx, 0, failure, true)
 			default:
 				return fmt.Errorf("unhandled activity timeout: %v", timeoutType)

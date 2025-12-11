@@ -32,6 +32,7 @@ type library struct {
 	scheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor
 	scheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor
 	startToCloseTimeoutTaskExecutor    *startToCloseTimeoutTaskExecutor
+	heartbeatTimeoutTaskExecutor       *heartbeatTimeoutTaskExecutor
 }
 
 func newLibrary(
@@ -40,6 +41,7 @@ func newLibrary(
 	scheduleToStartTimeoutTaskExecutor *scheduleToStartTimeoutTaskExecutor,
 	scheduleToCloseTimeoutTaskExecutor *scheduleToCloseTimeoutTaskExecutor,
 	startToCloseTimeoutTaskExecutor *startToCloseTimeoutTaskExecutor,
+	heartbeatTimeoutTaskExecutor *heartbeatTimeoutTaskExecutor,
 ) *library {
 	return &library{
 		handler:                            handler,
@@ -47,6 +49,7 @@ func newLibrary(
 		scheduleToStartTimeoutTaskExecutor: scheduleToStartTimeoutTaskExecutor,
 		scheduleToCloseTimeoutTaskExecutor: scheduleToCloseTimeoutTaskExecutor,
 		startToCloseTimeoutTaskExecutor:    startToCloseTimeoutTaskExecutor,
+		heartbeatTimeoutTaskExecutor:       heartbeatTimeoutTaskExecutor,
 	}
 }
 
@@ -75,6 +78,11 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 			"startToCloseTimer",
 			l.startToCloseTimeoutTaskExecutor,
 			l.startToCloseTimeoutTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"heartbeatTimer",
+			l.heartbeatTimeoutTaskExecutor,
+			l.heartbeatTimeoutTaskExecutor,
 		),
 	}
 }
