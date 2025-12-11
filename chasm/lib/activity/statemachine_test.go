@@ -241,10 +241,16 @@ func TestTransitionStarted(t *testing.T) {
 		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
-	err := TransitionStarted.Apply(activity, ctx, nil)
+	err := TransitionStarted.Apply(activity, ctx, &historyservice.RecordActivityTaskStartedRequest{
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			Identity: "test-worker",
+		},
+	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
+	require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
+	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
 
 	// Verify added tasks
 	require.Len(t, ctx.Tasks, 1)
@@ -318,16 +324,13 @@ func TestTransitionTimedout(t *testing.T) {
 				require.NotNil(t, outcome.GetFailed().GetFailure())
 				// do something
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-				// Timeout failure is recorded in both attempt state and outcome. TransitionTimedOut should only be called when there
+				// Timeout failure is recorded in attempt state only. TransitionTimedOut should only be called when there
 				// are no more retries. Retries go through TransitionRescheduled.
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetFailure())
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
 				require.NotNil(t, attemptState.GetCompleteTime())
 				require.Nil(t, attemptState.GetCurrentRetryInterval())
-
-				failure, ok := outcome.GetVariant().(*activitypb.ActivityOutcome_Failed_)
-				require.True(t, ok, "expected variant to be of type Failed")
-				require.Nil(t, failure.Failed, "expected outcome.Failed to be nil since failure is recorded in attempt state")
+				require.Nil(t, outcome.GetVariant())
 
 			default:
 				t.Fatalf("unexpected timeout type: %v", tc.timeoutType)

@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/util"
 	"go.uber.org/fx"
 )
 
@@ -124,25 +125,86 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 	return valid, nil
 }
 
+// Execute executes a StartToCloseTimeoutTask. It fails the attempt, leading to retry or activity
+// failure.
 func (e *startToCloseTimeoutTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
 	_ *activitypb.StartToCloseTimeoutTask,
 ) error {
-	shouldRetry, retryInterval, err := activity.shouldRetry(ctx, 0)
+	rescheduled, err := activity.tryReschedule(ctx, 0, createStartToCloseTimeoutFailure())
 	if err != nil {
 		return err
 	}
+	if rescheduled {
+		return nil
+	}
+	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+}
 
-	// Retry task if we have remaining attempts and time. A retry involves transitioning the activity back to scheduled state.
-	if shouldRetry {
-		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
-			retryInterval: retryInterval,
-			failure:       createStartToCloseTimeoutFailure(),
-		})
+// HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
+type heartbeatTimeoutTaskExecutor struct{}
+
+func newHeartbeatTimeoutTaskExecutor() *heartbeatTimeoutTaskExecutor {
+	return &heartbeatTimeoutTaskExecutor{}
+}
+
+// Validate validates a HeartbeatTimeoutTask.
+func (e *heartbeatTimeoutTaskExecutor) Validate(
+	ctx chasm.Context,
+	activity *Activity,
+	taskAttrs chasm.TaskAttributes,
+	task *activitypb.HeartbeatTimeoutTask,
+) (bool, error) {
+	// Let T = user-configured heartbeat timeout and let hb_i be the time of the ith user-submitted
+	// heartbeat request. (hb_0 = 0 since we always start a timer task when an attempt starts).
+
+	// There are two concurrent sequences of events:
+	// 1. A worker is sending heartbeats at times hb_i.
+	// 2. This task is being executed at (shortly after) times hb_i + T.
+
+	// On the i-th execution of this function, we look back into the past and determine whether the
+	// last heartbeat was received after hb_i. If so, we reject this timeout task. Otherwise, the
+	// Execute function runs and we fail the attempt.
+	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return false, nil
+	}
+	// Task attempt must still match current attempt.
+	attempt := activity.LastAttempt.Get(ctx)
+	if attempt.GetCount() != task.Attempt {
+		return false, nil
 	}
 
-	// Reached maximum attempts, timeout the activity
-	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	// Must not have been a heartbeat since this task was created
+	hbTimeout := activity.GetHeartbeatTimeout().AsDuration() // T
+	attemptStartTime := attempt.GetStartedTime().AsTime()
+	lastHb, _ := activity.LastHeartbeat.TryGet(ctx) // could be nil, or from a previous attempt
+	// No hbs in attempt so far is equivalent to hb having been sent at attempt start time.
+	lastHbTime := util.MaxTime(lastHb.GetRecordedTime().AsTime(), attemptStartTime)
+	thisTaskHbTime := taskAttrs.ScheduledTime.Add(-hbTimeout) // hb_i
+	if lastHbTime.After(thisTaskHbTime) {
+		// another heartbeat has invalidated this task's heartbeat
+		return false, nil
+	}
+	return true, nil
+}
+
+// Execute executes a HeartbeatTimeoutTask. It fails the attempt, leading to retry or activity
+// failure.
+func (e *heartbeatTimeoutTaskExecutor) Execute(
+	ctx chasm.MutableContext,
+	activity *Activity,
+	_ chasm.TaskAttributes,
+	_ *activitypb.HeartbeatTimeoutTask,
+) error {
+	rescheduled, err := activity.tryReschedule(ctx, 0, createHeartbeatTimeoutFailure())
+	if err != nil {
+		return err
+	}
+	if rescheduled {
+		return nil
+	}
+	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 }
