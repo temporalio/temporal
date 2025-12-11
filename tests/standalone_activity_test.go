@@ -1577,10 +1577,6 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_InvalidArgum
 }
 
 func (s *standaloneActivityTestSuite) TestHeartbeat() {
-	// TODO(dan)
-	// - a heartbeat timer set on one attempt should not timeout a subsequent attempt (not unless
-	//   there have been some appropriate adjustments to the schedule time)
-
 	t := s.T()
 	ctx := testcore.NewContext()
 	heartbeatDetails := payloads.EncodeString("Heartbeat Details")
