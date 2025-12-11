@@ -145,6 +145,16 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 			tv2 := tv.WithBuildIDNumber(2)
 			go s.idlePollWorkflow(context.Background(), tv2, true, ver3MinPollTime, "second deployment should not receive pinned task")
 
+			// Start a versioned poller for the first version so that it registers the version in the task queue.
+			pollerCtx, cancelPoller := context.WithCancel(context.Background())
+			go s.idlePollWorkflow(pollerCtx, tv, true, ver3MinPollTime, "first deployment should not receive any task. It is just creating a version in the task queue.")
+
+			// Wait for the version to be present in the task queue
+			s.validatePinnedVersionExistsInTaskQueue(tv)
+
+			// Cancel the poller after condition is met
+			cancelPoller()
+
 			s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
 			s.idlePollWorkflow(context.Background(), tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
 
@@ -272,6 +282,9 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 			s.NotNil(task)
 			return respondActivity(), nil
 		})
+
+	// Wait for the version to be present in the task queue. Version existence is required before it can be set as an override.
+	s.validatePinnedVersionExistsInTaskQueue(tv)
 
 	runID := s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
 
@@ -442,6 +455,19 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
 			s.NotNil(task)
 			return respondEmptyWft(tv, sticky, vbUnpinned), nil
 		})
+
+	// Wait for the version to be present in the task queue. Version existence is required before it can be set as an override.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv.Deployment()),
+		})
+		a.NoError(err)
+		a.True(resp.GetIsMember())
+	}, 10*time.Second, 100*time.Millisecond)
 
 	runID := s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
 
@@ -4570,4 +4596,59 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_AfterCAN_NoBounceBack()
 
 func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_ChildNoBounceBack() {
 	s.testRetryNoBounceBack(false, true)
+}
+
+// The following tests test out the CheckTaskQueueVersionMembership RPC.
+func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// No version exists in the task queue's userData as of now
+	s.Eventually(func() bool {
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv1.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
+		})
+		s.NoError(err)
+		return !resp.GetIsMember() // the check should pass if no version is present
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Start v1 worker which shall register the version in the task queue
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+	})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// The version should eventually show up in the task queue's user data
+	s.Eventually(func() bool {
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv1.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
+		})
+		s.NoError(err)
+		return resp.GetIsMember()
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// validatePinnedVersionExistsInTaskQueue validates that the version, to be pinned, exists in the task queue.
+// TODO (future improvement): This can be further extended to validate the presence of any version instead of using the GetTaskQueueUserData RPC.
+func (s *Versioning3Suite) validatePinnedVersionExistsInTaskQueue(tv *testvars.TestVars) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv.Deployment()),
+		})
+		a.NoError(err)
+		a.True(resp.GetIsMember())
+	}, 10*time.Second, 100*time.Millisecond)
 }
