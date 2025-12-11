@@ -354,8 +354,6 @@ func (a *Activity) recordFailedAttempt(
 	}
 	attempt.CompleteTime = currentTime
 
-	// If the activity has exhausted retries, mark the outcome failure as well but don't store duplicate failure info.
-	// Also reset the retry interval as there won't be any more retries.
 	if noRetriesLeft {
 		attempt.CurrentRetryInterval = nil
 	} else {
