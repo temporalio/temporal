@@ -125,26 +125,21 @@ func (e *startToCloseTimeoutTaskExecutor) Validate(
 	return valid, nil
 }
 
+// Execute executes a StartToCloseTimeoutTask. It fails the attempt, leading to retry or activity
+// failure.
 func (e *startToCloseTimeoutTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
 	_ *activitypb.StartToCloseTimeoutTask,
 ) error {
-	shouldRetry, retryInterval, err := activity.shouldRetry(ctx, 0)
+	rescheduled, err := activity.tryReschedule(ctx, 0, createStartToCloseTimeoutFailure())
 	if err != nil {
 		return err
 	}
-
-	// Retry task if we have remaining attempts and time. A retry involves transitioning the activity back to scheduled state.
-	if shouldRetry {
-		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
-			retryInterval: retryInterval,
-			failure:       createStartToCloseTimeoutFailure(),
-		})
+	if rescheduled {
+		return nil
 	}
-
-	// Reached maximum attempts, timeout the activity
 	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 }
 
@@ -196,23 +191,20 @@ func (e *heartbeatTimeoutTaskExecutor) Validate(
 	return true, nil
 }
 
-// Execute executes a HeartbeatTimeoutTask. It fails the attempt due to heartbeat timeout, leading
-// to retry or activity failure.
+// Execute executes a HeartbeatTimeoutTask. It fails the attempt, leading to retry or activity
+// failure.
 func (e *heartbeatTimeoutTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	activity *Activity,
 	_ chasm.TaskAttributes,
 	_ *activitypb.HeartbeatTimeoutTask,
 ) error {
-	shouldRetry, retryInterval, err := activity.shouldRetry(ctx, 0)
+	rescheduled, err := activity.tryReschedule(ctx, 0, createHeartbeatTimeoutFailure())
 	if err != nil {
 		return err
 	}
-	if shouldRetry {
-		return TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
-			retryInterval: retryInterval,
-			failure:       createHeartbeatTimeoutFailure(),
-		})
+	if rescheduled {
+		return nil
 	}
 	return TransitionTimedOut.Apply(activity, ctx, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 }

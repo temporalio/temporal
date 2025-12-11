@@ -226,23 +226,21 @@ func (a *Activity) HandleFailed(
 
 	failure := input.Request.GetFailedRequest().GetFailure()
 
-	shouldRetry, retryInterval, err := a.shouldRetryOnFailure(ctx, failure)
-	if err != nil {
-		return nil, err
-	}
+	appFailure := failure.GetApplicationFailureInfo()
+	isRetryable := appFailure != nil &&
+		!appFailure.GetNonRetryable() &&
+		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
 
-	if shouldRetry {
-		if err := TransitionRescheduled.Apply(a, ctx, rescheduleEvent{
-			retryInterval: retryInterval,
-			failure:       failure,
-		}); err != nil {
+	if isRetryable {
+		rescheduled, err := a.tryReschedule(ctx, appFailure.GetNextRetryDelay().AsDuration(), failure)
+		if err != nil {
 			return nil, err
 		}
-
-		return &historyservice.RespondActivityTaskFailedResponse{}, nil
+		if rescheduled {
+			return &historyservice.RespondActivityTaskFailedResponse{}, nil
+		}
 	}
 
-	// No more retries, transition to failed state
 	if err := TransitionFailed.Apply(a, ctx, input.Request); err != nil {
 		return nil, err
 	}
@@ -327,26 +325,6 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, req *ac
 	return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 }
 
-func (a *Activity) shouldRetryOnFailure(ctx chasm.Context, failure *failurepb.Failure) (bool, time.Duration, error) {
-	var isRetryable bool
-
-	if failure.GetApplicationFailureInfo() != nil {
-		appFailure := failure.GetApplicationFailureInfo()
-		isRetryable = !appFailure.GetNonRetryable() && !slices.Contains(
-			a.GetRetryPolicy().GetNonRetryableErrorTypes(),
-			appFailure.GetType(),
-		)
-	}
-
-	if !isRetryable {
-		return false, 0, nil
-	}
-
-	overridingRetryInterval := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
-
-	return a.shouldRetry(ctx, overridingRetryInterval)
-}
-
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
 // set the outcome failure directly and leave the attempt failure as is.
 func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
@@ -398,24 +376,38 @@ func (a *Activity) recordFailedAttempt(
 	return nil
 }
 
-func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration, error) {
+// tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
+// if retry is not possible.
+func (a *Activity) tryReschedule(
+	ctx chasm.MutableContext,
+	overridingRetryInterval time.Duration,
+	failure *failurepb.Failure,
+) (bool, error) {
+	shouldRetry, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
+	if !shouldRetry {
+		return false, nil
+	}
+	return true, TransitionRescheduled.Apply(a, ctx, rescheduleEvent{
+		retryInterval: retryInterval,
+		failure:       failure,
+	})
+}
+
+func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
 	if !TransitionRescheduled.Possible(a) {
-		return false, 0, nil
+		return false, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
 	retryPolicy := a.RetryPolicy
 
 	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || attempt.GetCount() < retryPolicy.GetMaximumAttempts()
-	enoughTime, retryInterval, err := a.hasEnoughTimeForRetry(ctx, overridingRetryInterval)
-	if err != nil {
-		return false, 0, err
-	}
-	return enoughAttempts && enoughTime, retryInterval, nil
+	enoughTime, retryInterval := a.hasEnoughTimeForRetry(ctx, overridingRetryInterval)
+	return enoughAttempts && enoughTime, retryInterval
 }
 
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time
-// remains, it will also return a valid retry interval
-func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration, error) {
+// remains, it will also return a valid retry interval.
+func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
 	attempt := a.LastAttempt.Get(ctx)
 
 	// Use overriding retry interval if provided, else calculate based on retry policy
@@ -426,11 +418,11 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 
 	scheduleToClose := a.GetScheduleToCloseTimeout().AsDuration()
 	if scheduleToClose == 0 {
-		return true, retryInterval, nil
+		return true, retryInterval
 	}
 
 	deadline := a.ScheduleTime.AsTime().Add(scheduleToClose)
-	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval, nil
+	return ctx.Now(a).Add(retryInterval).Before(deadline), retryInterval
 }
 
 func createStartToCloseTimeoutFailure() *failurepb.Failure {
