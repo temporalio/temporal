@@ -378,6 +378,10 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	var stateChanged []*namespace.Namespace
 	for _, aNamespace := range namespacesDb {
 		oldNS := r.updateIDToNamespace(newIDToNamespace, aNamespace.ID(), aNamespace)
+		// If namespace was renamed, remove entry for the old name
+		if oldNS != nil && oldNS.Name() != aNamespace.Name() {
+			delete(newNameToID, oldNS.Name())
+		}
 		newNameToID[aNamespace.Name()] = aNamespace.ID()
 
 		if namespaceStateChanged(oldNS, aNamespace) {
@@ -524,6 +528,10 @@ func (r *registry) updateSingleNamespace(ns *namespace.Namespace) {
 	}
 
 	oldNS := r.updateIDToNamespace(r.idToNamespace, ns.ID(), ns)
+	// If namespace was renamed, remove entry for the old name
+	if oldNS != nil && oldNS.Name() != ns.Name() {
+		delete(r.nameToID, oldNS.Name())
+	}
 	r.nameToID[ns.Name()] = ns.ID()
 	if namespaceStateChanged(oldNS, ns) {
 		r.stateChangedDuringReadthrough = append(r.stateChangedDuringReadthrough, ns)
@@ -584,6 +592,7 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 func namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) bool {
 	return old == nil ||
 		old.State() != new.State() ||
+		old.Name() != new.Name() ||
 		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
 		// TODO: Refactor to use ns.ActiveInCluster() api
 		old.ActiveClusterName(namespace.EmptyBusinessID) != new.ActiveClusterName(namespace.EmptyBusinessID) ||

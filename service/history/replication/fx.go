@@ -41,6 +41,7 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
+	PersistenceRateLimiterProvider,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{
