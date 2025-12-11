@@ -215,6 +215,7 @@ func GrpcServerOptionsProvider(
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
+	chasmRequestInterceptor *chasm.ChasmRequestInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
@@ -268,6 +269,7 @@ func GrpcServerOptionsProvider(
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
 		slowRequestLoggerInterceptor.Intercept,
+		chasmRequestInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
@@ -768,7 +770,6 @@ func HandlerProvider(
 		serviceConfig,
 		namespaceReplicationQueue,
 		visibilityMgr,
-		chasmVisibilityMgr,
 		logger,
 		throttledLogger,
 		persistenceExecutionManager.GetName(),

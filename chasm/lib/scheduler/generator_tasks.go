@@ -79,6 +79,7 @@ func (g *GeneratorTaskExecutor) Execute(
 		t2 = t1
 	}
 
+	fmt.Printf("about to process time range\n")
 	result, err := g.SpecProcessor.ProcessTimeRange(
 		scheduler,
 		t1, t2,
@@ -93,6 +94,8 @@ func (g *GeneratorTaskExecutor) Execute(
 		return queueerrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to process a time range: %s", err.Error()))
 	}
+
+	fmt.Printf("\n\n\n\nGENERATOR RESULT: %+v\n\n\n", result)
 
 	// Enqueue newly-generated buffered starts.
 	if len(result.BufferedStarts) > 0 {

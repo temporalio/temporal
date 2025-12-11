@@ -170,7 +170,6 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		config,
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
-		s.mockResource.GetChasmVisibilityManager(),
 		s.mockResource.GetLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager().GetName(),
