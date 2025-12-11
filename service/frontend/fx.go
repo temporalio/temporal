@@ -114,7 +114,7 @@ var Module = fx.Options(
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
-	fx.Provide(chasm.ChasmRequestVisibilityInterceptorProvider),
+	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
 
 func NewServiceProvider(
@@ -215,7 +215,7 @@ func GrpcServerOptionsProvider(
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
-	chasmRequestVisibilityInterceptor *chasm.ChasmRequestVisibilityInterceptor,
+	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,

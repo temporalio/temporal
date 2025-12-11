@@ -11,19 +11,17 @@ import (
 
 const chasmRequestPrefix = "/temporal.server.chasm"
 
-// ChasmRequestEngineInterceptor Interceptor that intercepts RPC requests,
+// ChasmEngineInterceptor Interceptor that intercepts RPC requests,
 // detects CHASM-specific calls and does additional boilerplate processing before
 // handing off. Visibility is injected separately with
-// ChasmRequestVisibilityInterceptor.
-type ChasmRequestEngineInterceptor struct {
+// ChasmVisibilityInterceptor.
+type ChasmEngineInterceptor struct {
 	engine         Engine
 	logger         log.Logger
 	metricsHandler metrics.Handler
 }
 
-var _ grpc.UnaryServerInterceptor = (*ChasmRequestEngineInterceptor)(nil).Intercept
-
-func (i *ChasmRequestEngineInterceptor) Intercept(
+func (i *ChasmEngineInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -37,27 +35,25 @@ func (i *ChasmRequestEngineInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-func ChasmRequestEngineInterceptorProvider(
+func ChasmEngineInterceptorProvider(
 	engine Engine,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) *ChasmRequestEngineInterceptor {
-	return &ChasmRequestEngineInterceptor{
+) *ChasmEngineInterceptor {
+	return &ChasmEngineInterceptor{
 		engine:         engine,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 	}
 }
 
-// ChasmRequestVisibilityInterceptor intercepts RPC requests and adds the CHASM
+// ChasmVisibilityInterceptor intercepts RPC requests and adds the CHASM
 // VisibilityManager to their context.
-type ChasmRequestVisibilityInterceptor struct {
+type ChasmVisibilityInterceptor struct {
 	visibilityMgr VisibilityManager
 }
 
-var _ grpc.UnaryServerInterceptor = (*ChasmRequestVisibilityInterceptor)(nil).Intercept
-
-func (i *ChasmRequestVisibilityInterceptor) Intercept(
+func (i *ChasmVisibilityInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -67,8 +63,8 @@ func (i *ChasmRequestVisibilityInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-func ChasmRequestVisibilityInterceptorProvider(visibilityMgr VisibilityManager) *ChasmRequestVisibilityInterceptor {
-	return &ChasmRequestVisibilityInterceptor{
+func ChasmVisibilityInterceptorProvider(visibilityMgr VisibilityManager) *ChasmVisibilityInterceptor {
+	return &ChasmVisibilityInterceptor{
 		visibilityMgr: visibilityMgr,
 	}
 }
