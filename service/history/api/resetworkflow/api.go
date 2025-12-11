@@ -64,7 +64,7 @@ func Invoke(
 	}
 
 	// Validate versioning override, if any.
-	err = validatePostResetOperationInputs(request.GetPostResetOperations(), matchingClient, versionMembershipCache,
+	err = validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionMembershipCache,
 		&taskqueuepb.TaskQueue{
 			Name: baseMutableState.GetExecutionInfo().GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -216,7 +216,8 @@ func GetResetReapplyExcludeTypes(
 }
 
 // validatePostResetOperationInputs validates the optional post reset operation inputs.
-func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation,
+func validatePostResetOperationInputs(ctx context.Context,
+	postResetOperations []*workflowpb.PostResetOperation,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache cache.Cache,
 	taskQueue *taskqueuepb.TaskQueue,
@@ -225,7 +226,7 @@ func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostRese
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
+			if err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
 				return err
 			}
 		default:

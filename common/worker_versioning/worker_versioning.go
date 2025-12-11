@@ -524,7 +524,8 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
-func validatePinnedVersionInTaskQueue(pinnedVersion *deploymentpb.WorkerDeploymentVersion,
+func validatePinnedVersionInTaskQueue(ctx context.Context,
+	pinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	matchingClient resource.MatchingClient,
 	versionMembershipCache cache.Cache,
 	tq string,
@@ -563,7 +564,8 @@ func validatePinnedVersionInTaskQueue(pinnedVersion *deploymentpb.WorkerDeployme
 	return nil
 }
 
-func ValidateVersioningOverride(override *workflowpb.VersioningOverride,
+func ValidateVersioningOverride(ctx context.Context,
+	override *workflowpb.VersioningOverride,
 	matchingClient resource.MatchingClient,
 	versionMembershipCache cache.Cache,
 	tq string,
@@ -582,7 +584,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride,
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return validatePinnedVersionInTaskQueue(p.GetVersion(), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
+		return validatePinnedVersionInTaskQueue(ctx, p.GetVersion(), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -596,7 +598,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride,
 				return err
 			}
 
-			return validatePinnedVersionInTaskQueue(ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
+			return validatePinnedVersionInTaskQueue(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
 
 		} else {
 			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")

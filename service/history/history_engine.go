@@ -317,7 +317,7 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.versionMembershipCache = cache.New(10000, &cache.Options{
-		TTL: max(1, config.VersionMembershipCacheTTL())}, // ensure TTL is never zero (which would disable TTL)
+		TTL: max(1*time.Second, config.VersionMembershipCacheTTL())}, // ensure TTL is never zero (which would disable TTL)
 	)
 	return historyEngImpl
 }

@@ -1,6 +1,7 @@
 package worker_versioning
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -768,6 +769,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			tt.setupCache(testCache)
 
 			err := ValidateVersioningOverride(
+				context.Background(),
 				tt.override,
 				mockMatchingClient,
 				testCache,

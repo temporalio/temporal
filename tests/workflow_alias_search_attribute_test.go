@@ -95,6 +95,9 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
+	fmt.Println("task queue name ", tv.TaskQueue().Name)
+	fmt.Println("deployment name ", tv.DeploymentSeries())
+	fmt.Println("build ID ", tv.BuildID())
 	s.startVersionedPollerAndValidate(ctx, tv.TaskQueue().Name, tv.DeploymentSeries(), tv.BuildID())
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -123,7 +126,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
 	})
 }
 
-func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
+func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSA() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -167,7 +170,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	s.Require().NoError(err)
 }
 
-func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSAOverride() {
+func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSA_Custom() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
