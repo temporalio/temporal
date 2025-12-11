@@ -659,9 +659,9 @@ func (a *Activity) validateActivityTaskToken(
 // Returns the current search attribute values for this activity execution.
 func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
-		ActivityTypeSearchAttribute.Value(a.ActivityType.GetName()),
-		ActivityStatusSearchAttribute.Value(a.Status.String()),
-		ActivityTaskQueueSearchAttribute.Value(a.TaskQueue.GetName()),
+		ActivityTypeSearchAttribute.Value(a.GetActivityType().GetName()),
+		ActivityStatusSearchAttribute.Value(a.GetStatus().String()),
+		ActivityTaskQueueSearchAttribute.Value(a.GetTaskQueue().GetName()),
 	}
 }
 
@@ -669,8 +669,8 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 // Returns the memo data to be stored in visibility for list responses.
 func (a *Activity) Memo(_ chasm.Context) proto.Message {
 	return &activitypb.ActivityListMemo{
-		ActivityType: a.ActivityType.GetName(),
-		TaskQueue:    a.TaskQueue.Name,
-		Status:       a.Status,
+		ActivityType: a.GetActivityType().GetName(),
+		TaskQueue:    a.GetTaskQueue().GetName(),
+		Status:       a.GetStatus(),
 	}
 }
