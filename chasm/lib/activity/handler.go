@@ -75,6 +75,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		req.GetFrontendRequest(),
 		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
+		chasm.WithTaskQueue(req.GetFrontendRequest().GetTaskQueue().GetName()),
 	)
 
 	if err != nil {
