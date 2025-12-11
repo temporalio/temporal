@@ -105,6 +105,7 @@ type (
 
 		// Temporary solution to force read search attributes from persistence
 		forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn
+		replicationResolverFactory              namespace.ReplicationResolverFactory
 	}
 )
 
@@ -119,6 +120,7 @@ func NewRegistry(
 	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) *registry {
 	reg := &registry{
 		persistence:              aPersistence,
@@ -133,6 +135,7 @@ func NewRegistry(
 		readthroughNotFoundCache: cache.New(readthroughCacheSize, &readthroughNotFoundCacheOpts),
 
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
+		replicationResolverFactory:              replicationResolverFactory,
 	}
 	return reg
 }
@@ -348,10 +351,15 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 			return err
 		}
 		for _, namespaceDb := range response.Namespaces {
-			ns := namespace.FromPersistentState(
+			ns, err := namespace.FromPersistentState(
 				namespaceDb.Namespace,
+				r.replicationResolverFactory(namespaceDb.Namespace),
 				namespace.WithGlobalFlag(namespaceDb.IsGlobalNamespace),
-				namespace.WithNotificationVersion(namespaceDb.NotificationVersion))
+				namespace.WithNotificationVersion(namespaceDb.NotificationVersion),
+			)
+			if err != nil {
+				return err
+			}
 			namespacesDb = append(namespacesDb, ns)
 			namespaceIDsDb[namespace.ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
 		}
@@ -582,8 +590,10 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	}
 	return namespace.FromPersistentState(
 		response.Namespace,
+		r.replicationResolverFactory(response.Namespace),
 		namespace.WithGlobalFlag(response.IsGlobalNamespace),
-		namespace.WithNotificationVersion(response.NotificationVersion)), nil
+		namespace.WithNotificationVersion(response.NotificationVersion),
+	)
 }
 
 // this test should include anything that might affect whether a namespace is active on
