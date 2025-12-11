@@ -703,7 +703,8 @@ func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyVa
 func (s *Scheduler) Memo(
 	ctx chasm.Context,
 ) proto.Message {
-	return s.ListInfo(ctx)
+	// TODO - CHASM to do this clone internally
+	return common.CloneProto(s.ListInfo(ctx))
 }
 
 // ListInfo returns the ScheduleListInfo, used as the visibility memo, and to
