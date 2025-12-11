@@ -5,7 +5,7 @@ This document describes the project's testing setup, utilities and best practice
 ## Setup
 
 ### Build tags
-- `test_dep` (required): This Go build tag is required for running functional tests.
+- `test_dep`: This Go build tag enables the test hooks implementation. Only very few tests require it; they will fail if not enabled.
 - `TEMPORAL_DEBUG`: Extends functional test timeouts to allow sufficient time for debugging sessions.
 - `disable_grpc_modules`: Disables gRPC modules for faster compilation during unit tests.
 
