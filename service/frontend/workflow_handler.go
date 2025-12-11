@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
@@ -4376,6 +4378,72 @@ func (wh *WorkflowHandler) ListSchedules(
 		query = scheduler.VisibilityBaseListQuery
 	}
 
+	if wh.chasmSchedulerEnabled(ctx, namespaceName.String()) {
+		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
+		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
+	}
+	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+}
+
+func (wh *WorkflowHandler) listSchedulesChasm(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	query string,
+) (_ *workflowservice.ListSchedulesResponse, retError error) {
+	resp, err := chasm.ListExecutions[*chasmscheduler.Scheduler, *schedulepb.ScheduleListInfo](ctx, &chasm.ListExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		PageSize:      int(request.GetMaximumPageSize()),
+		NextPageToken: request.NextPageToken,
+		Query:         query,
+		NamespaceName: namespaceName.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	schedules := make([]*schedulepb.ScheduleListEntry, len(resp.Executions))
+	for i, ex := range resp.Executions {
+		// Schedules returned may have either a Memo (V1) or a ChasmMemo (V2) containing
+		// the ScheduleListInfo. Both must be handled, as migration means a mix of
+		// versions can be returned.
+		listInfo := ex.ChasmMemo // V2
+		customMemo := ex.Memo
+		if listInfo == nil {
+			listInfo = wh.decodeScheduleListInfo(customMemo) // V1
+			wh.cleanScheduleMemo(customMemo)
+		} else {
+			scheduler.CleanSpec(listInfo.Spec) // done as part of decodeScheduleListInfo for V1
+		}
+
+		workflowID := ex.BusinessID
+		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix) // needed for V1 schedules, not CHASM
+
+		schedules[i] = &schedulepb.ScheduleListEntry{
+			ScheduleId: scheduleID,
+			Memo:       customMemo,
+			// cleanScheduleSearchAttributes is only needed for V1 schedules
+			SearchAttributes: wh.cleanScheduleSearchAttributes(&commonpb.SearchAttributes{
+				IndexedFields: ex.CustomSearchAttributes,
+			}),
+			Info: listInfo,
+		}
+	}
+
+	return &workflowservice.ListSchedulesResponse{
+		Schedules:     schedules,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+func (wh *WorkflowHandler) listSchedulesWorkflow(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	query string,
+) (_ *workflowservice.ListSchedulesResponse, retError error) {
 	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(
 		ctx,
 		&manager.ListWorkflowExecutionsRequestV2{
