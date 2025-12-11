@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -45,9 +46,21 @@ func Invoke(
 			ctx,
 			componentRef,
 			(*activity.Activity).HandleFailed,
-			activity.WithToken[*historyservice.RespondActivityTaskFailedRequest]{
-				Token:   token,
+			activity.RespondFailedEvent{
 				Request: req,
+				Token:   token,
+				HandlerBuilder: func(activityType string, taskQueueName string) metrics.Handler {
+					return metrics.GetPerTaskQueueFamilyScope(
+						shard.GetMetricsHandler(),
+						namespace.String(),
+						tqid.UnsafeTaskQueueFamily(req.GetNamespaceId(), taskQueueName),
+						shard.GetConfig().BreakdownMetricsByTaskQueue(namespace.String(), taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+						metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
+						metrics.ActivityTypeTag(activityType),
+						metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+						metrics.WorkflowTypeTag(activity.WorkflowTypeTag),
+					)
+				},
 			},
 		)
 

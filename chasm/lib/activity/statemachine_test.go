@@ -8,13 +8,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -80,17 +84,23 @@ func TestTransitionScheduled(t *testing.T) {
 			}
 			attemptState := &activitypb.ActivityAttemptState{Count: tc.startingAttemptCount}
 			outcome := &activitypb.ActivityOutcome{}
+			input := payloads.EncodeString("test-input")
 
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 					RetryPolicy:            defaultRetryPolicy,
 					ScheduleToCloseTimeout: durationpb.New(tc.scheduleToCloseTimeout),
 					ScheduleToStartTimeout: durationpb.New(tc.scheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 				},
 				LastAttempt: chasm.NewDataField(ctx, attemptState),
 				Outcome:     chasm.NewDataField(ctx, outcome),
+				RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
+					Input: input,
+				}),
 			}
 
 			err := TransitionScheduled.Apply(activity, ctx, nil)
@@ -130,6 +140,9 @@ func TestTransitionRescheduled(t *testing.T) {
 		expectedRetryInterval  time.Duration
 		retryPolicy            *commonpb.RetryPolicy
 		scheduleToStartTimeout time.Duration
+		operationTag           string
+		counterMetric          string
+		timeoutType            enumspb.TimeoutType
 	}{
 		{
 			name:                 "second attempt - timeout recorded",
@@ -141,6 +154,9 @@ func TestTransitionRescheduled(t *testing.T) {
 			expectedRetryInterval:  2 * time.Second,
 			retryPolicy:            defaultRetryPolicy,
 			scheduleToStartTimeout: defaultScheduleToStartTimeout,
+			operationTag:           metrics.TimerActiveTaskActivityTimeoutScope,
+			counterMetric:          metrics.ActivityTaskTimeout.Name(),
+			timeoutType:            enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		},
 		{
 			name:                 "third attempt - timeout recorded",
@@ -152,6 +168,9 @@ func TestTransitionRescheduled(t *testing.T) {
 			expectedRetryInterval:  4 * time.Second,
 			retryPolicy:            defaultRetryPolicy,
 			scheduleToStartTimeout: defaultScheduleToStartTimeout,
+			operationTag:           metrics.TimerActiveTaskActivityTimeoutScope,
+			counterMetric:          metrics.ActivityTaskTimeout.Name(),
+			timeoutType:            enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		},
 		{
 			name:                 "no schedule to start timeout",
@@ -162,6 +181,37 @@ func TestTransitionRescheduled(t *testing.T) {
 			expectedRetryInterval:  2 * time.Second,
 			retryPolicy:            defaultRetryPolicy,
 			scheduleToStartTimeout: 0,
+			operationTag:           metrics.TimerActiveTaskActivityTimeoutScope,
+			counterMetric:          metrics.ActivityTaskTimeout.Name(),
+			timeoutType:            enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		},
+		{
+			name:                 "heartbeat timeout - timeout recorded",
+			startingAttemptCount: 1,
+			expectedTasks: []chasm.MockTask{
+				{Payload: &activitypb.ScheduleToStartTimeoutTask{}},
+				{Payload: &activitypb.ActivityDispatchTask{}},
+			},
+			expectedRetryInterval:  2 * time.Second,
+			retryPolicy:            defaultRetryPolicy,
+			scheduleToStartTimeout: defaultScheduleToStartTimeout,
+			operationTag:           metrics.TimerActiveTaskActivityTimeoutScope,
+			counterMetric:          metrics.ActivityTaskTimeout.Name(),
+			timeoutType:            enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		},
+
+		{
+			name:                 "reschedule from failure",
+			startingAttemptCount: 1,
+			expectedTasks: []chasm.MockTask{
+				{Payload: &activitypb.ScheduleToStartTimeoutTask{}},
+				{Payload: &activitypb.ActivityDispatchTask{}},
+			},
+			expectedRetryInterval:  2 * time.Second,
+			retryPolicy:            defaultRetryPolicy,
+			scheduleToStartTimeout: defaultScheduleToStartTimeout,
+			operationTag:           metrics.HistoryRespondActivityTaskFailedScope,
+			counterMetric:          metrics.ActivityTaskFail.Name(),
 		},
 	}
 
@@ -174,20 +224,25 @@ func TestTransitionRescheduled(t *testing.T) {
 
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 					RetryPolicy:            defaultRetryPolicy,
 					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
 					ScheduleToStartTimeout: durationpb.New(tc.scheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 				},
 				LastAttempt: chasm.NewDataField(ctx, attemptState),
 				Outcome:     chasm.NewDataField(ctx, outcome),
 			}
 
-			err := TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
+			event := rescheduleEvent{
 				retryInterval: tc.expectedRetryInterval,
 				failure:       createStartToCloseTimeoutFailure(),
-			})
+				timeoutType:   tc.timeoutType,
+			}
+
+			err := TransitionRescheduled.Apply(activity, ctx, event)
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, activity.Status)
 			require.Equal(t, tc.startingAttemptCount+1, attemptState.Count)
@@ -226,7 +281,10 @@ func TestTransitionRescheduled(t *testing.T) {
 func TestTransitionStarted(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	attemptState := &activitypb.ActivityAttemptState{
+		Count:       1,
+		StartedTime: timestamppb.New(defaultTime),
+	}
 	outcome := &activitypb.ActivityOutcome{}
 
 	activity := &Activity{
@@ -290,6 +348,12 @@ func TestTransitionTimedout(t *testing.T) {
 			timeoutType:  enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			attemptCount: 5,
 		},
+		{
+			name:         "heartbeat timeout",
+			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			timeoutType:  enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			attemptCount: 2,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -300,17 +364,45 @@ func TestTransitionTimedout(t *testing.T) {
 
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 					RetryPolicy:            defaultRetryPolicy,
 					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
 					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 					Status:                 tc.startStatus,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 				},
 				LastAttempt: chasm.NewDataField(ctx, attemptState),
 				Outcome:     chasm.NewDataField(ctx, outcome),
 			}
 
-			err := TransitionTimedOut.Apply(activity, ctx, tc.timeoutType)
+			controller := gomock.NewController(t)
+			metricsHandler := metrics.NewMockHandler(controller)
+
+			timerStartToCloseLatency := metrics.NewMockTimerIface(controller)
+			timerStartToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+			metricsHandler.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(timerStartToCloseLatency)
+
+			timerScheduleToCloseLatency := metrics.NewMockTimerIface(controller)
+			timerScheduleToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+			metricsHandler.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(timerScheduleToCloseLatency)
+
+			timeoutTag := metrics.StringTag("timeout_type", tc.timeoutType.String())
+
+			counterTimeout := metrics.NewMockCounterIface(controller)
+			counterTimeout.EXPECT().Record(int64(1), timeoutTag).Times(1)
+			metricsHandler.EXPECT().Counter(metrics.ActivityTimeout.Name()).Return(counterTimeout)
+
+			counterTaskTimeout := metrics.NewMockCounterIface(controller)
+			counterTaskTimeout.EXPECT().Record(int64(1), timeoutTag).Times(1)
+			metricsHandler.EXPECT().Counter(metrics.ActivityTaskTimeout.Name()).Return(counterTaskTimeout)
+
+			event := timeoutEvent{
+				timeoutType:    tc.timeoutType,
+				metricsHandler: metricsHandler,
+			}
+
+			err := TransitionTimedOut.Apply(activity, ctx, event)
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.Status)
 			require.Equal(t, tc.attemptCount, attemptState.Count)
@@ -323,7 +415,8 @@ func TestTransitionTimedout(t *testing.T) {
 				require.Nil(t, attemptState.GetCompleteTime())
 				require.NotNil(t, outcome.GetFailed().GetFailure())
 				// do something
-			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
+			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+				enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				// Timeout failure is recorded in attempt state only. TransitionTimedOut should only be called when there
 				// are no more retries. Retries go through TransitionRescheduled.
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetFailure())
@@ -349,11 +442,13 @@ func TestTransitionCompleted(t *testing.T) {
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 			RetryPolicy:            defaultRetryPolicy,
 			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
 			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
 		LastAttempt: chasm.NewDataField(ctx, attemptState),
 		Outcome:     chasm.NewDataField(ctx, outcome),
@@ -361,12 +456,34 @@ func TestTransitionCompleted(t *testing.T) {
 
 	payload := payloads.EncodeString("Done")
 
-	err := TransitionCompleted.Apply(activity, ctx, &historyservice.RespondActivityTaskCompletedRequest{
-		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
-			Result:   payload,
-			Identity: "worker",
+	controller := gomock.NewController(t)
+	metricsHandler := metrics.NewMockHandler(controller)
+
+	timerStartToCloseLatency := metrics.NewMockTimerIface(controller)
+	timerStartToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+	metricsHandler.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(timerStartToCloseLatency)
+
+	timerScheduleToCloseLatency := metrics.NewMockTimerIface(controller)
+	timerScheduleToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+	metricsHandler.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(timerScheduleToCloseLatency)
+
+	counterSuccess := metrics.NewMockCounterIface(controller)
+	counterSuccess.EXPECT().Record(int64(1)).Times(1)
+	metricsHandler.EXPECT().Counter(metrics.ActivitySuccess.Name()).Return(counterSuccess)
+
+	req := RespondCompletedEvent{
+		Request: &historyservice.RespondActivityTaskCompletedRequest{
+			CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
+				Result:   payload,
+				Identity: "worker",
+			},
 		},
-	})
+		HandlerBuilder: func(_ string, _ string) metrics.Handler {
+			return metricsHandler
+		},
+	}
+
+	err := TransitionCompleted.Apply(activity, ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
@@ -384,11 +501,13 @@ func TestTransitionFailed(t *testing.T) {
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 			RetryPolicy:            defaultRetryPolicy,
 			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
 			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
 		LastAttempt:   chasm.NewDataField(ctx, attemptState),
 		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
@@ -404,13 +523,40 @@ func TestTransitionFailed(t *testing.T) {
 		}},
 	}
 
-	err := TransitionFailed.Apply(activity, ctx, &historyservice.RespondActivityTaskFailedRequest{
-		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
-			Failure:              failure,
-			LastHeartbeatDetails: heartbeatDetails,
-			Identity:             "worker",
+	controller := gomock.NewController(t)
+	metricsHandler := metrics.NewMockHandler(controller)
+
+	timerStartToCloseLatency := metrics.NewMockTimerIface(controller)
+	timerStartToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+	metricsHandler.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(timerStartToCloseLatency)
+
+	timerScheduleToCloseLatency := metrics.NewMockTimerIface(controller)
+	timerScheduleToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+	metricsHandler.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(timerScheduleToCloseLatency)
+
+	counterFail := metrics.NewMockCounterIface(controller)
+	counterFail.EXPECT().Record(int64(1)).Times(1)
+	metricsHandler.EXPECT().Counter(metrics.ActivityFail.Name()).Return(counterFail)
+
+	counterTaskFail := metrics.NewMockCounterIface(controller)
+	counterTaskFail.EXPECT().Record(int64(1)).Times(1)
+	metricsHandler.EXPECT().Counter(metrics.ActivityTaskFail.Name()).Return(counterTaskFail)
+
+	req := RespondFailedEvent{
+		Request: &historyservice.RespondActivityTaskFailedRequest{
+			FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+				Failure:              failure,
+				LastHeartbeatDetails: heartbeatDetails,
+				Identity:             "worker",
+			},
 		},
-	})
+		HandlerBuilder: func(_ string, _ string) metrics.Handler {
+			return metricsHandler
+		},
+	}
+
+	err := TransitionFailed.Apply(activity, ctx, req)
+
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
@@ -434,22 +580,38 @@ func TestTransitionTerminated(t *testing.T) {
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 			RetryPolicy:            defaultRetryPolicy,
 			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
 			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
 		LastAttempt: chasm.NewDataField(ctx, attemptState),
 		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
-	err := TransitionTerminated.Apply(activity, ctx, &activitypb.TerminateActivityExecutionRequest{
-		FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
-			Reason:   "Test Termination",
-			Identity: "terminator",
+	controller := gomock.NewController(t)
+	metricsHandler := metrics.NewMockHandler(controller)
+
+	counterCancel := metrics.NewMockCounterIface(controller)
+	counterCancel.EXPECT().Record(int64(1)).Times(1)
+	metricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterCancel)
+
+	reqWrapper := terminateEvent{
+		request: &activitypb.TerminateActivityExecutionRequest{
+			FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
+				Reason:   "Test Termination",
+				Identity: "terminator",
+			},
 		},
-	})
+		handlerBuilder: func(_ string, _ string) metrics.Handler {
+			return metricsHandler
+		},
+	}
+
+	err := TransitionTerminated.Apply(activity, ctx, reqWrapper)
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
@@ -502,17 +664,39 @@ func TestTransitionCanceled(t *testing.T) {
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 			RetryPolicy:            defaultRetryPolicy,
 			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
 			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
 		LastAttempt: chasm.NewDataField(ctx, attemptState),
 		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
-	err := TransitionCanceled.Apply(activity, ctx, payloads.EncodeString("Details"))
+	controller := gomock.NewController(t)
+	metricsHandler := metrics.NewMockHandler(controller)
+
+	timerStartToCloseLatency := metrics.NewMockTimerIface(controller)
+	timerStartToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+	metricsHandler.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(timerStartToCloseLatency)
+
+	timerScheduleToCloseLatency := metrics.NewMockTimerIface(controller)
+	timerScheduleToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+	metricsHandler.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(timerScheduleToCloseLatency)
+
+	counterCancel := metrics.NewMockCounterIface(controller)
+	counterCancel.EXPECT().Record(int64(1)).Times(1)
+	metricsHandler.EXPECT().Counter(metrics.ActivityCancel.Name()).Return(counterCancel)
+
+	event := cancelEvent{
+		details: payloads.EncodeString("Details"),
+		handler: metricsHandler,
+	}
+
+	err := TransitionCanceled.Apply(activity, ctx, event)
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
 
