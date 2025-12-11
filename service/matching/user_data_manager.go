@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -250,11 +249,7 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 		}
 		// sticky queue can only be of workflow type as of now. but to be future-proof, we make sure
 		// change to workflow task queue here
-		wfTQ := normalQ.Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-		// use hash of the sticky queue name to pick a consistent "parent"
-		partitions := m.config.NumReadPartitions()
-		partition := int(farm.Fingerprint32([]byte(m.partition.RpcName()))) % partitions
-		return wfTQ.NormalPartition(partition), nil
+		return normalQ.Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), nil
 	}
 
 }
