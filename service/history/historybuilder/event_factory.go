@@ -115,17 +115,21 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
+	externalPayloadSizeBytes int64,
+	externalPayloadCount int64,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-			ScheduledEventId:       scheduledEventID,
-			Identity:               identity,
-			RequestId:              requestID,
-			SuggestContinueAsNew:   suggestContinueAsNew,
-			HistorySizeBytes:       historySizeBytes,
-			WorkerVersion:          versioningStamp,
-			BuildIdRedirectCounter: buildIdRedirectCounter,
+			ScheduledEventId:         scheduledEventID,
+			Identity:                 identity,
+			RequestId:                requestID,
+			SuggestContinueAsNew:     suggestContinueAsNew,
+			HistorySizeBytes:         historySizeBytes,
+			WorkerVersion:            versioningStamp,
+			BuildIdRedirectCounter:   buildIdRedirectCounter,
+			ExternalPayloadSizeBytes: externalPayloadSizeBytes,
+			ExternalPayloadCount:     externalPayloadCount,
 		},
 	}
 	return event

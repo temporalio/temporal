@@ -517,6 +517,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			historySizeBytes,
 			versioningStamp,
 			redirectCounter,
+			m.ms.GetExternalPayloadSize(),
+			m.ms.GetExternalPayloadCount(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
@@ -708,6 +710,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.HistorySizeBytes,
 			request.WorkerVersionStamp,
 			workflowTask.BuildIdRedirectCounter,
+			m.ms.GetExternalPayloadSize(),
+			m.ms.GetExternalPayloadCount(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -796,6 +800,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.HistorySizeBytes,
 			versioningStamp,
 			workflowTask.BuildIdRedirectCounter,
+			m.ms.GetExternalPayloadSize(),
+			m.ms.GetExternalPayloadCount(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -867,6 +873,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.HistorySizeBytes,
 			nil,
 			workflowTask.BuildIdRedirectCounter,
+			m.ms.GetExternalPayloadSize(),
+			m.ms.GetExternalPayloadCount(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -1390,6 +1398,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.HistorySizeBytes,
 			nil,
 			wt.BuildIdRedirectCounter,
+			m.ms.GetExternalPayloadSize(),
+			m.ms.GetExternalPayloadCount(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 
