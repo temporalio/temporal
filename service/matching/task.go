@@ -128,11 +128,12 @@ func newInternalTaskForSyncMatch(
 				TaskId: syncMatchTaskId,
 			},
 		},
-		forwardInfo:                   forwardInfo,
-		source:                        source,
-		redirectInfo:                  redirectInfo,
-		responseC:                     make(chan taskResponse, 1),
-		effectivePriority:             priorityKey(info.GetPriority().GetPriorityKey()),
+		forwardInfo:       forwardInfo,
+		source:            source,
+		redirectInfo:      redirectInfo,
+		responseC:         make(chan taskResponse, 1),
+		effectivePriority: priorityKey(info.GetPriority().GetPriorityKey()),
+		
 		targetWorkerDeploymentVersion: targetVersion,
 	}
 }
