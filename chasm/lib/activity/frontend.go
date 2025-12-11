@@ -191,6 +191,40 @@ func (h *frontendHandler) ListActivityExecutions(
 	}, nil
 }
 
+// CountActivityExecutions counts activity executions matching the query in the request.
+func (h *frontendHandler) CountActivityExecutions(
+	ctx context.Context,
+	req *workflowservice.CountActivityExecutionsRequest,
+) (*workflowservice.CountActivityExecutionsResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	ctx = chasm.NewVisibilityManagerContext(ctx, h.visibilityManager)
+
+	resp, err := chasm.CountExecutions[*Activity](ctx, &chasm.CountExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		NamespaceName: req.GetNamespace(),
+		Query:         req.GetQuery(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountActivityExecutionsResponse_AggregationGroup, 0, len(resp.Groups))
+	for _, g := range resp.Groups {
+		groups = append(groups, &workflowservice.CountActivityExecutionsResponse_AggregationGroup{
+			GroupValues: g.Values,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountActivityExecutionsResponse{
+		Count:  resp.Count,
+		Groups: groups,
+	}, nil
+}
+
 // TerminateActivityExecution terminates a standalone activity execution
 func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,
