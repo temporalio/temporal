@@ -86,7 +86,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 		)
 		a.NoError(err)
 		a.True(resp.GetIsMember())
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 1*time.Second)
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
@@ -167,7 +167,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	s.Require().NoError(err)
 }
 
-func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSearchAttributeOverride() {
+func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSAOverride() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
