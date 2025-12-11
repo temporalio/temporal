@@ -1345,7 +1345,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_Ca
 	s.Error(err)
 	s.Nil(resp)
 
-	// Wait for the cache TTL to expire;
+	// Wait for the cache TTL to expire
 	s.Eventually(func() bool {
 		_, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 			Namespace:                s.Namespace().String(),
@@ -1354,10 +1354,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_Ca
 			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			Identity:                 tv.ClientIdentity(),
 		})
-		if err == nil {
-			return true
-		}
-		return false
+		return err == nil
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// The Pinned Override should have now succeeded with no error. Verify that the
@@ -1691,10 +1688,7 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_C
 	s.Eventually(func() bool {
 		var err error
 		resp, err = s.FrontendClient().StartWorkflowExecution(ctx, request)
-		if err == nil {
-			return true
-		}
-		return false
+		return err == nil
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// The StartWorkflowExecution should now succeed with no error. Verify that the workflow shows the override.
@@ -1748,10 +1742,7 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinned
 	s.Eventually(func() bool {
 		var err error
 		resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
-		if err == nil {
-			return resp.GetStarted()
-		}
-		return false
+		return err == nil && resp.GetStarted()
 	}, 10*time.Second, 500*time.Millisecond)
 
 	wf := &commonpb.WorkflowExecution{
