@@ -26,13 +26,15 @@ import (
 )
 
 const (
-	ActivityTypeSAAlias   = "ActivityType"
-	ActivityStatusSAAlias = "ActivityStatus"
+	ActivityTypeSAAlias      = "ActivityType"
+	ActivityStatusSAAlias    = "ActivityStatus"
+	ActivityTaskQueueSAAlias = "ActivityTaskQueue"
 )
 
 var (
-	ActivityTypeSearchAttribute   = chasm.NewSearchAttributeKeyword(ActivityTypeSAAlias, chasm.SearchAttributeFieldKeyword01)
-	ActivityStatusSearchAttribute = chasm.NewSearchAttributeKeyword(ActivityStatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	ActivityTypeSearchAttribute      = chasm.NewSearchAttributeKeyword(ActivityTypeSAAlias, chasm.SearchAttributeFieldKeyword01)
+	ActivityStatusSearchAttribute    = chasm.NewSearchAttributeKeyword(ActivityStatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
+	ActivityTaskQueueSearchAttribute = chasm.NewSearchAttributeKeyword(ActivityTaskQueueSAAlias, chasm.SearchAttributeFieldKeyword02)
 )
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
@@ -659,6 +661,7 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 	return []chasm.SearchAttributeKeyValue{
 		ActivityTypeSearchAttribute.Value(a.ActivityType.GetName()),
 		ActivityStatusSearchAttribute.Value(a.Status.String()),
+		ActivityTaskQueueSearchAttribute.Value(a.TaskQueue.GetName()),
 	}
 }
 

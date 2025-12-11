@@ -325,6 +325,21 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	applyActivityOptionsToStartRequest(opts, req)
 
+	// TODO: Unalias for validation, then restore aliased SA for CHASM visibility storage. The
+	// validator requires unaliased format but CHASM visibility expects aliased format.
+	originalSA := req.SearchAttributes
+	if originalSA != nil {
+		unaliasedSA, err := searchattribute.UnaliasFields(
+			h.saMapperProvider,
+			originalSA,
+			req.GetNamespace(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		req.SearchAttributes = unaliasedSA
+	}
+
 	err = validateAndNormalizeStartActivityExecutionRequest(
 		req,
 		dynamicconfig.BlobSizeLimitError.Get(h.dc),
@@ -335,6 +350,8 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	if err != nil {
 		return nil, err
 	}
+
+	req.SearchAttributes = originalSA
 
 	return req, nil
 }
