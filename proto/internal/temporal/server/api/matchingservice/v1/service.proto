@@ -190,5 +190,8 @@ service MatchingService {
     // Returns an error if the namespace or worker doesn't exist.
     rpc DescribeWorker (DescribeWorkerRequest) returns (DescribeWorkerResponse) {}
 
+    // CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
+    rpc CheckTaskQueueVersionMembership(CheckTaskQueueVersionMembershipRequest) returns (CheckTaskQueueVersionMembershipResponse) {}
+
 }
 
