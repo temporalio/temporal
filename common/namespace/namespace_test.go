@@ -14,23 +14,27 @@ import (
 )
 
 func base(t *testing.T) *namespace.Namespace {
-	return namespace.FromPersistentState(
-		&persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   namespace.NewID().String(),
-				Name: t.Name(),
-				Data: make(map[string]string),
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespace.NewID().String(),
+			Name: t.Name(),
+			Data: make(map[string]string),
+		},
+		Config: &persistencespb.NamespaceConfig{
+			BadBinaries: &namespacepb.BadBinaries{
+				Binaries: make(map[string]*namespacepb.BadBinaryInfo),
 			},
-			Config: &persistencespb.NamespaceConfig{
-				BadBinaries: &namespacepb.BadBinaries{
-					Binaries: make(map[string]*namespacepb.BadBinaryInfo),
-				},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: "foo",
-				Clusters:          []string{"foo", "bar"},
-			},
-		})
+		},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "foo",
+			Clusters:          []string{"foo", "bar"},
+		},
+	}
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	resolver := factory(detail)
+	ns, err := namespace.FromPersistentState(detail, resolver)
+	require.NoError(t, err)
+	return ns
 }
 
 func TestActiveInCluster(t *testing.T) {
