@@ -241,10 +241,16 @@ func TestTransitionStarted(t *testing.T) {
 		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
-	err := TransitionStarted.Apply(activity, ctx, nil)
+	err := TransitionStarted.Apply(activity, ctx, &historyservice.RecordActivityTaskStartedRequest{
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			Identity: "test-worker",
+		},
+	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
+	require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
+	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
 
 	// Verify added tasks
 	require.Len(t, ctx.Tasks, 1)

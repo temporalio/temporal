@@ -5,6 +5,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -124,8 +125,16 @@ var TransitionStarted = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-	func(a *Activity, ctx chasm.MutableContext, _ any) error {
+	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 		attempt := a.LastAttempt.Get(ctx)
+		attempt.StartedTime = timestamppb.New(ctx.Now(a))
+		attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
+		if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
+			attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+				BuildId:        versionDirective.GetBuildId(),
+				DeploymentName: versionDirective.GetDeploymentName(),
+			}
+		}
 		startTime := attempt.GetStartedTime().AsTime()
 		ctx.AddTask(
 			a,

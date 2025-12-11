@@ -7,7 +7,6 @@ import (
 
 	"go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -141,20 +140,9 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
 	*historyservice.RecordActivityTaskStartedResponse, error,
 ) {
-	attempt := a.LastAttempt.Get(ctx)
-	attempt.StartedTime = timestamppb.New(ctx.Now(a))
-	attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
-	if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
-		attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
-			BuildId:        versionDirective.GetBuildId(),
-			DeploymentName: versionDirective.GetDeploymentName(),
-		}
-	}
-
-	if err := TransitionStarted.Apply(a, ctx, nil); err != nil {
+	if err := TransitionStarted.Apply(a, ctx, request); err != nil {
 		return nil, err
 	}
-
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	err := a.StoreOrSelf(ctx).PopulateRecordStartedResponse(ctx, ctx.ExecutionKey(), response)
 	return response, err
