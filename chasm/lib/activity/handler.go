@@ -11,6 +11,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 var (
@@ -28,12 +30,16 @@ var (
 
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
-	config *Config
+	config            *Config
+	metricsHandler    metrics.Handler
+	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config) *handler {
+func newHandler(config *Config, metricsHandler metrics.Handler, namespaceRegistry namespace.Registry) *handler {
 	return &handler{
-		config: config,
+		config:            config,
+		metricsHandler:    metricsHandler,
+		namespaceRegistry: namespaceRegistry,
 	}
 }
 
@@ -76,7 +82,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -115,11 +120,11 @@ func (h *handler) DescribeActivityExecution(
 	// deadline that causes us to send that response before the caller's own deadline (see
 	// chasm.activity.longPollBuffer). We also cap the caller's deadline at
 	// chasm.activity.longPollTimeout.
-	namespace := req.GetFrontendRequest().GetNamespace()
+	ns := req.GetFrontendRequest().GetNamespace()
 	ctx, cancel := contextutil.WithDeadlineBuffer(
 		ctx,
-		h.config.LongPollTimeout(namespace),
-		h.config.LongPollBuffer(namespace),
+		h.config.LongPollTimeout(ns),
+		h.config.LongPollBuffer(ns),
 	)
 	defer cancel()
 
@@ -184,11 +189,11 @@ func (h *handler) GetActivityExecutionOutcome(
 	// deadline that causes us to send that response before the caller's own deadline (see
 	// chasm.activity.longPollBuffer). We also cap the caller's deadline at
 	// chasm.activity.longPollTimeout.
-	namespace := req.GetFrontendRequest().GetNamespace()
+	ns := req.GetFrontendRequest().GetNamespace()
 	ctx, cancel := contextutil.WithDeadlineBuffer(
 		ctx,
-		h.config.LongPollTimeout(namespace),
-		h.config.LongPollBuffer(namespace),
+		h.config.LongPollTimeout(ns),
+		h.config.LongPollBuffer(ns),
 	)
 	defer cancel()
 
@@ -226,11 +231,23 @@ func (h *handler) TerminateActivityExecution(
 		RunID:       frontendReq.GetRunId(),
 	})
 
+	namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+
 	response, _, err = chasm.UpdateComponent(
 		ctx,
 		ref,
 		(*Activity).handleTerminated,
-		req,
+		terminateEvent{
+			request: req,
+			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
+				Handler:                     h.metricsHandler,
+				NamespaceName:               namespaceName.String(),
+				BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
+			},
+		},
 	)
 
 	if err != nil {
@@ -253,11 +270,23 @@ func (h *handler) RequestCancelActivityExecution(
 		RunID:       frontendReq.GetRunId(),
 	})
 
+	namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+
 	response, _, err = chasm.UpdateComponent(
 		ctx,
 		ref,
 		(*Activity).handleCancellationRequested,
-		req,
+		requestCancelEvent{
+			request: req,
+			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
+				Handler:                     h.metricsHandler,
+				NamespaceName:               namespaceName.String(),
+				BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
+			},
+		},
 	)
 	if err != nil {
 		return nil, err

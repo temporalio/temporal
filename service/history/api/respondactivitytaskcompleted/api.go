@@ -43,9 +43,14 @@ func Invoke(
 			ctx,
 			componentRef,
 			(*activity.Activity).HandleCompleted,
-			activity.WithToken[*historyservice.RespondActivityTaskCompletedRequest]{
-				Token:   token,
+			activity.RespondCompletedEvent{
 				Request: req,
+				Token:   token,
+				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
+					Handler:                     shard.GetMetricsHandler(),
+					NamespaceName:               namespace.String(),
+					BreakdownMetricsByTaskQueue: shard.GetConfig().BreakdownMetricsByTaskQueue,
+				},
 			},
 		)
 
