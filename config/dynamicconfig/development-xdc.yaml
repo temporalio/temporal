@@ -49,3 +49,5 @@ history.EnableReplicationTaskTieredProcessing:
   - value: true
 history.enableChasm:
   - value: true
+activity.enableStandalone:
+  - value: true

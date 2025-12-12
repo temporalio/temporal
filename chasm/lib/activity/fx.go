@@ -26,6 +26,7 @@ var HistoryModule = fx.Module(
 
 var FrontendModule = fx.Module(
 	"activity-frontend",
+	fx.Provide(ConfigProvider),
 	fx.Provide(activitypb.NewActivityServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(resource.SearchAttributeValidatorProvider),
