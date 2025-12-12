@@ -118,6 +118,8 @@ type Config struct {
 	TaskSchedulerGlobalNamespaceMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TaskSchedulerNamespaceMaxQPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TaskSchedulerInactiveChannelDeletionDelay dynamicconfig.DurationPropertyFn
+	TaskChanFullBackoff                       dynamicconfig.DurationPropertyFn
+	TaskChanFullBackoffJitterCoefficient      dynamicconfig.FloatPropertyFn
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -507,6 +509,8 @@ func NewConfig(
 		TaskSchedulerNamespaceMaxQPS:              dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
 		TaskSchedulerGlobalNamespaceMaxQPS:        dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
 		TaskSchedulerInactiveChannelDeletionDelay: dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
+		TaskChanFullBackoff:                       dynamicconfig.ReschedulerTaskChanFullBackoff.Get(dc),
+		TaskChanFullBackoffJitterCoefficient:      dynamicconfig.ReschedulerTaskChanFullBackoffJitterCoefficient.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
 		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),

@@ -100,6 +100,8 @@ func (f *transferQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.Config.TaskChanFullBackoff,
+		f.Config.TaskChanFullBackoffJitterCoefficient,
 	)
 
 	activeExecutor := newTransferQueueActiveTaskExecutor(

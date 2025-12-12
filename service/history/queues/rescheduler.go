@@ -3,6 +3,7 @@
 package queues
 
 import (
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -20,9 +22,6 @@ import (
 )
 
 const (
-	taskChanFullBackoff                  = 2 * time.Second
-	taskChanFullBackoffJitterCoefficient = 0.5
-
 	reschedulerPQCleanupDuration          = 3 * time.Minute
 	reschedulerPQCleanupJitterCoefficient = 0.15
 )
@@ -56,6 +55,9 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
+		taskChanFullBackoff                  dynamicconfig.DurationPropertyFn
+		taskChanFullBackoffJitterCoefficient dynamicconfig.FloatPropertyFn
+
 		status     int32
 		shutdownCh chan struct{}
 		shutdownWG sync.WaitGroup
@@ -74,12 +76,16 @@ func NewRescheduler(
 	timeSource clock.TimeSource,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	taskChanFullBackoff dynamicconfig.DurationPropertyFn,
+	taskChanFullBackoffJitterCoefficient dynamicconfig.FloatPropertyFn,
 ) *reschedulerImpl {
 	return &reschedulerImpl{
-		scheduler:      scheduler,
-		timeSource:     timeSource,
-		logger:         logger,
-		metricsHandler: metricsHandler,
+		scheduler:                            scheduler,
+		timeSource:                           timeSource,
+		logger:                               logger,
+		metricsHandler:                       metricsHandler,
+		taskChanFullBackoff:                  taskChanFullBackoff,
+		taskChanFullBackoffJitterCoefficient: taskChanFullBackoffJitterCoefficient,
 
 		status:     common.DaemonStatusInitialized,
 		shutdownCh: make(chan struct{}),
@@ -211,7 +217,20 @@ func (r *reschedulerImpl) reschedule() {
 
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
-	for _, pq := range r.pqMap {
+
+	// ---- sort keys by priority (ascending) ---------------------------------
+	keys := make([]TaskChannelKey, 0, len(r.pqMap))
+	for key := range r.pqMap {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Priority < keys[j].Priority
+	})
+	// ------------------------------------------------------------------------
+
+	for _, key := range keys {
+		pq := r.pqMap[key]
+
 		for !pq.IsEmpty() {
 			rescheduled := pq.Peek()
 
@@ -230,7 +249,15 @@ func (r *reschedulerImpl) reschedule() {
 			executable.SetScheduledTime(now)
 			submitted := r.scheduler.TrySubmit(executable)
 			if !submitted {
-				r.timerGate.Update(now.Add(backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
+				backoffDuration := backoff.Jitter(
+					r.taskChanFullBackoff(),
+					r.taskChanFullBackoffJitterCoefficient(),
+				)
+				rescheduled.rescheduleTime = now.Add(backoffDuration)
+				executable.SetScheduledTime(rescheduled.rescheduleTime)
+				pq.Remove()
+				pq.Add(rescheduled)
+				r.timerGate.Update(rescheduled.rescheduleTime)
 				break
 			}
 
