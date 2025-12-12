@@ -3243,7 +3243,12 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 	}
 
 	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-		data := common.CloneProto(old)
+		data := old
+		if data != nil {
+			data = common.CloneProto(old)
+		} else {
+			data = &persistencespb.TaskQueueUserData{}
+		}
 		if data.PerType == nil {
 			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
 		}

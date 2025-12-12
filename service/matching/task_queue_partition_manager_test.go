@@ -40,11 +40,12 @@ type PartitionManagerTestSuite struct {
 	suite.Suite
 	protorequire.ProtoAssertions
 
-	newMatcher   bool
-	fairness     bool
-	controller   *gomock.Controller
-	userDataMgr  *mockUserDataManager
-	partitionMgr *taskQueuePartitionManagerImpl
+	newMatcher     bool
+	fairness       bool
+	controller     *gomock.Controller
+	userDataMgr    *mockUserDataManager
+	partitionMgr   *taskQueuePartitionManagerImpl
+	matchingClient *matchingservicemock.MockMatchingServiceClient
 }
 
 // TODO(pri): cleanup; delete this
@@ -76,8 +77,10 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 		useNewMatcher(config)
 	}
 
-	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
-	engine := createTestMatchingEngine(logger, s.controller, config, matchingClientMock, registry)
+	config.AutoEnableV2 = func(_, _ string, _ enumspb.TaskQueueType) bool { return true }
+
+	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	engine := createTestMatchingEngine(logger, s.controller, config, s.matchingClient, registry)
 
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.NoError(err)
@@ -497,6 +500,29 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 			s.Equal("bid", workerVersionCapabilities.GetBuildId())
 		}
 	}
+}
+
+func (s *PartitionManagerTestSuite) TestAutoEnable() {
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	defer cancel()
+	s.matchingClient.EXPECT().UpdateFairnessState(ctx, &matchingservice.UpdateFairnessStateRequest{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "my-test-tq",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		FairnessState: persistencespb.FAIRNESS_STATE_V2,
+	}).Times(1).Return(nil, nil)
+	_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+			Priority: &commonpb.Priority{
+				PriorityKey: 3,
+			},
+		},
+	})
+	s.Require().NoError(err)
 }
 
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistencespb.VersioningData, directive *taskqueuespb.TaskVersionDirective) {

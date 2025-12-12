@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -133,7 +134,7 @@ func createTestMatchingEngine(
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
-	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String()}, nil, "")
+	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String(), Id: uuid.NewString()}, nil, "")
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
@@ -211,6 +212,7 @@ func (s *matchingEngineSuite) newConfig() *Config {
 	} else if s.newMatcher {
 		useNewMatcher(res)
 	}
+	res.AutoEnableV2 = func(_, _ string, _ enumspb.TaskQueueType) bool { return true }
 	return res
 }
 
@@ -767,21 +769,48 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, false)
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowTasks() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, false)
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 }
 
-func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
+func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
+	tq := &taskqueuepb.TaskQueue{
+		Name: "makeToast",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	req := &matchingservice.UpdateFairnessStateRequest{
+		NamespaceId:   s.ns.ID().String(),
+		TaskQueue:     tq,
+		FairnessState: persistencespb.FAIRNESS_STATE_V2,
+	}
+	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (resp *matchingservice.UpdateFairnessStateResponse, err error) {
+			resp, err = s.matchingEngine.UpdateFairnessState(ctx, req)
+			return
+		},
+	)
+	dbq := newUnversionedRootQueueKey(s.ns.ID().String(), "makeToast", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
+	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
+	mgr.Start()
+	mgr.WaitUntilInitialized(context.Background())
+
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
+	data, _, _ := mgr.GetUserDataManager().GetUserData()
+	s.Require().Equal(data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState, persistencespb.FAIRNESS_STATE_V2)
+}
+
+func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool, addPriority bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
-	namespaceID := uuid.NewString()
+	namespaceID := s.ns.ID().String()
 	tl := "makeToast"
 	forwardedFrom := "/_sys/makeToast/1"
 
@@ -821,6 +850,11 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 			}
 			if isForwarded {
 				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
+			}
+			if addPriority {
+				addRequest.Priority = &commonpb.Priority{
+					PriorityKey: 3,
+				}
 			}
 			_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
 		}
