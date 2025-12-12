@@ -43,6 +43,9 @@ func newHandler(config *Config, metricsHandler metrics.Handler, namespaceRegistr
 	}
 }
 
+// StartActivityExecution schedules an activity execution. Note that while external callers refer to
+// this as "start", the start transition in fact happens later, in response to the activity task in
+// matching being delivered to a worker poll request.
 func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.StartActivityExecutionRequest) (*activitypb.StartActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 
@@ -93,13 +96,12 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	}, nil
 }
 
-// DescribeActivityExecution handles DescribeActivityExecutionRequest from frontend. This method
-// queries current activity state, optionally as a long-poll that waits for any state change. When
-// used to long-poll, it returns an empty non-error response on context deadline expiry, to indicate
-// that the state being waited for was not reached. Callers should interpret this as an invitation
-// to resubmit their long-poll request. This response is sent before the caller's deadline (see
-// chasm.activity.longPollBuffer) so that it is likely that the caller does indeed receive the
-// non-error response.
+// DescribeActivityExecution queries current activity state, optionally as a long-poll that waits
+// for any state change. When used to long-poll, it returns an empty non-error response on context
+// deadline expiry, to indicate that the state being waited for was not reached. Callers should
+// interpret this as an invitation to resubmit their long-poll request. This response is sent before
+// the caller's deadline (see chasm.activity.longPollBuffer) so that it is likely that the caller
+// does indeed receive the non-error response.
 func (h *handler) DescribeActivityExecution(
 	ctx context.Context,
 	req *activitypb.DescribeActivityExecutionRequest,
@@ -217,7 +219,7 @@ func (h *handler) PollActivityExecution(
 	return response, err
 }
 
-// TerminateActivityExecution terminates a standalone activity execution
+// TerminateActivityExecution terminates an activity execution.
 func (h *handler) TerminateActivityExecution(
 	ctx context.Context,
 	req *activitypb.TerminateActivityExecutionRequest,
@@ -256,7 +258,7 @@ func (h *handler) TerminateActivityExecution(
 	return response, nil
 }
 
-// RequestCancelActivityExecution requests cancellation on a standalone activity execution
+// RequestCancelActivityExecution requests cancellation of an activity execution.
 func (h *handler) RequestCancelActivityExecution(
 	ctx context.Context,
 	req *activitypb.RequestCancelActivityExecutionRequest,
