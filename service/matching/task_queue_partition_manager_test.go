@@ -14,6 +14,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -510,7 +511,7 @@ func (s *PartitionManagerTestSuite) TestAutoEnable() {
 			Name: "my-test-tq",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		FairnessState: persistencespb.FAIRNESS_STATE_V2,
+		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}).Times(1).Return(nil, nil)
 	_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{

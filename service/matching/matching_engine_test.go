@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -788,7 +789,7 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	req := &matchingservice.UpdateFairnessStateRequest{
 		NamespaceId:   s.ns.ID().String(),
 		TaskQueue:     tq,
-		FairnessState: persistencespb.FAIRNESS_STATE_V2,
+		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}
 	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (resp *matchingservice.UpdateFairnessStateResponse, err error) {
@@ -810,7 +811,7 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task", tag.Error(errTaskQueueClosed))
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
 	data, _, _ := mgr.GetUserDataManager().GetUserData()
-	s.Require().Equal(persistencespb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
+	s.Require().Equal(enumsspb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
 	// At this point the partition manager should be unloaded
 	select {
 	case <-cMgr.initCtx.Done():

@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -66,7 +67,7 @@ type (
 		cache cache.Cache // non-nil for root-partition
 
 		autoEnableRateLimiter quotas.RateLimiter
-		fairnessState         persistencespb.FairnessState // Set once on initialization and read only after
+		fairnessState         enumsspb.FairnessState // Set once on initialization and read only after
 		defaultQueueFuture    *future.FutureImpl[physicalTaskQueueManager]
 		initCtx               context.Context
 		initCancel            func()
@@ -146,7 +147,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 
 	pm.fairnessState = data.GetFairnessState()
 	switch {
-	case !pm.config.AutoEnableV2() || pm.fairnessState == persistencespb.FAIRNESS_STATE_UNSPECIFIED:
+	case !pm.config.AutoEnableV2() || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
 		var fairness bool
 		fairness, pm.cancelFairnessSub = pm.config.EnableFairnessSub(unload)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
@@ -156,13 +157,13 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 		} else {
 			pm.config.NewMatcher, pm.cancelNewMatcherSub = pm.config.NewMatcherSub(unload)
 		}
-	case pm.fairnessState == persistencespb.FAIRNESS_STATE_V0:
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
 		pm.config.NewMatcher = false
 		pm.config.EnableFairness = false
-	case pm.fairnessState == persistencespb.FAIRNESS_STATE_V1:
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V1:
 		pm.config.NewMatcher = true
 		pm.config.EnableFairness = false
-	case pm.fairnessState == persistencespb.FAIRNESS_STATE_V2:
+	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V2:
 		pm.config.NewMatcher = true
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			pm.config.EnableFairness = false
@@ -253,7 +254,7 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 }
 
 func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
-	if pm.fairnessState != persistencespb.FAIRNESS_STATE_UNSPECIFIED {
+	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
 		return
 	}
 	if !pm.config.AutoEnableV2() || !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -271,7 +272,7 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 			Kind: pm.Partition().Kind(),
 			Name: pm.Partition().RpcName(),
 		},
-		FairnessState: persistencespb.FAIRNESS_STATE_V2,
+		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}
 	_, err := pm.matchingClient.UpdateFairnessState(ctx, req)
 	if err != nil {

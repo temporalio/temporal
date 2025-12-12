@@ -7,6 +7,7 @@ import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/deployment/v1/message.proto";
+import "temporal/server/api/enums/v1/fairness_state.proto";
 
 // BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
 message BuildId {
@@ -135,7 +136,7 @@ message TaskQueueTypeUserData {
 
     temporal.api.taskqueue.v1.TaskQueueConfig config = 2;
 
-    FairnessState fairness_state = 3;
+    temporal.server.api.enums.v1.FairnessState fairness_state = 3;
 }
 
 // Container for all persistent user provided data for a task queue family.
@@ -162,10 +163,3 @@ message VersionedTaskQueueUserData {
     TaskQueueUserData data = 1;
     int64 version = 2;
 }
-
-enum FairnessState {
-    FAIRNESS_STATE_UNSPECIFIED = 0;
-    FAIRNESS_STATE_V0 = 1;
-    FAIRNESS_STATE_V1 = 2;
-    FAIRNESS_STATE_V2 = 3;
-};

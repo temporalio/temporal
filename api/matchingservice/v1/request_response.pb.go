@@ -23,6 +23,7 @@ import (
 	v1 "go.temporal.io/api/workflowservice/v1"
 	v17 "go.temporal.io/server/api/clock/v1"
 	v110 "go.temporal.io/server/api/deployment/v1"
+	v115 "go.temporal.io/server/api/enums/v1"
 	v13 "go.temporal.io/server/api/history/v1"
 	v111 "go.temporal.io/server/api/persistence/v1"
 	v18 "go.temporal.io/server/api/taskqueue/v1"
@@ -4767,7 +4768,7 @@ type UpdateFairnessStateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	TaskQueue     *v14.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	FairnessState v111.FairnessState     `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.persistence.v1.FairnessState" json:"fairness_state,omitempty"`
+	FairnessState v115.FairnessState     `protobuf:"varint,3,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.enums.v1.FairnessState" json:"fairness_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4816,11 +4817,11 @@ func (x *UpdateFairnessStateRequest) GetTaskQueue() *v14.TaskQueue {
 	return nil
 }
 
-func (x *UpdateFairnessStateRequest) GetFairnessState() v111.FairnessState {
+func (x *UpdateFairnessStateRequest) GetFairnessState() v115.FairnessState {
 	if x != nil {
 		return x.FairnessState
 	}
-	return v111.FairnessState(0)
+	return v115.FairnessState(0)
 }
 
 type UpdateFairnessStateResponse struct {
@@ -5236,7 +5237,7 @@ var File_temporal_server_api_matchingservice_v1_request_response_proto protorefl
 
 const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"=temporal/server/api/matchingservice/v1/request_response.proto\x12&temporal.server.api.matchingservice.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/history/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a#temporal/api/query/v1/message.proto\x1a&temporal/api/protocol/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a/temporal/server/api/deployment/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/persistence/v1/nexus.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a#temporal/api/nexus/v1/message.proto\x1a$temporal/api/worker/v1/message.proto\"\xeb\x01\n" +
+	"=temporal/server/api/matchingservice/v1/request_response.proto\x12&temporal.server.api.matchingservice.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a%temporal/api/history/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a#temporal/api/query/v1/message.proto\x1a&temporal/api/protocol/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a/temporal/server/api/deployment/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/persistence/v1/nexus.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\x1a1temporal/server/api/enums/v1/fairness_state.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a#temporal/api/nexus/v1/message.proto\x1a$temporal/api/worker/v1/message.proto\"\xeb\x01\n" +
 	"\x1cPollWorkflowTaskQueueRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1b\n" +
 	"\tpoller_id\x18\x02 \x01(\tR\bpollerId\x12`\n" +
@@ -5593,12 +5594,12 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\arequest\x18\x02 \x01(\v26.temporal.api.workflowservice.v1.DescribeWorkerRequestR\arequest\"]\n" +
 	"\x16DescribeWorkerResponse\x12C\n" +
 	"\vworker_info\x18\x01 \x01(\v2\".temporal.api.worker.v1.WorkerInfoR\n" +
-	"workerInfo\"\xde\x01\n" +
+	"workerInfo\"\xd8\x01\n" +
 	"\x1aUpdateFairnessStateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12C\n" +
 	"\n" +
-	"task_queue\x18\x02 \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\ttaskQueue\x12X\n" +
-	"\x0efairness_state\x18\x03 \x01(\x0e21.temporal.server.api.persistence.v1.FairnessStateR\rfairnessState\"\x1d\n" +
+	"task_queue\x18\x02 \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\ttaskQueue\x12R\n" +
+	"\x0efairness_state\x18\x03 \x01(\x0e2+.temporal.server.api.enums.v1.FairnessStateR\rfairnessState\"\x1d\n" +
 	"\x1bUpdateFairnessStateResponse\"\x8e\x02\n" +
 	"&CheckTaskQueueVersionMembershipRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
@@ -5767,7 +5768,7 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes =
 	(*v1.UpdateTaskQueueConfigRequest)(nil),            // 141: temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
 	(*v14.TaskQueueConfig)(nil),                        // 142: temporal.api.taskqueue.v1.TaskQueueConfig
 	(*v1.DescribeWorkerRequest)(nil),                   // 143: temporal.api.workflowservice.v1.DescribeWorkerRequest
-	(v111.FairnessState)(0),                            // 144: temporal.server.api.persistence.v1.FairnessState
+	(v115.FairnessState)(0),                            // 144: temporal.server.api.enums.v1.FairnessState
 	(*v14.TaskQueueStats)(nil),                         // 145: temporal.api.taskqueue.v1.TaskQueueStats
 	(*v18.TaskQueueVersionInfoInternal)(nil),           // 146: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
 	(*v1.UpdateWorkerBuildIdCompatibilityRequest)(nil), // 147: temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
@@ -5890,7 +5891,7 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_depIdxs =
 	143, // 113: temporal.server.api.matchingservice.v1.DescribeWorkerRequest.request:type_name -> temporal.api.workflowservice.v1.DescribeWorkerRequest
 	140, // 114: temporal.server.api.matchingservice.v1.DescribeWorkerResponse.worker_info:type_name -> temporal.api.worker.v1.WorkerInfo
 	92,  // 115: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	144, // 116: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest.fairness_state:type_name -> temporal.server.api.persistence.v1.FairnessState
+	144, // 116: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest.fairness_state:type_name -> temporal.server.api.enums.v1.FairnessState
 	110, // 117: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
 	112, // 118: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
 	90,  // 119: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
