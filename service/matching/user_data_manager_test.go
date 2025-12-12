@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -27,6 +29,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 type tqmTestOpts struct {
@@ -691,28 +694,46 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		Data:    mkUserData(1),
 	}
 
+	matchGetTaskQueueUserDataRequest := func(expectedReq *matchingservice.GetTaskQueueUserDataRequest, out *string) gomock.Matcher {
+		expectedReq = common.CloneProto(expectedReq)
+		expectedTQ := expectedReq.TaskQueue
+		expectedReq.TaskQueue = ""
+		return gomock.Cond(func(req *matchingservice.GetTaskQueueUserDataRequest) bool {
+			*out = req.TaskQueue
+			// must be some partition of expected name, just use substring match
+			if !strings.Contains(req.TaskQueue, expectedTQ) {
+				return false
+			}
+			// check the rest matches
+			req = common.CloneProto(req)
+			req.TaskQueue = ""
+			return proto.Equal(req, expectedReq)
+		})
+	}
+
+	var firstPartition, secondPartition string
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchGetTaskQueueUserDataRequest(&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                normalName,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}).
+		}, &firstPartition)).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
 		}, nil)
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
+		matchGetTaskQueueUserDataRequest(&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                normalName,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
-		}).
+		}, &secondPartition)).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
 		}, nil).MaxTimes(maxFastUserDataFetches + 1)
@@ -724,6 +745,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
+	require.Equal(t, firstPartition, secondPartition)
 	m.Stop()
 }
 
