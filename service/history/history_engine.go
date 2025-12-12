@@ -373,7 +373,7 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
 		if ns.IsGlobalNamespace() &&
 			ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
-			ns.ActiveClusterName() == e.currentClusterName {
+			ns.ActiveInCluster(e.currentClusterName) {
 
 			for _, queueProcessor := range e.queueProcessors {
 				queueProcessor.FailoverNamespace(ns.ID().String())

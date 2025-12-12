@@ -604,6 +604,7 @@ func namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) b
 		old.State() != new.State() ||
 		old.Name() != new.Name() ||
 		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
-		old.ActiveClusterName() != new.ActiveClusterName() ||
+		// TODO: Refactor to use ns.ActiveInCluster() api
+		old.ActiveClusterName(namespace.EmptyBusinessID) != new.ActiveClusterName(namespace.EmptyBusinessID) ||
 		old.ReplicationState() != new.ReplicationState()
 }

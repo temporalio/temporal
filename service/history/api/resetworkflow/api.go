@@ -121,7 +121,7 @@ func Invoke(
 		baseWorkflowLease.GetReleaseFn(),
 	)
 
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespaceID)
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespaceID, workflowID)
 	if err != nil {
 		return nil, err
 	}

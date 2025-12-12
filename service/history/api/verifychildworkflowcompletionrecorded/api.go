@@ -117,7 +117,7 @@ func Invoke(
 		return nil, err
 	}
 
-	activeClusterName := namespaceEntry.ActiveClusterName()
+	activeClusterName := namespaceEntry.ActiveClusterName(request.ParentExecution.WorkflowId)
 	if activeClusterName == clusterMetadata.GetCurrentClusterName() {
 		return nil, errors.New("namespace becomes active when processing task as standby")
 	}
