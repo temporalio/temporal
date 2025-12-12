@@ -91,7 +91,7 @@ func (s *MatcherDataSuite) newSyncTask(fwdInfo *taskqueuespb.TaskForwardInfo) *i
 	t := &persistencespb.TaskInfo{
 		CreateTime: timestamppb.New(s.now()),
 	}
-	return newInternalTaskForSyncMatch(t, fwdInfo, 0)
+	return newInternalTaskForSyncMatch(t, fwdInfo, 0, nil)
 }
 
 func (s *MatcherDataSuite) newQueryTask(id string) *internalTask {
@@ -747,7 +747,7 @@ func FuzzMatcherData(f *testing.F) {
 					t := &persistencespb.TaskInfo{
 						CreateTime: timestamppb.New(ts.Now()),
 					}
-					md.FinishMatchAfterPollForward(res.poller, newInternalTaskForSyncMatch(t, nil, 0))
+					md.FinishMatchAfterPollForward(res.poller, newInternalTaskForSyncMatch(t, nil, 0, nil))
 				}()
 
 			case 6: // add task forwarder
