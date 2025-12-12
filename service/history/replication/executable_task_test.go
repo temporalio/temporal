@@ -580,8 +580,17 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 			},
 			ArchetypeId:         syncStateErr.ArchetypeId,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories:    syncStateErr.VersionHistories,
-			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						// BranchToken is removed in the actual implementation
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
 		},
 	).Return(nil, consts.ErrTransitionHistoryDisabled).Times(1)
 
@@ -636,8 +645,17 @@ func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBuffer
 			},
 			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories:    syncStateErr.VersionHistories,
-			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						// BranchToken is removed in the actual implementation
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
 		},
 	).Return(nil, serviceerror.NewWorkflowNotReady("workflow not ready")).Times(1)
 
@@ -1134,8 +1152,17 @@ func (s *executableTaskSuite) TestSyncState() {
 			},
 			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories:    syncStateErr.VersionHistories,
-			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						// BranchToken is removed in the actual implementation
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
 		},
 	).Return(&adminservice.SyncWorkflowStateResponse{
 		VersionedTransitionArtifact: versionedTransitionArtifact,
