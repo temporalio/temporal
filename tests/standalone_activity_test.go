@@ -10,7 +10,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/errordetails/v1"
+	errordetailspb "go.temporal.io/api/errordetails/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -170,9 +170,9 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy_FailsIfExists() {
 	statusErr := serviceerror.ToStatus(err)
 	require.Equal(t, codes.AlreadyExists, statusErr.Code())
 
-	var details *errordetails.ActivityExecutionAlreadyStartedFailure
+	var details *errordetailspb.ActivityExecutionAlreadyStartedFailure
 	for _, detail := range statusErr.Details() {
-		if d, ok := detail.(*errordetails.ActivityExecutionAlreadyStartedFailure); ok {
+		if d, ok := detail.(*errordetailspb.ActivityExecutionAlreadyStartedFailure); ok {
 			details = d
 			break
 		}

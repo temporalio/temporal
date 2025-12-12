@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/errordetails/v1"
+	errordetailspb "go.temporal.io/api/errordetails/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
@@ -90,7 +90,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	if err != nil {
 		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 		if errors.As(err, &alreadyStartedErr) {
-			details := &errordetails.ActivityExecutionAlreadyStartedFailure{
+			details := &errordetailspb.ActivityExecutionAlreadyStartedFailure{
 				StartRequestId: alreadyStartedErr.CurrentRequestID,
 				RunId:          alreadyStartedErr.CurrentRunID,
 			}
