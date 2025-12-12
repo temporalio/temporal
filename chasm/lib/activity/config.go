@@ -23,13 +23,15 @@ var (
 )
 
 type Config struct {
-	LongPollTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	LongPollBuffer  dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	BreakdownMetricsByTaskQueue dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
+	LongPollTimeout             dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollBuffer              dynamicconfig.DurationPropertyFnWithNamespaceFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		LongPollTimeout: LongPollTimeout.Get(dc),
-		LongPollBuffer:  LongPollBuffer.Get(dc),
+		LongPollTimeout:             LongPollTimeout.Get(dc),
+		LongPollBuffer:              LongPollBuffer.Get(dc),
+		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 	}
 }

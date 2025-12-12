@@ -7,6 +7,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
+	activitystatepb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -303,6 +306,22 @@ func ValidateGetActivityExecutionOutcomeRequest(
 		if err != nil {
 			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
 		}
+	}
+	return nil
+}
+
+// ValidateActivityTaskToken validates a task token against the current activity state.
+func ValidateActivityTaskToken(
+	ctx chasm.Context,
+	a *Activity,
+	token *tokenspb.Task,
+) error {
+	if a.Status != activitystatepb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		a.Status != activitystatepb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return serviceerror.NewNotFound("activity task not found")
+	}
+	if token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
+		return serviceerror.NewNotFound("activity task not found")
 	}
 	return nil
 }
