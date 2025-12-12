@@ -101,8 +101,38 @@ func sanitizeTag() error {
 
 // organizeBinaries organizes binaries for Docker builds
 func organizeBinaries() error {
-	// Create build directories in docker/build
-	archs := []string{"amd64", "arm64"}
+	// Determine target architectures based on PLATFORM environment variable
+	platform := os.Getenv("PLATFORM")
+	var archs []string
+
+	if platform != "" {
+		// Parse platform (e.g., "linux/amd64" -> "amd64")
+		parts := strings.Split(platform, "/")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid platform format: %s (expected format: os/arch)", platform)
+		}
+		arch := parts[1]
+
+		// Check if arch is in valid list
+		found := false
+		for _, validArch := range validArchs {
+			if arch == validArch {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("architecture %s not in supported list: %v", arch, validArchs)
+		}
+
+		archs = []string{arch}
+		fmt.Printf("Single architecture build: %s\n", arch)
+	} else {
+		// Default to all architectures
+		archs = []string{"amd64", "arm64"}
+		fmt.Println("Multi-architecture build: amd64, arm64")
+	}
+
 	binaries := []string{
 		"temporal-server",
 		"temporal-cassandra-tool",
@@ -167,7 +197,7 @@ func organizeBinaries() error {
 				}
 				fmt.Printf("Copied %s -> %s\n", distPath, buildPath)
 			} else {
-				fmt.Printf("Warning: Binary not found: %s for %s\n", binary, arch)
+				return fmt.Errorf("binary not found: %s for architecture %s (expected at %s)", binary, arch, distPath)
 			}
 		}
 	}

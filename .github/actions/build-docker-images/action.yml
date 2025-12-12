@@ -49,6 +49,8 @@ runs:
       id: organize-binaries
       shell: bash
       working-directory: ${{ github.workspace }}
+      env:
+        PLATFORM: ${{ inputs.platform }}
       run: |
         .github/actions/build-docker-images/scripts/docker-build-helper organize-binaries
 
