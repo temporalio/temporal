@@ -3,6 +3,7 @@ package nexusrpc
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -214,6 +215,10 @@ func (c *HTTPClient) StartOperation(
 	request.Header.Set(headerUserAgent, userAgent)
 	addContentHeaderToHTTPHeader(reader.Header, request.Header)
 	addCallbackHeaderToHTTPHeader(options.CallbackHeader, request.Header)
+	if options.CallbackToken != "" {
+		encodedToken := base64.StdEncoding.EncodeToString([]byte(options.CallbackToken))
+		request.Header.Set("Nexus-Callback-Token", encodedToken)
+	}
 	if err := addLinksToHTTPHeader(options.Links, request.Header); err != nil {
 		return nil, fmt.Errorf("failed to serialize links into header: %w", err)
 	}
