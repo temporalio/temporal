@@ -56,6 +56,10 @@ func (s *standaloneActivityTestSuite) SetupSuite() {
 		dynamicconfig.EnableChasm,
 		true,
 	)
+	s.OverrideDynamicConfig(
+		activity.Enabled,
+		true,
+	)
 }
 
 func (s *standaloneActivityTestSuite) SetupTest() {

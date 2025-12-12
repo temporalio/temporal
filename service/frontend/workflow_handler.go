@@ -1236,6 +1236,11 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
@@ -1407,13 +1412,18 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetResult().Size(),
@@ -1480,10 +1490,14 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, errIdentityTooLong
 	}
 
-	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref
-	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
 	var componentRef []byte
 	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
 		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
 			NamespaceID: namespaceID.String(),
 			BusinessID:  activityID,
@@ -1590,6 +1604,11 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
 		return nil, errFailureMustHaveApplicationFailureInfo
@@ -1599,8 +1618,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	response := workflowservice.RespondActivityTaskFailedResponse{}
 
@@ -1679,10 +1698,14 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, errIdentityTooLong
 	}
 
-	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref
-	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
 	var componentRef []byte
 	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
 		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
 			NamespaceID: namespaceID.String(),
 			BusinessID:  activityID,
@@ -1798,13 +1821,18 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetDetails().Size(),
@@ -1870,10 +1898,14 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, errIdentityTooLong
 	}
 
-	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref
-	// TODO Need to add a dynamic config to enable standalone configs, and incorporate that into the check below
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
 	var componentRef []byte
 	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
 		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
 			NamespaceID: namespaceID.String(),
 			BusinessID:  activityID,
