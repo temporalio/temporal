@@ -1,0 +1,65 @@
+# Configuration for typos spell checker
+# See: https://github.com/crate-ci/typos
+#
+# Inline typos ignore comments:
+# To ignore a specific line, add a comment on the same line:
+#   var myVar = "mispeling"  // typos:disable-line
+#
+# To ignore the next line, add a comment on the line before:
+#   // typos:ignore-next-line
+#   var myVar = "mispeling"
+#
+# To ignore a block of code:
+#   // typos:off
+#   var myVar = "mispeling"
+#   var other = "anothermispeling"
+#   // typos:on
+#
+# To check only changed files (useful for local development):
+#   git diff --name-only --diff-filter=ACMR main...HEAD | typos --file-list -
+# Or check only staged files:
+#   git diff --cached --name-only | typos --file-list -
+
+[default]
+# Custom ignore patterns for inline typos comments
+extend-ignore-re = [
+  # Line ignore with trailing comment: // typos:disable-line or # typos:disable-line
+  "(?Rm)^.*(#|//)\\s*typos:disable-line$",
+  # Block ignore with typos:off/on: // typos:off ... // typos:on
+  "(?s)(#|//)\\s*typos:off.*?\\n\\s*(#|//)\\s*typos:on",
+  # Next-line ignore: // typos:ignore-next-line (ignores the following line)
+  "(#|//)\\s*typos:ignore-next-line\\n.*",
+]
+
+[default.extend-words]
+# Add custom dictionary entries here for intentional "misspellings" used in the codebase
+# Preemptable is used consistently instead of "Preemptible" for caller types
+Preemptable = "Preemptable"
+preemptable = "preemptable"
+# "ba" is a legitimate variable name in merge tests (shorthand for "b merged with a")
+ba = "ba"
+# Hash strings may contain letter combinations that look like typos
+Ue = "Ue"
+# Test data and base64 strings that contain letter combinations that look like typos
+nd = "nd"
+abd = "abd"
+# Environment variable name that must remain for backwards compatibility
+AVAILABILTY = "AVAILABILTY"
+# Proto-generated field names that have typos in the proto definition
+# These should be fixed in the proto file first, then regenerated
+Heartbeart = "Heartbeart"
+
+Invoke = "Invoke"
+Invokable = "Invokable"
+
+[files]
+# Exclude generated protobuf files
+extend-exclude = [
+  "*.pb.go",
+  "*.gen.go",
+  "**/testdata/**",
+  "*.svg",
+]
+
+[type.go]
+extend-glob = ["*.go"]
