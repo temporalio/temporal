@@ -14,6 +14,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -40,11 +41,12 @@ type PartitionManagerTestSuite struct {
 	suite.Suite
 	protorequire.ProtoAssertions
 
-	newMatcher   bool
-	fairness     bool
-	controller   *gomock.Controller
-	userDataMgr  *mockUserDataManager
-	partitionMgr *taskQueuePartitionManagerImpl
+	newMatcher     bool
+	fairness       bool
+	controller     *gomock.Controller
+	userDataMgr    *mockUserDataManager
+	partitionMgr   *taskQueuePartitionManagerImpl
+	matchingClient *matchingservicemock.MockMatchingServiceClient
 }
 
 // TODO(pri): cleanup; delete this
@@ -76,8 +78,10 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 		useNewMatcher(config)
 	}
 
-	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
-	engine := createTestMatchingEngine(logger, s.controller, config, matchingClientMock, registry)
+	config.AutoEnableV2 = func(_, _ string, _ enumspb.TaskQueueType) bool { return true }
+
+	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	engine := createTestMatchingEngine(logger, s.controller, config, s.matchingClient, registry)
 
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.NoError(err)
@@ -499,6 +503,29 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 }
 
+func (s *PartitionManagerTestSuite) TestAutoEnable() {
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	defer cancel()
+	s.matchingClient.EXPECT().UpdateFairnessState(ctx, &matchingservice.UpdateFairnessStateRequest{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "my-test-tq",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		FairnessState: enumsspb.FAIRNESS_STATE_V2,
+	}).Times(1).Return(nil, nil)
+	_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+			Priority: &commonpb.Priority{
+				PriorityKey: 3,
+			},
+		},
+	})
+	s.Require().NoError(err)
+}
+
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistencespb.VersioningData, directive *taskqueuespb.TaskVersionDirective) {
 	timeout := 1000000 * time.Millisecond
 	if expectedSyncMatch {
@@ -602,7 +629,8 @@ func createVersionSet(buildId string) *persistencespb.CompatibleVersionSet {
 
 type mockUserDataManager struct {
 	sync.Mutex
-	data *persistencespb.VersionedTaskQueueUserData
+	data     *persistencespb.VersionedTaskQueueUserData
+	onChange UserDataOnChangeFunc
 }
 
 func (m *mockUserDataManager) Start() {
@@ -625,13 +653,18 @@ func (m *mockUserDataManager) GetUserData() (*persistencespb.VersionedTaskQueueU
 
 func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	m.Lock()
-	defer m.Unlock()
 	data, _, err := updateFn(m.data.GetData())
 	if err != nil {
+		m.Unlock()
 		return 0, err
 	}
 	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.GetVersion() + 1}
-	return m.data.Version, nil
+	version := m.data.Version
+	m.Unlock()
+	if m.onChange != nil {
+		go m.onChange(m.data)
+	}
+	return version, nil
 }
 
 func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error) {

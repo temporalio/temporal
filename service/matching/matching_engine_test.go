@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -133,7 +135,7 @@ func createTestMatchingEngine(
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
-	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String()}, nil, "")
+	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String(), Id: uuid.NewString()}, nil, "")
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
@@ -211,6 +213,7 @@ func (s *matchingEngineSuite) newConfig() *Config {
 	} else if s.newMatcher {
 		useNewMatcher(res)
 	}
+	res.AutoEnableV2 = func(_, _ string, _ enumspb.TaskQueueType) bool { return true }
 	return res
 }
 
@@ -767,21 +770,60 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, false)
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowTasks() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, false)
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
 }
 
-func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
+func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
+	tq := &taskqueuepb.TaskQueue{
+		Name: "makeToast",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	req := &matchingservice.UpdateFairnessStateRequest{
+		NamespaceId:   s.ns.ID().String(),
+		TaskQueue:     tq,
+		FairnessState: enumsspb.FAIRNESS_STATE_V2,
+	}
+	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (resp *matchingservice.UpdateFairnessStateResponse, err error) {
+			resp, err = s.matchingEngine.UpdateFairnessState(ctx, req)
+			return
+		},
+	).AnyTimes()
+	dbq := newUnversionedRootQueueKey(s.ns.ID().String(), "makeToast", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
+	cMgr := mgr.(*taskQueuePartitionManagerImpl)
+	mgr.GetUserDataManager().(*mockUserDataManager).onChange = cMgr.userDataChanged
+	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
+	mgr.Start()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err := mgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	cancel()
+
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task", tag.Error(errTaskQueueClosed))
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
+	data, _, _ := mgr.GetUserDataManager().GetUserData()
+	s.Require().Equal(enumsspb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
+	// At this point the partition manager should be unloaded
+	select {
+	case <-cMgr.initCtx.Done():
+	case <-time.Tick(100 * time.Millisecond):
+		s.Require().Fail("our partition manager was not unloaded")
+	}
+}
+
+func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool, addPriority bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
-	namespaceID := uuid.NewString()
+	namespaceID := s.ns.ID().String()
 	tl := "makeToast"
 	forwardedFrom := "/_sys/makeToast/1"
 
@@ -822,7 +864,16 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 			if isForwarded {
 				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
 			}
+			if addPriority {
+				addRequest.Priority = &commonpb.Priority{
+					PriorityKey: 3,
+				}
+			}
 			_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+		}
+
+		if addPriority && (err == errShutdown || err == errTaskQueueClosed) {
+			continue
 		}
 
 		switch isForwarded {
@@ -831,6 +882,10 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 		case true:
 			s.Equal(errRemoteSyncMatchFailed, err)
 		}
+	}
+
+	if addPriority {
+		return
 	}
 
 	switch isForwarded {
@@ -2119,8 +2174,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		s.NoError(err)
 	}
 
-	tlMgr, ok := s.matchingEngine.partitions[dbq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	tlMgr := s.getPhysicalTaskQueueManagerImpl(dbq)
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
 
 	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
@@ -2254,8 +2308,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.NoError(err)
 		}
 
-		tlMgr, ok := s.matchingEngine.partitions[dbq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-		s.True(ok, "failed to load task queue")
+		tlMgr := s.getPhysicalTaskQueueManagerImpl(dbq)
 		s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
 		blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 
@@ -2988,7 +3041,9 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	tlmImpl, ok := tqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
+	defaultQ, err := tqm.(*taskQueuePartitionManagerImpl).defaultQueueFuture.Get(context.Background())
+	s.Require().NoError(err)
+	tlmImpl := defaultQ.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
 	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, prtn, tlmImpl.queue.version, 1)
@@ -3223,8 +3278,9 @@ func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
 
 // getPhysicalTaskQueueManagerImpl extracts the physicalTaskQueueManagerImpl for the given PhysicalTaskQueueKey
 func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQueueKey) *physicalTaskQueueManagerImpl {
-	pgMgr, ok := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
-	s.True(ok, "taskQueueManger doesn't implement taskQueuePartitionManager interface")
+	defaultQ, err := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueueFuture.Get(context.Background())
+	s.Require().NoError(err)
+	pgMgr := defaultQ.(*physicalTaskQueueManagerImpl)
 	return pgMgr
 }
 
