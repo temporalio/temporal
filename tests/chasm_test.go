@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
@@ -431,6 +433,68 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
 	s.Contains(err.Error(), "GROUP BY")
+}
+
+func (s *ChasmTestSuite) TestListWorkflowExecutions() {
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	createResp, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+
+	_, err = tests.AddPayloadHandler(
+		ctx,
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "test-key",
+			Payload:     payload.EncodeString("test-value"),
+		},
+	)
+	s.NoError(err)
+
+	visQuery := sadefs.QueryWithAnyNamespaceDivision(
+		fmt.Sprintf("WorkflowId = '%s'", storeID),
+	)
+
+	var execInfo *workflowpb.WorkflowExecutionInfo
+	s.Eventually(
+		func() bool {
+			listResp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     visQuery,
+			})
+			s.NoError(err)
+			if len(listResp.Executions) != 1 {
+				return false
+			}
+			execInfo = listResp.Executions[0]
+			return true
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	s.Equal(storeID, execInfo.Execution.WorkflowId)
+	s.Equal(createResp.RunID, execInfo.Execution.RunId)
+
+	s.NotNil(execInfo.SearchAttributes)
+	_, hasScheduledByID := execInfo.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById]
+	s.True(hasScheduledByID)
+
+	_, hasTotalCount := execInfo.SearchAttributes.IndexedFields["TemporalInt01"]
+	s.False(hasTotalCount, "CHASM search attribute TemporalInt01 should not be exposed")
+	_, hasTotalSize := execInfo.SearchAttributes.IndexedFields["TemporalInt02"]
+	s.False(hasTotalSize, "CHASM search attribute TemporalInt02 should not be exposed")
 }
 
 // TODO: More tests here...

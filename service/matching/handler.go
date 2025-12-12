@@ -475,6 +475,14 @@ func (h *Handler) CheckTaskQueueUserDataPropagation(
 	return h.engine.CheckTaskQueueUserDataPropagation(ctx, request)
 }
 
+func (h *Handler) CheckTaskQueueVersionMembership(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueVersionMembershipRequest,
+) (_ *matchingservice.CheckTaskQueueVersionMembershipResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CheckTaskQueueVersionMembership(ctx, request)
+}
+
 func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.DispatchNexusTask(ctx, request)

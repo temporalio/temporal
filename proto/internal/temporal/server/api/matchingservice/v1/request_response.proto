@@ -656,3 +656,14 @@ message UpdateFairnessStateRequest {
 
 message UpdateFairnessStateResponse {
 }
+
+message CheckTaskQueueVersionMembershipRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 4;
+}
+
+message CheckTaskQueueVersionMembershipResponse {
+    bool is_member = 1;
+}

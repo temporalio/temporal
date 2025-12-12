@@ -199,5 +199,9 @@ service MatchingService {
     // (-- api-linter: core::0134::request-resource-required=disabled
     //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
     rpc UpdateFairnessState(UpdateFairnessStateRequest) returns (UpdateFairnessStateResponse) {}
+
+    // CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
+    rpc CheckTaskQueueVersionMembership(CheckTaskQueueVersionMembershipRequest) returns (CheckTaskQueueVersionMembershipResponse) {}
+
 }
 
