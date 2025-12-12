@@ -18,6 +18,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -2251,11 +2252,25 @@ func (s *Versioning3Suite) testCanWithTaskPoller() {
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 
-			lastEvent := task.GetHistory().GetEvents()[len(task.GetHistory().GetEvents())-1]
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, lastEvent.GetEventType())
-			attr := lastEvent.GetWorkflowTaskStartedEventAttributes()
-			s.True(attr.GetSuggestContinueAsNew())
-			s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
+			wfTaskStartedEvents := make([]*historypb.HistoryEvent, 0)
+			for _, event := range task.History.Events {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					wfTaskStartedEvents = append(wfTaskStartedEvents, event)
+				}
+			}
+			s.Require().Len(wfTaskStartedEvents, 3) // make sure we are actually verifying events
+
+			for i, event := range wfTaskStartedEvents {
+				attr := event.GetWorkflowTaskStartedEventAttributes()
+				// the last started event should have ContinueAsNewSuggested=true and reasons=[NewTargetVersion]
+				if i == len(wfTaskStartedEvents)-1 {
+					s.True(attr.GetSuggestContinueAsNew())
+					s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
+				} else { // the other started events should not
+					s.False(attr.GetSuggestContinueAsNew())
+					s.Require().Len(attr.GetSuggestContinueAsNewReasons(), 0)
+				}
+			}
 
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{
