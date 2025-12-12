@@ -2285,25 +2285,85 @@ func (s *Versioning3Suite) testCanWithTaskPoller(behavior enumspb.VersioningBeha
 				}
 			}
 
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{
-				Commands: []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
-							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-								WorkflowType:              tv1.WorkflowType(),
-								TaskQueue:                 tv1.TaskQueue(),
-								Input:                     tv1.Any().Payloads(),
-								InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			if behavior == vbPinned {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{
+						{
+							CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+							Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+								ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+									WorkflowType:              tv1.WorkflowType(),
+									TaskQueue:                 tv1.TaskQueue(),
+									Input:                     tv1.Any().Payloads(),
+									InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+								},
 							},
 						},
 					},
-				},
-				ForceCreateNewWorkflowTask: false,
-				VersioningBehavior:         vbPinned,
-				DeploymentOptions:          tv1.WorkerDeploymentOptions(true),
-			}, nil
+					ForceCreateNewWorkflowTask: false,
+					VersioningBehavior:         vbPinned,
+					DeploymentOptions:          tv1.WorkerDeploymentOptions(true),
+				}, nil
+			} else {
+				// For AutoUpgrade, I want to test that once the workflow has transitioned to v2, it doesn't get the CaN suggestion anymore.
+				return respondEmptyWft(tv2, false, behavior), nil
+			}
 		})
+
+	if behavior == vbUnpinned {
+		// Signal the workflow again to trigger another WFT with ContinueAsNewSuggested=false and reasons=[]
+		_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: execution,
+			SignalName:        tv1.SignalName(),
+			Input:             tv1.Any().Payloads(),
+			Identity:          tv1.WorkerIdentity(),
+		})
+		s.NoError(err)
+		s.pollWftAndHandle(tv2, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+
+				wfTaskStartedEvents := make([]*historypb.HistoryEvent, 0)
+				for _, event := range task.History.Events {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
+					}
+				}
+				s.True(len(wfTaskStartedEvents) > 0) // make sure we are actually verifying non-zero # of events
+
+				for i, event := range wfTaskStartedEvents {
+					attr := event.GetWorkflowTaskStartedEventAttributes()
+					// the second-to-last started event should have ContinueAsNewSuggested=true and reasons=[NewTargetVersion]
+					if i == len(wfTaskStartedEvents)-2 {
+						s.True(attr.GetSuggestContinueAsNew())
+						s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
+					} else { // the other started events should not
+						s.False(attr.GetSuggestContinueAsNew())
+						s.Require().Len(attr.GetSuggestContinueAsNewReasons(), 0)
+					}
+				}
+
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{
+						{
+							CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+							Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+								ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+									WorkflowType:              tv1.WorkflowType(),
+									TaskQueue:                 tv1.TaskQueue(),
+									Input:                     tv1.Any().Payloads(),
+									InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+								},
+							},
+						},
+					},
+					ForceCreateNewWorkflowTask: false,
+					VersioningBehavior:         vbUnpinned,
+					DeploymentOptions:          tv2.WorkerDeploymentOptions(true),
+				}, nil
+			})
+	}
 
 	// Start async poller for v2 to receive the ContinueAsNew new run
 	wftNewRunDone := make(chan struct{})
