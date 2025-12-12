@@ -31,7 +31,7 @@ func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus
 	a.Status = state
 }
 
-// TransitionScheduled affects a transition to Scheduled status. This is only called on the initial scheduling of the activity.
+// TransitionScheduled transitions to Scheduled status. This is only called on the initial scheduling of the activity.
 var TransitionScheduled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
@@ -78,7 +78,7 @@ type rescheduleEvent struct {
 	failure       *failurepb.Failure
 }
 
-// TransitionRescheduled affects a transition to Scheduled from Started, which happens on retries. The event to pass in
+// TransitionRescheduled transitions to Scheduled from Started, which happens on retries. The event to pass in
 // is the failure to be recorded from the previously failed attempt.
 var TransitionRescheduled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
@@ -119,7 +119,7 @@ var TransitionRescheduled = chasm.NewTransition(
 	},
 )
 
-// TransitionStarted affects a transition to Started status
+// TransitionStarted transitions to Started status
 var TransitionStarted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
@@ -160,7 +160,7 @@ var TransitionStarted = chasm.NewTransition(
 	},
 )
 
-// TransitionCompleted affects a transition to Completed status
+// TransitionCompleted transitions to Completed status
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
@@ -183,7 +183,7 @@ var TransitionCompleted = chasm.NewTransition(
 	},
 )
 
-// TransitionFailed affects a transition to Failed status
+// TransitionFailed transitions to Failed status
 var TransitionFailed = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
@@ -204,7 +204,7 @@ var TransitionFailed = chasm.NewTransition(
 	},
 )
 
-// TransitionTerminated affects a transition to Terminated status
+// TransitionTerminated transitions to Terminated status
 var TransitionTerminated = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
@@ -230,7 +230,7 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 )
 
-// TransitionCancelRequested affects a transition to CancelRequested status
+// TransitionCancelRequested transitions to CancelRequested status
 var TransitionCancelRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
@@ -250,7 +250,7 @@ var TransitionCancelRequested = chasm.NewTransition(
 	},
 )
 
-// TransitionCanceled affects a transition to Canceled status
+// TransitionCanceled transitions to Canceled status
 var TransitionCanceled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
@@ -277,7 +277,7 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 )
 
-// TransitionTimedOut affects a transition to TimedOut status
+// TransitionTimedOut transitions to TimedOut status
 var TransitionTimedOut = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
