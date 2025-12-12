@@ -302,13 +302,20 @@ func downloadCLIForArch(arch string) error {
 	}
 
 	// Move to build directory
-	destDir := filepath.Join("build", arch)
+	destDir := filepath.Join("docker", "build", arch)
+	if err := validatePath(destDir, "docker/build"); err != nil {
+		return fmt.Errorf("invalid build directory path: %w", err)
+	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("failed to create build directory: %w", err)
 	}
 
 	sourcePath := filepath.Join(tempDir, "temporal")
 	destPath := filepath.Join(destDir, "temporal")
+
+	if err := validatePath(destPath, "docker/build"); err != nil {
+		return fmt.Errorf("invalid destination path: %w", err)
+	}
 
 	if err := os.Rename(sourcePath, destPath); err != nil {
 		// If rename fails (e.g., cross-device), try copy and delete
