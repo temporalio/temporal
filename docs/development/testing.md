@@ -14,6 +14,8 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_LOG_FORMAT`: Controls the output format for test logs. Available options: `json` or `console`
 - `TEMPORAL_TEST_LOG_LEVEL`:  Sets the verbosity level for test logging. Available levels: `debug`, `info`, `warn`, `error`, `fatal`
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
+- `TEMPORAL_TEST_SHARED_CLUSTERS`: Number of shared clusters in the pool. Tests can use each simultaneously. 
+- `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Only one test can use each at a time. 
 
 ### Debugging via IDE
 
