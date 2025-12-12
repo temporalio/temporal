@@ -2172,7 +2172,7 @@ func (s *Versioning3Suite) TestUnpinnedCaN_upgradeOnCaN() {
 	s.testCan(false, vbUnpinned, true, false)
 }
 
-// TestPinnedCaN_upgradeOnCaN_WithTaskPoller tests ContinueAsNew with InitialVersioningBehavior
+// TestPinnedCaN_UpgradeOnCaN tests ContinueAsNew of a Pinned workflow with InitialVersioningBehavior
 // set to AUTO_UPGRADE using task polling directly (without SDK). This allows testing the feature
 // before it's exposed in the SDK.
 //
@@ -2184,14 +2184,33 @@ func (s *Versioning3Suite) TestUnpinnedCaN_upgradeOnCaN() {
 //   - Confirm that ContinueAsNewSuggested=true and ContinueAsNewSuggestedReasons=[NewTargetVersion]
 //   - Issue ContinueAsNew with InitialVersioningBehavior AUTO_UPGRADE
 //
-// 5. The new run should start on v2 (current) because of AUTO_UPGRADE initial behavior
-func (s *Versioning3Suite) TestPinnedCaN_upgradeOnCaN_WithTaskPoller() {
+// 5. The new run should start on v2 (current) because of AUTO_UPGRADE initial behavior, but after WFT completion, be pinned.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN() {
 	s.RunTestWithMatchingBehavior(func() {
-		s.testCanWithTaskPoller()
+		s.testCanWithTaskPoller(vbPinned)
 	})
 }
 
-func (s *Versioning3Suite) testCanWithTaskPoller() {
+// TestAutoUpgradeCaN_UpgradeOnCaN tests ContinueAsNew of an AutoUpgrade workflow with InitialVersioningBehavior
+// set to AUTO_UPGRADE using task polling directly (without SDK). This allows testing the feature
+// before it's exposed in the SDK.
+//
+// Flow:
+// 1. Set v1 as current, start workflow
+// 2. First WFT: task is sent to v1 worker, worker declares vbUnpinned -> workflow becomes AutoUpgrade on v1
+// 3. Set v2 as current
+// 4. Signal workflow, then on WFT:
+//   - Confirm that ContinueAsNewSuggested=true and ContinueAsNewSuggestedReasons=[NewTargetVersion]
+//   - Issue ContinueAsNew with InitialVersioningBehavior AUTO_UPGRADE
+//
+// 5. The new run should start on v2 (current) because of AUTO_UPGRADE initial behavior, and after WFT completion, be AutoUpgrade.
+func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
+	s.RunTestWithMatchingBehavior(func() {
+		s.testCanWithTaskPoller(vbUnpinned)
+	})
+}
+
+func (s *Versioning3Suite) testCanWithTaskPoller(behavior enumspb.VersioningBehavior) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2200,7 +2219,7 @@ func (s *Versioning3Suite) testCanWithTaskPoller() {
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv1)
 
 	// The workflow is currently unpinned (drainWorkflowTaskAfterSetCurrent uses vbUnpinned)
-	// We need another WFT where the worker declares vbPinned to pin it
+	// We need another WFT where the worker declares behavior to make it pinned (if behavior is pinned)
 	// Signal to trigger a new WFT
 	_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.Namespace().String(),
@@ -2211,31 +2230,21 @@ func (s *Versioning3Suite) testCanWithTaskPoller() {
 	})
 	s.NoError(err)
 
-	// Process the signal WFT and declare vbPinned to pin the workflow to v1
+	// Process the signal WFT and declare behavior to make the workflow versioned (either pinned or AU) on v1
 	s.pollWftAndHandle(tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			// Worker declares vbPinned - this pins the workflow to v1
-			return respondEmptyWft(tv1, false, vbPinned), nil
+			return respondEmptyWft(tv1, false, behavior), nil
 		})
 
-	// Verify workflow is now pinned to v1
-	s.verifyWorkflowVersioning(tv1, vbPinned, tv1.Deployment(), nil, nil)
+	// Verify workflow is now versioned (either pinned or AU) and running on v1
+	s.verifyWorkflowVersioning(tv1, behavior, tv1.Deployment(), nil, nil)
 
 	// Register v2 poller before setting it as current
 	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
 
 	// Set v2 as current
 	s.setCurrentDeployment(tv2)
-
-	// Start async poller for v2 to receive the ContinueAsNew new run
-	wftNewRunDone := make(chan struct{})
-	s.pollWftAndHandle(tv2, false, wftNewRunDone,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.NotNil(task)
-			// The new run should be on v2 because InitialVersioningBehavior was AUTO_UPGRADE
-			return respondCompleteWorkflow(tv2, vbPinned), nil
-		})
 
 	// Signal the workflow again to trigger the WFT with ContinueAsNewSuggested=true and reasons=[NewTargetVersion]
 	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -2247,8 +2256,12 @@ func (s *Versioning3Suite) testCanWithTaskPoller() {
 	})
 	s.NoError(err)
 
-	// Process the WFT on v1 and issue ContinueAsNew with AUTO_UPGRADE initial behavior
-	s.pollWftAndHandle(tv1, false, nil,
+	// Process the signal WFT and issue ContinueAsNew with AUTO_UPGRADE initial behavior
+	pollingVersion := tv1
+	if behavior == vbUnpinned {
+		pollingVersion = tv2
+	}
+	s.pollWftAndHandle(pollingVersion, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 
@@ -2258,7 +2271,7 @@ func (s *Versioning3Suite) testCanWithTaskPoller() {
 					wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 				}
 			}
-			s.Require().Len(wfTaskStartedEvents, 3) // make sure we are actually verifying events
+			s.Require().Len(wfTaskStartedEvents, 3) // make sure we are actually verifying non-zero # of events
 
 			for i, event := range wfTaskStartedEvents {
 				attr := event.GetWorkflowTaskStartedEventAttributes()
@@ -2292,12 +2305,21 @@ func (s *Versioning3Suite) testCanWithTaskPoller() {
 			}, nil
 		})
 
+	// Start async poller for v2 to receive the ContinueAsNew new run
+	wftNewRunDone := make(chan struct{})
+	s.pollWftAndHandle(tv2, false, wftNewRunDone,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// The new run should be on v2 because InitialVersioningBehavior was AUTO_UPGRADE
+			return respondCompleteWorkflow(tv2, behavior), nil
+		})
+
 	// Wait for the new run's first workflow task on v2
 	s.WaitForChannel(ctx, wftNewRunDone)
 
 	// Verify the new workflow run is on v2 (not v1) because of AUTO_UPGRADE initial behavior
-	// The new workflow is now Pinned though, because the worker annotation was Pinned
-	s.verifyWorkflowVersioning(tv2, vbPinned, tv2.Deployment(), nil, nil)
+	// The new workflow has the worker-sent behavior from the first WFT completion after CaN.
+	s.verifyWorkflowVersioning(tv2, behavior, tv2.Deployment(), nil, nil)
 }
 
 func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBehavior, upgradeOnCaN bool, expectInherit bool) {
