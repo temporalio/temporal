@@ -517,7 +517,7 @@ func (s *PauseWorkflowExecutionSuite) assertWorkflowIsPaused(ctx context.Context
 	isPaused := false
 	for hist.HasNext() {
 		event, err := hist.Next()
-		s.NoError(err)
+		require.NoError(t, err)
 		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED {
 			isPaused = true
 			continue
