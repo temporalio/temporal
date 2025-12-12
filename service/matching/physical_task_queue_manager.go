@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -725,6 +727,9 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 		var errResourceExhausted *serviceerror.ResourceExhausted
 		if !errors.As(err, &errResourceExhausted) {
+			if strings.Contains(err.Error(), workerdeployment.ErrTooManyDeploymentsInNamespacePrefix) {
+				return err
+			}
 			// Do not surface low level error to user
 			c.logger.Error("error while registering version", tag.Error(err))
 			err = errDeploymentVersionNotReady
