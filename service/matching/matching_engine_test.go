@@ -795,16 +795,25 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 			resp, err = s.matchingEngine.UpdateFairnessState(ctx, req)
 			return
 		},
-	)
+	).AnyTimes()
 	dbq := newUnversionedRootQueueKey(s.ns.ID().String(), "makeToast", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
+	cMgr := mgr.(*taskQueuePartitionManagerImpl)
+	mgr.GetUserDataManager().(*mockUserDataManager).onChange = cMgr.userDataChanged
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 	mgr.WaitUntilInitialized(context.Background())
 
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task", tag.Error(errTaskQueueClosed))
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
 	data, _, _ := mgr.GetUserDataManager().GetUserData()
 	s.Require().Equal(data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState, persistencespb.FAIRNESS_STATE_V2)
+	//At this point the partition manager should be unloaded
+	select {
+	case <-cMgr.initCtx.Done():
+	case <-time.Tick(100 * time.Millisecond):
+		s.Require().Fail("our partition manager was not unloaded")
+	}
 }
 
 func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool, addPriority bool) {
@@ -859,12 +868,20 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 			_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
 		}
 
+		if addPriority && (err == errShutdown || err == errTaskQueueClosed) {
+			continue
+		}
+
 		switch isForwarded {
 		case false:
 			s.NoError(err)
 		case true:
 			s.Equal(errRemoteSyncMatchFailed, err)
 		}
+	}
+
+	if addPriority {
+		return
 	}
 
 	switch isForwarded {

@@ -628,7 +628,8 @@ func createVersionSet(buildId string) *persistencespb.CompatibleVersionSet {
 
 type mockUserDataManager struct {
 	sync.Mutex
-	data *persistencespb.VersionedTaskQueueUserData
+	data     *persistencespb.VersionedTaskQueueUserData
+	onChange UserDataOnChangeFunc
 }
 
 func (m *mockUserDataManager) Start() {
@@ -651,13 +652,18 @@ func (m *mockUserDataManager) GetUserData() (*persistencespb.VersionedTaskQueueU
 
 func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	m.Lock()
-	defer m.Unlock()
 	data, _, err := updateFn(m.data.GetData())
 	if err != nil {
+		m.Unlock()
 		return 0, err
 	}
 	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.GetVersion() + 1}
-	return m.data.Version, nil
+	version := m.data.Version
+	m.Unlock()
+	if m.onChange != nil {
+		go m.onChange(m.data)
+	}
+	return version, nil
 }
 
 func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error) {
