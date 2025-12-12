@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/tqid"
 )
 
 var (
@@ -243,17 +242,10 @@ func (h *handler) TerminateActivityExecution(
 		(*Activity).handleTerminated,
 		terminateEvent{
 			request: req,
-			handlerBuilder: func(activityType string, taskQueueName string) metrics.Handler {
-				return metrics.GetPerTaskQueueFamilyScope(
-					h.metricsHandler,
-					namespaceName.String(),
-					tqid.UnsafeTaskQueueFamily(req.GetNamespaceId(), taskQueueName),
-					h.config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-					metrics.OperationTag(metrics.ActivityTerminatedScope),
-					metrics.ActivityTypeTag(activityType),
-					metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
-					metrics.WorkflowTypeTag(WorkflowTypeTag),
-				)
+			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
+				Handler:                     h.metricsHandler,
+				NamespaceName:               namespaceName.String(),
+				BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
 			},
 		},
 	)
@@ -289,17 +281,10 @@ func (h *handler) RequestCancelActivityExecution(
 		(*Activity).handleCancellationRequested,
 		requestCancelEvent{
 			request: req,
-			handlerBuilder: func(activityType string, taskQueueName string) metrics.Handler {
-				return metrics.GetPerTaskQueueFamilyScope(
-					h.metricsHandler,
-					namespaceName.String(),
-					tqid.UnsafeTaskQueueFamily(req.GetNamespaceId(), taskQueueName),
-					h.config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-					metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
-					metrics.ActivityTypeTag(activityType),
-					metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
-					metrics.WorkflowTypeTag(WorkflowTypeTag),
-				)
+			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
+				Handler:                     h.metricsHandler,
+				NamespaceName:               namespaceName.String(),
+				BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
 			},
 		},
 	)

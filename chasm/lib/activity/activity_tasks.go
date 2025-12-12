@@ -101,7 +101,8 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 		return err
 	}
 
-	metricsHandler := activity.enrichMetricsHandler(
+	metricsHandler := enrichMetricsHandler(
+		activity,
 		e.opts.MetricsHandler,
 		namespaceName.String(),
 		metrics.TimerActiveTaskActivityTimeoutScope,
@@ -110,6 +111,7 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		metricsHandler: metricsHandler,
+		fromStatus:     activity.GetStatus(),
 	}
 
 	return TransitionTimedOut.Apply(activity, ctx, event)
@@ -146,7 +148,8 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 		return err
 	}
 
-	metricsHandler := activity.enrichMetricsHandler(
+	metricsHandler := enrichMetricsHandler(
+		activity,
 		e.opts.MetricsHandler,
 		namespaceName.String(),
 		metrics.TimerActiveTaskActivityTimeoutScope,
@@ -155,6 +158,7 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		metricsHandler: metricsHandler,
+		fromStatus:     activity.GetStatus(),
 	}
 
 	return TransitionTimedOut.Apply(activity, ctx, event)
@@ -200,7 +204,8 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 		return err
 	}
 
-	metricsHandler := activity.enrichMetricsHandler(
+	metricsHandler := enrichMetricsHandler(
+		activity,
 		e.opts.MetricsHandler,
 		namespaceName.String(),
 		metrics.TimerActiveTaskActivityTimeoutScope,
@@ -215,6 +220,7 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		metricsHandler: metricsHandler,
+		fromStatus:     activity.GetStatus(),
 	})
 }
 
@@ -289,7 +295,8 @@ func (e *heartbeatTimeoutTaskExecutor) Execute(
 		return err
 	}
 
-	metricsHandler := activity.enrichMetricsHandler(
+	metricsHandler := enrichMetricsHandler(
+		activity,
 		e.opts.MetricsHandler,
 		namespaceName.String(),
 		metrics.TimerActiveTaskActivityTimeoutScope,
@@ -303,5 +310,6 @@ func (e *heartbeatTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		metricsHandler: metricsHandler,
+		fromStatus:     activity.GetStatus(),
 	})
 }

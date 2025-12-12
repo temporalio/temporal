@@ -471,19 +471,17 @@ func TestTransitionCompleted(t *testing.T) {
 	counterSuccess.EXPECT().Record(int64(1)).Times(1)
 	metricsHandler.EXPECT().Counter(metrics.ActivitySuccess.Name()).Return(counterSuccess)
 
-	req := RespondCompletedEvent{
-		Request: &historyservice.RespondActivityTaskCompletedRequest{
-			CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
-				Result:   payload,
-				Identity: "worker",
-			},
-		},
-		HandlerBuilder: func(_ string, _ string) metrics.Handler {
-			return metricsHandler
+	req := &historyservice.RespondActivityTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
+			Result:   payload,
+			Identity: "worker",
 		},
 	}
 
-	err := TransitionCompleted.Apply(activity, ctx, req)
+	err := TransitionCompleted.Apply(activity, ctx, completeEvent{
+		req:            req,
+		metricsHandler: metricsHandler,
+	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
@@ -542,20 +540,18 @@ func TestTransitionFailed(t *testing.T) {
 	counterTaskFail.EXPECT().Record(int64(1)).Times(1)
 	metricsHandler.EXPECT().Counter(metrics.ActivityTaskFail.Name()).Return(counterTaskFail)
 
-	req := RespondFailedEvent{
-		Request: &historyservice.RespondActivityTaskFailedRequest{
-			FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
-				Failure:              failure,
-				LastHeartbeatDetails: heartbeatDetails,
-				Identity:             "worker",
-			},
-		},
-		HandlerBuilder: func(_ string, _ string) metrics.Handler {
-			return metricsHandler
+	req := &historyservice.RespondActivityTaskFailedRequest{
+		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+			Failure:              failure,
+			LastHeartbeatDetails: heartbeatDetails,
+			Identity:             "worker",
 		},
 	}
 
-	err := TransitionFailed.Apply(activity, ctx, req)
+	err := TransitionFailed.Apply(activity, ctx, failedEvent{
+		req:            req,
+		metricsHandler: metricsHandler,
+	})
 
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, activity.Status)
@@ -594,24 +590,39 @@ func TestTransitionTerminated(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	metricsHandler := metrics.NewMockHandler(controller)
+	enrichedMetricsHandler := metrics.NewMockHandler(controller)
 
-	counterCancel := metrics.NewMockCounterIface(controller)
-	counterCancel.EXPECT().Record(int64(1)).Times(1)
-	metricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterCancel)
+	tags := []metrics.Tag{
+		metrics.OperationTag(metrics.ActivityTerminatedScope),
+		metrics.ActivityTypeTag("test-activity-type"),
+		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+		metrics.WorkflowTypeTag(WorkflowTypeTag),
+		metrics.NamespaceTag("test-namespace"),
+		metrics.UnsafeTaskQueueTag("test-task-queue"),
+	}
+	metricsHandler.EXPECT().WithTags(tags).Return(enrichedMetricsHandler)
 
-	reqWrapper := terminateEvent{
-		request: &activitypb.TerminateActivityExecutionRequest{
-			FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
-				Reason:   "Test Termination",
-				Identity: "terminator",
-			},
-		},
-		handlerBuilder: func(_ string, _ string) metrics.Handler {
-			return metricsHandler
+	counterTerminate := metrics.NewMockCounterIface(controller)
+	counterTerminate.EXPECT().Record(int64(1)).Times(1)
+	enrichedMetricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterTerminate)
+
+	req := &activitypb.TerminateActivityExecutionRequest{
+		FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
+			Reason:   "Test Termination",
+			Identity: "terminator",
 		},
 	}
 
-	err := TransitionTerminated.Apply(activity, ctx, reqWrapper)
+	err := TransitionTerminated.Apply(activity, ctx, terminateEvent{
+		request: req,
+		MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
+			Handler:       metricsHandler,
+			NamespaceName: "test-namespace",
+			BreakdownMetricsByTaskQueue: func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) bool {
+				return namespace == "test-namespace" && taskQueue == "test-task-queue" && taskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY
+			},
+		},
+	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)

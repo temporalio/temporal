@@ -162,6 +162,11 @@ var TransitionStarted = chasm.NewTransition(
 	},
 )
 
+type completeEvent struct {
+	req            *historyservice.RespondActivityTaskCompletedRequest
+	metricsHandler metrics.Handler
+}
+
 // TransitionCompleted affects a transition to Completed status
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
@@ -169,9 +174,9 @@ var TransitionCompleted = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-	func(a *Activity, ctx chasm.MutableContext, event RespondCompletedEvent) error {
+	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			req := event.Request.GetCompleteRequest()
+			req := event.req.GetCompleteRequest()
 
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
@@ -183,14 +188,17 @@ var TransitionCompleted = chasm.NewTransition(
 				},
 			}
 
-			metricsHandler := event.HandlerBuilder(a.GetActivityType().GetName(), a.GetTaskQueue().GetName())
-
-			a.emitOnCompletedMetrics(ctx, metricsHandler)
+			a.emitOnCompletedMetrics(ctx, event.metricsHandler)
 
 			return nil
 		})
 	},
 )
+
+type failedEvent struct {
+	req            *historyservice.RespondActivityTaskFailedRequest
+	metricsHandler metrics.Handler
+}
 
 // TransitionFailed affects a transition to Failed status
 var TransitionFailed = chasm.NewTransition(
@@ -199,9 +207,9 @@ var TransitionFailed = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-	func(a *Activity, ctx chasm.MutableContext, event RespondFailedEvent) error {
+	func(a *Activity, ctx chasm.MutableContext, event failedEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			req := event.Request.GetFailedRequest()
+			req := event.req.GetFailedRequest()
 
 			if details := req.GetLastHeartbeatDetails(); details != nil {
 				heartbeat := a.getOrCreateLastHeartbeat(ctx)
@@ -215,9 +223,7 @@ var TransitionFailed = chasm.NewTransition(
 				return err
 			}
 
-			metricsHandler := event.HandlerBuilder(a.GetActivityType().GetName(), a.GetTaskQueue().GetName())
-
-			a.emitOnFailedMetrics(ctx, metricsHandler)
+			a.emitOnFailedMetrics(ctx, event.metricsHandler)
 
 			return nil
 		})
@@ -246,7 +252,12 @@ var TransitionTerminated = chasm.NewTransition(
 				},
 			}
 
-			metricsHandler := event.handlerBuilder(a.GetActivityType().GetName(), a.GetTaskQueue().GetName())
+			metricsHandler := enrichMetricsHandler(
+				a,
+				event.MetricsHandlerBuilderParams.Handler,
+				event.MetricsHandlerBuilderParams.NamespaceName,
+				metrics.ActivityTerminatedScope,
+				event.MetricsHandlerBuilderParams.BreakdownMetricsByTaskQueue)
 
 			metrics.ActivityTerminate.With(metricsHandler).Record(1)
 
@@ -276,8 +287,9 @@ var TransitionCancelRequested = chasm.NewTransition(
 )
 
 type cancelEvent struct {
-	details *commonpb.Payloads
-	handler metrics.Handler
+	details    *commonpb.Payloads
+	handler    metrics.Handler
+	fromStatus activitypb.ActivityExecutionStatus
 }
 
 // TransitionCanceled affects a transition to Canceled status
@@ -303,17 +315,17 @@ var TransitionCanceled = chasm.NewTransition(
 				},
 			}
 
-			a.emitOnCanceledMetrics(ctx, event.handler)
+			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
 
 			return nil
 		})
 	},
 )
 
-// TransitionTimedOut affects a transition to TimedOut status
 type timeoutEvent struct {
 	metricsHandler metrics.Handler
 	timeoutType    enumspb.TimeoutType
+	fromStatus     activitypb.ActivityExecutionStatus
 }
 
 // TransitionTimedOut transitions to TimedOut status
@@ -346,7 +358,7 @@ var TransitionTimedOut = chasm.NewTransition(
 				return err
 			}
 
-			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType)
+			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
 
 			return nil
 		})
