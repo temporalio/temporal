@@ -108,13 +108,6 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 			useNewDeploymentData:      true,
 		})
 	})
-	//suite.Run(t, &Versioning3Suite{
-	//	deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-	//	useV32:                    true,
-	//	useNewDeploymentData:      true,
-	//	useRevisionNumbers:        true,
-	//})
-
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -2155,7 +2148,7 @@ func (s *Versioning3Suite) TestPinnedCaN_upgradeOnCaN_SameTQ() {
 
 func (s *Versioning3Suite) TestPinnedCaN_upgradeOnCaN_CrossTQ_Inherit() {
 	s.T().Skip("run after SDK exposes CaN option")
-	s.testCan(true, vbPinned, true, false)
+	s.testCan(true, vbPinned, true, true)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_upgradeOnCaN_CrossTQ_NoInherit() {
