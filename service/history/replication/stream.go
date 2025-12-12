@@ -103,7 +103,7 @@ func livenessMonitor(
 	case <-shutdownChan.Channel():
 		return
 	case <-signalChan:
-		// Wait for the first message into stream sever before monitoring the connection.
+		// Wait for the first message into stream before monitoring.
 	}
 
 	heartbeatTimeout := time.NewTimer(timeoutFn() * time.Duration(timeoutMultiplier()))
