@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/errordetails/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
@@ -13,6 +14,8 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -24,7 +27,8 @@ var (
 
 	// TODO this will change once we rebase on main
 	businessIDConflictPolicyMap = map[enumspb.ActivityIdConflictPolicy]chasm.BusinessIDConflictPolicy{
-		enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL: chasm.BusinessIDConflictPolicyFail,
+		enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL:         chasm.BusinessIDConflictPolicyFail,
+		enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING: chasm.BusinessIDConflictPolicyUseExisting,
 	}
 )
 
@@ -82,7 +86,19 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
+
 	if err != nil {
+		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
+		if errors.As(err, &alreadyStartedErr) {
+			details := &errordetails.ActivityExecutionAlreadyStartedFailure{
+				StartRequestId: alreadyStartedErr.CurrentRequestID,
+				RunId:          alreadyStartedErr.CurrentRunID,
+			}
+
+			errStatus, _ := status.New(codes.AlreadyExists, "activity execution already started").WithDetails(details)
+			return nil, errStatus.Err()
+		}
+
 		return nil, err
 	}
 

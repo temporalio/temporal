@@ -10,6 +10,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/errordetails/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -150,7 +151,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy_FailsIfExists() {
 	activityID := s.tv.ActivityID()
 	taskQueue := s.tv.TaskQueue().String()
 
-	s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	startResponse := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
 	// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
 	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
@@ -164,10 +165,48 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy_FailsIfExists() {
 		},
 		StartToCloseTimeout: durationpb.New(1 * time.Minute),
 	})
+
 	require.Error(t, err)
+	statusErr := serviceerror.ToStatus(err)
+	require.Equal(t, codes.AlreadyExists, statusErr.Code())
+
+	var details *errordetails.ActivityExecutionAlreadyStartedFailure
+	for _, detail := range statusErr.Details() {
+		if d, ok := detail.(*errordetails.ActivityExecutionAlreadyStartedFailure); ok {
+			details = d
+			break
+		}
+	}
+	require.NotNil(t, details, "expected ActivityExecutionAlreadyStartedFailure in error details")
+	require.Equal(t, s.tv.RequestID(), details.StartRequestId)
+	require.Equal(t, startResponse.GetRunId(), details.RunId)
 }
 
-// TODO(fred): add test for BusinessIDConflictPolicyUseExisting after rebasing on main
+func (s *standaloneActivityTestSuite) TestIDConflictPolicy_UseExistingNoError() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+
+	// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
+	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		ActivityId:   activityID,
+		ActivityType: s.tv.ActivityType(),
+		Identity:     s.tv.WorkerIdentity(),
+		Input:        defaultInput,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+		},
+		StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+	})
+	require.NoError(t, err)
+}
 
 func (s *standaloneActivityTestSuite) TestActivityCompleted() {
 	t := s.T()
