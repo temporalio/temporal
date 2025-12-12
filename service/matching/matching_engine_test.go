@@ -802,7 +802,9 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	mgr.GetUserDataManager().(*mockUserDataManager).onChange = cMgr.userDataChanged
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
-	mgr.WaitUntilInitialized(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	mgr.WaitUntilInitialized(ctx)
+	cancel()
 
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task", tag.Error(errTaskQueueClosed))
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)

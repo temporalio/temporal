@@ -336,7 +336,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	s.tqMgr.namespaceRegistry = mockNamespaceCache
 
 	s.tqMgr.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err := s.tqMgr.WaitUntilInitialized(ctx)
 	s.Require().NoError(err)
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)

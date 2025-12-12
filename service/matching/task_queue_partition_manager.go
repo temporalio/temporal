@@ -129,19 +129,18 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) initialize() {
+func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
+	defer func() { pm.defaultQueueFuture.SetIfNotReady(nil, retErr) }()
 	unload := func(bool) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
-	err := pm.userDataManager.WaitUntilInitialized(pm.initCtx)
-	if err != nil {
-		pm.defaultQueueFuture.Set(nil, err)
+	retErr = pm.userDataManager.WaitUntilInitialized(pm.initCtx)
+	if retErr != nil {
 		return
 	}
-	data, _, err := pm.getPerTypeUserData()
-	if err != nil {
-		pm.defaultQueueFuture.Set(nil, err)
+	data, _, retErr := pm.getPerTypeUserData()
+	if retErr != nil {
 		return
 	}
 
@@ -171,17 +170,17 @@ func (pm *taskQueuePartitionManagerImpl) initialize() {
 			pm.config.EnableFairness = true
 		}
 	default:
-		pm.defaultQueueFuture.Set(nil, serviceerror.NewInternal("Unknown FairnessState in UserData"))
+		retErr = serviceerror.NewInternal("Unknown FairnessState in UserData")
 		return
 	}
 
-	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
-	if err != nil {
-		pm.defaultQueueFuture.Set(nil, err)
+	defaultQ, retErr := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
+	if retErr != nil {
 		return
 	}
 	defaultQ.Start()
 	pm.defaultQueueFuture.Set(defaultQ, nil)
+	return
 }
 
 func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager {
@@ -254,10 +253,10 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 }
 
 func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
-	if !pm.config.AutoEnableV2() || !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	if pm.fairnessState != persistencespb.FAIRNESS_STATE_UNSPECIFIED {
 		return
 	}
-	if pm.fairnessState != persistencespb.FAIRNESS_STATE_UNSPECIFIED {
+	if !pm.config.AutoEnableV2() || !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		return
 	}
 	if params.taskInfo.Priority.GetFairnessKey() == "" && params.taskInfo.Priority.GetPriorityKey() == int32(0) {
