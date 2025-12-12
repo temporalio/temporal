@@ -803,14 +803,15 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	mgr.WaitUntilInitialized(ctx)
+	err := mgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	cancel()
 
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task", tag.Error(errTaskQueueClosed))
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
 	data, _, _ := mgr.GetUserDataManager().GetUserData()
-	s.Require().Equal(data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState, persistencespb.FAIRNESS_STATE_V2)
-	//At this point the partition manager should be unloaded
+	s.Require().Equal(persistencespb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
+	// At this point the partition manager should be unloaded
 	select {
 	case <-cMgr.initCtx.Done():
 	case <-time.Tick(100 * time.Millisecond):
