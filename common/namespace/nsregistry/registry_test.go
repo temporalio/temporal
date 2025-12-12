@@ -1,6 +1,7 @@
 package nsregistry_test
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -52,7 +53,9 @@ func (s *registrySuite) SetupTest() {
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		dynamicconfig.GetBoolPropertyFn(false),
 		metrics.NoopMetricsHandler,
-		log.NewTestLogger())
+		log.NewTestLogger(),
+		namespace.NewDefaultReplicationResolverFactory(),
+	)
 }
 
 func (s *registrySuite) TearDownTest() {
@@ -61,6 +64,7 @@ func (s *registrySuite) TearDownTest() {
 }
 
 func (s *registrySuite) TestListNamespace() {
+	factory := namespace.NewDefaultReplicationResolverFactory()
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -85,9 +89,11 @@ func (s *registrySuite) TestListNamespace() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1 := namespace.FromPersistentState(
+	entry1, err := namespace.FromPersistentState(
 		namespaceRecord1.Namespace,
+		factory(namespaceRecord1.Namespace),
 		namespace.WithNotificationVersion(namespaceRecord1.NotificationVersion))
+	s.NoError(err)
 
 	namespaceNotificationVersion++
 
@@ -114,9 +120,11 @@ func (s *registrySuite) TestListNamespace() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2 := namespace.FromPersistentState(
+	entry2, err := namespace.FromPersistentState(
 		namespaceRecord2.Namespace,
+		factory(namespaceRecord2.Namespace),
 		namespace.WithNotificationVersion(namespaceRecord2.NotificationVersion))
+	s.NoError(err)
 
 	namespaceNotificationVersion++
 
@@ -214,9 +222,12 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1 := namespace.FromPersistentState(
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	entry1, err := namespace.FromPersistentState(
 		namespaceRecord1.Namespace,
+		factory(namespaceRecord1.Namespace),
 		namespace.WithNotificationVersion(namespaceRecord1.NotificationVersion))
+	s.NoError(err)
 
 	namespaceNotificationVersion++
 
@@ -244,9 +255,11 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2 := namespace.FromPersistentState(
+	entry2, err := namespace.FromPersistentState(
 		namespaceRecord2.Namespace,
+		factory(namespaceRecord2.Namespace),
 		namespace.WithNotificationVersion(namespaceNotificationVersion))
+	s.NoError(err)
 
 	namespaceNotificationVersion++
 
@@ -278,7 +291,13 @@ func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 	if entriesNotification[0].NotificationVersion() > entriesNotification[1].NotificationVersion() {
 		entriesNotification[0], entriesNotification[1] = entriesNotification[1], entriesNotification[0]
 	}
-	s.Equal([]*namespace.Namespace{entry1, entry2}, entriesNotification)
+	// Compare by ID and key properties instead of pointer equality
+	s.Equal(entry1.ID(), entriesNotification[0].ID())
+	s.Equal(entry1.Name(), entriesNotification[0].Name())
+	s.Equal(entry1.NotificationVersion(), entriesNotification[0].NotificationVersion())
+	s.Equal(entry2.ID(), entriesNotification[1].ID())
+	s.Equal(entry2.Name(), entriesNotification[1].Name())
+	s.Equal(entry2.NotificationVersion(), entriesNotification[1].NotificationVersion())
 }
 
 func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
@@ -308,9 +327,12 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		NotificationVersion: namespaceNotificationVersion,
 	}
 	namespaceNotificationVersion++
-	entry1Old := namespace.FromPersistentState(
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	entry1Old, err := namespace.FromPersistentState(
 		namespaceRecord1Old.Namespace,
+		factory(namespaceRecord1Old.Namespace),
 		namespace.WithNotificationVersion(namespaceRecord1Old.NotificationVersion))
+	s.NoError(err)
 	namespaceNotificationVersion++
 
 	namespaceRecord2Old := &persistence.GetNamespaceResponse{
@@ -337,9 +359,11 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2Old := namespace.FromPersistentState(
+	entry2Old, err := namespace.FromPersistentState(
 		namespaceRecord2Old.Namespace,
+		factory(namespaceRecord2Old.Namespace),
 		namespace.WithNotificationVersion(namespaceRecord2Old.NotificationVersion))
+	s.NoError(err)
 	namespaceNotificationVersion++
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
@@ -368,9 +392,11 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2New := namespace.FromPersistentState(
+	entry2New, err := namespace.FromPersistentState(
 		namespaceRecord2New.Namespace,
+		factory(namespaceRecord2New.Namespace),
 		namespace.WithNotificationVersion(namespaceRecord2New.NotificationVersion))
+	s.NoError(err)
 	namespaceNotificationVersion++
 
 	namespaceRecord1New := &persistence.GetNamespaceResponse{ // only the description changed
@@ -428,7 +454,13 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	if entries[0].NotificationVersion() > entries[1].NotificationVersion() {
 		entries[0], entries[1] = entries[1], entries[0]
 	}
-	s.Equal([]*namespace.Namespace{entry1Old, entry2Old}, entries)
+	// Compare by ID and key properties instead of pointer equality
+	s.Equal(entry1Old.ID(), entries[0].ID())
+	s.Equal(entry1Old.Name(), entries[0].Name())
+	s.Equal(entry1Old.NotificationVersion(), entries[0].NotificationVersion())
+	s.Equal(entry2Old.ID(), entries[1].ID())
+	s.Equal(entry2Old.Name(), entries[1].Name())
+	s.Equal(entry2Old.NotificationVersion(), entries[1].NotificationVersion())
 
 	wg.Add(1)
 	wg.Wait()
@@ -437,7 +469,10 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 
 	// entry1 only has descrption update, so won't trigger the state change callback
 	s.Len(newEntries, 1)
-	s.Equal([]*namespace.Namespace{entry2New}, newEntries)
+	// Compare by ID and key properties instead of pointer equality
+	s.Equal(entry2New.ID(), newEntries[0].ID())
+	s.Equal(entry2New.Name(), newEntries[0].Name())
+	s.Equal(entry2New.NotificationVersion(), newEntries[0].NotificationVersion())
 }
 
 func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
@@ -461,8 +496,11 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 			FailoverVersion: 0,
 		},
 	}
-	entryOld := namespace.FromPersistentState(
-		namespaceRecordOld.Namespace)
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	entryOld, err := namespace.FromPersistentState(
+		namespaceRecordOld.Namespace,
+		factory(namespaceRecordOld.Namespace))
+	s.NoError(err)
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:       nsregistry.CacheRefreshPageSize,
@@ -701,6 +739,236 @@ func (s *registrySuite) TestGetByIDWithoutReadthrough() {
 	ns, err = s.registry.GetNamespaceByIDWithOptions(id, namespace.GetNamespaceOptions{DisableReadthrough: false})
 	s.NoError(err)
 	s.Equal(namespace.Name("foo"), ns.Name())
+}
+
+// TestNamespaceRename validates that when a namespace is renamed via the
+// background refresh loop (refreshNamespaces), the old name no longer resolves
+// and the new name resolves correctly. This tests that stale name->ID mappings
+// are properly cleaned up when the namespace name changes in the database.
+func (s *registrySuite) TestNamespaceRename() {
+	id := namespace.NewID()
+	namespaceNotificationVersion := int64(0)
+
+	// Initial namespace with original name
+	namespaceRecordOld := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "original-name",
+				Data: make(map[string]string),
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(1),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters:          []string{cluster.TestCurrentClusterName},
+			},
+			ConfigVersion:   1,
+			FailoverVersion: 1,
+		},
+		NotificationVersion: namespaceNotificationVersion,
+	}
+	namespaceNotificationVersion++
+
+	// Renamed namespace (same ID, different name, changed ActiveClusterName to trigger callback)
+	namespaceRecordNew := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "renamed-name",
+				Data: make(map[string]string),
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(1),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName, // changed to trigger callback
+				Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+			},
+			ConfigVersion:   2,
+			FailoverVersion: 2,
+		},
+		NotificationVersion: namespaceNotificationVersion,
+	}
+
+	// First ListNamespaces returns original name
+	s.regPersistence.EXPECT().ListNamespaces(
+		gomock.Any(), &persistence.ListNamespacesRequest{
+			PageSize:       nsregistry.CacheRefreshPageSize,
+			IncludeDeleted: true,
+			NextPageToken:  nil,
+		},
+	).Return(
+		&persistence.ListNamespacesResponse{
+			Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecordOld},
+			NextPageToken: nil,
+		}, nil,
+	)
+
+	// Used to temporarily block the second refresh
+	blockRefreshCh := make(chan struct{})
+
+	// Second and subsequent ListNamespaces returns renamed namespace
+	s.regPersistence.EXPECT().ListNamespaces(
+		gomock.Any(), &persistence.ListNamespacesRequest{
+			PageSize:       nsregistry.CacheRefreshPageSize,
+			IncludeDeleted: true,
+			NextPageToken:  nil,
+		},
+	).DoAndReturn(func(context.Context, *persistence.ListNamespacesRequest) (*persistence.ListNamespacesResponse, error) {
+		<-blockRefreshCh
+		return &persistence.ListNamespacesResponse{
+			Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecordNew},
+			NextPageToken: nil,
+		}, nil
+	}).MinTimes(1)
+
+	s.registry.Start()
+	// Register callback to detect when the rename is applied
+	refreshCompletedCh := make(chan struct{})
+	s.registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
+		if ns.Name() == "renamed-name" {
+			close(refreshCompletedCh)
+		}
+	})
+	defer s.registry.Stop()
+
+	// Verify original name works before rename
+	ns, err := s.registry.GetNamespace("original-name")
+	s.NoError(err)
+	s.Equal(namespace.Name("original-name"), ns.Name())
+	s.Equal(id, ns.ID())
+
+	// Allow second refresh through and wait for it to happen
+	close(blockRefreshCh)
+	<-refreshCompletedCh
+
+	// Verify new name works after rename
+	ns, err = s.registry.GetNamespace("renamed-name")
+	s.NoError(err)
+	s.Equal(namespace.Name("renamed-name"), ns.Name())
+	s.Equal(id, ns.ID())
+
+	// Verify ID lookup returns namespace with new name
+	ns, err = s.registry.GetNamespaceByID(id)
+	s.NoError(err)
+	s.Equal(namespace.Name("renamed-name"), ns.Name())
+
+	// Verify old name no longer resolves
+	// Disable readthrough so we only check the cache
+	_, err = s.registry.GetNamespaceWithOptions(
+		"original-name",
+		namespace.GetNamespaceOptions{DisableReadthrough: true},
+	)
+	s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
+}
+
+// TestNamespaceRenameViaRefreshById validates that when a namespace is renamed
+// and refreshed via RefreshNamespaceById (which calls updateSingleNamespace),
+// the old name no longer resolves and the new name resolves correctly. This tests
+// that stale name->ID mappings are properly cleaned up during single-namespace
+// refresh operations triggered by readthrough or explicit refresh calls.
+func (s *registrySuite) TestNamespaceRenameViaRefreshById() {
+	id := namespace.NewID()
+
+	// Initial namespace with original name
+	nsOriginal := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "original-name",
+				Data: make(map[string]string),
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(1),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters:          []string{cluster.TestCurrentClusterName},
+			},
+			FailoverVersion: 1,
+		},
+		NotificationVersion: 1,
+	}
+
+	// Renamed namespace (same ID, different name)
+	nsRenamed := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   id.String(),
+				Name: "renamed-name",
+				Data: make(map[string]string),
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(1),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters:          []string{cluster.TestCurrentClusterName},
+			},
+			FailoverVersion: 1,
+		},
+		NotificationVersion: 2,
+	}
+
+	// Load original namespace via ListNamespaces on Start
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(
+		&persistence.ListNamespacesResponse{
+			Namespaces: []*persistence.GetNamespaceResponse{nsOriginal},
+		}, nil,
+	).MinTimes(1)
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	// Verify original name works
+	ns, err := s.registry.GetNamespace("original-name")
+	s.NoError(err)
+	s.Equal(namespace.Name("original-name"), ns.Name())
+	s.Equal(id, ns.ID())
+
+	// Mock GetNamespace to return the renamed namespace
+	s.regPersistence.EXPECT().GetNamespace(
+		gomock.Any(), &persistence.GetNamespaceRequest{
+			ID: id.String(),
+		},
+	).Return(nsRenamed, nil).Times(1)
+
+	// Refresh the namespace by ID (triggers updateSingleNamespace)
+	ns, err = s.registry.RefreshNamespaceById(id)
+	s.NoError(err)
+	s.Equal(namespace.Name("renamed-name"), ns.Name())
+
+	// Verify new name works
+	ns, err = s.registry.GetNamespace("renamed-name")
+	s.NoError(err)
+	s.Equal(namespace.Name("renamed-name"), ns.Name())
+	s.Equal(id, ns.ID())
+
+	// Verify ID lookup returns namespace with new name
+	ns, err = s.registry.GetNamespaceByID(id)
+	s.NoError(err)
+	s.Equal(namespace.Name("renamed-name"), ns.Name())
+
+	// Verify old name no longer resolves
+	_, err = s.registry.GetNamespaceWithOptions(
+		"original-name",
+		namespace.GetNamespaceOptions{DisableReadthrough: true},
+	)
+	s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
 }
 
 func (s *registrySuite) TestRefreshSingleCacheKeyById() {

@@ -4805,3 +4805,42 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_AfterCAN_NoBounceBack()
 func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_ChildNoBounceBack() {
 	s.testRetryNoBounceBack(false, true)
 }
+
+// The following tests test out the CheckTaskQueueVersionMembership RPC.
+func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// No version exists in the task queue's userData as of now
+	s.Eventually(func() bool {
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv1.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
+		})
+		s.NoError(err)
+		return !resp.GetIsMember() // the check should pass if no version is present
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Start v1 worker which shall register the version in the task queue
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+	})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// The version should eventually show up in the task queue's user data
+	s.Eventually(func() bool {
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv1.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
+		})
+		s.NoError(err)
+		return resp.GetIsMember()
+	}, 10*time.Second, 100*time.Millisecond)
+}
