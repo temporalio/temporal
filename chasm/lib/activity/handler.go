@@ -95,7 +95,10 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				RunId:          alreadyStartedErr.CurrentRunID,
 			}
 
-			errStatus, _ := status.New(codes.AlreadyExists, "activity execution already started").WithDetails(details)
+			errStatus, errDetail := status.New(codes.AlreadyExists, "activity execution already started").WithDetails(details)
+			if errDetail != nil {
+				return nil, errDetail
+			}
 			return nil, errStatus.Err()
 		}
 
