@@ -731,7 +731,11 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 		// Before retrying the error, hold the poller for some time so it does not retry immediately
 		// Parallel polls are already serialized using the lock.
-		time.Sleep(deploymentRegisterErrorBackoff)
+		backoff := deploymentRegisterErrorBackoff
+		if testBackoff, ok := testhooks.Get[time.Duration](c.partitionMgr.engine.testHooks, testhooks.MatchingDeploymentRegisterErrorBackoff); ok {
+			backoff = testBackoff
+		}
+		time.Sleep(backoff)
 		return err
 	}
 
