@@ -44,12 +44,6 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	}{
 		{name: "nil data"},
 		{name: "empty data", data: &persistencespb.DeploymentData{}},
-		{name: "old data", wantCurrent: v1,
-			data: &persistencespb.DeploymentData{
-				Deployments: []*persistencespb.DeploymentData_DeploymentDataItem{
-					{Deployment: DeploymentFromDeploymentVersion(v1), Data: &deploymentspb.TaskQueueData{LastBecameCurrentTime: t1}},
-				}},
-		},
 		{name: "old deployment data: two current + two ramping",
 			wantCurrent: v2,
 			wantRamping: v3,
@@ -107,16 +101,6 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: nil},
 				},
 				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
-			},
-		},
-		{name: "mix of prerelease and public preview deployment data: one current", wantCurrent: v2,
-			data: &persistencespb.DeploymentData{
-				Deployments: []*persistencespb.DeploymentData_DeploymentDataItem{
-					{Deployment: DeploymentFromDeploymentVersion(v1), Data: &deploymentspb.TaskQueueData{LastBecameCurrentTime: t1}},
-				},
-				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v2, CurrentSinceTime: t2, RoutingUpdateTime: t2},
-				},
 			},
 		},
 		// Membership related tests
