@@ -657,6 +657,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		123678,
 		nil,
 		int64(0),
+		nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{

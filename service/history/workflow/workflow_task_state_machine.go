@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -451,6 +452,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	skipVersioningCheck bool,
 	updateReg update.Registry,
+	targetDeploymentVersion *deploymentpb.WorkerDeploymentVersion,
 ) (*historypb.HistoryEvent, *historyi.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -472,9 +474,20 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// events. That's okay, it doesn't have to be 100% accurate. It just has to be kept
 	// consistent between the started event in history and the event that was sent to the SDK
 	// that resulted in the successful completion.
-	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
-	if updateReg != nil {
-		suggestContinueAsNew = cmp.Or(suggestContinueAsNew, updateReg.SuggestContinueAsNew())
+	historySizeBytes, suggestContinueAsNewReasons := m.getHistorySizeInfo()
+	suggestContinueAsNew := len(suggestContinueAsNewReasons) > 0
+	if updateReg != nil && updateReg.SuggestContinueAsNew() {
+		suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
+		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
+	}
+
+	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
+		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
+			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
+				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
+			suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
+			suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)
+		}
 	}
 
 	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)
@@ -517,6 +530,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			historySizeBytes,
 			versioningStamp,
 			redirectCounter,
+			suggestContinueAsNewReasons,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
@@ -708,6 +722,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.HistorySizeBytes,
 			request.WorkerVersionStamp,
 			workflowTask.BuildIdRedirectCounter,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -796,6 +811,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.HistorySizeBytes,
 			versioningStamp,
 			workflowTask.BuildIdRedirectCounter,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -867,6 +883,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.HistorySizeBytes,
 			nil,
 			workflowTask.BuildIdRedirectCounter,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -1318,10 +1335,11 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	return durationpb.New(startToCloseTimeout)
 }
 
-func (m *workflowTaskStateMachine) getHistorySizeInfo() (bool, int64) {
+func (m *workflowTaskStateMachine) getHistorySizeInfo() (int64, []enumspb.SuggestContinueAsNewReason) {
+	var reasons []enumspb.SuggestContinueAsNewReason
 	stats := m.ms.GetExecutionInfo().ExecutionStats
 	if stats == nil {
-		return false, 0
+		return 0, reasons
 	}
 	// This only includes events that have actually been written to persistence, so it won't
 	// include the workflow task started event that we're currently writing. That's okay, it
@@ -1334,8 +1352,13 @@ func (m *workflowTaskStateMachine) getHistorySizeInfo() (bool, int64) {
 	namespaceName := m.ms.GetNamespaceEntry().Name().String()
 	sizeLimit := int64(config.HistorySizeSuggestContinueAsNew(namespaceName))
 	countLimit := int64(config.HistoryCountSuggestContinueAsNew(namespaceName))
-	suggestContinueAsNew := historySize >= sizeLimit || historyCount >= countLimit
-	return suggestContinueAsNew, historySize
+	if historySize >= sizeLimit {
+		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)
+	}
+	if historyCount >= countLimit {
+		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)
+	}
+	return historySize, reasons
 }
 
 func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() error {
@@ -1390,6 +1413,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.HistorySizeBytes,
 			nil,
 			wt.BuildIdRedirectCounter,
+			nil,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 
