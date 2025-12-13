@@ -206,6 +206,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		}
 	case *adminservice.ResendReplicationTasksResponse:
 		return nil
+	case *adminservice.StartAdminBatchOperationRequest:
+		return nil
+	case *adminservice.StartAdminBatchOperationResponse:
+		return nil
 	case *adminservice.SyncWorkflowStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),

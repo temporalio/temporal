@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
@@ -33,6 +34,7 @@ type (
 		Logger         log.Logger
 		ClientFactory  sdk.ClientFactory
 		FrontendClient workflowservice.WorkflowServiceClient
+		AdminClient    resource.AdminClient
 	}
 
 	fxResult struct {

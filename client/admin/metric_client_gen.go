@@ -583,6 +583,20 @@ func (c *metricClient) ResendReplicationTasks(
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.StartAdminBatchOperationResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientStartAdminBatchOperation")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.StartAdminBatchOperation(ctx, request, opts...)
+}
+
 func (c *metricClient) SyncWorkflowState(
 	ctx context.Context,
 	request *adminservice.SyncWorkflowStateRequest,

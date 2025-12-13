@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -284,13 +285,27 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		}
 	}
 
-	adjustedQuery := a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
+	// Get namespace and query based on request type (public vs admin)
+	var ns string
+	var visibilityQuery string
+	var executions []*commonpb.WorkflowExecution
+
+	if batchParams.AdminRequest != nil {
+		adminReq := batchParams.AdminRequest
+		ns = adminReq.Namespace
+		visibilityQuery = a.adjustQueryAdminBatchType(adminReq)
+		executions = adminReq.GetExecutions()
+	} else {
+		ns = batchParams.Request.Namespace
+		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
+		executions = batchParams.Request.Executions
+	}
 
 	if startOver {
-		estimateCount := int64(len(batchParams.Request.Executions))
-		if len(adjustedQuery) > 0 {
+		estimateCount := int64(len(executions))
+		if len(visibilityQuery) > 0 {
 			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-				Query: adjustedQuery,
+				Query: visibilityQuery,
 			})
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -304,15 +319,15 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 
 	// Prepare configuration for shared processing function
 	config := batchProcessorConfig{
-		namespace:         batchParams.Request.Namespace,
-		adjustedQuery:     adjustedQuery,
-		rps:               float64(a.rps(batchParams.Request.Namespace)),
+		namespace:         ns,
+		adjustedQuery:     visibilityQuery,
+		rps:               float64(a.rps(ns)),
 		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
 		initialPageToken:  hbd.PageToken,
-		initialExecutions: batchParams.Request.Executions,
+		initialExecutions: executions,
 	}
 
-	// Create a wrapper for the protobuf specific worker processor
+	// Create a wrapper for the task processor
 	workerProcessor := func(
 		ctx context.Context,
 		taskCh chan task,
@@ -323,7 +338,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		metricsHandler metrics.Handler,
 		logger log.Logger,
 	) {
-		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
@@ -353,6 +368,23 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 	}
 }
 
+func (a *activities) adjustQueryAdminBatchType(adminReq *adminservice.StartAdminBatchOperationRequest) string {
+	query := adminReq.GetVisibilityQuery()
+	if len(query) == 0 {
+		return query
+	}
+
+	switch adminReq.Operation.(type) {
+	case *adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation:
+		// RefreshWorkflowTasks only for running workflows.
+		// Non-running workflows will be a no-op at the history level but still
+		// incur gRPC and DB costs, so filter them out.
+		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningQueryFilter)
+	default:
+		return query
+	}
+}
+
 func (a *activities) getOperationConcurrency(concurrency int) int {
 	if concurrency <= 0 {
 		return a.concurrency(a.namespace.String())
@@ -361,7 +393,7 @@ func (a *activities) getOperationConcurrency(concurrency int) int {
 }
 
 // nolint:revive,cognitive-complexity
-func startTaskProcessorProtobuf(
+func (a *activities) startTaskProcessor(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	namespace string,
@@ -384,6 +416,13 @@ func startTaskProcessorProtobuf(
 			var err error
 
 			if task.execution == nil {
+				continue
+			}
+
+			// Handle admin batch operations
+			if batchOperation.AdminRequest != nil {
+				err = a.processAdminTask(ctx, batchOperation, task, limiter)
+				a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
 				continue
 			}
 
@@ -551,22 +590,57 @@ func startTaskProcessorProtobuf(
 			default:
 				err = errors.New(fmt.Sprintf("unknown batch type: %v", batchOperation.BatchType))
 			}
-			if err != nil {
-				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
-				logger.Error("Failed to process batch operation task", tag.Error(err))
-				nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
-				if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
-					respCh <- taskResponse{err: err, page: task.page}
-				} else {
-					// put back to the channel if less than attemptsOnError
-					task.attempts++
-					taskCh <- task
-				}
-			} else {
-				metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
-				respCh <- taskResponse{err: nil, page: task.page}
-			}
+			a.handleTaskResult(batchOperation, task, err, taskCh, respCh, metricsHandler, logger)
 		}
+	}
+}
+
+func (a *activities) handleTaskResult(
+	batchOperation *batchspb.BatchOperationInput,
+	task task,
+	err error,
+	taskCh chan task,
+	respCh chan taskResponse,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) {
+	if err != nil {
+		metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
+		logger.Error("Failed to process batch operation task", tag.Error(err))
+		nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+		if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
+			respCh <- taskResponse{err: err, page: task.page}
+		} else {
+			// put back to the channel if less than attemptsOnError
+			task.attempts++
+			taskCh <- task
+		}
+	} else {
+		metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
+		respCh <- taskResponse{err: nil, page: task.page}
+	}
+}
+
+func (a *activities) processAdminTask(
+	ctx context.Context,
+	batchOperation *batchspb.BatchOperationInput,
+	task task,
+	limiter *rate.Limiter,
+) error {
+	adminReq := batchOperation.AdminRequest
+	switch op := adminReq.Operation.(type) {
+	case *adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation:
+		return processTask(ctx, limiter, task,
+			func(execution *commonpb.WorkflowExecution) error {
+				_, err := a.AdminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
+					NamespaceId: batchOperation.NamespaceId,
+					Execution:   execution,
+					Archetype:   op.RefreshWorkflowTasksOperation.GetArchetype(),
+				})
+				return err
+			})
+	default:
+		return fmt.Errorf("unknown admin batch type: %T", adminReq.Operation)
 	}
 }
 
