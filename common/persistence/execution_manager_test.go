@@ -62,9 +62,10 @@ func TestExecutionManager_DeletesTasksWhenEnabled(t *testing.T) {
 		},
 	)
 
+	serializer := serialization.NewSerializer()
 	em := p.NewExecutionManager(
 		store,
-		serialization.NewSerializer(),
+		serializer,
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
@@ -86,9 +87,10 @@ func TestExecutionManager_DoesNotDeleteTasksWhenDisabled(t *testing.T) {
 	store.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	// No CompleteHistoryTask expected
 
+	serializer := serialization.NewSerializer()
 	em := p.NewExecutionManager(
 		store,
-		serialization.NewSerializer(),
+		serializer,
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
@@ -121,9 +123,10 @@ func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
 		serviceerror.NewInternal("simulated deletion error"),
 	)
 
+	serializer := serialization.NewSerializer()
 	em := p.NewExecutionManager(
 		store,
-		serialization.NewSerializer(),
+		serializer,
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),

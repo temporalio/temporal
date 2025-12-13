@@ -2409,7 +2409,7 @@ func (s *NDCFunctionalTestSuite) setupRemoteFrontendClients() {
 func (s *NDCFunctionalTestSuite) sizeOfHistoryEvents(
 	events []*historypb.HistoryEvent,
 ) int64 {
-	blob, err := serialization.NewSerializer().SerializeEvents(events)
+	blob, err := s.serializer.SerializeEvents(events)
 	s.NoError(err)
 	return int64(len(blob.Data))
 }
