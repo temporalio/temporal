@@ -396,10 +396,6 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	var res deploymentspb.SetCurrentDeploymentResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, nil, err
@@ -498,10 +494,6 @@ func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	var res deploymentspb.SyncDeploymentStateResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err

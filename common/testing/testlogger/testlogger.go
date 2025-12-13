@@ -218,7 +218,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		state: &sharedTestLoggerState{
 			t:               t,
 			logExpectations: false,
-			level:           zapcore.FatalLevel,
+			level:           zapcore.DebugLevel,
 			logCaller:       true,
 			mode:            mode,
 		},

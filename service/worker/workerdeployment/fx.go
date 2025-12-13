@@ -44,6 +44,7 @@ type (
 		Logger                 log.Logger
 		ClientFactory          sdk.ClientFactory
 		MatchingClient         resource.MatchingClient
+		HistoryClient          resource.HistoryClient
 		WorkerDeploymentClient Client
 	}
 
@@ -135,6 +136,7 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		namespace:        ns,
 		deploymentClient: s.activityDeps.WorkerDeploymentClient,
 		matchingClient:   s.activityDeps.MatchingClient,
+		historyClient:    s.activityDeps.HistoryClient,
 	}
 	registry.RegisterActivity(activities)
 	return nil
