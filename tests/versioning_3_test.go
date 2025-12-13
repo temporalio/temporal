@@ -2956,9 +2956,9 @@ func (s *Versioning3Suite) forgetTaskQueueDeploymentVersion(
 	}
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
-			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     tv.TaskQueue().GetName(),
-			TaskQueueType: t,
+			NamespaceId:    s.NamespaceID().String(),
+			TaskQueue:      tv.TaskQueue().GetName(),
+			TaskQueueTypes: []enumspb.TaskQueueType{t},
 			Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
 				ForgetVersion: v,
 			},
@@ -3524,15 +3524,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			s.NoError(err)
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
-				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()
 				deploymentsData := perTypes[int32(pt.tp)].GetDeploymentData().GetDeploymentsData()
 				workerDeploymentData := deploymentsData[tv.DeploymentVersion().GetDeploymentName()]
 
-				for _, d := range deps {
-					if d.GetDeployment().Equal(tv.Deployment()) {
-						delete(remaining, pt)
-					}
-				}
 				if unversionedRamp {
 					if perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
 						delete(remaining, pt)
