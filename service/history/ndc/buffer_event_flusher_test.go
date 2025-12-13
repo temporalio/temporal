@@ -158,6 +158,7 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 		"",
 		int64(0),
 	).Return(&historypb.HistoryEvent{}, nil)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	s.mockMutableState.EXPECT().AddWorkflowTaskScheduledEvent(
 		false,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,

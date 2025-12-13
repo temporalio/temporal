@@ -218,6 +218,12 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 	if _, err = r.failWorkflowTask(); err != nil {
 		return err
 	}
+
+	// Don't schedule a new workflow task if the workflow is paused.
+	if r.mutableState.IsWorkflowExecutionStatusPaused() {
+		return nil
+	}
+
 	if _, err := r.mutableState.AddWorkflowTaskScheduledEvent(
 		false,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,

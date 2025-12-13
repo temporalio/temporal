@@ -465,6 +465,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
 	msCurrent.EXPECT().HasPendingWorkflowTask().Return(false)
+	msCurrent.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	msCurrent.EXPECT().AddWorkflowTaskScheduledEvent(
 		false,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
@@ -476,4 +477,54 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
 	s.Equal(1, len(appliedEvent))
+}
+
+// Reapplies a signal event to a paused workflow
+// Asserts that AddWorkflowTaskScheduledEvent() is NOT called
+
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_PausedWorkflow_NoWorkflowTaskScheduled() {
+	runID := uuid.NewString()
+	execution := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: uuid.NewString(),
+	}
+	event := &historypb.HistoryEvent{
+		EventId:   1,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+			Identity:   "test",
+			SignalName: "signal",
+			Input:      payloads.EncodeBytes([]byte{}),
+			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
+		}},
+	}
+	attr := event.GetWorkflowExecutionSignaledEventAttributes()
+
+	msCurrent := historyi.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
+	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(msCurrent)
+	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
+	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msCurrent.EXPECT().AddWorkflowExecutionSignaled(
+		attr.GetSignalName(),
+		attr.GetInput(),
+		attr.GetIdentity(),
+		attr.GetHeader(),
+		event.Links,
+	).Return(event, nil)
+	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
+	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(false)
+	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
+	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
+	msCurrent.EXPECT().HasPendingWorkflowTask().Return(false)
+	// Workflow is paused, so AddWorkflowTaskScheduledEvent should NOT be called.
+	msCurrent.EXPECT().IsWorkflowExecutionStatusPaused().Return(true)
+	events := []*historypb.HistoryEvent{
+		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		event,
+	}
+	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
+	s.NoError(err)
+	s.Len(appliedEvent, 1)
 }
