@@ -302,7 +302,8 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 
 	// Check for the presence of the version in the new DeploymentData format.
 	if deploymentData, ok := deployments.GetDeploymentsData()[v.GetDeploymentName()]; ok {
-		return deploymentData.GetVersions()[v.GetBuildId()] != nil
+		vd := deploymentData.GetVersions()[v.GetBuildId()]
+		return vd != nil && !vd.GetDeleted()
 	}
 
 	return false

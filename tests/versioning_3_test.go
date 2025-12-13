@@ -90,16 +90,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
-	t.Run("async_without_revision_number", func(t *testing.T) {
-		suite.Run(t, &Versioning3Suite{
-			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-			useV32:                    true,
-			useNewDeploymentData:      true,
-			useRevisionNumbers:        false,
-		})
-	})
-
-	t.Run("async_with_revision_number", func(t *testing.T) {
+	t.Run("async", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
 			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
 			useV32:                    true,
@@ -108,6 +99,14 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
+	t.Run("async_version_rev_no", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.VersionDataRevisionNumber,
+			useV32:                    true,
+			useRevisionNumbers:        true,
+			useNewDeploymentData:      true,
+		})
+	})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -2182,7 +2181,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
-		if behavior == vbUnpinned && s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		if behavior == vbUnpinned && s.deploymentWorkflowVersion >= workerdeployment.AsyncSetCurrentAndRamping {
 			// Unpinned CaN should inherit parent deployment version and behaviour
 			s.verifyWorkflowVersioning(tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
 		} else {
