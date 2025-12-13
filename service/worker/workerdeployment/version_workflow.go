@@ -384,11 +384,6 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 	workflow.Await(ctx, func() bool { return d.asyncPropagationsInProgress == 1 }) // delete itself is counted as one
 	d.cancelPropagations = false                                                   // need to unset this in case the version is revived
 
-	// Not counting the possible wait for previous propagations in this propagation latency.
-	startTime := workflow.Now(ctx)
-	defer func() {
-		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
-	}()
 	d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
 	d.asyncPropagationsInProgress--
 }
