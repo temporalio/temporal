@@ -608,8 +608,9 @@ func TestTransitionTerminated(t *testing.T) {
 
 	req := &activitypb.TerminateActivityExecutionRequest{
 		FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
-			Reason:   "Test Termination",
-			Identity: "terminator",
+			Reason:    "Test Termination",
+			Identity:  "terminator",
+			RequestId: "test-request-id",
 		},
 	}
 
@@ -627,6 +628,7 @@ func TestTransitionTerminated(t *testing.T) {
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
+	require.Equal(t, "test-request-id", activity.GetTerminateState().RequestId)
 
 	expectedFailure := &failurepb.Failure{
 		Message:     "Test Termination",

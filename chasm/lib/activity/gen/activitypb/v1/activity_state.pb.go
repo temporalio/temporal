@@ -180,10 +180,12 @@ type ActivityState struct {
 	ScheduleTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=schedule_time,json=scheduleTime,proto3" json:"schedule_time,omitempty"`
 	// Priority metadata.
 	Priority *v1.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
-	// Set if activity cancelation was requested.
-	CancelState   *ActivityCancelState `protobuf:"bytes,11,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Set if activity cancellation was requested.
+	CancelState *ActivityCancelState `protobuf:"bytes,11,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
+	// Set if activity termination was requested.
+	TerminateState *ActivityTerminateState `protobuf:"bytes,12,opt,name=terminate_state,json=terminateState,proto3" json:"terminate_state,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ActivityState) Reset() {
@@ -293,6 +295,13 @@ func (x *ActivityState) GetCancelState() *ActivityCancelState {
 	return nil
 }
 
+func (x *ActivityState) GetTerminateState() *ActivityTerminateState {
+	if x != nil {
+		return x.TerminateState
+	}
+	return nil
+}
+
 type ActivityCancelState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -361,6 +370,50 @@ func (x *ActivityCancelState) GetReason() string {
 	return ""
 }
 
+type ActivityTerminateState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActivityTerminateState) Reset() {
+	*x = ActivityTerminateState{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivityTerminateState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivityTerminateState) ProtoMessage() {}
+
+func (x *ActivityTerminateState) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivityTerminateState.ProtoReflect.Descriptor instead.
+func (*ActivityTerminateState) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ActivityTerminateState) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
 type ActivityAttemptState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The attempt this activity is currently on.
@@ -392,7 +445,7 @@ type ActivityAttemptState struct {
 
 func (x *ActivityAttemptState) Reset() {
 	*x = ActivityAttemptState{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -404,7 +457,7 @@ func (x *ActivityAttemptState) String() string {
 func (*ActivityAttemptState) ProtoMessage() {}
 
 func (x *ActivityAttemptState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -417,7 +470,7 @@ func (x *ActivityAttemptState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityAttemptState.ProtoReflect.Descriptor instead.
 func (*ActivityAttemptState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ActivityAttemptState) GetCount() int32 {
@@ -481,7 +534,7 @@ type ActivityHeartbeatState struct {
 
 func (x *ActivityHeartbeatState) Reset() {
 	*x = ActivityHeartbeatState{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +546,7 @@ func (x *ActivityHeartbeatState) String() string {
 func (*ActivityHeartbeatState) ProtoMessage() {}
 
 func (x *ActivityHeartbeatState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +559,7 @@ func (x *ActivityHeartbeatState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityHeartbeatState.ProtoReflect.Descriptor instead.
 func (*ActivityHeartbeatState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ActivityHeartbeatState) GetDetails() *v1.Payloads {
@@ -536,7 +589,7 @@ type ActivityRequestData struct {
 
 func (x *ActivityRequestData) Reset() {
 	*x = ActivityRequestData{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -548,7 +601,7 @@ func (x *ActivityRequestData) String() string {
 func (*ActivityRequestData) ProtoMessage() {}
 
 func (x *ActivityRequestData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -561,7 +614,7 @@ func (x *ActivityRequestData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityRequestData.ProtoReflect.Descriptor instead.
 func (*ActivityRequestData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{4}
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ActivityRequestData) GetInput() *v1.Payloads {
@@ -598,7 +651,7 @@ type ActivityOutcome struct {
 
 func (x *ActivityOutcome) Reset() {
 	*x = ActivityOutcome{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[5]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -610,7 +663,7 @@ func (x *ActivityOutcome) String() string {
 func (*ActivityOutcome) ProtoMessage() {}
 
 func (x *ActivityOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[5]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -623,7 +676,7 @@ func (x *ActivityOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityOutcome.ProtoReflect.Descriptor instead.
 func (*ActivityOutcome) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{5}
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ActivityOutcome) GetVariant() isActivityOutcome_Variant {
@@ -679,7 +732,7 @@ type ActivityAttemptState_LastFailureDetails struct {
 
 func (x *ActivityAttemptState_LastFailureDetails) Reset() {
 	*x = ActivityAttemptState_LastFailureDetails{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[6]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -691,7 +744,7 @@ func (x *ActivityAttemptState_LastFailureDetails) String() string {
 func (*ActivityAttemptState_LastFailureDetails) ProtoMessage() {}
 
 func (x *ActivityAttemptState_LastFailureDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[6]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -704,7 +757,7 @@ func (x *ActivityAttemptState_LastFailureDetails) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use ActivityAttemptState_LastFailureDetails.ProtoReflect.Descriptor instead.
 func (*ActivityAttemptState_LastFailureDetails) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{2, 0}
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{3, 0}
 }
 
 func (x *ActivityAttemptState_LastFailureDetails) GetTime() *timestamppb.Timestamp {
@@ -730,7 +783,7 @@ type ActivityOutcome_Successful struct {
 
 func (x *ActivityOutcome_Successful) Reset() {
 	*x = ActivityOutcome_Successful{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[7]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -742,7 +795,7 @@ func (x *ActivityOutcome_Successful) String() string {
 func (*ActivityOutcome_Successful) ProtoMessage() {}
 
 func (x *ActivityOutcome_Successful) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[7]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -755,7 +808,7 @@ func (x *ActivityOutcome_Successful) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityOutcome_Successful.ProtoReflect.Descriptor instead.
 func (*ActivityOutcome_Successful) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{5, 0}
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{6, 0}
 }
 
 func (x *ActivityOutcome_Successful) GetOutput() *v1.Payloads {
@@ -776,7 +829,7 @@ type ActivityOutcome_Failed struct {
 
 func (x *ActivityOutcome_Failed) Reset() {
 	*x = ActivityOutcome_Failed{}
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[8]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -788,7 +841,7 @@ func (x *ActivityOutcome_Failed) String() string {
 func (*ActivityOutcome_Failed) ProtoMessage() {}
 
 func (x *ActivityOutcome_Failed) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[8]
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -801,7 +854,7 @@ func (x *ActivityOutcome_Failed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityOutcome_Failed.ProtoReflect.Descriptor instead.
 func (*ActivityOutcome_Failed) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{5, 1}
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{6, 1}
 }
 
 func (x *ActivityOutcome_Failed) GetFailure() *v14.Failure {
@@ -815,7 +868,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xed\x06\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xdb\a\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
 	"\n" +
@@ -829,13 +882,17 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\rschedule_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\fscheduleTime\x12<\n" +
 	"\bpriority\x18\n" +
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12c\n" +
-	"\fcancel_state\x18\v \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\"\xa7\x01\n" +
+	"\fcancel_state\x18\v \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\x12l\n" +
+	"\x0fterminate_state\x18\f \x01(\v2C.temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateStateR\x0eterminateState\"\xa7\x01\n" +
 	"\x13ActivityCancelState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +
 	"\frequest_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12\x1a\n" +
 	"\bidentity\x18\x03 \x01(\tR\bidentity\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xa8\x05\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"7\n" +
+	"\x16ActivityTerminateState\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\xa8\x05\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
@@ -889,64 +946,66 @@ func file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDe
 }
 
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_goTypes = []any{
 	(ActivityExecutionStatus)(0),                    // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatus
 	(*ActivityState)(nil),                           // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityState
 	(*ActivityCancelState)(nil),                     // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
-	(*ActivityAttemptState)(nil),                    // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState
-	(*ActivityHeartbeatState)(nil),                  // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState
-	(*ActivityRequestData)(nil),                     // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData
-	(*ActivityOutcome)(nil),                         // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome
-	(*ActivityAttemptState_LastFailureDetails)(nil), // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
-	(*ActivityOutcome_Successful)(nil),              // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
-	(*ActivityOutcome_Failed)(nil),                  // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
-	(*v1.ActivityType)(nil),                         // 10: temporal.api.common.v1.ActivityType
-	(*v11.TaskQueue)(nil),                           // 11: temporal.api.taskqueue.v1.TaskQueue
-	(*durationpb.Duration)(nil),                     // 12: google.protobuf.Duration
-	(*v1.RetryPolicy)(nil),                          // 13: temporal.api.common.v1.RetryPolicy
-	(*timestamppb.Timestamp)(nil),                   // 14: google.protobuf.Timestamp
-	(*v1.Priority)(nil),                             // 15: temporal.api.common.v1.Priority
-	(*v12.WorkerDeploymentVersion)(nil),             // 16: temporal.api.deployment.v1.WorkerDeploymentVersion
-	(*v1.Payloads)(nil),                             // 17: temporal.api.common.v1.Payloads
-	(*v1.Header)(nil),                               // 18: temporal.api.common.v1.Header
-	(*v13.UserMetadata)(nil),                        // 19: temporal.api.sdk.v1.UserMetadata
-	(*v14.Failure)(nil),                             // 20: temporal.api.failure.v1.Failure
+	(*ActivityTerminateState)(nil),                  // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateState
+	(*ActivityAttemptState)(nil),                    // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState
+	(*ActivityHeartbeatState)(nil),                  // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState
+	(*ActivityRequestData)(nil),                     // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData
+	(*ActivityOutcome)(nil),                         // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome
+	(*ActivityAttemptState_LastFailureDetails)(nil), // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
+	(*ActivityOutcome_Successful)(nil),              // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
+	(*ActivityOutcome_Failed)(nil),                  // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
+	(*v1.ActivityType)(nil),                         // 11: temporal.api.common.v1.ActivityType
+	(*v11.TaskQueue)(nil),                           // 12: temporal.api.taskqueue.v1.TaskQueue
+	(*durationpb.Duration)(nil),                     // 13: google.protobuf.Duration
+	(*v1.RetryPolicy)(nil),                          // 14: temporal.api.common.v1.RetryPolicy
+	(*timestamppb.Timestamp)(nil),                   // 15: google.protobuf.Timestamp
+	(*v1.Priority)(nil),                             // 16: temporal.api.common.v1.Priority
+	(*v12.WorkerDeploymentVersion)(nil),             // 17: temporal.api.deployment.v1.WorkerDeploymentVersion
+	(*v1.Payloads)(nil),                             // 18: temporal.api.common.v1.Payloads
+	(*v1.Header)(nil),                               // 19: temporal.api.common.v1.Header
+	(*v13.UserMetadata)(nil),                        // 20: temporal.api.sdk.v1.UserMetadata
+	(*v14.Failure)(nil),                             // 21: temporal.api.failure.v1.Failure
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdxs = []int32{
-	10, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityState.activity_type:type_name -> temporal.api.common.v1.ActivityType
-	11, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityState.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	12, // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_to_close_timeout:type_name -> google.protobuf.Duration
-	12, // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	12, // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityState.start_to_close_timeout:type_name -> google.protobuf.Duration
-	12, // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityState.heartbeat_timeout:type_name -> google.protobuf.Duration
-	13, // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityState.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
+	11, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityState.activity_type:type_name -> temporal.api.common.v1.ActivityType
+	12, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityState.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	13, // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_to_close_timeout:type_name -> google.protobuf.Duration
+	13, // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	13, // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityState.start_to_close_timeout:type_name -> google.protobuf.Duration
+	13, // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityState.heartbeat_timeout:type_name -> google.protobuf.Duration
+	14, // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityState.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
 	0,  // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityState.status:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatus
-	14, // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_time:type_name -> google.protobuf.Timestamp
-	15, // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityState.priority:type_name -> temporal.api.common.v1.Priority
+	15, // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_time:type_name -> google.protobuf.Timestamp
+	16, // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityState.priority:type_name -> temporal.api.common.v1.Priority
 	2,  // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityState.cancel_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
-	14, // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp
-	12, // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval:type_name -> google.protobuf.Duration
-	14, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.started_time:type_name -> google.protobuf.Timestamp
-	14, // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.complete_time:type_name -> google.protobuf.Timestamp
-	7,  // 15: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_failure_details:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
-	16, // 16: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
-	17, // 17: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads
-	14, // 18: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.recorded_time:type_name -> google.protobuf.Timestamp
-	17, // 19: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.input:type_name -> temporal.api.common.v1.Payloads
-	18, // 20: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.header:type_name -> temporal.api.common.v1.Header
-	19, // 21: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
-	8,  // 22: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
-	9,  // 23: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
-	14, // 24: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.time:type_name -> google.protobuf.Timestamp
-	20, // 25: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.failure:type_name -> temporal.api.failure.v1.Failure
-	17, // 26: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
-	20, // 27: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
-	28, // [28:28] is the sub-list for method output_type
-	28, // [28:28] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	3,  // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityState.terminate_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateState
+	15, // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp
+	13, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval:type_name -> google.protobuf.Duration
+	15, // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.started_time:type_name -> google.protobuf.Timestamp
+	15, // 15: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.complete_time:type_name -> google.protobuf.Timestamp
+	8,  // 16: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_failure_details:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
+	17, // 17: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	18, // 18: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads
+	15, // 19: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.recorded_time:type_name -> google.protobuf.Timestamp
+	18, // 20: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.input:type_name -> temporal.api.common.v1.Payloads
+	19, // 21: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.header:type_name -> temporal.api.common.v1.Header
+	20, // 22: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
+	9,  // 23: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
+	10, // 24: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
+	15, // 25: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.time:type_name -> google.protobuf.Timestamp
+	21, // 26: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.failure:type_name -> temporal.api.failure.v1.Failure
+	18, // 27: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
+	21, // 28: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init() }
@@ -954,7 +1013,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init(
 	if File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto != nil {
 		return
 	}
-	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[5].OneofWrappers = []any{
+	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes[6].OneofWrappers = []any{
 		(*ActivityOutcome_Successful_)(nil),
 		(*ActivityOutcome_Failed_)(nil),
 	}
@@ -964,7 +1023,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init(
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
