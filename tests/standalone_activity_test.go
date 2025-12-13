@@ -1981,6 +1981,75 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
 		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
 	})
+
+	t.Run("RecordHeartbeatByIDStaysAlive", func(t *testing.T) {
+		// Start activity, worker accepts, worker heartbeats within timeout,
+		// more time passes, worker heartbeats again, worker completes.
+		// Verify: activity status is COMPLETED.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			HeartbeatTimeout:    durationpb.New(1 * time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1, // No retries - timeout would be terminal
+			},
+		})
+		require.NoError(t, err)
+
+		// Worker accepts task
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollTaskResp.TaskToken)
+
+		// Heartbeat before timeout
+		time.Sleep(600 * time.Millisecond) //nolint:forbidigo
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Details:    heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Wait again, then heartbeat again
+		time.Sleep(600 * time.Millisecond) //nolint:forbidigo
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Details:    heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Complete the activity
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Result:    defaultResult,
+		})
+		require.NoError(t, err)
+
+		// Verify activity completed successfully (didn't timeout)
+		pollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, pollResp.GetInfo().GetStatus(),
+			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
+		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
+	})
 }
 
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
