@@ -570,10 +570,6 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 		return nil, err
 	}
 
-	if !wh.config.EnableExecuteMultiOperation(request.Namespace) {
-		return nil, errMultiOperationAPINotAllowed
-	}
-
 	// as a temporary limitation, the only allowed list of operations is exactly [Start, Update]
 	if len(request.Operations) != 2 {
 		return nil, errMultiOpNotStartAndUpdate
