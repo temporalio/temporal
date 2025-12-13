@@ -1,6 +1,7 @@
 package workerdeployment
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,13 +10,26 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
+	update2 "go.temporal.io/server/service/history/workflow/update"
 )
 
 const (
@@ -63,13 +77,13 @@ const (
 	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 	errLongHistory                = "errLongHistory"                    // update is not accepted until CaN happens. client should retry
+	errVersionIsDraining          = "errVersionIsDraining"
+	errVersionHasPollers          = "errVersionHasPollersSuffix"
 
 	errFailedPrecondition = "FailedPrecondition"
 
-	errVersionIsDrainingSuffix   = "cannot be deleted since it is draining"
-	ErrVersionIsDraining         = "version '%s' " + errVersionIsDrainingSuffix
-	errVersionHasPollersSuffix   = "cannot be deleted since it has active pollers"
-	ErrVersionHasPollers         = "version '%s' " + errVersionHasPollersSuffix
+	ErrVersionIsDraining         = "version '%s' cannot be deleted since it is draining"
+	ErrVersionHasPollers         = "version '%s' cannot be deleted since it has active pollers"
 	ErrVersionIsCurrentOrRamping = "version '%s' cannot be deleted since it is current or ramping"
 
 	ErrRampingVersionDoesNotHaveAllTaskQueues = "proposed ramping version '%s' is missing active task queues from the current version; these would become unversioned if it is set as the ramping version"
@@ -164,4 +178,244 @@ func isFailedPreconditionOrNotFound(err error) bool {
 	var failedPreconditionError *serviceerror.FailedPrecondition
 	var notFound *serviceerror.NotFound
 	return errors.As(err, &failedPreconditionError) || errors.As(err, &notFound)
+}
+
+// update updates an already existing deployment version/deployment workflow.
+func updateWorkflow(
+	ctx context.Context,
+	historyClient historyservice.HistoryServiceClient,
+	namespaceEntry *namespace.Namespace,
+	workflowID string,
+	updateRequest *updatepb.Request,
+) (*updatepb.Outcome, error) {
+	updateReq := &historyservice.UpdateWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace: namespaceEntry.Name().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+			Request:    updateRequest,
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+		},
+	}
+
+	var outcome *updatepb.Outcome
+	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		// historyClient retries internally on retryable rpc errors, we just have to retry on
+		// successful but un-completed responses.
+		res, err := historyClient.UpdateWorkflowExecution(ctx, updateReq)
+		if err != nil {
+			return err
+		}
+
+		if err := convertUpdateFailure(res.GetResponse()); err != nil {
+			return err
+		}
+
+		outcome = res.GetResponse().GetOutcome()
+		return nil
+	}, retryPolicy, isRetryableUpdateError)
+
+	return outcome, err
+}
+
+// extractApplicationErrorOrInternal extract application error from update failure preserving error type and retriability.
+// If the failure is no-nil but not an application error, it returns an internal error.
+func extractApplicationErrorOrInternal(failure *failurepb.Failure) error {
+	if failure != nil {
+		if af := failure.GetApplicationFailureInfo(); af != nil {
+			if af.GetNonRetryable() {
+				return temporal.NewNonRetryableApplicationError(failure.GetMessage(), af.GetType(), nil)
+			}
+			return temporal.NewApplicationError(failure.GetMessage(), af.GetType(), nil)
+		}
+		return serviceerror.NewInternal(failure.Message)
+	}
+	return nil
+}
+
+func updateWorkflowWithStart(
+	ctx context.Context,
+	historyClient historyservice.HistoryServiceClient,
+	namespaceEntry *namespace.Namespace,
+	workflowType string,
+	workflowID string,
+	memo *commonpb.Memo,
+	input *commonpb.Payloads,
+	updateRequest *updatepb.Request,
+	identity string,
+	requestID string,
+) (*updatepb.Outcome, error) {
+	// Start workflow execution, if it hasn't already
+	startReq := makeStartRequest(requestID, workflowID, identity, workflowType, namespaceEntry, memo, input)
+
+	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace: namespaceEntry.Name().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+		},
+		Request:    updateRequest,
+		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+	}
+
+	// This is an atomic operation; if one operation fails, both will.
+	multiOpReq := &historyservice.ExecuteMultiOperationRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		WorkflowId:  workflowID,
+		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
+			{
+				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
+						NamespaceId:  namespaceEntry.ID().String(),
+						StartRequest: startReq,
+					},
+				},
+			},
+			{
+				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
+						NamespaceId: namespaceEntry.ID().String(),
+						Request:     updateReq,
+					},
+				},
+			},
+		},
+	}
+
+	var outcome *updatepb.Outcome
+
+	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		// historyClient retries internally on retryable rpc errors, we just have to retry on
+		// successful but un-completed responses.
+		res, err := historyClient.ExecuteMultiOperation(ctx, multiOpReq)
+		if err != nil {
+			return err
+		}
+
+		// we should get exactly one of each of these
+		var startRes *historyservice.StartWorkflowExecutionResponse
+		var updateRes *workflowservice.UpdateWorkflowExecutionResponse
+		for _, response := range res.Responses {
+			if sr := response.GetStartWorkflow(); sr != nil {
+				startRes = sr
+			} else if ur := response.GetUpdateWorkflow().GetResponse(); ur != nil {
+				updateRes = ur
+			}
+		}
+		if startRes == nil {
+			return serviceerror.NewInternal("failed to start deployment workflow")
+		}
+
+		if err := convertUpdateFailure(updateRes); err != nil {
+			return err
+		}
+
+		outcome = updateRes.GetOutcome()
+		return nil
+	}, retryPolicy, isRetryableUpdateError)
+
+	return outcome, err
+}
+
+func convertUpdateFailure(updateRes *workflowservice.UpdateWorkflowExecutionResponse) error {
+	if updateRes == nil {
+		return serviceerror.NewInternal("failed to update deployment workflow")
+	}
+
+	if updateRes.Stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+		// update not completed, try again
+		return errUpdateInProgress
+	}
+
+	if failure := updateRes.GetOutcome().GetFailure(); failure != nil {
+		if failure.GetApplicationFailureInfo().GetType() == errLongHistory {
+			// Retriable
+			return errWorkflowHistoryTooLong
+		} else if failure.GetApplicationFailureInfo().GetType() == errVersionDeleted {
+			// Non-retriable
+			return serviceerror.NewNotFoundf("Worker Deployment Version not found")
+		} else if failure.GetApplicationFailureInfo().GetType() == errDeploymentDeleted {
+			// Non-retriable
+			return serviceerror.NewNotFoundf("Worker Deployment not found")
+		} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
+			return serviceerror.NewFailedPrecondition(failure.GetMessage())
+		}
+
+		// we let caller handle other update failures
+	} else if updateRes.GetOutcome().GetSuccess() == nil {
+		return serviceerror.NewInternal("outcome missing success and failure")
+	}
+	return nil
+}
+
+func isRetryableQueryError(err error) bool {
+	var internalErr *serviceerror.Internal
+	return api.IsRetryableError(err) && !errors.As(err, &internalErr)
+}
+
+func isRetryableUpdateError(err error) bool {
+	if errors.Is(err, errUpdateInProgress) || errors.Is(err, errWorkflowHistoryTooLong) ||
+		err.Error() == consts.ErrWorkflowClosing.Error() || err.Error() == update2.AbortedByServerErr.Error() {
+		return true
+	}
+
+	var errResourceExhausted *serviceerror.ResourceExhausted
+	if errors.As(err, &errResourceExhausted) &&
+		(errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT ||
+			errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW) {
+		// We're hitting the max concurrent update limit for the wf. Retrying will eventually succeed.
+		return true
+	}
+
+	var errWfNotReady *serviceerror.WorkflowNotReady
+	if errors.As(err, &errWfNotReady) {
+		// Update edge cases, can retry.
+		return true
+	}
+
+	// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
+	// The ErrWorkflowClosing and ResourceExhausted could be nested.
+	var errMultiOps *serviceerror.MultiOperationExecution
+	if errors.As(err, &errMultiOps) {
+		for _, e := range errMultiOps.OperationErrors() {
+			if errors.As(e, &errResourceExhausted) &&
+				(errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT ||
+					errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW) {
+				// We're hitting the max concurrent update limit for the wf. Retrying will eventually succeed.
+				return true
+			}
+			if e.Error() == consts.ErrWorkflowClosing.Error() || e.Error() == update2.AbortedByServerErr.Error() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func makeStartRequest(
+	requestID, workflowID, identity, workflowType string,
+	namespaceEntry *namespace.Namespace,
+	memo *commonpb.Memo,
+	input *commonpb.Payloads,
+) *workflowservice.StartWorkflowExecutionRequest {
+	return &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                requestID,
+		Namespace:                namespaceEntry.Name().String(),
+		WorkflowId:               workflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    input,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		SearchAttributes:         buildSearchAttributes(),
+		Memo:                     memo,
+		Identity:                 identity,
+	}
+}
+
+func buildSearchAttributes() *commonpb.SearchAttributes {
+	sa := &commonpb.SearchAttributes{}
+	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
+	return sa
 }

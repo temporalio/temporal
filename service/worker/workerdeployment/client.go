@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -29,18 +28,12 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -156,17 +149,6 @@ type Client interface {
 		requestID string,
 	) (*deploymentspb.SyncVersionStateResponse, error)
 
-	// Used internally by the Worker Deployment workflow in its DeleteVersion Activity
-	DeleteVersionFromWorkerDeployment(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		deploymentName, version string,
-		identity string,
-		requestID string,
-		skipDrainage bool,
-		asyncPropagation bool,
-	) error
-
 	// Used internally by the Drainage workflow (child of Worker Deployment Version workflow)
 	// in its GetVersionDrainageStatus Activity
 	GetVersionDrainageStatus(
@@ -240,8 +222,9 @@ func (d *ClientImpl) SetManager(
 		return nil, err
 	}
 
-	outcome, err := d.update(
+	outcome, err := updateWorkflow(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		GenerateDeploymentWorkflowID(request.GetDeploymentName()),
 		&updatepb.Request{
@@ -272,10 +255,6 @@ func (d *ClientImpl) SetManager(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
@@ -478,7 +457,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 	}
 
 	workflowID := GenerateVersionWorkflowID(versionObj.GetDeploymentName(), versionObj.GetBuildId())
-	outcome, err := d.update(ctx, namespaceEntry, workflowID, &updatepb.Request{
+	outcome, err := updateWorkflow(ctx, d.historyClient, namespaceEntry, workflowID, &updatepb.Request{
 		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	})
@@ -488,10 +467,6 @@ func (d *ClientImpl) UpdateVersionMetadata(
 
 	if failure := outcome.GetFailure(); failure != nil {
 		return nil, serviceerror.NewInternal(failure.Message)
-	}
-	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
 	var res deploymentspb.UpdateVersionMetadataResponse
@@ -711,8 +686,9 @@ func (d *ClientImpl) SetCurrentVersion(
 		}
 	} else {
 		// we *don't* want to start the Worker Deployment workflow; it should be started by a poller
-		outcome, err = d.update(
+		outcome, err = updateWorkflow(
 			ctx,
+			d.historyClient,
 			namespaceEntry,
 			GenerateDeploymentWorkflowID(deploymentName),
 			&updatepb.Request{
@@ -745,10 +721,6 @@ func (d *ClientImpl) SetCurrentVersion(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
@@ -825,8 +797,9 @@ func (d *ClientImpl) SetRampingVersion(
 			return nil, err
 		}
 	} else {
-		outcome, err = d.update(
+		outcome, err = updateWorkflow(
 			ctx,
+			d.historyClient,
 			namespaceEntry,
 			workflowID,
 			&updatepb.Request{
@@ -862,10 +835,6 @@ func (d *ClientImpl) SetRampingVersion(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
@@ -913,8 +882,9 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
-	outcome, err := d.update(
+	outcome, err := updateWorkflow(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
@@ -935,11 +905,6 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 			return serviceerror.NewFailedPrecondition(failure.GetCause().GetMessage())
 		}
 		return serviceerror.NewInternal(failure.Message)
-	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return serviceerror.NewInternal("outcome missing success and failure")
 	}
 	return nil
 }
@@ -973,8 +938,9 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	}
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
-	outcome, err := d.update(
+	outcome, err := updateWorkflow(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
@@ -993,12 +959,6 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	if failure := outcome.GetFailure(); failure != nil {
 		return serviceerror.NewInternal(failure.Message)
 	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	return nil
 }
 
@@ -1023,7 +983,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 		return err
 	}
 
-	startReq := d.makeStartRequest(requestID, workflowID, identity, WorkerDeploymentWorkflowType, namespaceEntry, nil, input)
+	startReq := makeStartRequest(requestID, workflowID, identity, WorkerDeploymentWorkflowType, namespaceEntry, nil, input)
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:  namespaceEntry.ID().String(),
@@ -1058,7 +1018,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	if err != nil {
 		return err
 	}
-	startReq := d.makeStartRequest(requestID, workflowID, identity, WorkerDeploymentVersionWorkflowType, namespaceEntry, nil, input)
+	startReq := makeStartRequest(requestID, workflowID, identity, WorkerDeploymentVersionWorkflowType, namespaceEntry, nil, input)
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:  namespaceEntry.ID().String(),
@@ -1093,8 +1053,9 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	workflowID := GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
 
 	// updates an already existing deployment version workflow.
-	outcome, err := d.update(
+	outcome, err := updateWorkflow(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
@@ -1119,111 +1080,11 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	}
 
 	success := outcome.GetSuccess()
-	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
-	}
-
 	var res deploymentspb.SyncVersionStateResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
-}
-
-func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	deploymentName, version string,
-	identity string,
-	requestID string,
-	skipDrainage bool,
-	asyncPropagation bool,
-) (retErr error) {
-	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity, skipDrainage)()
-
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
-	if err != nil {
-		return err
-	}
-
-	workflowID := GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
-		Identity:         identity,
-		Version:          version,
-		SkipDrainage:     skipDrainage,
-		AsyncPropagation: asyncPropagation,
-	})
-	if err != nil {
-		return err
-	}
-
-	outcome, err := d.update(
-		ctx,
-		namespaceEntry,
-		workflowID,
-		&updatepb.Request{
-			Input: &updatepb.Input{Name: DeleteVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	if failure := outcome.GetFailure(); failure != nil {
-		if strings.Contains(failure.Message, errVersionIsDrainingSuffix) {
-			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionIsDraining, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
-		} else if strings.Contains(failure.Message, errVersionHasPollersSuffix) {
-			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionHasPollers, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj)), errFailedPrecondition, nil) // non-retryable error to stop multiple activity attempts
-		}
-		return serviceerror.NewInternal(failure.Message)
-	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return serviceerror.NewInternal("outcome missing success and failure")
-	}
-	return nil
-}
-
-// update updates an already existing deployment version/deployment workflow.
-func (d *ClientImpl) update(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	workflowID string,
-	updateRequest *updatepb.Request,
-) (*updatepb.Outcome, error) {
-	updateReq := &historyservice.UpdateWorkflowExecutionRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		Request: &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace: namespaceEntry.Name().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-			Request:    updateRequest,
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-		},
-	}
-
-	var outcome *updatepb.Outcome
-	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
-		// historyClient retries internally on retryable rpc errors, we just have to retry on
-		// successful but un-completed responses.
-		res, err := d.historyClient.UpdateWorkflowExecution(ctx, updateReq)
-		if err != nil {
-			return err
-		}
-
-		if err := convertUpdateFailure(res.GetResponse()); err != nil {
-			return err
-		}
-
-		outcome = res.GetResponse().GetOutcome()
-		return nil
-	}, retryPolicy, isRetryableUpdateError)
-
-	return outcome, err
 }
 
 func (d *ClientImpl) updateWithStartWorkerDeployment(
@@ -1274,8 +1135,9 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		return nil, err
 	}
 
-	return d.updateWithStart(
+	return updateWorkflowWithStart(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		WorkerDeploymentWorkflowType,
 		workflowID,
@@ -1331,8 +1193,9 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		return nil, err
 	}
 
-	return d.updateWithStart(
+	return updateWorkflowWithStart(
 		ctx,
+		d.historyClient,
 		namespaceEntry,
 		WorkerDeploymentVersionWorkflowType,
 		workflowID,
@@ -1342,166 +1205,6 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		identity,
 		requestID,
 	)
-}
-
-func (d *ClientImpl) updateWithStart(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	workflowType string,
-	workflowID string,
-	memo *commonpb.Memo,
-	input *commonpb.Payloads,
-	updateRequest *updatepb.Request,
-	identity string,
-	requestID string,
-) (*updatepb.Outcome, error) {
-	// Start workflow execution, if it hasn't already
-	startReq := d.makeStartRequest(requestID, workflowID, identity, workflowType, namespaceEntry, memo, input)
-
-	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
-		Namespace: namespaceEntry.Name().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-		},
-		Request:    updateRequest,
-		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-	}
-
-	// This is an atomic operation; if one operation fails, both will.
-	multiOpReq := &historyservice.ExecuteMultiOperationRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		WorkflowId:  workflowID,
-		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
-						NamespaceId:  namespaceEntry.ID().String(),
-						StartRequest: startReq,
-					},
-				},
-			},
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
-						NamespaceId: namespaceEntry.ID().String(),
-						Request:     updateReq,
-					},
-				},
-			},
-		},
-	}
-
-	var outcome *updatepb.Outcome
-
-	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
-		// historyClient retries internally on retryable rpc errors, we just have to retry on
-		// successful but un-completed responses.
-		res, err := d.historyClient.ExecuteMultiOperation(ctx, multiOpReq)
-		if err != nil {
-			return err
-		}
-
-		// we should get exactly one of each of these
-		var startRes *historyservice.StartWorkflowExecutionResponse
-		var updateRes *workflowservice.UpdateWorkflowExecutionResponse
-		for _, response := range res.Responses {
-			if sr := response.GetStartWorkflow(); sr != nil {
-				startRes = sr
-			} else if ur := response.GetUpdateWorkflow().GetResponse(); ur != nil {
-				updateRes = ur
-			}
-		}
-		if startRes == nil {
-			return serviceerror.NewInternal("failed to start deployment workflow")
-		}
-
-		if err := convertUpdateFailure(updateRes); err != nil {
-			return err
-		}
-
-		outcome = updateRes.GetOutcome()
-		return nil
-	}, retryPolicy, isRetryableUpdateError)
-
-	return outcome, err
-}
-
-func convertUpdateFailure(updateRes *workflowservice.UpdateWorkflowExecutionResponse) error {
-	if updateRes == nil {
-		return serviceerror.NewInternal("failed to update deployment workflow")
-	}
-
-	if updateRes.Stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		// update not completed, try again
-		return errUpdateInProgress
-	}
-
-	if failure := updateRes.GetOutcome().GetFailure(); failure != nil {
-		if failure.GetApplicationFailureInfo().GetType() == errLongHistory {
-			// Retriable
-			return errWorkflowHistoryTooLong
-		} else if failure.GetApplicationFailureInfo().GetType() == errVersionDeleted {
-			// Non-retriable
-			return serviceerror.NewNotFoundf("Worker Deployment Version not found")
-		} else if failure.GetApplicationFailureInfo().GetType() == errDeploymentDeleted {
-			// Non-retriable
-			return serviceerror.NewNotFoundf("Worker Deployment not found")
-		} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
-			return serviceerror.NewFailedPrecondition(failure.GetMessage())
-		}
-
-		// we let caller handle other update failures
-	}
-	return nil
-}
-
-func isRetryableQueryError(err error) bool {
-	return api.IsRetryableError(err)
-}
-
-func isRetryableUpdateError(err error) bool {
-	if errors.Is(err, errUpdateInProgress) || errors.Is(err, errWorkflowHistoryTooLong) ||
-		err.Error() == consts.ErrWorkflowClosing.Error() || err.Error() == update.AbortedByServerErr.Error() {
-		return true
-	}
-
-	var errResourceExhausted *serviceerror.ResourceExhausted
-	if errors.As(err, &errResourceExhausted) &&
-		(errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT ||
-			errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW) {
-		// We're hitting the max concurrent update limit for the wf. Retrying will eventually succeed.
-		return true
-	}
-
-	var errWfNotReady *serviceerror.WorkflowNotReady
-	if errors.As(err, &errWfNotReady) {
-		// Update edge cases, can retry.
-		return true
-	}
-
-	// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
-	// The ErrWorkflowClosing and ResourceExhausted could be nested.
-	var errMultiOps *serviceerror.MultiOperationExecution
-	if errors.As(err, &errMultiOps) {
-		for _, e := range errMultiOps.OperationErrors() {
-			if errors.As(e, &errResourceExhausted) &&
-				(errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT ||
-					errResourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW) {
-				// We're hitting the max concurrent update limit for the wf. Retrying will eventually succeed.
-				return true
-			}
-			if e.Error() == consts.ErrWorkflowClosing.Error() || e.Error() == update.AbortedByServerErr.Error() {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
-	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
-	return sa
 }
 
 func (d *ClientImpl) convertAndRecordError(operation string, retErr *error, args ...any) func() {
@@ -1946,26 +1649,5 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 			Metadata:          nil,
 			SyncBatchSize:     d.getSyncBatchSize(),
 		},
-	}
-}
-
-func (d *ClientImpl) makeStartRequest(
-	requestID, workflowID, identity, workflowType string,
-	namespaceEntry *namespace.Namespace,
-	memo *commonpb.Memo,
-	input *commonpb.Payloads,
-) *workflowservice.StartWorkflowExecutionRequest {
-	return &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                requestID,
-		Namespace:                namespaceEntry.Name().String(),
-		WorkflowId:               workflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    input,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		SearchAttributes:         d.buildSearchAttributes(),
-		Memo:                     memo,
-		Identity:                 identity,
 	}
 }

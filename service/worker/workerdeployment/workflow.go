@@ -47,9 +47,9 @@ type (
 		stateChanged  bool
 		signalHandler *SignalHandler
 		forceCAN      bool
-		// Tracks the version of the deployment workflow when a particular run of a workflow starts base on the dynamic config of the
-		// worker who completes the first task of the workflow. `workflowVersion` remains the same until the workflow CaNs when it
-		// will get another chance to pick the latest manager version.
+		// workflowVersion is set at workflow start based on the dynamic config of the worker
+		// that completes the first task. It remains constant for the lifetime of the run and
+		// only updates when the workflow performs continue-as-new.
 		workflowVersion DeploymentWorkflowVersion
 	}
 )
@@ -434,6 +434,11 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 }
 
 func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
+	// TODO: there is a small race condition where the deployment is just deleted and got a register update before closing itself.
+	// In that case, we should ideally not reject the update, but revive the workflow so that the caller does not need to retry.
+	// In practice this should be fine because the polls will retry and Deployment workflows are short-lived.
+	// Same principle applies for Version workflows, but they can be slightly more long-lived of they are handling long propagations.
+	// Hence, the revive logic is implemented in Version workflow but not here yet.
 	if err := d.ensureNotDeleted(); err != nil {
 		return err
 	}
@@ -899,6 +904,12 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 		AsyncPropagation: d.hasMinVersion(AsyncSetCurrentAndRamping),
 	}).Get(ctx, &res)
 	if err != nil {
+		var activityError *temporal.ActivityError
+		var applicationError *temporal.ApplicationError
+		if errors.As(err, &activityError) && errors.As(activityError.Unwrap(), &applicationError) &&
+			(applicationError.Type() == errVersionHasPollers || applicationError.Type() == errVersionIsDraining) {
+			return serviceerror.NewFailedPrecondition(applicationError.Message())
+		}
 		return err
 	}
 	// update local state

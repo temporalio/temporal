@@ -40,12 +40,12 @@ type (
 
 func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
-	//t.Run("sync", func(t *testing.T) {
-	//	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
-	//})
-	//t.Run("async", func(t *testing.T) {
-	//	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
-	//})
+	t.Run("sync", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
+	})
+	t.Run("async", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	})
 	t.Run("version_rev_no", func(t *testing.T) {
 		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
 	})
@@ -73,7 +73,6 @@ func (s *WorkerDeploymentSuite) SetupSuite() {
 
 		dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Key(): 1000,
 		dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Key():  60 * time.Second,
-		//dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Key():      1000,
 	}))
 }
 
@@ -2005,7 +2004,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, numTaskQueues)
 	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, syncBatchSize)
-	s.InjectHook(testhooks.MatchingTaskQueueRegistrationBackoffDuration, time.Millisecond*500)
+	s.InjectHook(testhooks.MatchingDeploymentRegisterErrorBackoff, time.Millisecond*500)
 
 	// Need to increase max pending activities because it is set only to 10 for functional tests. it's 2000 by default.
 	s.OverrideDynamicConfig(dynamicconfig.NumPendingActivitiesLimitError, numOperations)
@@ -2029,9 +2028,13 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 		// Send new pollers regularly, this is needed because the registration might take more time than initial pollers
 		t := time.NewTicker(10 * time.Second)
 		go func() {
-			select {
-			case <-t.C:
-				sendPollers()
+			for {
+				select {
+				case <-t.C:
+					sendPollers()
+				case <-pollCtx.Done():
+					return
+				}
 			}
 		}()
 
@@ -2046,7 +2049,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 			})
 			a.NoError(err)
 			a.NotNil(resp.GetWorkerDeploymentInfo())
-			a.Equal(i+1, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+			a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), i+1)
 		}, 3*time.Minute, 500*time.Millisecond)
 
 		fmt.Printf(">>> Time taken version %d added: %v\n", i, time.Since(start))
@@ -2058,7 +2061,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 				DeploymentVersion: tv.WithBuildIDNumber(i).ExternalDeploymentVersion(),
 			})
 			a.NoError(err)
-			a.Equal(numTaskQueues, len(resp.GetVersionTaskQueues()))
+			a.Len(resp.GetVersionTaskQueues(), numTaskQueues)
 		}, 5*time.Minute, 1000*time.Millisecond)
 
 		t.Stop()
@@ -2099,7 +2102,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 			}
 			if common.IsResourceExhausted(err) {
 				fmt.Printf("ResourceExhausted error, retrying operation %d\n", i)
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond) //nolint:forbidigo // throttling requests
 				continue
 			}
 			s.NoError(err)
@@ -2137,8 +2140,8 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 			TaskQueue:     tqTV.TaskQueue().GetName(),
 		})
 		s.NoError(err)
-		s.Equal(1, len(tqUD.GetUserData().GetData().GetPerType()))
-		s.Equal(1, len(tqUD.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData().GetDeploymentsData()))
+		s.Len(tqUD.GetUserData().GetData().GetPerType(), 1)
+		s.Len(tqUD.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData().GetDeploymentsData(), 1)
 		s.ProtoEqual(latestRoutingConfig, tqUD.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData().GetDeploymentsData()[dn].GetRoutingConfig())
 	}
 }

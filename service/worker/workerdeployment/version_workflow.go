@@ -208,6 +208,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// We should not start the deployment workflow. If we cannot find the deployment workflow when signaling, it means a bug and we should fix it.
 	if !d.hasMinVersion(VersionDataRevisionNumber) {
 		// First ensure deployment workflow is running
+		//nolint:staticcheck // SA1019
 		if !d.VersionState.StartedDeploymentWorkflow {
 			activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 			err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
@@ -217,6 +218,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 			if err != nil {
 				return err
 			}
+			//nolint:staticcheck // SA1019
 			d.VersionState.StartedDeploymentWorkflow = true
 		}
 	}
@@ -347,6 +349,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	if !d.hasMinVersion(VersionDataRevisionNumber) {
 		// wait until deployment workflow started
+		//nolint:staticcheck // SA1019
 		err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
 		if err != nil {
 			d.logger.Error("Update canceled before worker deployment workflow started")
@@ -365,7 +368,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	if !args.SkipDrainage {
 		if d.GetVersionState().GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 			// activity won't retry on this error since version not eligible for deletion
-			return serviceerror.NewFailedPrecondition(ErrVersionIsDraining)
+			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionIsDraining, worker_versioning.WorkerDeploymentVersionToStringV32(d.VersionState.GetVersion())), errVersionIsDraining, nil)
 		}
 	}
 
@@ -373,7 +376,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	hasPollers, err := d.doesVersionHaveActivePollers(ctx)
 	if hasPollers {
 		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(ErrVersionHasPollers)
+		return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionHasPollers, worker_versioning.WorkerDeploymentVersionToStringV32(d.VersionState.GetVersion())), errVersionHasPollers, nil)
 	}
 	if err != nil {
 		// some other error allowing activity retries
@@ -481,9 +484,7 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 }
 
 func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInVersionArgs) error {
-	if err := d.ensureNotDeleted(); err != nil {
-		return err
-	}
+	// Should not ensure not deleted, instead the version would revive if deleted.
 
 	if _, ok := d.VersionState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
 		return temporal.NewApplicationError("task queue already exists in deployment version", errNoChangeType)
@@ -498,8 +499,11 @@ func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.Regis
 }
 
 func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) error {
-	if err := d.preUpdateChecks(ctx); err != nil {
-		return err
+	// Should not ensure not deleted, instead the version would revive if deleted.
+	if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+		// History is too large, do not accept new updates until wf CaNs.
+		// Since this needs workflow context we cannot do it in validators.
+		return temporal.NewApplicationError(errLongHistory, errLongHistory)
 	}
 
 	// use lock to enforce only one update at a time
