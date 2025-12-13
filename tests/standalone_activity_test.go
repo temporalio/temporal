@@ -758,6 +758,75 @@ func (s *standaloneActivityTestSuite) TestCompletedActivity_CannotTerminate() {
 	require.Error(t, err)
 }
 
+func (s *standaloneActivityTestSuite) TestActivityTerminated_DuplicateRequestIDSucceeds() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RequestId:  "test-request-id",
+		RunId:      runID,
+		Reason:     "Test Termination",
+		Identity:   "terminator",
+	})
+	require.NoError(t, err)
+
+	_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RequestId:  "test-request-id",
+		RunId:      runID,
+		Reason:     "Test Termination",
+		Identity:   "terminator",
+	})
+	require.NoError(t, err)
+}
+
+func (s *standaloneActivityTestSuite) TestActivityTerminated_DifferentRequestIDFails() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+	_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RequestId:  "test-request-id",
+		RunId:      runID,
+		Reason:     "Test Termination",
+		Identity:   "terminator",
+	})
+	require.NoError(t, err)
+
+	_, err = s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RequestId:  "test-request-id-2",
+		RunId:      runID,
+		Reason:     "Test Termination",
+		Identity:   "terminator",
+	})
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
+}
+
 func (s *standaloneActivityTestSuite) TestRetryWithoutScheduleToCloseTimeout() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
