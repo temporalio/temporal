@@ -855,12 +855,13 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	}
 
 	// handle last completion/failure and record resulting payload sizes
-	if res.GetResult() != nil {
-		s.State.LastCompletionResult = res.GetResult()
+	if res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 		s.State.ContinuedFailure = nil
-
-		if resultPayload, err := res.GetResult().Marshal(); err == nil {
-			s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(resultPayload)))
+		if res.GetResult() != nil {
+			s.State.LastCompletionResult = res.GetResult()
+			if resultPayload, err := res.GetResult().Marshal(); err == nil {
+				s.metrics.Counter(metrics.SchedulePayloadSize.Name()).Inc(int64(len(resultPayload)))
+			}
 		}
 	} else if res.GetFailure() != nil {
 		// leave LastCompletionResult from previous run
