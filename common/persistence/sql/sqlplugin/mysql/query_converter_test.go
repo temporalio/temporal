@@ -189,7 +189,7 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 			name:     "empty",
 			pageSize: 10,
 			stmt: fmt.Sprintf(
-				"SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
+				"SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
 				strings.Join(dbFields, ", "),
 			),
 			queryArgs: []any{10},
@@ -203,7 +203,7 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 			},
 			pageSize: 20,
 			stmt: fmt.Sprintf(
-				"SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) WHERE Keyword01 = 'foo' ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
+				"SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE Keyword01 = 'foo' ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
 				strings.Join(dbFields, ", "),
 			),
 			queryArgs: []any{20},
@@ -222,7 +222,7 @@ func TestQueryConverter_BuildSelectStmt(t *testing.T) {
 				RunID:     runID,
 			},
 			stmt: fmt.Sprintf(
-				"SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) WHERE Keyword01 = 'foo' AND ((coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) = ? AND start_time = ? AND run_id > ?) OR (coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) = ? AND start_time < ?) OR coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) < ?) ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
+				"SELECT %s FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE Keyword01 = 'foo' AND ((coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) = ? AND start_time = ? AND run_id > ?) OR (coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) = ? AND start_time < ?) OR coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) < ?) ORDER BY coalesce(close_time, cast('9999-12-31 23:59:59' as datetime)) DESC, start_time DESC, run_id LIMIT ?",
 				strings.Join(dbFields, ", "),
 			),
 			queryArgs: []any{
@@ -266,7 +266,7 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 	}{
 		{
 			name: "empty",
-			stmt: "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id)",
+			stmt: "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id)",
 		},
 		{
 			name: "non-empty",
@@ -275,7 +275,7 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 				Left:     keywordCol,
 				Right:    query.NewUnsafeSQLString("foo"),
 			},
-			stmt: "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) WHERE Keyword01 = 'foo'",
+			stmt: "SELECT COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE Keyword01 = 'foo'",
 		},
 		{
 			name: "group by",
@@ -287,7 +287,7 @@ func TestQueryConverter_BuildCountStmt(t *testing.T) {
 			groupBy: []*query.SAColumn{
 				query.NewSAColumn(sadefs.ExecutionStatus, sadefs.ExecutionStatus, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			},
-			stmt: "SELECT status, COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) WHERE Keyword01 = 'foo' GROUP BY status",
+			stmt: "SELECT status, COUNT(*) FROM executions_visibility ev LEFT JOIN custom_search_attributes USING (namespace_id, run_id) LEFT JOIN chasm_search_attributes USING (namespace_id, run_id) WHERE Keyword01 = 'foo' GROUP BY status",
 		},
 	}
 

@@ -16,14 +16,16 @@ const (
 )
 
 const (
-	TestScheduleID           = "TestScheduleID"
-	PayloadTotalCountSAAlias = "PayloadTotalCount"
-	PayloadTotalSizeSAAlias  = "PayloadTotalSize"
+	TestScheduleID                = "TestScheduleID"
+	PayloadTotalCountSAAlias      = "PayloadTotalCount"
+	PayloadTotalSizeSAAlias       = "PayloadTotalSize"
+	PayloadExecutionStatusSAAlias = "PayloadExecutionStatus"
 )
 
 var (
-	PayloadTotalCountSearchAttribute = chasm.NewSearchAttributeInt(PayloadTotalCountSAAlias, chasm.SearchAttributeFieldInt01)
-	PayloadTotalSizeSearchAttribute  = chasm.NewSearchAttributeInt(PayloadTotalSizeSAAlias, chasm.SearchAttributeFieldInt02)
+	PayloadTotalCountSearchAttribute      = chasm.NewSearchAttributeInt(PayloadTotalCountSAAlias, chasm.SearchAttributeFieldInt01)
+	PayloadTotalSizeSearchAttribute       = chasm.NewSearchAttributeInt(PayloadTotalSizeSAAlias, chasm.SearchAttributeFieldInt02)
+	PayloadExecutionStatusSearchAttribute = chasm.NewSearchAttributeKeyword(PayloadExecutionStatusSAAlias, chasm.SearchAttributeFieldLowCardinalityKeyword01)
 
 	_ chasm.VisibilitySearchAttributesProvider = (*PayloadStore)(nil)
 	_ chasm.VisibilityMemoProvider             = (*PayloadStore)(nil)
@@ -150,6 +152,7 @@ func (s *PayloadStore) SearchAttributes(
 	return []chasm.SearchAttributeKeyValue{
 		PayloadTotalCountSearchAttribute.Value(s.State.TotalCount),
 		PayloadTotalSizeSearchAttribute.Value(s.State.TotalSize),
+		PayloadExecutionStatusSearchAttribute.Value(s.LifecycleState(ctx).String()),
 		chasm.SearchAttributeTemporalScheduledByID.Value(TestScheduleID),
 	}
 }

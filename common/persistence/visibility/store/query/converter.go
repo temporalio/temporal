@@ -77,8 +77,12 @@ type (
 )
 
 var (
-	groupByFieldWhitelist = []string{
+	groupByFieldAllowlist = []string{
 		sadefs.ExecutionStatus,
+	}
+
+	groupByFieldPrefixAllowlist = []string{
+		"TemporalLowCardinalityKeyword",
 	}
 
 	supportedComparisonOperators = []string{
@@ -276,11 +280,10 @@ func (c *QueryConverter[ExprT]) convertSelectStmt(
 		if err != nil {
 			return nil, err
 		}
-		if !slices.Contains(groupByFieldWhitelist, colName.FieldName) {
+		if !IsGroupByFieldAllowed(colName.FieldName) {
 			return nil, NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for search attributes [%v]",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				NotSupportedErrMessage,
-				strings.Join(groupByFieldWhitelist, ", "),
 			)
 		}
 		res.GroupBy = append(res.GroupBy, colName)
@@ -707,6 +710,20 @@ func (c *QueryConverter[ExprT]) validateValueType(
 			saName,
 		)
 	}
+}
+
+func IsGroupByFieldAllowed(fieldName string) bool {
+	for _, allowedField := range groupByFieldAllowlist {
+		if fieldName == allowedField {
+			return true
+		}
+	}
+	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
+		if strings.HasPrefix(fieldName, allowedPrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseExecutionStatusValue(value any) (string, error) {

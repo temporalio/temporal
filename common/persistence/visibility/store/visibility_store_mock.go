@@ -68,10 +68,10 @@ func (mr *MockVisibilityStoreMockRecorder) Close() *gomock.Call {
 }
 
 // CountChasmExecutions mocks base method.
-func (m *MockVisibilityStore) CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*manager.CountChasmExecutionsResponse, error) {
+func (m *MockVisibilityStore) CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountChasmExecutions", ctx, request)
-	ret0, _ := ret[0].(*manager.CountChasmExecutionsResponse)
+	ret0, _ := ret[0].(*InternalCountExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -83,10 +83,10 @@ func (mr *MockVisibilityStoreMockRecorder) CountChasmExecutions(ctx, request any
 }
 
 // CountWorkflowExecutions mocks base method.
-func (m *MockVisibilityStore) CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*InternalCountExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountWorkflowExecutions", ctx, request)
-	ret0, _ := ret[0].(*manager.CountWorkflowExecutionsResponse)
+	ret0, _ := ret[0].(*InternalCountExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

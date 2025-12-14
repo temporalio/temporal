@@ -23,15 +23,15 @@ import (
 // TestReplays tests workflow logic backwards compatibility from previous versions.
 func TestReplays(t *testing.T) {
 	// For each workflow implementation version we run all the replay tests for snapshots created by that version or older versions
-	for wv := workerdeployment.InitialVersion; wv <= workerdeployment.AsyncSetCurrentAndRamping; wv++ {
+	for wv := workerdeployment.InitialVersion; wv <= workerdeployment.VersionDataRevisionNumber; wv++ {
 		replayer := worker.NewWorkflowReplayer()
 
 		// Create version workflow wrapper to match production registration
 		versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
-			refreshIntervalGetter := func() any {
+			refreshIntervalGetter := func() time.Duration {
 				return 5 * time.Minute // default value for testing
 			}
-			visibilityGracePeriodGetter := func() any {
+			visibilityGracePeriodGetter := func() time.Duration {
 				return 3 * time.Minute // default value for testing
 			}
 			return workerdeployment.VersionWorkflow(ctx, nil, refreshIntervalGetter, visibilityGracePeriodGetter, args)
