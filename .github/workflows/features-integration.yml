@@ -17,7 +17,7 @@ jobs:
     permissions:
       actions: write
       contents: read
-    uses: chaptersix/docker-builds/.github/workflows/docker-build-only.yml@5c88dffd1836344bd1581a6a5944154e4cab852c
+    uses: temporalio/docker-builds/.github/workflows/docker-build-only.yml@5c88dffd1836344bd1581a6a5944154e4cab852c
     with:
       temporal-server-repo-path: ${{github.event.pull_request.head.repo.full_name}}
       temporal-server-repo-ref: ${{github.event.pull_request.head.ref}}
