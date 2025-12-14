@@ -305,7 +305,21 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 
 	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-	_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+	heartbeatDetails := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			payload.EncodeString("Heartbeat Details"),
+		},
+	}
+
+	heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Details:   heartbeatDetails,
+	})
+	require.NoError(t, err)
+	require.False(t, heartbeatResp.CancelRequested)
+
+	_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		ActivityId: s.tv.ActivityID(),
 		RunId:      runID,
@@ -315,7 +329,13 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 	})
 	require.NoError(t, err)
 
-	// TODO: we should get the cancel request from heart beat once we implement it
+	heartbeatResp, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Details:   heartbeatDetails,
+	})
+	require.NoError(t, err)
+	require.True(t, heartbeatResp.CancelRequested)
 
 	details := &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{
@@ -358,7 +378,7 @@ func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
 	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 	runID := startResp.RunId
 
-	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
 	_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
@@ -370,7 +390,14 @@ func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
 	})
 	require.NoError(t, err)
 
-	// TODO: we should get the cancel request from heart beat once we implement it
+	// TODO(dan): could use RecordActivityTaskHeartbeatById here
+
+	heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+	})
+	require.NoError(t, err)
+	require.True(t, heartbeatResp.CancelRequested)
 
 	details := &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{
