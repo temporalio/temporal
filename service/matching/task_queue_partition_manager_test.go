@@ -47,6 +47,7 @@ type PartitionManagerTestSuite struct {
 	userDataMgr    *mockUserDataManager
 	partitionMgr   *taskQueuePartitionManagerImpl
 	matchingClient *matchingservicemock.MockMatchingServiceClient
+	ns             *namespace.Namespace
 }
 
 // TODO(pri): cleanup; delete this
@@ -71,14 +72,14 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
+	s.ns = ns
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	if s.fairness {
 		useFairness(config)
 	} else if s.newMatcher {
 		useNewMatcher(config)
 	}
-
-	config.AutoEnableV2 = func(_, _ string, _ enumspb.TaskQueueType) bool { return true }
+	config.AutoEnableV2 = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 
 	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	engine := createTestMatchingEngine(logger, s.controller, config, s.matchingClient, registry)
@@ -504,9 +505,10 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 }
 
 func (s *PartitionManagerTestSuite) TestAutoEnable() {
-	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	s.matchingClient.EXPECT().UpdateFairnessState(ctx, &matchingservice.UpdateFairnessStateRequest{
+		NamespaceId: s.ns.ID().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "my-test-tq",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,

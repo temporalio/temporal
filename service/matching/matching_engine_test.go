@@ -213,7 +213,6 @@ func (s *matchingEngineSuite) newConfig() *Config {
 	} else if s.newMatcher {
 		useNewMatcher(res)
 	}
-	res.AutoEnableV2 = func(_, _ string, _ enumspb.TaskQueueType) bool { return true }
 	return res
 }
 
@@ -770,15 +769,15 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false, false)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false)
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowTasks() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, false)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false)
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true, false)
+	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true)
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
@@ -791,9 +790,12 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 		TaskQueue:     tq,
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}
+	const N = 64
+	ch := make(chan struct{}, N)
 	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (resp *matchingservice.UpdateFairnessStateResponse, err error) {
 			resp, err = s.matchingEngine.UpdateFairnessState(ctx, req)
+			ch <- struct{}{}
 			return
 		},
 	).AnyTimes()
@@ -803,24 +805,50 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	mgr.GetUserDataManager().(*mockUserDataManager).onChange = cMgr.userDataChanged
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err := mgr.WaitUntilInitialized(ctx)
 	s.Require().NoError(err)
-	cancel()
+	defer cancel()
 
-	s.logger.Expect(testlogger.Error, "unexpected error dispatching task", tag.Error(errTaskQueueClosed))
-	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, false, true)
+	// It's possible that autoenable triggers an unload before the WorkflowTask can be enqueued
+	for range N {
+		_, _, err = s.matchingEngine.AddWorkflowTask(
+			context.Background(),
+			&matchingservice.AddWorkflowTaskRequest{
+				NamespaceId: s.ns.ID().String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflow1",
+					RunId:      uuid.NewString(),
+				},
+				TaskQueue: tq,
+				Priority: &commonpb.Priority{
+					PriorityKey: 3,
+				},
+			},
+		)
+		if err == errShutdown {
+			continue
+		}
+		break
+	}
+	s.Require().NoError(err)
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		s.Require().Fail("AddWorkflowTask did not trigger AutoEnable")
+	}
+
 	data, _, _ := mgr.GetUserDataManager().GetUserData()
 	s.Require().Equal(enumsspb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
 	// At this point the partition manager should be unloaded
 	select {
 	case <-cMgr.initCtx.Done():
-	case <-time.Tick(100 * time.Millisecond):
+	case <-time.After(time.Second):
 		s.Require().Fail("our partition manager was not unloaded")
 	}
 }
 
-func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool, addPriority bool) {
+func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
 	namespaceID := s.ns.ID().String()
@@ -864,16 +892,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 			if isForwarded {
 				addRequest.ForwardInfo = &taskqueuespb.TaskForwardInfo{SourcePartition: forwardedFrom}
 			}
-			if addPriority {
-				addRequest.Priority = &commonpb.Priority{
-					PriorityKey: 3,
-				}
-			}
 			_, _, err = s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-		}
-
-		if addPriority && (err == errShutdown || err == errTaskQueueClosed) {
-			continue
 		}
 
 		switch isForwarded {
@@ -882,10 +901,6 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 		case true:
 			s.Equal(errRemoteSyncMatchFailed, err)
 		}
-	}
-
-	if addPriority {
-		return
 	}
 
 	switch isForwarded {
@@ -2174,7 +2189,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		s.NoError(err)
 	}
 
-	tlMgr := s.getPhysicalTaskQueueManagerImpl(dbq)
+	tlMgr := s.getPhysicalTaskQueueManagerImplFromKey(dbq)
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
 
 	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
@@ -2308,7 +2323,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.NoError(err)
 		}
 
-		tlMgr := s.getPhysicalTaskQueueManagerImpl(dbq)
+		tlMgr := s.getPhysicalTaskQueueManagerImplFromKey(dbq)
 		s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
 		blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 
@@ -3041,10 +3056,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	defaultQ, err := tqm.(*taskQueuePartitionManagerImpl).defaultQueueFuture.Get(context.Background())
-	s.Require().NoError(err)
-	tlmImpl := defaultQ.(*physicalTaskQueueManagerImpl)
-	s.True(ok)
+	tlmImpl := s.getPhysicalTaskQueueManagerImpl(tqm)
 
 	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, prtn, tlmImpl.queue.version, 1)
 
@@ -3253,7 +3265,7 @@ func (s *matchingEngineSuite) pollWorkflowTasks(
 		// relax ApproximateBacklogCount for fairness impl
 		if !s.fairness {
 			// PartitionManager could have been unloaded; fetch the latest copy
-			pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+			pgMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 			s.LessOrEqual(int64(taskCount-tasksPolled), totalApproximateBacklogCount(pgMgr.backlogMgr))
 		}
 	}
@@ -3276,12 +3288,22 @@ func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
 	}
 }
 
-// getPhysicalTaskQueueManagerImpl extracts the physicalTaskQueueManagerImpl for the given PhysicalTaskQueueKey
-func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(ptq *PhysicalTaskQueueKey) *physicalTaskQueueManagerImpl {
-	defaultQ, err := s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueueFuture.Get(context.Background())
+func (s *matchingEngineSuite) getTaskQueuePartitionManagerImpl(ptq *PhysicalTaskQueueKey) *taskQueuePartitionManagerImpl {
+	return s.matchingEngine.partitions[ptq.Partition().Key()].(*taskQueuePartitionManagerImpl)
+}
+
+// getPhysicalTaskQueueManagerImpl extracts the physicalTaskQueueManagerImpl for the given taskQueuePartitionManager
+func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(mgr taskQueuePartitionManager) *physicalTaskQueueManagerImpl {
+	defaultQ, err := mgr.(*taskQueuePartitionManagerImpl).defaultQueueFuture.GetIfReady()
+	if err != nil {
+		panic("BAD")
+	}
 	s.Require().NoError(err)
-	pgMgr := defaultQ.(*physicalTaskQueueManagerImpl)
-	return pgMgr
+	return defaultQ.(*physicalTaskQueueManagerImpl)
+}
+
+func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImplFromKey(ptq *PhysicalTaskQueueKey) *physicalTaskQueueManagerImpl {
+	return s.getPhysicalTaskQueueManagerImpl(s.getTaskQueuePartitionManagerImpl(ptq))
 }
 
 func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCount int) {
@@ -3292,7 +3314,7 @@ func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCoun
 	s.Equal(taskCount, s.taskManager.getCreateTaskCount(ptq))
 	s.Equal(taskCount, s.taskManager.getTaskCount(ptq))
 
-	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	pgMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 	backlogCount := totalApproximateBacklogCount(pgMgr.backlogMgr)
 	if s.fairness {
 		// Relax this condition for fairBacklogManager: it can sometimes reset backlog count on
@@ -3336,7 +3358,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	partitionManager, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), false, loadCauseTask)
 	s.NoError(err)
-	pqMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	pqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 
 	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 
@@ -3370,7 +3392,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.pollWorkflowTasks(workflowType, (taskCount*numWorkers)-1, ptq, taskQueue)
 
 	// Update pgMgr to have the latest pgMgr
-	pqMgr = s.getPhysicalTaskQueueManagerImpl(ptq)
+	pqMgr = s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 
 	// Overwrite the maxReadLevel since it could have increased if the previous taskWriter was
 	// stopped (which would not result in resetting).
@@ -3437,7 +3459,7 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	s.pollWorkflowTasksConcurrently(&wg, workflowType, numWorkers, tasksToPoll, ptq, taskQueue)
 	wg.Wait()
 
-	ptqMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	ptqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 	dbTasks := int64(s.taskManager.getTaskCount(ptq))
 	backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
 	if s.fairness {
@@ -4815,6 +4837,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
+	config.AutoEnableV2 = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 	return config
 }
 
