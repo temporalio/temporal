@@ -162,7 +162,7 @@ func TestEvictByCapacity(t *testing.T) {
 	// Ensure we evicted down to maxItems
 	remaining := m.filterWorkers("ns", alwaysTrue)
 	assert.Len(t, remaining, int(maxItems), "should evict down to maxItems")
-	assert.LessOrEqual(t, m.total.Load(), maxItems, "total counter should not exceed maxItems")
+	assert.LessOrEqual(t, m.total.Load(), int64(maxItems), "total counter should not exceed maxItems")
 
 	// Verify metrics: eviction should succeed (no age protection issues)
 	snapshot := capture.Snapshot()
@@ -197,7 +197,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 
 	// Verify we're over capacity
 	assert.Equal(t, int64(3), m.total.Load(), "should have 3 entries initially")
-	assert.Greater(t, m.total.Load(), maxItems, "should be over capacity")
+	assert.Greater(t, m.total.Load(), int64(maxItems), "should be over capacity")
 
 	// Attempt eviction - should not happen because all entries are too new
 	m.evictByCapacity()
@@ -246,7 +246,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		// Should have evicted down to maxItems
 		workers := m.filterWorkers("ns", alwaysTrue)
 		assert.LessOrEqual(t, len(workers), int(maxItems), "should evict down to maxItems")
-		assert.LessOrEqual(t, m.total.Load(), maxItems, "total should be within limits")
+		assert.LessOrEqual(t, m.total.Load(), int64(maxItems), "total should be within limits")
 
 		// Verify metrics: eviction should succeed (entries were old enough)
 		snapshot := capture.Snapshot()
