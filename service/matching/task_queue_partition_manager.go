@@ -24,6 +24,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -727,6 +728,21 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 	pm.versionedQueuesLock.RUnlock()
 
+	var deploymentData *persistencespb.DeploymentData
+	var unversionedStatsByPriority map[int32]*taskqueuepb.TaskQueueStats
+	if reportStats {
+		// This is the default/unversioned queue. For current/ramping deployment versions, tasks are backlogged
+		// here, so we include this queue's stats if the version to describe is a current/ramping version.
+		unversionedStatsByPriority = pm.defaultQueue.GetStatsByPriority()
+
+		userData, _, err := pm.GetUserDataManager().GetUserData()
+		if err != nil {
+			return nil, err
+		}
+		perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+		deploymentData = perType.GetDeploymentData()
+	}
+
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
 	for v := range versions {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
@@ -740,6 +756,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		if v.Deployment() != nil {
 			buildID = v.Deployment().BuildId
 		}
+
 		physicalQueue, err := pm.getPhysicalQueue(ctx, buildID, v.Deployment())
 		if err != nil {
 			return nil, err
@@ -748,8 +765,36 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 		}
 		if reportStats {
-			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = physicalQueue.GetStatsByPriority()
-			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = aggregateStats(vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey)
+			physicalStatsByPriority := physicalQueue.GetStatsByPriority()
+			statsByPriority := physicalStatsByPriority
+
+			// TODO (Shivam): What if we are querying the unversioned queue itself?
+
+			// If this is the current or ramping deployment version for its worker-deployment, attribute backlog
+			// from the unversioned/default queue according to routing config.
+			deploymentVersion := worker_versioning.DeploymentVersionFromDeployment(v.Deployment())
+			if workerDeploymentData, ok := deploymentData.GetDeploymentsData()[deploymentVersion.GetDeploymentName()]; ok && workerDeploymentData != nil {
+				routingConfig := workerDeploymentData.GetRoutingConfig()
+				rampPct := routingConfig.GetRampingVersionPercentage()
+
+				curr := routingConfig.GetCurrentDeploymentVersion()
+				ramp := routingConfig.GetRampingDeploymentVersion()
+
+				isCurrent := curr == worker_versioning.ExternalWorkerDeploymentVersionFromVersion(deploymentVersion)
+				isRamping := ramp == worker_versioning.ExternalWorkerDeploymentVersionFromVersion(deploymentVersion)
+
+				if isCurrent || isRamping {
+					currentShare, rampShare := splitStatsByRampPercentage(unversionedStatsByPriority, rampPct)
+					if isCurrent {
+						statsByPriority = addStatsByPriority(physicalStatsByPriority, currentShare)
+					} else {
+						statsByPriority = addStatsByPriority(physicalStatsByPriority, rampShare)
+					}
+				}
+			}
+
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = statsByPriority
+			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = aggregateStats(statsByPriority)
 		}
 		if internalTaskQueueStatus {
 			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
@@ -771,6 +816,99 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: versionsInfo,
 	}, nil
+}
+
+func addStatsByPriority(
+	base map[int32]*taskqueuepb.TaskQueueStats,
+	add map[int32]*taskqueuepb.TaskQueueStats,
+) map[int32]*taskqueuepb.TaskQueueStats {
+	out := make(map[int32]*taskqueuepb.TaskQueueStats, max(len(base), len(add)))
+
+	for pri, s := range base {
+		if s == nil {
+			continue
+		}
+		// Copy to avoid mutating a map returned by a physical queue.
+		age := s.GetApproximateBacklogAge()
+		if age == nil {
+			age = durationpb.New(0)
+		}
+		out[pri] = &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: s.GetApproximateBacklogCount(),
+			ApproximateBacklogAge:   durationpb.New(age.AsDuration()),
+			TasksAddRate:            s.GetTasksAddRate(),
+			TasksDispatchRate:       s.GetTasksDispatchRate(),
+		}
+	}
+	for pri, s := range add {
+		if s == nil {
+			continue
+		}
+		if existing, ok := out[pri]; ok {
+			mergeStats(existing, s)
+			continue
+		}
+		age := s.GetApproximateBacklogAge()
+		if age == nil {
+			age = durationpb.New(0)
+		}
+		out[pri] = &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: s.GetApproximateBacklogCount(),
+			ApproximateBacklogAge:   durationpb.New(age.AsDuration()),
+			TasksAddRate:            s.GetTasksAddRate(),
+			TasksDispatchRate:       s.GetTasksDispatchRate(),
+		}
+	}
+	return out
+}
+
+// splitStatsByRampPercentage splits the unversioned queue's statistics into current and ramping shares based on the ramp percentage.
+func splitStatsByRampPercentage(
+	unversionedStatsByPriority map[int32]*taskqueuepb.TaskQueueStats,
+	rampPct float32,
+) (currentShare map[int32]*taskqueuepb.TaskQueueStats, rampShare map[int32]*taskqueuepb.TaskQueueStats) {
+	currentShare = make(map[int32]*taskqueuepb.TaskQueueStats, len(unversionedStatsByPriority))
+	rampShare = make(map[int32]*taskqueuepb.TaskQueueStats, len(unversionedStatsByPriority))
+
+	if len(unversionedStatsByPriority) == 0 {
+		return currentShare, rampShare
+	}
+
+	for pri, s := range unversionedStatsByPriority {
+		if s == nil {
+			continue
+		}
+		total := s.GetApproximateBacklogCount()
+		rampCount := int64(float64(total)*float64(rampPct)/100.0 + 0.5)
+		if rampCount < 0 {
+			rampCount = 0
+		} else if rampCount > total {
+			rampCount = total
+		}
+		currentCount := total - rampCount
+
+		rampAddRate := s.GetTasksAddRate() * rampPct / 100
+		rampDispatchRate := s.GetTasksDispatchRate() * rampPct / 100
+
+		age := s.GetApproximateBacklogAge()
+		if age == nil {
+			age = durationpb.New(0)
+		}
+
+		currentShare[pri] = &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: currentCount,
+			ApproximateBacklogAge:   durationpb.New(age.AsDuration()),
+			TasksAddRate:            s.GetTasksAddRate() - rampAddRate,
+			TasksDispatchRate:       s.GetTasksDispatchRate() - rampDispatchRate,
+		}
+		rampShare[pri] = &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: rampCount,
+			ApproximateBacklogAge:   durationpb.New(age.AsDuration()),
+			TasksAddRate:            rampAddRate,
+			TasksDispatchRate:       rampDispatchRate,
+		}
+	}
+	return currentShare, rampShare
 }
 
 func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
