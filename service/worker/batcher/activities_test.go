@@ -114,8 +114,6 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 			gotWorkflowTaskEventID, err := getLastWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
-
-			// Verify error is non-retryable when expected
 			if tt.wantErr {
 				var appErr *temporal.ApplicationError
 				s.Require().ErrorAs(err, &appErr, "error should be an ApplicationError")
@@ -174,8 +172,6 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 			gotWorkflowTaskEventID, err := getFirstWorkflowTaskEventID(ctx, namespaceStr, &workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
-
-			// Verify error is non-retryable when expected
 			if tt.wantErr {
 				var appErr *temporal.ApplicationError
 				s.Require().ErrorAs(err, &appErr, "error should be an ApplicationError")
