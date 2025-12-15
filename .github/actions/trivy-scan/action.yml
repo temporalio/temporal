@@ -45,7 +45,7 @@ runs:
         echo "artifact-name=trivy-${name}-results" >> $GITHUB_OUTPUT
 
     - name: Install Trivy
-      uses: aquasecurity/setup-trivy@v0.2.3
+      uses: aquasecurity/setup-trivy@v0.2.4
       with:
         version: v0.65.0
 

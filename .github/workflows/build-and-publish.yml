@@ -21,7 +21,7 @@ jobs:
       startsWith(github.ref, 'refs/heads/release/')
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
@@ -45,7 +45,7 @@ jobs:
     if: startsWith(github.ref, 'refs/heads/feature/')
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0

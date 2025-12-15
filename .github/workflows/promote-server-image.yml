@@ -27,7 +27,7 @@ jobs:
     steps:
       - name: Validate input tags
         id: validate
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           SOURCE_TAG: ${{ inputs.source-tag }}
           TARGET_TAGS: ${{ inputs.target-tags }}
@@ -84,7 +84,7 @@ jobs:
       high-count: ${{ steps.scan.outputs.high-count }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Pull source server image
         env:
@@ -116,7 +116,7 @@ jobs:
     steps:
       - name: Evaluate security scan results
         id: check
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           OVERRIDE: ${{ inputs.override-security-scan }}
           SCAN_RESULT: ${{ needs.scan-server-image.outputs.scan-result }}
@@ -168,7 +168,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Pull, tag, and push server image
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
           TARGET_TAGS: ${{ needs.validate-inputs.outputs.target-tags-safe }}

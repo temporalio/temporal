@@ -11,8 +11,6 @@ import (
 	"strings"
 )
 
-const cliVersion = "1.5.1"
-
 var validArchs = []string{"amd64", "arm64"}
 
 func main() {
@@ -305,10 +303,15 @@ func downloadCLI() error {
 }
 
 func downloadCLIForArch(arch string) error {
+	cliVersion := os.Getenv("CLI_VERSION")
+	if cliVersion == "" {
+		cliVersion = "1.5.1" // default fallback
+	}
+
 	tarballName := fmt.Sprintf("temporal_cli_%s_linux_%s.tar.gz", cliVersion, arch)
 	downloadURL := fmt.Sprintf("https://github.com/temporalio/cli/releases/download/v%s/%s", cliVersion, tarballName)
 
-	fmt.Printf("Downloading Temporal CLI for %s from %s\n", arch, downloadURL)
+	fmt.Printf("Downloading Temporal CLI v%s for %s from %s\n", cliVersion, arch, downloadURL)
 
 	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("temporal-cli-%s", arch))
 	tarballPath := filepath.Join(os.TempDir(), tarballName)

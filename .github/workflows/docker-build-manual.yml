@@ -1,0 +1,97 @@
+name: Manual Docker Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (branch, tag, or SHA) to build from"
+        required: true
+        default: "main"
+      cli-version:
+        description: "Temporal CLI version to include in images"
+        required: true
+        default: "1.5.1"
+      push:
+        description: "Push images to Docker Hub"
+        required: true
+        type: boolean
+        default: false
+      tag-latest:
+        description: "Tag images as latest"
+        required: true
+        type: boolean
+        default: false
+      platform:
+        description: "Platform to build (leave empty for multi-arch, or specify linux/amd64 or linux/arm64)"
+        required: false
+        default: ""
+      snapshot:
+        description: "Build in snapshot mode (for non-release builds)"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Determine single-arch parameter
+        id: arch-param
+        run: |
+          if [ -n "${{ inputs.platform }}" ]; then
+            # Extract arch from platform (e.g., linux/amd64 -> amd64)
+            ARCH=$(echo "${{ inputs.platform }}" | cut -d'/' -f2)
+            echo "single-arch=${ARCH}" >> $GITHUB_OUTPUT
+          else
+            echo "single-arch=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build binaries
+        uses: ./.github/actions/build-binaries
+        with:
+          snapshot: ${{ inputs.snapshot }}
+          single-arch: ${{ steps.arch-param.outputs.single-arch }}
+
+      - name: Build Docker images
+        if: ${{ !inputs.push }}
+        uses: ./.github/actions/build-docker-images
+        with:
+          push: false
+          tag-latest: ${{ inputs.tag-latest }}
+          platform: ${{ inputs.platform }}
+          cli-version: ${{ inputs.cli-version }}
+          load: ${{ inputs.platform == 'linux/amd64' || inputs.platform == '' }}
+
+      - name: Build and push Docker images
+        if: ${{ inputs.push }}
+        uses: ./.github/actions/build-docker-images
+        with:
+          push: true
+          tag-latest: ${{ inputs.tag-latest }}
+          platform: ${{ inputs.platform }}
+          cli-version: ${{ inputs.cli-version }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Output image tags
+        run: |
+          echo "### Docker Images Built" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Git Ref:** ${{ inputs.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "**CLI Version:** ${{ inputs.cli-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** ${{ inputs.platform || 'linux/amd64,linux/arm64' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Pushed to Docker Hub:** ${{ inputs.push }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tagged as latest:** ${{ inputs.tag-latest }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "- temporaliotest/server:sha-${GITHUB_SHA:0:7}" >> $GITHUB_STEP_SUMMARY
+          echo "- temporaliotest/admin-tools:sha-${GITHUB_SHA:0:7}" >> $GITHUB_STEP_SUMMARY
