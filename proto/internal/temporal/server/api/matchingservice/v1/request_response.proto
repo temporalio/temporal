@@ -347,18 +347,8 @@ message SyncDeploymentUserDataRequest {
     // (-- api-linter: core::0203::required=disabled
     //     aip.dev/not-precedent: Not following Google API format --)
     string deployment_name = 9;
-    // Note: this is the task queue type being modified, but this field should not be used for
-    // routing, the user data is owned by the WORKFLOW task queue.
-    // Deprecated. Use `task_queue_types`.
-    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    reserved 3, 4, 5;
     repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 8;
-
-    // This is the deployment being modified.
-    // Deprecated.
-    temporal.api.deployment.v1.Deployment deployment = 4;
-    // Data for this deployment.
-    // Deprecated.
-    temporal.server.api.deployment.v1.TaskQueueData data = 5;
 
     oneof operation {
         // The deployment version and its data that is being updated.
@@ -371,12 +361,11 @@ message SyncDeploymentUserDataRequest {
     // Ignored by the task queue if new revision number is not greater that what it has.
     temporal.api.deployment.v1.RoutingConfig update_routing_config = 10;
     // Optional map of build id to upsert version data.
-    // Ignored if `update_routing_config` is present and has an outdated revision number.
     // (-- api-linter: core::0203::required=disabled
     //     aip.dev/not-precedent: Not following Google API format --)
     map<string, temporal.server.api.deployment.v1.WorkerDeploymentVersionData> upsert_versions_data = 11;
     // List of build ids to forget from task queue.
-    // Ignored if `update_routing_config` is present and has an outdated revision number.
+    // Deprecated. Use upsert_versions_data with deleted=true.
     repeated string forget_versions = 12;
 }
 
@@ -384,7 +373,8 @@ message SyncDeploymentUserDataResponse {
     // New task queue user data version. Can be used to wait for propagation.
     int64 version = 1;
     // If the routing config changed after applying this operation. Compared base on revision number.
-    bool routing_config_changed = 2;
+    // Deprecated. using this is not totaly safe in case of retries.
+    bool routing_config_changed = 2 [deprecated = true];
 }
 
 message ApplyTaskQueueUserDataReplicationEventRequest {

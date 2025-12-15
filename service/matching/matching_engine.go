@@ -59,7 +59,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -115,7 +114,6 @@ type (
 		fairTaskManager               persistence.FairTaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
-		deploymentStoreClient         deployment.DeploymentStoreClient
 		workerDeploymentClient        workerdeployment.Client
 		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
@@ -198,7 +196,6 @@ func NewEngine(
 	fairTaskManager persistence.FairTaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient deployment.DeploymentStoreClient, // [wv-cleanup-pre-release]
 	workerDeploymentClient workerdeployment.Client,
 	config *Config,
 	logger log.Logger,
@@ -223,7 +220,6 @@ func NewEngine(
 		fairTaskManager:               fairTaskManager,
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
-		deploymentStoreClient:         deploymentStoreClient,
 		tokenSerializer:               tasktoken.NewSerializer(),
 		workerDeploymentClient:        workerDeploymentClient,
 		historySerializer:             serialization.NewSerializer(),
@@ -1902,7 +1898,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	if req.Deployment == nil && req.GetOperation() == nil && req.GetDeploymentName() == "" {
+	if req.GetOperation() == nil && req.GetDeploymentName() == "" {
 		return nil, errMissingDeploymentVersion
 	}
 
@@ -1930,10 +1926,6 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
 		}
 
-		if req.TaskQueueType != enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-			req.TaskQueueTypes = append(req.TaskQueueTypes, req.TaskQueueType)
-		}
-
 		changed := false
 		for _, t := range req.TaskQueueTypes {
 			if data.PerType[int32(t)] == nil {
@@ -1946,20 +1938,8 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			// set/append the new data
 			deploymentData := data.PerType[int32(t)].DeploymentData
 
-			if d := req.Deployment; d != nil {
-				// [cleanup-old-wv]
-				//nolint:staticcheck
-				if idx := worker_versioning.FindDeployment(deploymentData, req.Deployment); idx >= 0 {
-					deploymentData.Deployments[idx].Data = req.Data
-				} else {
-					deploymentData.Deployments = append(
-						deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
-							Deployment: req.Deployment,
-							Data:       req.Data,
-						})
-				}
-				changed = true
-			} else if vd := req.GetUpdateVersionData(); vd != nil {
+			//nolint:staticcheck // SA1019
+			if vd := req.GetUpdateVersionData(); vd != nil {
 				// [cleanup-public-preview-versioning]
 				if vd.GetVersion() == nil { // unversioned ramp
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
@@ -2039,8 +2019,28 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					tqWorkerDeploymentData.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionData)
 				}
 				for buildID, versionData := range req.GetUpsertVersionsData() {
+					existing := tqWorkerDeploymentData.Versions[buildID]
+					// Skip if existing version data has a higher revision number to avoid stale writes.
+					// Equal revision number is accepted for now because we may roll back the workflow version
+					// and stop incrementing the revision number.
+					if existing != nil && existing.GetRevisionNumber() > versionData.GetRevisionNumber() {
+						continue
+					}
 					tqWorkerDeploymentData.Versions[buildID] = versionData
 					changed = true
+					if versionData.GetDeleted() {
+						// Remove the version from the old deployment data format if present.
+						//nolint:staticcheck // SA1019 deprecated versions will clean up later
+						for idx, oldVersions := range deploymentData.GetVersions() {
+							if oldVersions.GetVersion().GetDeploymentName() == req.GetDeploymentName() &&
+								oldVersions.GetVersion().GetBuildId() == buildID {
+								//nolint:staticcheck // SA1019 deprecated versions will clean up later
+								deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+								changed = true
+								break
+							}
+						}
+					}
 				}
 
 				if removed := removeDeploymentVersions(
@@ -2085,6 +2085,10 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 						tqWorkerDeploymentData,
 					)
 				}
+
+				if cleanupOldDeletedVersions(tqWorkerDeploymentData) {
+					changed = true
+				}
 			}
 		}
 		if !changed {
@@ -2098,6 +2102,20 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		return nil, err
 	}
 	return &matchingservice.SyncDeploymentUserDataResponse{Version: version, RoutingConfigChanged: applyUpdatesToRoutingConfig}, nil
+}
+
+func cleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData) bool {
+	cleaned := false
+	for buildID, versionData := range deploymentData.Versions {
+		// TODO: improve this logic to remove even more old versions if we're reaching the limit of max versions per task queue.
+		// max versions per task queue is not implemented yet but we should have it because as of now a task queue can be polled from
+		// numerous deployment versions (accross different deployments) and that leads to a very large user data size.
+		if versionData.GetDeleted() && versionData.GetUpdateTime().AsTime().Before(time.Now().Add(-time.Hour*24*30)) {
+			delete(deploymentData.Versions, buildID)
+			cleaned = true
+		}
+	}
+	return cleaned
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(

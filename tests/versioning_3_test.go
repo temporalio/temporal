@@ -90,16 +90,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
-	t.Run("async_without_revision_number", func(t *testing.T) {
-		suite.Run(t, &Versioning3Suite{
-			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-			useV32:                    true,
-			useNewDeploymentData:      true,
-			useRevisionNumbers:        false,
-		})
-	})
-
-	t.Run("async_with_revision_number", func(t *testing.T) {
+	t.Run("async", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
 			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
 			useV32:                    true,
@@ -108,6 +99,14 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
+	t.Run("async_version_rev_no", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.VersionDataRevisionNumber,
+			useV32:                    true,
+			useRevisionNumbers:        true,
+			useNewDeploymentData:      true,
+		})
+	})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -2182,7 +2181,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
-		if behavior == vbUnpinned && s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		if behavior == vbUnpinned && s.deploymentWorkflowVersion >= workerdeployment.AsyncSetCurrentAndRamping {
 			// Unpinned CaN should inherit parent deployment version and behaviour
 			s.verifyWorkflowVersioning(tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
 		} else {
@@ -2957,9 +2956,9 @@ func (s *Versioning3Suite) forgetTaskQueueDeploymentVersion(
 	}
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
-			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     tv.TaskQueue().GetName(),
-			TaskQueueType: t,
+			NamespaceId:    s.NamespaceID().String(),
+			TaskQueue:      tv.TaskQueue().GetName(),
+			TaskQueueTypes: []enumspb.TaskQueueType{t},
 			Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
 				ForgetVersion: v,
 			},
@@ -3525,15 +3524,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			s.NoError(err)
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
-				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()
 				deploymentsData := perTypes[int32(pt.tp)].GetDeploymentData().GetDeploymentsData()
 				workerDeploymentData := deploymentsData[tv.DeploymentVersion().GetDeploymentName()]
 
-				for _, d := range deps {
-					if d.GetDeployment().Equal(tv.Deployment()) {
-						delete(remaining, pt)
-					}
-				}
 				if unversionedRamp {
 					if perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
 						delete(remaining, pt)
