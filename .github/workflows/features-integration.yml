@@ -114,7 +114,7 @@ jobs:
 
   feature-tests-dotnet:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/dotnet.yaml@bmain
+    uses: temporalio/features/.github/workflows/dotnet.yaml@main
     with:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
