@@ -305,18 +305,20 @@ func (v *CommandAttrValidator) ValidateCancelExternalWorkflowExecutionAttributes
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_ATTRIBUTES
-	if err := v.validateCrossNamespaceCall(
-		namespaceID,
-		targetNamespaceID,
-	); err != nil {
-		return failedCause, err
-	}
 
 	if attributes == nil {
 		return failedCause, serviceerror.NewInvalidArgument("RequestCancelExternalWorkflowExecutionCommandAttributes is not set on RequestCancelExternalWorkflowExecutionCommand.")
 	}
 
 	workflowID := attributes.GetWorkflowId()
+
+	if err := v.validateCrossNamespaceCall(
+		namespaceID,
+		targetNamespaceID,
+		workflowID,
+	); err != nil {
+		return failedCause, err
+	}
 	ns := attributes.GetNamespace()
 	runID := attributes.GetRunId()
 
@@ -346,12 +348,6 @@ func (v *CommandAttrValidator) ValidateSignalExternalWorkflowExecutionAttributes
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES
-	if err := v.validateCrossNamespaceCall(
-		namespaceID,
-		targetNamespaceID,
-	); err != nil {
-		return failedCause, err
-	}
 
 	if attributes == nil {
 		return failedCause, serviceerror.NewInvalidArgument("SignalExternalWorkflowExecutionCommandAttributes is not set on SignalExternalWorkflowExecutionCommand.")
@@ -361,6 +357,14 @@ func (v *CommandAttrValidator) ValidateSignalExternalWorkflowExecutionAttributes
 	}
 
 	workflowID := attributes.Execution.GetWorkflowId()
+
+	if err := v.validateCrossNamespaceCall(
+		namespaceID,
+		targetNamespaceID,
+		workflowID,
+	); err != nil {
+		return failedCause, err
+	}
 	ns := attributes.GetNamespace()
 	targetRunID := attributes.Execution.GetRunId()
 	signalName := attributes.GetSignalName()
@@ -501,18 +505,20 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES
-	if err := v.validateCrossNamespaceCall(
-		namespaceID,
-		targetNamespaceID,
-	); err != nil {
-		return failedCause, err
-	}
 
 	if attributes == nil {
 		return failedCause, serviceerror.NewInvalidArgument("StartChildWorkflowExecutionCommandAttributes is not set on StartChildWorkflowExecutionCommand.")
 	}
 
 	wfID := attributes.GetWorkflowId()
+
+	if err := v.validateCrossNamespaceCall(
+		namespaceID,
+		targetNamespaceID,
+		wfID,
+	); err != nil {
+		return failedCause, err
+	}
 	wfType := ""
 	if attributes.WorkflowType != nil {
 		wfType = attributes.WorkflowType.GetName()
@@ -618,6 +624,7 @@ func (v *CommandAttrValidator) validateWorkflowRetryPolicy(
 func (v *CommandAttrValidator) validateCrossNamespaceCall(
 	namespaceID namespace.ID,
 	targetNamespaceID namespace.ID,
+	targetWorkflowID string,
 ) error {
 
 	// same name, no check needed
@@ -644,8 +651,8 @@ func (v *CommandAttrValidator) validateCrossNamespaceCall(
 		return nil
 	}
 
-	namespaceClusters := namespaceEntry.ClusterNames()
-	targetNamespaceClusters := targetNamespaceEntry.ClusterNames()
+	namespaceClusters := namespaceEntry.ClusterNames(namespace.EmptyBusinessID)
+	targetNamespaceClusters := targetNamespaceEntry.ClusterNames(targetWorkflowID)
 
 	// one is local namespace, another one is global namespace or both global namespace
 	// treat global namespace with one replication cluster as local namespace

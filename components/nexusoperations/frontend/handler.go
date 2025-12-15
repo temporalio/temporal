@@ -517,8 +517,8 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 	}
 
 	// Redirect if current cluster is passive for this namespace.
-	if !c.namespace.ActiveInCluster(c.ClusterMetadata.GetCurrentClusterName()) {
-		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header) {
+	if c.namespace.ActiveClusterName(c.workflowID) != c.ClusterMetadata.GetCurrentClusterName() {
+		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header, c.workflowID) {
 			c.forwarded = true
 			handler, forwardStartTime := c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
@@ -574,7 +574,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 // SelectedAPIsForwardingRedirectionPolicy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding so all
 // redirection conditions can be checked at once. If either of those methods are updated, this should
 // be kept in sync.
-func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.Header) bool {
+func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.Header, workflowID string) bool {
 	redirectHeader := header.Get(interceptor.DCRedirectionContextHeaderName)
 	redirectAllowed, err := strconv.ParseBool(redirectHeader)
 	if err != nil {
@@ -583,6 +583,6 @@ func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.H
 	return redirectAllowed &&
 		c.RedirectionInterceptor.RedirectionAllowed(ctx) &&
 		c.namespace.IsGlobalNamespace() &&
-		len(c.namespace.ClusterNames()) > 1 &&
+		len(c.namespace.ClusterNames(workflowID)) > 1 &&
 		c.Config.ForwardingEnabledForNamespace(c.namespace.Name().String())
 }
