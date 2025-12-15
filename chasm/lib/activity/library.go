@@ -22,9 +22,9 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Activity]("activity",
 			chasm.WithSearchAttributes(
-				ActivityTypeSearchAttribute,
-				ActivityStatusSearchAttribute,
-				ActivityTaskQueueSearchAttribute,
+				TypeSearchAttribute,
+				StatusSearchAttribute,
+				TaskQueueSearchAttribute,
 			),
 		),
 	}
