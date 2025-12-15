@@ -1454,9 +1454,8 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.Vers
 	}
 
 	taskType := int32(pm.Partition().TaskType())
-	pm.logger.Debug("FairnessState being update to: " + to.GetData().GetPerType()[taskType].GetFairnessState().String())
 	if to.GetData().GetPerType()[taskType].GetFairnessState() != pm.fairnessState {
-		pm.logger.Debug("unloading partition manager due to change in FairnessState: " + pm.fairnessState.String() + " " + to.GetData().GetPerType()[taskType].GetFairnessState().String())
+		pm.logger.Debug("unloading partitionManager due to change in FairnessState")
 		pm.unloadFromEngine(unloadCauseConfigChange)
 		return
 	}
