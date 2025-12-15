@@ -657,6 +657,71 @@ func (s *standaloneActivityTestSuite) TestActivityFinishes_AfterCancelRequested(
 	}
 }
 
+// TestActivityFailsRetryably_AfterCancelRequested verifies that when an activity fails with a
+// retryable error after cancellation was requested, retries are blocked and the activity
+// transitions to FAILED status (not rescheduled).
+func (s *standaloneActivityTestSuite) TestActivityFailsRetryably_AfterCancelRequested() {
+	t := s.T()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := s.tv.Any().String()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:           s.Namespace().String(),
+		ActivityId:          activityID,
+		ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+		StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval: durationpb.New(1 * time.Millisecond),
+			MaximumAttempts: 3, // Would normally allow retries
+		},
+	})
+	require.NoError(t, err)
+	runID := startResp.RunId
+
+	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+	require.EqualValues(t, 1, pollTaskResp.Attempt)
+
+	_, err = s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+		Identity:   "cancelling-worker",
+		RequestId:  s.tv.RequestID(),
+		Reason:     "Test Cancellation",
+	})
+	require.NoError(t, err)
+
+	// Fail with retryable error - should NOT trigger retry because cancel was requested
+	_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Failure: &failurepb.Failure{
+			Message: "retryable failure",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+	})
+	require.NoError(t, err)
+
+	info := activityResp.GetInfo()
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, info.GetStatus(),
+		"expected Failed but is %s", info.GetStatus())
+	require.EqualValues(t, 1, info.GetAttempt(), "activity should not have retried")
+}
+
 func (s *standaloneActivityTestSuite) TestRequestCancellation_FailsValidation() {
 	testCases := []struct {
 		name   string
