@@ -14,6 +14,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -113,6 +114,14 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 			gotWorkflowTaskEventID, err := getLastWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
+
+			// Verify error is non-retryable when expected
+			if tt.wantErr {
+				var appErr *temporal.ApplicationError
+				s.ErrorAs(err, &appErr, "error should be an ApplicationError")
+				s.True(appErr.NonRetryable(), "error should be non-retryable")
+				s.Equal("NoWorkflowTaskFound", appErr.Type(), "error type should be NoWorkflowTaskFound")
+			}
 		})
 	}
 }
@@ -165,6 +174,14 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 			gotWorkflowTaskEventID, err := getFirstWorkflowTaskEventID(ctx, namespaceStr, &workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, gotWorkflowTaskEventID)
+
+			// Verify error is non-retryable when expected
+			if tt.wantErr {
+				var appErr *temporal.ApplicationError
+				s.ErrorAs(err, &appErr, "error should be an ApplicationError")
+				s.True(appErr.NonRetryable(), "error should be non-retryable")
+				s.Equal("NoWorkflowTaskFound", appErr.Type(), "error type should be NoWorkflowTaskFound")
+			}
 		})
 	}
 }

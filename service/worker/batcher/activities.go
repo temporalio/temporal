@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -679,7 +680,7 @@ func getLastWorkflowTaskEventID(
 		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
-		return 0, errors.New("unable to find any scheduled or completed task")
+		return 0, temporal.NewNonRetryableApplicationError("unable to find any scheduled or completed task", "NoWorkflowTaskFound", nil)
 	}
 	return
 }
@@ -720,7 +721,7 @@ func getFirstWorkflowTaskEventID(
 		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
-		return 0, errors.New("unable to find any scheduled or completed task")
+		return 0, temporal.NewNonRetryableApplicationError("unable to find any scheduled or completed task", "NoWorkflowTaskFound", nil)
 	}
 	return
 }
