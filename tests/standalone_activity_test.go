@@ -1296,7 +1296,8 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 
 	activityID := s.tv.ActivityID()
 	activityType := s.tv.ActivityType().GetName()
-	startResp := s.startAndValidateActivity(ctx, t, activityID, s.tv.TaskQueue().GetName())
+	taskQueue := s.tv.TaskQueue().GetName()
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 	runID := startResp.RunId
 
 	verifyListQuery := func(t *testing.T, query string) {
@@ -1317,11 +1318,17 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		)
 		require.Len(t, resp.GetExecutions(), 1, "expected exactly 1 result for query: %s", query)
 		exec := resp.GetExecutions()[0]
+		// Verify all ActivityExecutionListInfo fields
 		s.Equal(activityID, exec.GetActivityId())
 		s.Equal(runID, exec.GetRunId())
 		s.Equal(activityType, exec.GetActivityType().GetName())
+		s.Equal(taskQueue, exec.GetTaskQueue())
 		s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, exec.GetStatus())
 		s.NotNil(exec.GetScheduleTime())
+		s.Nil(exec.GetCloseTime())         // Running activity has no close time
+		s.Nil(exec.GetExecutionDuration()) // Running activity has no execution duration
+		s.GreaterOrEqual(exec.GetStateSizeBytes(), int64(0))
+		s.GreaterOrEqual(exec.GetStateTransitionCount(), int64(0))
 	}
 
 	t.Run("QueryByActivityId", func(t *testing.T) {
@@ -1337,7 +1344,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	})
 
 	t.Run("QueryByTaskQueue", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", s.tv.TaskQueue().GetName(), activityType))
+		verifyListQuery(t, fmt.Sprintf("ActivityTaskQueue = '%s' AND ActivityType = '%s'", taskQueue, activityType))
 	})
 
 	t.Run("QueryByMultipleFields", func(t *testing.T) {

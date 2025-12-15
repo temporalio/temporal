@@ -190,7 +190,6 @@ func (h *frontendHandler) ListActivityExecutions(
 			ActivityId:           exec.BusinessID,
 			RunId:                exec.RunID,
 			ScheduleTime:         timestamppb.New(exec.StartTime),
-			CloseTime:            timestamppb.New(exec.CloseTime),
 			StateTransitionCount: exec.StateTransitionCount,
 			StateSizeBytes:       exec.HistorySizeBytes,
 			// TODO(dan): exec.CustomSearchAttributes
@@ -198,8 +197,11 @@ func (h *frontendHandler) ListActivityExecutions(
 			TaskQueue:    exec.ChasmMemo.GetTaskQueue(),
 			Status:       InternalStatusToAPIStatus(exec.ChasmMemo.GetStatus()),
 		}
-		if !exec.CloseTime.IsZero() && !exec.StartTime.IsZero() {
-			info.ExecutionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
+		if !exec.CloseTime.IsZero() {
+			info.CloseTime = timestamppb.New(exec.CloseTime)
+			if !exec.StartTime.IsZero() {
+				info.ExecutionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
+			}
 		}
 		executions = append(executions, info)
 	}
