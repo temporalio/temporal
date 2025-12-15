@@ -3,16 +3,20 @@ variable "SERVER_VERSION" {
 }
 
 variable "CLI_VERSION" {
-  default = "1.5.0"
+  default = "1.5.1"
 }
 
 variable "IMAGE_REPO" {
   default = "temporaliotest"
 }
 
-variable "IMAGE_SHA_TAG" {}
+variable "IMAGE_SHA_TAG" {
+  default = ""
+}
 
-variable "IMAGE_BRANCH_TAG" {}
+variable "IMAGE_BRANCH_TAG" {
+  default = ""
+}
 
 variable "SAFE_IMAGE_BRANCH_TAG" {
   default = join("-", [for c in regexall("[a-z0-9]+", lower(IMAGE_BRANCH_TAG)) : c])
@@ -31,6 +35,7 @@ variable "TAG_LATEST" {
 # no longer needed, these legacy targets can be removed and only the standard targets should be used.
 
 target "admin-tools" {
+  context = "docker"
   dockerfile = "targets/admin-tools.Dockerfile"
   tags = compact([
     "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}",
@@ -53,6 +58,7 @@ target "admin-tools" {
 }
 
 target "server" {
+  context = "docker"
   dockerfile = "targets/server.Dockerfile"
   tags = compact([
     "${IMAGE_REPO}/server:${IMAGE_SHA_TAG}",
