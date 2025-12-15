@@ -1104,11 +1104,16 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 
 	s.True(workflowComplete)
 
-	mutableState := s.GetDatabaseMutableState(s.Namespace().String(), workflowID, we.GetRunId())
-	executionStats := mutableState.GetExecutionInfo().GetExecutionStats()
-	s.NotNil(executionStats)
-	s.Equal(int64(2), executionStats.GetExternalPayloadCount())
-	s.Equal(workflowExternalPayloadSize+activityExternalPayloadSize, executionStats.GetExternalPayloadSize())
+	descResp, descErr := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      we.GetRunId(),
+		},
+	})
+	s.NoError(descErr)
+	s.Equal(int64(2), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(workflowExternalPayloadSize+activityExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 
 	// Get history to find reset point (first completed workflow task)
 	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
@@ -1138,11 +1143,17 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	s.NoError(err)
 	s.Logger.Info("Workflow reset complete", tag.WorkflowRunID(resetResp.GetRunId()), tag.NewInt64("ResetToEventID", resetToEventID))
 
-	// Verify external payload stats after reset
-	resetMutableState := s.GetDatabaseMutableState(s.Namespace().String(), workflowID, resetResp.GetRunId())
-	resetExecutionStats := resetMutableState.GetExecutionInfo().GetExecutionStats()
+	descResp, descErr = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      resetResp.GetRunId(),
+		},
+	})
+	s.NoError(descErr)
 
-	s.NotNil(resetExecutionStats)
-	s.Equal(int64(1), resetExecutionStats.GetExternalPayloadCount())
-	s.Equal(workflowExternalPayloadSize, resetExecutionStats.GetExternalPayloadSize())
+	// Verify external payload stats after reset
+	s.NotNil(descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(int64(1), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(workflowExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 }

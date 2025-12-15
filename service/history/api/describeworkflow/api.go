@@ -135,6 +135,8 @@ func Invoke(
 			VersioningInfo:               common.CloneProto(executionInfo.VersioningInfo),
 			WorkerDeploymentName:         executionInfo.WorkerDeploymentName,
 			Priority:                     executionInfo.Priority,
+			ExternalPayloadSizeBytes:     executionInfo.ExecutionStats.ExternalPayloadSize,
+			ExternalPayloadCount:         executionInfo.ExecutionStats.ExternalPayloadCount,
 		},
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
 			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
