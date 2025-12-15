@@ -8,12 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -28,6 +30,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -248,7 +251,6 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 	)
 
 	// Seed user data with deployment routing config that marks current/ramping.
-	s.userDataMgr.Lock()
 	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
 		Data: &persistencespb.TaskQueueUserData{
 			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -265,7 +267,14 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 										DeploymentName: deploymentName,
 										BuildId:        rampingBuildID,
 									},
-									RampingVersionPercentage: rampPct,
+									RampingVersionPercentage:            rampPct,
+									RampingVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									rampingBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
 								},
 							},
 						},
@@ -274,7 +283,6 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 			},
 		},
 	}
-	s.userDataMgr.Unlock()
 
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
@@ -302,6 +310,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 	buildIds := map[string]bool{
 		worker_versioning.BuildIDToStringV32(deploymentName, currentBuildID): true,
 		worker_versioning.BuildIDToStringV32(deploymentName, rampingBuildID): true,
+		"": true, // also request unversioned stats; it should have the attributed portion removed
 	}
 
 	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, false, false)
@@ -316,12 +325,203 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 
 	currentStats := resp.VersionsInfoInternal[currentKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
 	rampingStats := resp.VersionsInfoInternal[rampingKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+	unversionedStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
 	s.NotNil(currentStats)
 	s.NotNil(rampingStats)
+	s.NotNil(unversionedStats)
 
 	// With 10 tasks and 30% ramp, ramp should receive ~3 tasks and current gets the remainder.
 	s.Equal(int64(8), currentStats.GetApproximateBacklogCount())
 	s.Equal(int64(3), rampingStats.GetApproximateBacklogCount())
+	// Since we've attributed 7+3 from the unversioned backlog, the unversioned queue itself should show the remainder.
+	s.Equal(int64(0), unversionedStats.GetApproximateBacklogCount())
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyCurrentNoRampingTakesAllUnversionedBacklog() {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+	)
+
+	// Seed user data with deployment routing config that marks only current (no ramping).
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									RampingDeploymentVersion:            nil,
+									RampingVersionPercentage:            0,
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Backlog 10 tasks in the unversioned/default queue.
+	for i := 0; i < 10; i++ {
+		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-only-current-%d", i),
+		})
+		s.NoError(err)
+	}
+
+	buildIds := map[string]bool{
+		worker_versioning.BuildIDToStringV32(deploymentName, currentBuildID): true,
+		"": true,
+	}
+
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, false, false)
+	s.NoError(err)
+
+	currentKey := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: currentBuildID},
+	)
+
+	currentStats := resp.VersionsInfoInternal[currentKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+	unversionedStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+	s.NotNil(currentStats)
+	s.NotNil(unversionedStats)
+
+	// With only current (no ramping), all unversioned backlog is attributed to current.
+	s.Equal(int64(10), currentStats.GetApproximateBacklogCount())
+	s.Equal(int64(0), unversionedStats.GetApproximateBacklogCount())
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyRampingNoCurrentSplitsUnversionedBacklog() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	const (
+		deploymentName = "foo"
+		rampingBuildID = "B"
+		rampPct        = float32(30)
+	)
+
+	// Seed user data with deployment routing config that marks only ramping (no current).
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: nil,
+									RampingDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        rampingBuildID,
+									},
+									RampingVersionPercentage:            rampPct,
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									rampingBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Backlog 10 tasks in the unversioned/default queue.
+	for i := 0; i < 10; i++ {
+		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-only-ramp-%d", i),
+		})
+		s.NoError(err)
+	}
+
+	buildIds := map[string]bool{
+		worker_versioning.BuildIDToStringV32(deploymentName, rampingBuildID): true,
+		"": true,
+	}
+
+	rampingKey := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: rampingBuildID},
+	)
+
+	// The backlog reader is async; wait until the stats stabilize to the expected split.
+	require.Eventually(s.T(), func() bool {
+		resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, false, false)
+		if err != nil {
+			return false
+		}
+		rampingStats := resp.VersionsInfoInternal[rampingKey].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		unversionedStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		if rampingStats == nil || unversionedStats == nil {
+			return false
+		}
+		return rampingStats.GetApproximateBacklogCount() == 3 && unversionedStats.GetApproximateBacklogCount() == 7
+	}, 1*time.Second, 10*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDoesNotDoubleCount() {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	// Current is unversioned (no current/ramping deployment versions set).
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							"foo": {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: nil,
+									RampingDeploymentVersion: nil,
+									RampingVersionPercentage: 0,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Backlog 5 tasks in the unversioned/default queue.
+	for i := 0; i < 5; i++ {
+		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-uv-%d", i),
+		})
+		s.NoError(err)
+	}
+
+	resp, err := s.partitionMgr.Describe(ctx, map[string]bool{"": true}, false, true, false, false)
+	s.NoError(err)
+
+	uvStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+	s.NotNil(uvStats)
+	s.Equal(int64(5), uvStats.GetApproximateBacklogCount())
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
