@@ -3295,9 +3295,6 @@ func (s *matchingEngineSuite) getTaskQueuePartitionManagerImpl(ptq *PhysicalTask
 // getPhysicalTaskQueueManagerImpl extracts the physicalTaskQueueManagerImpl for the given taskQueuePartitionManager
 func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImpl(mgr taskQueuePartitionManager) *physicalTaskQueueManagerImpl {
 	defaultQ, err := mgr.(*taskQueuePartitionManagerImpl).defaultQueueFuture.GetIfReady()
-	if err != nil {
-		panic("BAD")
-	}
 	s.Require().NoError(err)
 	return defaultQ.(*physicalTaskQueueManagerImpl)
 }

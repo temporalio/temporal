@@ -133,7 +133,6 @@ func newTaskQueuePartitionManager(
 func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	defer func() { pm.defaultQueueFuture.SetIfNotReady(nil, retErr) }()
 	unload := func(bool) {
-		pm.logger.Debug("unloading partitionManager due to config change")
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 

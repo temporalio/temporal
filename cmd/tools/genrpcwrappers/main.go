@@ -342,7 +342,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		nsID = fieldWithPath{path: `"not-applicable"`}
 	case "UpdateFairnessStateRequest":
 		tq = tryFindOneNestedField(t, "TaskQueue", "request", 1)
-		tqt = tryFindOneNestedField(t, "TaskQueueType", "request", 1)
+		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
 	default:
 		tqp = tryFindOneNestedField(t, "TaskQueuePartition", "request", 1)
