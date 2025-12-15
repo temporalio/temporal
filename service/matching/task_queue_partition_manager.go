@@ -268,11 +268,9 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 		return
 	}
 	req := &matchingservice.UpdateFairnessStateRequest{
-		NamespaceId: pm.Namespace().ID().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Kind: pm.Partition().Kind(),
-			Name: pm.Partition().RpcName(),
-		},
+		NamespaceId:   pm.Namespace().ID().String(),
+		TaskQueue:     pm.Partition().RpcName(),
+		TaskQueueType: pm.Partition().TaskType(),
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}
 	_, err := pm.matchingClient.UpdateFairnessState(ctx, req)

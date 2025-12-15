@@ -508,11 +508,9 @@ func (s *PartitionManagerTestSuite) TestAutoEnable() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	s.matchingClient.EXPECT().UpdateFairnessState(ctx, &matchingservice.UpdateFairnessStateRequest{
-		NamespaceId: s.ns.ID().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "my-test-tq",
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		NamespaceId:   s.ns.ID().String(),
+		TaskQueue:     "my-test-tq",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}).Times(1).Return(nil, nil)
 	_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{

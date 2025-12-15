@@ -781,13 +781,10 @@ func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
-	tq := &taskqueuepb.TaskQueue{
-		Name: "makeToast",
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
 	req := &matchingservice.UpdateFairnessStateRequest{
 		NamespaceId:   s.ns.ID().String(),
-		TaskQueue:     tq,
+		TaskQueue:     "makeToast",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}
 	const N = 64
@@ -820,7 +817,10 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 					WorkflowId: "workflow1",
 					RunId:      uuid.NewString(),
 				},
-				TaskQueue: tq,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: "makeToast",
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
 				Priority: &commonpb.Priority{
 					PriorityKey: 3,
 				},

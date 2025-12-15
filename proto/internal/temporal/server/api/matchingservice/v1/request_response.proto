@@ -651,8 +651,9 @@ message DescribeWorkerResponse {
 //     aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
 message UpdateFairnessStateRequest {
     string namespace_id = 1;
-    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
-    temporal.server.api.enums.v1.FairnessState fairness_state = 3;
+    string task_queue = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    temporal.server.api.enums.v1.FairnessState fairness_state = 4;
 }
 
 message UpdateFairnessStateResponse {

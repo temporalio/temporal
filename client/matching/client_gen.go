@@ -570,7 +570,7 @@ func (c *clientImpl) UpdateFairnessState(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateFairnessStateResponse, error) {
 
-	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}

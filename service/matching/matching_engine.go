@@ -3255,14 +3255,11 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 	ctx context.Context,
 	req *matchingservice.UpdateFairnessStateRequest,
 ) (*matchingservice.UpdateFairnessStateResponse, error) {
-	partition, err := tqid.PartitionFromProto(req.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	partition, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
 
-	if partition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL {
-		return nil, serviceerror.NewUnimplemented("fairness and priority not implemented for non-normal queues")
-	}
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
@@ -3278,7 +3275,7 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 		if data.PerType == nil {
 			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
 		}
-		typ := int32(pm.Partition().TaskType())
+		typ := int32(req.GetTaskQueueType())
 		perType := data.PerType[typ]
 		if perType == nil {
 			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
