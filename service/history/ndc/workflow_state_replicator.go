@@ -1117,6 +1117,12 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			isNewBranch = false
 
 			localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(historyBlob.rawHistory.Data))
+			externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
+			if err != nil {
+				return err
+			}
+			localMutableState.GetExecutionInfo().ExecutionStats.ExternalPayloadSize += externalPayloadSize
+			localMutableState.GetExecutionInfo().ExecutionStats.ExternalPayloadCount += externalPayloadCount
 		}
 		return nil
 	}
@@ -1175,6 +1181,13 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		startEventID = events[len(events)-1].EventId
 		startEventVersion = events[len(events)-1].Version
 		localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(eventBlobs[i].Data))
+		externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
+		if err != nil {
+			return newBranchToken, err
+		}
+		localMutableState.GetExecutionInfo().ExecutionStats.ExternalPayloadSize += externalPayloadSize
+		localMutableState.GetExecutionInfo().ExecutionStats.ExternalPayloadCount += externalPayloadCount
+
 	}
 	// add more events if there is any
 	if startEventID < endEventID {

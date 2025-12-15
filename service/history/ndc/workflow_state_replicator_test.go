@@ -1621,3 +1621,113 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	s.Equal(int32(2), localVersionHistoryies.CurrentVersionHistoryIndex)
 	s.NotNil(newRunBranch)
 }
+
+func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_ExternalPayloadStats() {
+	// Test that the external payload stats are correctly updated when bringLocalEventsUpToSourceCurrentBranch is invoked
+	namespaceID := uuid.NewString()
+	versionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("branchToken"),
+				Items: []*historyspb.VersionHistoryItem{
+					{
+						EventId: int64(2),
+						Version: int64(1),
+					},
+				},
+			},
+		},
+	}
+	localVersionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("local-branchToken"),
+			},
+		},
+	}
+
+	historyEvents := []*historypb.HistoryEvent{
+		{
+			EventId:   1,
+			Version:   1,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+					Input: &commonpb.Payloads{
+						Payloads: []*commonpb.Payload{
+							{
+								Data: []byte("test"),
+								ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+									{SizeBytes: 1024},
+									{SizeBytes: 2048},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			EventId:   2,
+			Version:   1,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
+				WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+			},
+		},
+	}
+
+	serializer := serialization.NewSerializer()
+	eventBlobs, err := serializer.SerializeEvents(historyEvents)
+	s.NoError(err)
+
+	executionStats := &persistencespb.ExecutionStats{
+		HistorySize:          0,
+		ExternalPayloadSize:  0,
+		ExternalPayloadCount: 0,
+	}
+	mockMutableState := historyi.NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		VersionHistories: localVersionHistories,
+		ExecutionStats:   executionStats,
+	}).AnyTimes()
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: s.runID,
+	}).AnyTimes()
+	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID, s.workflowID, s.runID)).AnyTimes()
+	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
+	mockMutableState.EXPECT().AddReapplyCandidateEvent(gomock.Any()).AnyTimes()
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+	sourceClusterName := "test-cluster"
+
+	mockShard := historyi.NewMockShardContext(s.controller)
+	taskId := int64(100)
+	mockShard.EXPECT().GenerateTaskID().Return(taskId, nil).Times(1)
+	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockEventsCache := events.NewMockCache(s.controller)
+	mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	mockShard.EXPECT().GetEventsCache().Return(mockEventsCache).AnyTimes()
+	s.workflowStateReplicator.shardContext = mockShard
+
+	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+
+	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
+		context.Background(),
+		namespace.ID(namespaceID),
+		s.workflowID,
+		s.runID,
+		sourceClusterName,
+		mockWeCtx,
+		mockMutableState,
+		versionHistories,
+		[]*commonpb.DataBlob{eventBlobs},
+		true)
+	s.NoError(err)
+
+	s.Equal(int64(1024+2048), executionStats.ExternalPayloadSize)
+	s.Equal(int64(2), executionStats.ExternalPayloadCount)
+}
