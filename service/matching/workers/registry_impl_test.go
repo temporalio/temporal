@@ -29,6 +29,23 @@ func disablePluginMetrics() func() bool {
 	return func() bool { return false }
 }
 
+// Test helper config functions with configurable values
+func ttlFn(d time.Duration) func() time.Duration {
+	return func() time.Duration { return d }
+}
+
+func minEvictAgeFn(d time.Duration) func() time.Duration {
+	return func() time.Duration { return d }
+}
+
+func maxItemsFn(n int) func() int {
+	return func() int { return n }
+}
+
+func evictionIntervalFn(d time.Duration) func() time.Duration {
+	return func() time.Duration { return d }
+}
+
 func TestUpdateAndListNamespace(t *testing.T) {
 	// Use capture handler to verify metrics
 	captureHandler := metricstest.NewCaptureHandler()
@@ -36,13 +53,13 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(
-		2,                     // numBuckets
-		time.Hour,             // TTL
-		0,                     // MinEvictAge
-		10,                    // maxItems
-		time.Hour,             // evictionInterval
-		captureHandler,        // metricsHandler
-		enablePluginMetrics(), // enableWorkerPluginMetrics
+		2,                             // numBuckets
+		captureHandler,                // metricsHandler
+		enablePluginMetrics(),         // enableWorkerPluginMetrics
+		ttlFn(time.Hour),              // TTL
+		minEvictAgeFn(0),              // MinEvictAge
+		maxItemsFn(10),                // maxItems
+		evictionIntervalFn(time.Hour), // evictionInterval
 	)
 	defer m.Stop()
 
@@ -72,7 +89,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 }
 
 func TestListNamespacePredicate(t *testing.T) {
-	m := newRegistryImpl(1, time.Hour, 0, 10, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
+	m := newRegistryImpl(1, metrics.NoopMetricsHandler, enablePluginMetrics(), ttlFn(time.Hour), minEvictAgeFn(0), maxItemsFn(10), evictionIntervalFn(time.Hour))
 	defer m.Stop()
 
 	// Set up multiple entries
@@ -102,7 +119,7 @@ func TestListNamespacePredicate(t *testing.T) {
 }
 
 func TestEvictByTTL(t *testing.T) {
-	m := newRegistryImpl(1, 1*time.Second, 0, 10, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
+	m := newRegistryImpl(1, metrics.NoopMetricsHandler, enablePluginMetrics(), ttlFn(1*time.Second), minEvictAgeFn(0), maxItemsFn(10), evictionIntervalFn(time.Hour))
 	defer m.Stop()
 
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "oldWorker"}
@@ -122,14 +139,14 @@ func TestEvictByTTL(t *testing.T) {
 }
 
 func TestEvictByCapacity(t *testing.T) {
-	maxItems := int64(3)
+	maxItems := 3
 
 	// Use capture handler to verify metrics
 	captureHandler := metricstest.NewCaptureHandler()
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(1, time.Hour, 0, maxItems, time.Hour, captureHandler, enablePluginMetrics())
+	m := newRegistryImpl(1, captureHandler, enablePluginMetrics(), ttlFn(time.Hour), minEvictAgeFn(0), maxItemsFn(maxItems), evictionIntervalFn(time.Hour))
 	defer m.Stop()
 
 	// Insert more entries than maxItems
@@ -160,7 +177,7 @@ func TestEvictByCapacity(t *testing.T) {
 // protected by minEvictAge. This verifies that we do not keep checking the same entries repeatedly
 // when there is no space.
 func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
-	maxItems := int64(2)
+	maxItems := 2
 	minEvictAge := 5 * time.Second
 
 	// Use capture handler to verify metrics
@@ -168,7 +185,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler, enablePluginMetrics())
+	m := newRegistryImpl(1, captureHandler, enablePluginMetrics(), ttlFn(time.Hour), minEvictAgeFn(minEvictAge), maxItemsFn(maxItems), evictionIntervalFn(time.Hour))
 	defer m.Stop()
 
 	// Add 3 entries (over capacity) - all will be "new" (< minEvictAge)
@@ -202,7 +219,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 // Tests that entries can be evicted once they exceed minEvictAge.
 func TestEvictByCapacityAfterMinAge(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		maxItems := int64(2)
+		maxItems := 2
 		minEvictAge := 100 * time.Millisecond // Short age for test
 
 		captureHandler := metricstest.NewCaptureHandler()
@@ -210,7 +227,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		defer captureHandler.StopCapture(capture)
 
 		// Uses real time.NewTicker - synctest provides virtual time control
-		m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler, enablePluginMetrics())
+		m := newRegistryImpl(1, captureHandler, enablePluginMetrics(), ttlFn(time.Hour), minEvictAgeFn(minEvictAge), maxItemsFn(maxItems), evictionIntervalFn(time.Hour))
 		defer m.Stop()
 
 		// Add 3 entries (over capacity)
@@ -243,12 +260,12 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 
 // TestMultipleNamespaces tests with registry with multiple namespaces.
 func TestMultipleNamespaces(t *testing.T) {
-	maxItems := int64(10)
+	maxItems := 10
 	captureHandler := metricstest.NewCaptureHandler()
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(2, time.Hour, 0, maxItems, time.Hour, captureHandler, enablePluginMetrics())
+	m := newRegistryImpl(2, captureHandler, enablePluginMetrics(), ttlFn(time.Hour), minEvictAgeFn(0), maxItemsFn(maxItems), evictionIntervalFn(time.Hour))
 	defer m.Stop()
 
 	// Add 3 workers to namespace1
@@ -290,14 +307,14 @@ func TestMultipleNamespaces(t *testing.T) {
 func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 	// Using synctest as it provides virtual time control.
 	synctest.Test(t, func(t *testing.T) {
-		maxItems := int64(5)
+		maxItems := 5
 		evictionInterval := 100 * time.Millisecond
 
 		captureHandler := metricstest.NewCaptureHandler()
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
 
-		m := newRegistryImpl(1, time.Hour, 0, maxItems, evictionInterval, captureHandler, enablePluginMetrics())
+		m := newRegistryImpl(1, captureHandler, enablePluginMetrics(), ttlFn(time.Hour), minEvictAgeFn(0), maxItemsFn(maxItems), evictionIntervalFn(evictionInterval))
 
 		// Add some entries to create utilization
 		for i := 1; i <= 3; i++ {
@@ -332,7 +349,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 }
 
 func BenchmarkUpdate(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
+	m := newRegistryImpl(16, metrics.NoopMetricsHandler, enablePluginMetrics(), ttlFn(time.Hour), minEvictAgeFn(time.Minute), maxItemsFn(b.N), evictionIntervalFn(time.Hour))
 	defer m.Stop()
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "benchWorker"}
 	b.ResetTimer()
@@ -342,7 +359,7 @@ func BenchmarkUpdate(b *testing.B) {
 }
 
 func BenchmarkListNamespace(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, 1000, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
+	m := newRegistryImpl(16, metrics.NoopMetricsHandler, enablePluginMetrics(), ttlFn(time.Hour), minEvictAgeFn(time.Minute), maxItemsFn(1000), evictionIntervalFn(time.Hour))
 	defer m.Stop()
 	// Pre-populate with entries
 	for i := 0; i < 1000; i++ {
@@ -362,12 +379,12 @@ func BenchmarkRandomUpdate(b *testing.B) {
 	totalHeartbeats := 30 // Total heartbeats per namespace
 	m := newRegistryImpl(
 		len(namespaces),
-		time.Hour,
-		time.Minute,
-		int64(b.N),
-		time.Hour,
 		metrics.NoopMetricsHandler,
 		enablePluginMetrics(),
+		ttlFn(time.Hour),
+		minEvictAgeFn(time.Minute),
+		maxItemsFn(b.N),
+		evictionIntervalFn(time.Hour),
 	)
 	defer m.Stop()
 
@@ -418,13 +435,13 @@ func TestPluginMetricsExported(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(
-		2,                     // numBuckets
-		time.Hour,             // TTL
-		0,                     // MinEvictAge
-		10,                    // maxItems
-		time.Hour,             // evictionInterval
-		captureHandler,        // metricsHandler
-		enablePluginMetrics(), // enableWorkerPluginMetrics
+		2,                             // numBuckets
+		captureHandler,                // metricsHandler
+		enablePluginMetrics(),         // enableWorkerPluginMetrics
+		ttlFn(time.Hour),              // TTL
+		minEvictAgeFn(0),              // MinEvictAge
+		maxItemsFn(10),                // maxItems
+		evictionIntervalFn(time.Hour), // evictionInterval
 	)
 	defer m.Stop()
 
@@ -496,13 +513,13 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(
-		2,                      // numBuckets
-		time.Hour,              // TTL
-		0,                      // MinEvictAge
-		10,                     // maxItems
-		time.Hour,              // evictionInterval
-		captureHandler,         // metricsHandler
-		disablePluginMetrics(), // enableWorkerPluginMetrics - DISABLED
+		2,                             // numBuckets
+		captureHandler,                // metricsHandler
+		disablePluginMetrics(),        // enableWorkerPluginMetrics - DISABLED
+		ttlFn(time.Hour),              // TTL
+		minEvictAgeFn(0),              // MinEvictAge
+		maxItemsFn(10),                // maxItems
+		evictionIntervalFn(time.Hour), // evictionInterval
 	)
 	defer m.Stop()
 

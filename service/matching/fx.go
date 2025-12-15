@@ -195,5 +195,13 @@ func WorkersRegistryProvider(
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
 ) workers.Registry {
-	return workers.NewRegistry(lc, metricsHandler, serviceConfig.EnableWorkerPluginMetrics)
+	return workers.NewRegistry(
+		lc,
+		metricsHandler,
+		serviceConfig.EnableWorkerPluginMetrics,
+		serviceConfig.WorkerRegistryEntryTTL,
+		serviceConfig.WorkerRegistryMinEvictAge,
+		serviceConfig.WorkerRegistryMaxEntries,
+		serviceConfig.WorkerRegistryEvictionInterval,
+	)
 }

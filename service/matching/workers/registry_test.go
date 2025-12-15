@@ -2,11 +2,20 @@ package workers
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+)
+
+// Test helper config defaults
+const (
+	testDefaultEntryTTL         = 2 * time.Hour
+	testDefaultMinEvictAge      = 2 * time.Minute
+	testDefaultMaxEntries       = 1_000_000
+	testDefaultEvictionInterval = 10 * time.Minute
 )
 
 func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
@@ -67,8 +76,13 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
-				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
-				defaultEvictionInterval, metrics.NoopMetricsHandler, enablePluginMetrics(),
+				defaultBuckets,
+				metrics.NoopMetricsHandler,
+				enablePluginMetrics(),
+				ttlFn(testDefaultEntryTTL),
+				minEvictAgeFn(testDefaultMinEvictAge),
+				maxItemsFn(testDefaultMaxEntries),
+				evictionIntervalFn(testDefaultEvictionInterval),
 			)
 			tt.setup(r)
 
@@ -166,8 +180,13 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
-				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
-				defaultEvictionInterval, metrics.NoopMetricsHandler, enablePluginMetrics(),
+				defaultBuckets,
+				metrics.NoopMetricsHandler,
+				enablePluginMetrics(),
+				ttlFn(testDefaultEntryTTL),
+				minEvictAgeFn(testDefaultMinEvictAge),
+				maxItemsFn(testDefaultMaxEntries),
+				evictionIntervalFn(testDefaultEvictionInterval),
 			)
 			tt.setup(r)
 
@@ -290,8 +309,13 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
-				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
-				defaultEvictionInterval, metrics.NoopMetricsHandler, enablePluginMetrics(),
+				defaultBuckets,
+				metrics.NoopMetricsHandler,
+				enablePluginMetrics(),
+				ttlFn(testDefaultEntryTTL),
+				minEvictAgeFn(testDefaultMinEvictAge),
+				maxItemsFn(testDefaultMaxEntries),
+				evictionIntervalFn(testDefaultEvictionInterval),
 			)
 			tt.setup(r)
 
@@ -394,8 +418,13 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(
-				defaultBuckets, defaultEntryTTL, defaultMinEvictAge, defaultMaxEntries,
-				defaultEvictionInterval, metrics.NoopMetricsHandler, enablePluginMetrics(),
+				defaultBuckets,
+				metrics.NoopMetricsHandler,
+				enablePluginMetrics(),
+				ttlFn(testDefaultEntryTTL),
+				minEvictAgeFn(testDefaultMinEvictAge),
+				maxItemsFn(testDefaultMaxEntries),
+				evictionIntervalFn(testDefaultEvictionInterval),
 			)
 			tt.setup(r)
 
