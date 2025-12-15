@@ -50,9 +50,9 @@ jobs:
           if [ -n "${{ inputs.platform }}" ]; then
             # Extract arch from platform (e.g., linux/amd64 -> amd64)
             ARCH=$(echo "${{ inputs.platform }}" | cut -d'/' -f2)
-            echo "single-arch=${ARCH}" >> $GITHUB_OUTPUT
+            echo "single-arch=${ARCH}" >> "$GITHUB_OUTPUT"
           else
-            echo "single-arch=" >> $GITHUB_OUTPUT
+            echo "single-arch=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build binaries
@@ -84,14 +84,16 @@ jobs:
 
       - name: Output image tags
         run: |
-          echo "### Docker Images Built" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Git Ref:** ${{ inputs.ref }}" >> $GITHUB_STEP_SUMMARY
-          echo "**CLI Version:** ${{ inputs.cli-version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Platform:** ${{ inputs.platform || 'linux/amd64,linux/arm64' }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Pushed to Docker Hub:** ${{ inputs.push }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Tagged as latest:** ${{ inputs.tag-latest }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo "- temporaliotest/server:sha-${GITHUB_SHA:0:7}" >> $GITHUB_STEP_SUMMARY
-          echo "- temporaliotest/admin-tools:sha-${GITHUB_SHA:0:7}" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### Docker Images Built"
+            echo ""
+            echo "**Git Ref:** ${{ inputs.ref }}"
+            echo "**CLI Version:** ${{ inputs.cli-version }}"
+            echo "**Platform:** ${{ inputs.platform || 'linux/amd64,linux/arm64' }}"
+            echo "**Pushed to Docker Hub:** ${{ inputs.push }}"
+            echo "**Tagged as latest:** ${{ inputs.tag-latest }}"
+            echo ""
+            echo "**Image Tags:**"
+            echo "- temporaliotest/server:sha-${GITHUB_SHA:0:7}"
+            echo "- temporaliotest/admin-tools:sha-${GITHUB_SHA:0:7}"
+          } >> "$GITHUB_STEP_SUMMARY"
