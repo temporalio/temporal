@@ -354,35 +354,53 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	applyActivityOptionsToStartRequest(opts, req)
 
-	// TODO: Unalias for validation, then restore aliased SA for CHASM visibility storage. The
-	// validator requires unaliased format but CHASM visibility expects aliased format.
-	originalSA := req.SearchAttributes
-	if originalSA != nil {
-		unaliasedSA, err := searchattribute.UnaliasFields(
-			h.saMapperProvider,
-			originalSA,
-			req.GetNamespace(),
-		)
-		if err != nil {
-			return nil, err
-		}
-		req.SearchAttributes = unaliasedSA
-	}
-
-	err = validateAndNormalizeStartActivityExecutionRequest(
-		req,
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
-		h.logger,
-		h.config.MaxIDLengthLimit(),
-		h.saValidator)
+	err = h.validateAndNormalizeStartActivityExecutionRequest(req)
 	if err != nil {
 		return nil, err
 	}
 
-	req.SearchAttributes = originalSA
-
 	return req, nil
+}
+
+// validateAndNormalizeStartActivityExecutionRequest validates and normalizes the standalone
+// activity specific attributes. Note that this method mutates the input params; the caller must
+// clone the request if necessary (e.g. if it may be retried).
+func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
+	if len(req.GetRequestId()) > h.config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	}
+
+	if err := normalizeAndValidateIDPolicy(req); err != nil {
+		return err
+	}
+
+	if err := validateInputSize(
+		req.GetActivityId(),
+		req.GetActivityType().GetName(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		req.Input.Size(),
+		h.logger,
+		req.GetNamespace()); err != nil {
+		return err
+	}
+
+	if req.GetSearchAttributes() != nil {
+		if err := validateAndNormalizeSearchAttributes(
+			req,
+			h.saMapperProvider,
+			h.saValidator); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields
