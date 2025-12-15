@@ -863,7 +863,7 @@ func (a *Activity) emitOnTimedOutMetrics(
 func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
 		TypeSearchAttribute.Value(a.GetActivityType().GetName()),
-		StatusSearchAttribute.Value(a.GetStatus().String()),
+		StatusSearchAttribute.Value(InternalStatusToAPIStatus(a.GetStatus()).String()),
 		TaskQueueSearchAttribute.Value(a.GetTaskQueue().GetName()),
 	}
 }

@@ -1340,7 +1340,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	})
 
 	t.Run("QueryByActivityStatus", func(t *testing.T) {
-		verifyListQuery(t, fmt.Sprintf("ActivityStatus = 'Scheduled' AND ActivityType = '%s'", activityType))
+		verifyListQuery(t, fmt.Sprintf("ActivityStatus = 'Running' AND ActivityType = '%s'", activityType))
 	})
 
 	t.Run("QueryByTaskQueue", func(t *testing.T) {
@@ -1471,7 +1471,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 	})
 
 	t.Run("CountByActivityStatus", func(t *testing.T) {
-		verifyCountQuery(t, fmt.Sprintf("ActivityStatus = 'Scheduled' AND ActivityType = '%s'", activityType), 1)
+		verifyCountQuery(t, fmt.Sprintf("ActivityStatus = 'Running' AND ActivityType = '%s'", activityType), 1)
 	})
 
 	t.Run("CountByTaskQueue", func(t *testing.T) {
@@ -1508,7 +1508,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 		s.Equal(int64(3), resp.GetGroups()[0].GetCount())
 		var groupValue string
 		require.NoError(t, payload.Decode(resp.GetGroups()[0].GetGroupValues()[0], &groupValue))
-		s.Equal("Scheduled", groupValue)
+		s.Equal("Running", groupValue)
 	})
 
 	t.Run("CountByCustomSearchAttribute", func(t *testing.T) {
