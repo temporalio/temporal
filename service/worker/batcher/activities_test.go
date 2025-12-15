@@ -118,7 +118,7 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 			// Verify error is non-retryable when expected
 			if tt.wantErr {
 				var appErr *temporal.ApplicationError
-				s.ErrorAs(err, &appErr, "error should be an ApplicationError")
+				s.Require().ErrorAs(err, &appErr, "error should be an ApplicationError")
 				s.True(appErr.NonRetryable(), "error should be non-retryable")
 				s.Equal("NoWorkflowTaskFound", appErr.Type(), "error type should be NoWorkflowTaskFound")
 			}
@@ -178,7 +178,7 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 			// Verify error is non-retryable when expected
 			if tt.wantErr {
 				var appErr *temporal.ApplicationError
-				s.ErrorAs(err, &appErr, "error should be an ApplicationError")
+				s.Require().ErrorAs(err, &appErr, "error should be an ApplicationError")
 				s.True(appErr.NonRetryable(), "error should be non-retryable")
 				s.Equal("NoWorkflowTaskFound", appErr.Type(), "error type should be NoWorkflowTaskFound")
 			}
