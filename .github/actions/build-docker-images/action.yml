@@ -101,33 +101,6 @@ runs:
             server admin-tools
         fi
 
-    - name: Verify admin-tools binaries
-      if: inputs.push != 'true' && inputs.load == 'true'
-      shell: bash
-      working-directory: ${{ github.workspace }}
-      env:
-        IMAGE_REPO: temporaliotest
-        IMAGE_SHA_TAG: ${{ github.sha }}
-      run: |
-        echo "Verifying admin-tools binaries are present in the image..."
-        MISSING_TOOLS=""
-
-        for tool in temporal temporal-server temporal-cassandra-tool temporal-sql-tool temporal-elasticsearch-tool tdbg; do
-          if docker run --rm "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}" sh -c "[ -x /usr/local/bin/${tool} ]"; then
-            echo "✓ ${tool} found and executable"
-          else
-            echo "✗ ${tool} is missing or not executable"
-            MISSING_TOOLS="${MISSING_TOOLS} ${tool}"
-          fi
-        done
-
-        if [ -n "${MISSING_TOOLS}" ]; then
-          echo "ERROR: The following tools are missing or not executable:${MISSING_TOOLS}"
-          exit 1
-        fi
-
-        echo "All admin tools verified successfully"
-
     - name: Build and push Docker images
       if: inputs.push == 'true'
       shell: bash

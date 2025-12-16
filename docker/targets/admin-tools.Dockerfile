@@ -1,4 +1,4 @@
-FROM alpine:3.22@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
+FROM alpine:3.23@sha256:c78ded0fee4493809c8ca71d4a6057a46237763d952fae15ea418f6d14137f2d
 
 ARG TARGETARCH
 
@@ -9,12 +9,17 @@ RUN apk add --no-cache \
 
 # Copy all admin tool binaries:
 # - temporal (CLI)
-# - temporal-server
 # - temporal-cassandra-tool
 # - temporal-sql-tool
 # - temporal-elasticsearch-tool
 # - tdbg
-COPY --chmod=755 ./build/${TARGETARCH}/* /usr/local/bin/
+COPY --chmod=755 \
+    ./build/${TARGETARCH}/temporal \
+    ./build/${TARGETARCH}/temporal-cassandra-tool \
+    ./build/${TARGETARCH}/temporal-sql-tool \
+    ./build/${TARGETARCH}/temporal-elasticsearch-tool \
+    ./build/${TARGETARCH}/tdbg \
+    /usr/local/bin/
 
 COPY ./build/temporal/schema /etc/temporal/schema
 

@@ -131,13 +131,21 @@ func organizeBinaries() error {
 		fmt.Println("Multi-architecture build: amd64, arm64")
 	}
 
-	binaries := []string{
-		"temporal-server",
+	// Admin tool binaries (for admin-tools image)
+	adminToolBinaries := []string{
 		"temporal-cassandra-tool",
 		"temporal-sql-tool",
 		"temporal-elasticsearch-tool",
 		"tdbg",
 	}
+
+	// Server binaries (for server image)
+	serverBinaries := []string{
+		"temporal-server",
+	}
+
+	// All binaries to copy
+	binaries := append(adminToolBinaries, serverBinaries...)
 
 	// Validate architecture and binary names
 	archReg := regexp.MustCompile(`^[a-z0-9]+$`)
