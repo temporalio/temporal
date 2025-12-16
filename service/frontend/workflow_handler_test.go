@@ -3680,6 +3680,29 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpStartDelay, errMultiOpAborted}, err)
 		})
+
+		// unique to MultiOperation:
+		s.Run("namespace mismatch", func() {
+			startReq := validStartReq()
+			startReq.Namespace = "other-namespace"
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr(
+				[]error{
+					errMultiOpNamespaceMismatch,
+					errMultiOpAborted,
+				},
+				err,
+			)
+		})
 	})
 
 	s.Run("Update operation is validated", func() {
@@ -3698,6 +3721,29 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpAborted, errUpdateInputNotSet}, err)
+		})
+
+		// unique to MultiOperation:
+		s.Run("namespace mismatch", func() {
+			updateReq := validUpdateReq()
+			updateReq.Namespace = "other-namespace"
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(validStartReq()),
+					newUpdateOp(updateReq),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr(
+				[]error{
+					errMultiOpAborted,
+					errMultiOpNamespaceMismatch,
+				},
+				err,
+			)
 		})
 	})
 }
