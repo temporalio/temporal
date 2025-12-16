@@ -264,13 +264,12 @@ func (s *FairnessSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  s.partitions,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): s.partitions,
 	}
-	switch s.doAutoEnable {
-	case true:
+	if s.doAutoEnable {
 		dynamicConfigOverrides[dynamicconfig.MatchingAutoEnableV2.Key()] = true
 		dynamicConfigOverrides[dynamicconfig.MatchingEnableMigration.Key()] = true
 		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = false
 		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = false
-	case false:
+	} else {
 		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = true
 		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = true
 	}

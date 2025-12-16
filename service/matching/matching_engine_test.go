@@ -3311,7 +3311,8 @@ func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCoun
 
 	pgMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	pgMgr.WaitUntilInitialized(ctx)
+	err := pgMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	cancel()
 	backlogCount := totalApproximateBacklogCount(pgMgr.backlogMgr)
 	if s.fairness {
