@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -788,11 +789,11 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}
 	const N = 64
-	ch := make(chan struct{}, N)
+	didUpdate := &atomic.Bool{}
 	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (resp *matchingservice.UpdateFairnessStateResponse, err error) {
 			resp, err = s.matchingEngine.UpdateFairnessState(ctx, req)
-			ch <- struct{}{}
+			didUpdate.Store(true)
 			return
 		},
 	).AnyTimes()
@@ -832,12 +833,9 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 		break
 	}
 	s.Require().NoError(err)
-	select {
-	case <-ch:
-	case <-time.After(time.Second):
-		s.Require().Fail("AddWorkflowTask did not trigger AutoEnable")
-	}
+	s.Eventually(didUpdate.Load, time.Second, time.Millisecond)
 
+	// We check the old partition manager for the change because a new partition created will not reference the same mockUserDataManager.
 	data, _, _ := mgr.GetUserDataManager().GetUserData()
 	s.Require().Equal(enumsspb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
 	// At this point the partition manager should be unloaded
