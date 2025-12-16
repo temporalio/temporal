@@ -240,7 +240,8 @@ func wrongorderness(vs []int) float64 {
 
 type FairnessSuite struct {
 	testcore.FunctionalTestBase
-	partitions int
+	partitions   int
+	doAutoEnable bool
 }
 
 func TestFairnessSuite(t *testing.T) {
@@ -248,17 +249,30 @@ func TestFairnessSuite(t *testing.T) {
 	suite.Run(t, new(FairnessSuite))
 }
 
+func TestFairnessAutoEnableSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &FairnessSuite{doAutoEnable: true})
+}
+
 func (s *FairnessSuite) SetupSuite() {
 	s.partitions = 1
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingUseNewMatcher.Key():          true,
-		dynamicconfig.MatchingEnableFairness.Key():         true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key():      20,
 		dynamicconfig.MatchingGetTasksReloadAt.Key():       5,
 		dynamicconfig.NumPendingActivitiesLimitError.Key(): 1000,
 		// TODO: disable this and use default later?
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  s.partitions,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): s.partitions,
+	}
+	switch s.doAutoEnable {
+	case true:
+		dynamicConfigOverrides[dynamicconfig.MatchingAutoEnableV2.Key()] = true
+		dynamicConfigOverrides[dynamicconfig.MatchingEnableMigration.Key()] = true
+		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = false
+		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = false
+	case false:
+		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = true
+		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = true
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -567,8 +581,10 @@ func (s *FairnessSuite) TestFairness_Migration_FromFair() {
 }
 
 func (s *FairnessSuite) TestFairness_UpdateWorkflowExecutionOptions_InvalidatesPendingTask() {
+	if s.doAutoEnable {
+		s.T().Skip("flaky with autoenable")
+	}
 	tv := testvars.New(s.T())
-
 	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
