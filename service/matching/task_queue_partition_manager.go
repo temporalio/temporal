@@ -692,6 +692,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	pm.versionedQueuesLock.RLock()
 
 	versions := make(map[PhysicalTaskQueueVersion]bool)
+	fmt.Println("buildIDs requested:", buildIds)
+	fmt.Println("Versioned Queues:", pm.versionedQueues)
 
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
@@ -708,8 +710,10 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		} else {
 			found := false
 			for k := range pm.versionedQueues {
-				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version.
-				if k.BuildId() == b || worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(k.Deployment())) == b {
+				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version (which could be v31 or v32)
+				if k.BuildId() == b ||
+					worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(k.Deployment())) == b ||
+					worker_versioning.ExternalWorkerDeploymentVersionToStringV31(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(k.Deployment())) == b {
 					versions[k] = true
 					found = true
 					break
@@ -777,10 +781,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			// of the *aggregated* default/unversioned queue stats. We intentionally do NOT adjust the per-priority
 			// map in this case.
 			agg := aggregateStats(physicalStatsByPriority)
-			fmt.Println("Worker Deployment Name", v.Deployment().GetSeriesName())
-			fmt.Println("Worker Deployment Build ID", v.BuildId())
-
-			fmt.Println("base backlog count stats", agg.GetApproximateBacklogCount())
 
 			// Attribution model:
 			// - If current and/or ramping deployment versions exist, we first "give away" a portion of the
@@ -802,6 +802,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 				currentShare = unversionedAgg
 			}
 
+			// fmt.Println("Deployment version for v:", v.Deployment())
+			// fmt.Println("BuildID for v:", v.BuildId())
 			deploymentVersion := worker_versioning.DeploymentVersionFromDeployment(v.Deployment())
 
 			isUnversionedDescribe := deploymentVersion == nil

@@ -1300,9 +1300,13 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 
 		var buildIds []string
+		var reportUnversioned bool
+
 		if request.Version != nil {
 			// A particular version was requested. This is only available internally; not user-facing.
-			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
+			// TODO (Shivam): Confirm with the crew: I think we should be passing in v32 here and then further having checks in the partition manager
+			// to handle both v31 and v32 versions.
+			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV32(request.Version)}
 		}
 
 		// TODO(stephan): cache each version separately to allow re-use of cached stats
@@ -1343,6 +1347,13 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						buildIds = append(buildIds, deploymentVersion)
 					}
 				}
+
+				// Report stats from the unversioned queue here
+				reportUnversioned = true
+			}
+
+			if reportUnversioned {
+				buildIds = append(buildIds, "")
 			}
 
 			// query each partition for stats
@@ -1358,7 +1369,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						},
 						Versions: &taskqueuepb.TaskQueueVersionSelection{
 							BuildIds:    buildIds,
-							Unversioned: true, // TODO (Shivam): This should only be true if the user is requesting the unversioned stats no?
+							Unversioned: reportUnversioned,
 						},
 						ReportStats: true,
 					})
@@ -1366,14 +1377,17 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
-					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
-					for pri, priorityStats := range partitionStats {
+					partitionStatsByPriority := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
+					for pri, priorityStats := range partitionStatsByPriority {
 						if _, ok := taskQueueStatsByPriority[pri]; !ok {
 							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
 						}
-						mergeStats(taskQueueStats, priorityStats)
+						// mergeStats(taskQueueStats, priorityStats)
 						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
 					}
+
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
+					mergeStats(taskQueueStats, partitionStats)
 				}
 			}
 			pm.PutCache(cacheKey, &workflowservice.DescribeTaskQueueResponse{
@@ -1424,6 +1438,7 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 
 	resp := &matchingservice.DescribeVersionedTaskQueuesResponse{}
 	for _, tq := range request.VersionTaskQueues {
+		fmt.Println("Version requested to being described:", request.Version.DeploymentName, request.Version.BuildId)
 		tqResp, err := e.matchingRawClient.DescribeTaskQueue(ctx,
 			&matchingservice.DescribeTaskQueueRequest{
 				NamespaceId: request.GetNamespaceId(),
@@ -1447,6 +1462,14 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 				Stats:              tqResp.DescResponse.Stats,
 				StatsByPriorityKey: tqResp.DescResponse.StatsByPriorityKey,
 			})
+	}
+
+	fmt.Println("--------------------------------")
+	fmt.Println("Number of version task queues:", len(resp.VersionTaskQueues))
+	for _, tq := range resp.VersionTaskQueues {
+		fmt.Println("Name:", tq.Name)
+		fmt.Println("Type:", tq.Type)
+		fmt.Println("Backlog count:", tq.Stats.ApproximateBacklogCount)
 	}
 
 	pm.PutCache(cacheKey, resp)
