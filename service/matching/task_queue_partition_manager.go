@@ -136,13 +136,13 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
-	retErr = pm.userDataManager.WaitUntilInitialized(pm.initCtx)
-	if retErr != nil {
-		return
+	err := pm.userDataManager.WaitUntilInitialized(pm.initCtx)
+	if err != nil {
+		return err
 	}
-	data, _, retErr := pm.getPerTypeUserData()
-	if retErr != nil {
-		return
+	data, _, err := pm.getPerTypeUserData()
+	if err != nil {
+		return err
 	}
 
 	pm.fairnessState = data.GetFairnessState()
@@ -171,17 +171,16 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 			pm.config.EnableFairness = true
 		}
 	default:
-		retErr = serviceerror.NewInternal("Unknown FairnessState in UserData")
-		return
+		return serviceerror.NewInternal("Unknown FairnessState in UserData")
 	}
 
-	defaultQ, retErr := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
-	if retErr != nil {
-		return
+	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
+	if err != nil {
+		return err
 	}
 	defaultQ.Start()
 	pm.defaultQueueFuture.Set(defaultQ, nil)
-	return
+	return nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager {
@@ -195,7 +194,10 @@ func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager
 func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
-	go pm.initialize()
+	go func() {
+		// Make the linter happy...
+		_ = pm.initialize()
+	}()
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
