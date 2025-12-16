@@ -2103,6 +2103,178 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 			"expected status=Completed but is %s", pollResp.GetInfo().GetStatus())
 		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
 	})
+
+	t.Run("HeartbeatWhileInState", func(t *testing.T) {
+		testCases := []struct {
+			name            string
+			setupFn         func(ctx context.Context, taskToken []byte, activityID, runID string) error
+			expectSuccess   bool
+			cancelRequested bool // only meaningful if expectSuccess is true
+		}{
+			{
+				name:            "STARTED",
+				setupFn:         nil, // already started after poll
+				expectSuccess:   true,
+				cancelRequested: false,
+			},
+			{
+				name: "CANCEL_REQUESTED",
+				setupFn: func(ctx context.Context, _ []byte, activityID, runID string) error {
+					_, err := s.FrontendClient().RequestCancelActivityExecution(ctx,
+						&workflowservice.RequestCancelActivityExecutionRequest{
+							Namespace:  s.Namespace().String(),
+							ActivityId: activityID,
+							RunId:      runID,
+							RequestId:  "cancel-req",
+						})
+					return err
+				},
+				expectSuccess:   true,
+				cancelRequested: true,
+			},
+			{
+				name: "COMPLETED",
+				setupFn: func(ctx context.Context, taskToken []byte, _, _ string) error {
+					_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx,
+						&workflowservice.RespondActivityTaskCompletedRequest{
+							Namespace: s.Namespace().String(),
+							TaskToken: taskToken,
+							Result:    defaultResult,
+						})
+					return err
+				},
+				expectSuccess: false,
+			},
+			{
+				name: "FAILED",
+				setupFn: func(ctx context.Context, taskToken []byte, _, _ string) error {
+					_, err := s.FrontendClient().RespondActivityTaskFailed(ctx,
+						&workflowservice.RespondActivityTaskFailedRequest{
+							Namespace: s.Namespace().String(),
+							TaskToken: taskToken,
+							Failure:   defaultFailure,
+						})
+					return err
+				},
+				expectSuccess: false,
+			},
+			{
+				name: "CANCELED",
+				setupFn: func(ctx context.Context, taskToken []byte, activityID, runID string) error {
+					// First request cancel
+					_, err := s.FrontendClient().RequestCancelActivityExecution(ctx,
+						&workflowservice.RequestCancelActivityExecutionRequest{
+							Namespace:  s.Namespace().String(),
+							ActivityId: activityID,
+							RunId:      runID,
+							RequestId:  "cancel-req",
+						})
+					if err != nil {
+						return err
+					}
+					// Then acknowledge cancellation
+					_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx,
+						&workflowservice.RespondActivityTaskCanceledRequest{
+							Namespace: s.Namespace().String(),
+							TaskToken: taskToken,
+						})
+					return err
+				},
+				expectSuccess: false,
+			},
+			{
+				name: "TERMINATED",
+				setupFn: func(ctx context.Context, _ []byte, activityID, runID string) error {
+					_, err := s.FrontendClient().TerminateActivityExecution(ctx,
+						&workflowservice.TerminateActivityExecutionRequest{
+							Namespace:  s.Namespace().String(),
+							ActivityId: activityID,
+							RunId:      runID,
+							Reason:     "test termination",
+						})
+					return err
+				},
+				expectSuccess: false,
+			},
+			{
+				name: "TIMED_OUT",
+				setupFn: func(ctx context.Context, _ []byte, activityID, runID string) error {
+					// Wait for the activity to time out (uses 1s heartbeat timeout configured below)
+					_, err := s.FrontendClient().PollActivityExecution(ctx,
+						&workflowservice.PollActivityExecutionRequest{
+							Namespace:  s.Namespace().String(),
+							ActivityId: activityID,
+							RunId:      runID,
+						})
+					return err
+				},
+				expectSuccess: false,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+				defer cancel()
+
+				activityID := testcore.RandomizeStr(t.Name())
+				taskQueue := testcore.RandomizeStr(t.Name())
+
+				startResp, err := s.FrontendClient().StartActivityExecution(ctx,
+					&workflowservice.StartActivityExecutionRequest{
+						Namespace:           s.Namespace().String(),
+						ActivityId:          activityID,
+						ActivityType:        s.tv.ActivityType(),
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+						StartToCloseTimeout: durationpb.New(1 * time.Minute),
+						HeartbeatTimeout:    durationpb.New(1 * time.Second),
+						RetryPolicy: &commonpb.RetryPolicy{
+							MaximumAttempts: 1, // No retries - timeout is terminal
+						},
+					})
+				require.NoError(t, err)
+
+				pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx,
+					&workflowservice.PollActivityTaskQueueRequest{
+						Namespace: s.Namespace().String(),
+						TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					})
+				require.NoError(t, err)
+
+				describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx,
+					&workflowservice.DescribeActivityExecutionRequest{
+						Namespace:  s.Namespace().String(),
+						ActivityId: activityID,
+					})
+				require.NoError(t, err)
+				require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, describeResp.GetInfo().GetRunState())
+
+				if tc.setupFn != nil {
+					err = tc.setupFn(ctx, pollResp.TaskToken, activityID, startResp.RunId)
+					require.NoError(t, err)
+				}
+
+				hbResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx,
+					&workflowservice.RecordActivityTaskHeartbeatRequest{
+						Namespace: s.Namespace().String(),
+						TaskToken: pollResp.TaskToken,
+						Details:   heartbeatDetails,
+					})
+
+				if tc.expectSuccess {
+					require.NoError(t, err)
+					require.Equal(t, tc.cancelRequested, hbResp.CancelRequested,
+						"expected CancelRequested=%v but got %v", tc.cancelRequested, hbResp.CancelRequested)
+				} else {
+					require.Error(t, err)
+					statusErr := serviceerror.ToStatus(err)
+					require.Equal(t, codes.NotFound, statusErr.Code(),
+						"expected NotFound but got %v", statusErr.Code())
+					require.Contains(t, statusErr.Message(), "activity task not found")
+				}
+			})
+		}
+	})
 }
 
 func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
