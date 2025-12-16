@@ -43,7 +43,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 
 	// Add some heartbeats
 	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerA", Status: enumspb.WORKER_STATUS_RUNNING}
-	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerB", Status: enumspb.WORKER_STATUS_SHUTDOWN}
+	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerB", Status: enumspb.WORKER_STATUS_RUNNING}
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
 
 	list = m.filterWorkers("ns1", alwaysTrue)
@@ -60,6 +60,59 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	assert.Equal(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
 	lastUtilization := utilizationMetrics[0]
 	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct capacity utilization")
+}
+
+func TestShutdownStatusRemovesWorker(t *testing.T) {
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
+	defer m.Stop()
+
+	// Add a running worker
+	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_RUNNING}
+	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb})
+
+	// Verify worker is registered
+	list := m.filterWorkers("ns1", alwaysTrue)
+	assert.Len(t, list, 1, "worker should be registered")
+	assert.Equal(t, int64(1), m.total.Load(), "total should be 1")
+
+	// Worker sends shutdown status
+	hbShutdown := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_SHUTDOWN}
+	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hbShutdown})
+
+	// Verify worker is immediately removed
+	list = m.filterWorkers("ns1", alwaysTrue)
+	assert.Len(t, list, 0, "worker should be removed on shutdown")
+	assert.Equal(t, int64(0), m.total.Load(), "total should be 0 after shutdown")
+}
+
+func TestShutdownStatusForNonExistentWorker(t *testing.T) {
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
+	defer m.Stop()
+
+	// Send shutdown for non-existent worker - should be a no-op
+	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "unknown", Status: enumspb.WORKER_STATUS_SHUTDOWN}
+	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb})
+
+	// Verify nothing happened
+	list := m.filterWorkers("ns1", alwaysTrue)
+	assert.Len(t, list, 0, "no workers should exist")
+	assert.Equal(t, int64(0), m.total.Load(), "total should remain 0")
 }
 
 func TestListNamespacePredicate(t *testing.T) {

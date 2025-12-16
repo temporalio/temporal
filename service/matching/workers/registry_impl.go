@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -67,13 +68,14 @@ func newBucket() *bucket {
 }
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
-// Returns the number of new entries.
+// Returns the net change in entry count (positive for new entries, negative for removals).
+// Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
 func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) int64 {
 	now := time.Now()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	var newEntries int64
+	var delta int64
 
 	mp, ok := b.namespaces[nsID]
 	if !ok {
@@ -83,6 +85,18 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 
 	for _, hb := range heartbeats {
 		key := hb.WorkerInstanceKey
+
+		// If worker is shutting down, remove it immediately
+		if hb.Status == enumspb.WORKER_STATUS_SHUTDOWN {
+			if e, exists := mp[key]; exists {
+				b.order.Remove(e.elem)
+				delete(mp, key)
+				delta--
+			}
+			continue
+		}
+
+		// Normal upsert
 		if e, exists := mp[key]; exists {
 			e.hb = hb
 			e.lastSeen = now
@@ -95,11 +109,11 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.Work
 			}
 			e.elem = b.order.PushBack(e)
 			mp[key] = e
-			newEntries += 1
+			delta++
 		}
 	}
 
-	return newEntries
+	return delta
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
@@ -222,8 +236,8 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 // New entries increment the global counter.
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	newEntries := b.upsertHeartbeats(nsID, heartbeats)
-	m.total.Add(newEntries)
+	delta := b.upsertHeartbeats(nsID, heartbeats)
+	m.total.Add(delta)
 	m.recordUtilizationMetric()
 }
 
