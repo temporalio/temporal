@@ -249,16 +249,6 @@ func (c *clientImpl) FetchWorkerConfig(
 	return c.client.FetchWorkerConfig(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetActivityExecutionOutcome(
-	ctx context.Context,
-	request *workflowservice.GetActivityExecutionOutcomeRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetActivityExecutionOutcomeResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.GetActivityExecutionOutcome(ctx, request, opts...)
-}
-
 func (c *clientImpl) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
@@ -527,6 +517,16 @@ func (c *clientImpl) PauseWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.PauseWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PollActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollActivityExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PollActivityExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollActivityTaskQueue(

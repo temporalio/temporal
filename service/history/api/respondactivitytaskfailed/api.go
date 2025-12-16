@@ -35,6 +35,10 @@ func Invoke(
 
 	// Handle standalone activity if component ref is present in the token
 	if componentRef := token.GetComponentRef(); len(componentRef) > 0 {
+		namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.ActivityId)
+		if err != nil {
+			return nil, err
+		}
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -44,7 +48,7 @@ func Invoke(
 				Token:   token,
 				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
 					Handler:                     shard.GetMetricsHandler(),
-					NamespaceName:               namespace.String(),
+					NamespaceName:               namespaceEntry.Name().String(),
 					BreakdownMetricsByTaskQueue: shard.GetConfig().BreakdownMetricsByTaskQueue,
 				},
 			},
