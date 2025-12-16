@@ -50,6 +50,17 @@ type (
 		metricsHandler            metrics.Handler                  // metrics handler for recording registry metrics
 		enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn     // dynamic config function to control plugin metrics export
 	}
+
+	// RegistryParams contains all parameters for creating a worker registry.
+	RegistryParams struct {
+		NumBuckets          int
+		TTL                 dynamicconfig.DurationPropertyFn
+		MinEvictAge         dynamicconfig.DurationPropertyFn
+		MaxItems            dynamicconfig.IntPropertyFn
+		EvictionInterval    dynamicconfig.DurationPropertyFn
+		MetricsHandler      metrics.Handler
+		EnablePluginMetrics dynamicconfig.BoolPropertyFn
+	}
 )
 
 func newBucket() *bucket {
@@ -175,49 +186,28 @@ func (b *bucket) evictByCapacity(threshold time.Time) bool {
 }
 
 // NewRegistry creates a workers heartbeat registry with the given parameters.
-func NewRegistry(
-	lc fx.Lifecycle,
-	entryTTL dynamicconfig.DurationPropertyFn,
-	minEvictAge dynamicconfig.DurationPropertyFn,
-	maxEntries dynamicconfig.IntPropertyFn,
-	evictionInterval dynamicconfig.DurationPropertyFn,
-	metricsHandler metrics.Handler,
-	enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn,
-) Registry {
-	m := newRegistryImpl(
-		defaultBuckets,
-		entryTTL,
-		minEvictAge,
-		maxEntries,
-		evictionInterval,
-		metricsHandler,
-		enableWorkerPluginMetrics,
-	)
-
+func NewRegistry(lc fx.Lifecycle, params RegistryParams) Registry {
+	m := newRegistryImpl(params)
 	lc.Append(fx.StartStopHook(m.Start, m.Stop))
-
 	return m
 }
 
-func newRegistryImpl(
-	numBuckets int,
-	ttlFn dynamicconfig.DurationPropertyFn,
-	minEvictAgeFn dynamicconfig.DurationPropertyFn,
-	maxItemsFn dynamicconfig.IntPropertyFn,
-	evictionIntervalFn dynamicconfig.DurationPropertyFn,
-	metricsHandler metrics.Handler,
-	enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn,
-) *registryImpl {
+func newRegistryImpl(params RegistryParams) *registryImpl {
+	numBuckets := params.NumBuckets
+	if numBuckets == 0 {
+		numBuckets = defaultBuckets
+	}
+
 	m := &registryImpl{
 		buckets:                   make([]*bucket, numBuckets),
-		maxItemsFn:                maxItemsFn,
-		ttlFn:                     ttlFn,
-		minEvictAgeFn:             minEvictAgeFn,
-		evictionIntervalFn:        evictionIntervalFn,
+		maxItemsFn:                params.MaxItems,
+		ttlFn:                     params.TTL,
+		minEvictAgeFn:             params.MinEvictAge,
+		evictionIntervalFn:        params.EvictionInterval,
 		seed:                      maphash.MakeSeed(),
 		quit:                      make(chan struct{}),
-		metricsHandler:            metricsHandler,
-		enableWorkerPluginMetrics: enableWorkerPluginMetrics,
+		metricsHandler:            params.MetricsHandler,
+		enableWorkerPluginMetrics: params.EnablePluginMetrics,
 	}
 
 	for i := range m.buckets {

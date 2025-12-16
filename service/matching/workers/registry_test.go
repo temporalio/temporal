@@ -76,15 +76,14 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newRegistryImpl(
-				defaultBuckets,
-				dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-				dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-				dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-				dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-				metrics.NoopMetricsHandler,
-				dynamicconfig.GetBoolPropertyFn(true),
-			)
+			r := newRegistryImpl(RegistryParams{
+				TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
+				MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
+				MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
+				EvictionInterval:    dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
+				MetricsHandler:      metrics.NoopMetricsHandler,
+				EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+			})
 			tt.setup(r)
 
 			r.RecordWorkerHeartbeats(tt.nsID, namespace.Name(tt.nsID+"_name"), []*workerpb.WorkerHeartbeat{tt.workerHeartbeat})
@@ -180,15 +179,14 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newRegistryImpl(
-				defaultBuckets,
-				dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-				dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-				dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-				dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-				metrics.NoopMetricsHandler,
-				dynamicconfig.GetBoolPropertyFn(true),
-			)
+			r := newRegistryImpl(RegistryParams{
+				TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
+				MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
+				MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
+				EvictionInterval:    dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
+				MetricsHandler:      metrics.NoopMetricsHandler,
+				EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+			})
 			tt.setup(r)
 
 			result, err := r.ListWorkers(tt.nsID, "", nil)
@@ -309,15 +307,14 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newRegistryImpl(
-				defaultBuckets,
-				dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-				dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-				dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-				dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-				metrics.NoopMetricsHandler,
-				dynamicconfig.GetBoolPropertyFn(true),
-			)
+			r := newRegistryImpl(RegistryParams{
+				TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
+				MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
+				MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
+				EvictionInterval:    dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
+				MetricsHandler:      metrics.NoopMetricsHandler,
+				EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+			})
 			tt.setup(r)
 
 			result, err := r.ListWorkers(tt.nsID, tt.query, nil)
@@ -418,15 +415,14 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newRegistryImpl(
-				defaultBuckets,
-				dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-				dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-				dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-				dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-				metrics.NoopMetricsHandler,
-				dynamicconfig.GetBoolPropertyFn(true),
-			)
+			r := newRegistryImpl(RegistryParams{
+				TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
+				MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
+				MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
+				EvictionInterval:    dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
+				MetricsHandler:      metrics.NoopMetricsHandler,
+				EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+			})
 			tt.setup(r)
 
 			result, err := r.DescribeWorker(tt.nsID, tt.workerInstanceKey)

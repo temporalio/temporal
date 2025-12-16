@@ -195,13 +195,12 @@ func WorkersRegistryProvider(
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
 ) workers.Registry {
-	return workers.NewRegistry(
-		lc,
-		serviceConfig.WorkerRegistryEntryTTL,
-		serviceConfig.WorkerRegistryMinEvictAge,
-		serviceConfig.WorkerRegistryMaxEntries,
-		serviceConfig.WorkerRegistryEvictionInterval,
-		metricsHandler,
-		serviceConfig.EnableWorkerPluginMetrics,
-	)
+	return workers.NewRegistry(lc, workers.RegistryParams{
+		TTL:                 serviceConfig.WorkerRegistryEntryTTL,
+		MinEvictAge:         serviceConfig.WorkerRegistryMinEvictAge,
+		MaxItems:            serviceConfig.WorkerRegistryMaxEntries,
+		EvictionInterval:    serviceConfig.WorkerRegistryEvictionInterval,
+		MetricsHandler:      metricsHandler,
+		EnablePluginMetrics: serviceConfig.EnableWorkerPluginMetrics,
+	})
 }
