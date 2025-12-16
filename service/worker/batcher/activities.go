@@ -555,7 +555,8 @@ func startTaskProcessorProtobuf(
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
-				nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+				var appErr *temporal.ApplicationError
+				nonRetryable := (errors.As(err, &appErr) && appErr.NonRetryable()) || slices.Contains(batchOperation.NonRetryableErrors, err.Error())
 				if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
 					respCh <- taskResponse{err: err, page: task.page}
 				} else {
