@@ -166,6 +166,10 @@ func (h *frontendHandler) ListActivityExecutions(
 	ctx context.Context,
 	req *workflowservice.ListActivityExecutionsRequest,
 ) (*workflowservice.ListActivityExecutionsResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+	}
+
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -220,6 +224,10 @@ func (h *frontendHandler) CountActivityExecutions(
 	ctx context.Context,
 	req *workflowservice.CountActivityExecutionsRequest,
 ) (*workflowservice.CountActivityExecutionsResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+	}
+
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
