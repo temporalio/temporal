@@ -880,6 +880,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
+				executionInfo.WorkflowId,
 				targetNamespaceID,
 				handler.initiatedChildExecutionsInBatch,
 				attr,
@@ -1164,6 +1165,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateSignalExternalWorkflowExecutionAttributes(
 				namespaceID,
+				executionInfo.WorkflowId,
 				targetNamespaceID,
 				attr,
 			)
