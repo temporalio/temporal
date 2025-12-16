@@ -199,10 +199,10 @@ func (h *frontendHandler) ListActivityExecutions(
 			ScheduleTime:         timestamppb.New(exec.StartTime),
 			StateTransitionCount: exec.StateTransitionCount,
 			StateSizeBytes:       exec.HistorySizeBytes,
-			// TODO(dan): exec.CustomSearchAttributes
-			ActivityType: &commonpb.ActivityType{Name: activityType},
-			TaskQueue:    taskQueue,
-			Status:       status,
+			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: exec.CustomSearchAttributes},
+			ActivityType:         &commonpb.ActivityType{Name: activityType},
+			TaskQueue:            taskQueue,
+			Status:               status,
 		}
 		if !exec.CloseTime.IsZero() {
 			info.CloseTime = timestamppb.New(exec.CloseTime)
