@@ -23,11 +23,3 @@ jobs:
         with:
           snapshot: false
           release: true
-
-      - name: Build and push Docker images
-        uses: ./.github/actions/build-docker-images
-        with:
-          push: true
-          tag-latest: true
-          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}

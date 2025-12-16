@@ -20,6 +20,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  sanitize-tag      - Sanitize branch name for Docker tag\n")
 		fmt.Fprintf(os.Stderr, "  organize-binaries - Organize binaries for Docker\n")
 		fmt.Fprintf(os.Stderr, "  download-cli      - Download Temporal CLI\n")
+		fmt.Fprintf(os.Stderr, "  extract-version   - Extract version from temporal-server binary\n")
 		os.Exit(1)
 	}
 
@@ -38,6 +39,11 @@ func main() {
 		}
 	case "download-cli":
 		if err := downloadCLI(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case "extract-version":
+		if err := extractVersion(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -371,6 +377,50 @@ func downloadCLIForArch(arch string) error {
 	}
 
 	fmt.Printf("Installed Temporal CLI to %s\n", destPath)
+
+	return nil
+}
+
+// extractVersion extracts the version from the temporal-server binary
+func extractVersion() error {
+	// Try to find the temporal-server binary in any available architecture directory
+	var binaryPath string
+	for _, arch := range validArchs {
+		candidatePath := filepath.Join("docker", "build", arch, "temporal-server")
+		if _, err := os.Stat(candidatePath); err == nil {
+			binaryPath = candidatePath
+			break
+		}
+	}
+
+	if binaryPath == "" {
+		return fmt.Errorf("temporal-server binary not found in docker/build/{amd64,arm64}/")
+	}
+
+	fmt.Printf("Extracting version from %s\n", binaryPath)
+
+	// Run the binary with --version flag
+	cmd := exec.Command(binaryPath, "--version")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to run %s --version: %w", binaryPath, err)
+	}
+
+	// Parse the version from output like "temporal version 1.29.0"
+	outputStr := strings.TrimSpace(string(output))
+	versionRegex := regexp.MustCompile(`^temporal version (\d+\.\d+\.\d+)`)
+	matches := versionRegex.FindStringSubmatch(outputStr)
+	if len(matches) < 2 {
+		return fmt.Errorf("failed to parse version from output: %s", outputStr)
+	}
+
+	version := matches[1]
+	fmt.Printf("Extracted version: %s\n", version)
+
+	// Set output for GitHub Actions
+	if err := setOutput("server-version", version); err != nil {
+		return fmt.Errorf("failed to set output: %w", err)
+	}
 
 	return nil
 }

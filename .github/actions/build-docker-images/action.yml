@@ -71,6 +71,13 @@ runs:
       run: |
         .github/actions/build-docker-images/scripts/docker-build-helper download-cli
 
+    - name: Extract server version from binary
+      id: extract-version
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        .github/actions/build-docker-images/scripts/docker-build-helper extract-version
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
@@ -92,6 +99,7 @@ runs:
         TEMPORAL_SHA: ${{ github.sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
+        SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
       run: |
         if [ -n "${{ inputs.platform }}" ]; then
           docker buildx bake \
@@ -117,6 +125,7 @@ runs:
         TEMPORAL_SHA: ${{ github.sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
+        SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
       run: |
         docker buildx bake \
           --push \

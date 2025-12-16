@@ -1,9 +1,9 @@
 variable "SERVER_VERSION" {
-  default = "1.29.1"
+  default = "unknown"
 }
 
 variable "CLI_VERSION" {
-  default = "1.5.1"
+  default = "unknown"
 }
 
 variable "IMAGE_REPO" {
@@ -55,7 +55,6 @@ target "admin-tools" {
     "org.opencontainers.image.url" = "https://github.com/temporalio/temporal"
     "org.opencontainers.image.source" = "https://github.com/temporalio/temporal"
     "org.opencontainers.image.licenses" = "MIT"
-    "org.opencontainers.image.version" = "${SERVER_VERSION}"
     "org.opencontainers.image.revision" = "${TEMPORAL_SHA}"
     "org.opencontainers.image.created" = timestamp()
     "com.temporal.server.version" = "${SERVER_VERSION}"
