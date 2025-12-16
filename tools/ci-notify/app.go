@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	FlagRunID       = "run-id"
+	FlagRunID        = "run-id"
 	FlagSlackWebhook = "slack-webhook"
-	FlagDryRun      = "dry-run"
+	FlagDryRun       = "dry-run"
 )
 
 // NewCliApp instantiates a new instance of the CLI application
@@ -57,7 +57,7 @@ func run(c *cli.Context) error {
 		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
 		return nil // Don't fail CI if notification fails
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	runID := c.String(FlagRunID)
 	slackWebhook := c.String(FlagSlackWebhook)
