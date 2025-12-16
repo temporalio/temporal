@@ -177,21 +177,21 @@ func (b *bucket) evictByCapacity(threshold time.Time) bool {
 // NewRegistry creates a workers heartbeat registry with the given parameters.
 func NewRegistry(
 	lc fx.Lifecycle,
-	metricsHandler metrics.Handler,
-	enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn,
 	entryTTL dynamicconfig.DurationPropertyFn,
 	minEvictAge dynamicconfig.DurationPropertyFn,
 	maxEntries dynamicconfig.IntPropertyFn,
 	evictionInterval dynamicconfig.DurationPropertyFn,
+	metricsHandler metrics.Handler,
+	enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn,
 ) Registry {
 	m := newRegistryImpl(
 		defaultBuckets,
-		metricsHandler,
-		enableWorkerPluginMetrics,
 		entryTTL,
 		minEvictAge,
 		maxEntries,
 		evictionInterval,
+		metricsHandler,
+		enableWorkerPluginMetrics,
 	)
 
 	lc.Append(fx.StartStopHook(m.Start, m.Stop))
@@ -201,12 +201,12 @@ func NewRegistry(
 
 func newRegistryImpl(
 	numBuckets int,
-	metricsHandler metrics.Handler,
-	enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn,
 	ttlFn dynamicconfig.DurationPropertyFn,
 	minEvictAgeFn dynamicconfig.DurationPropertyFn,
 	maxItemsFn dynamicconfig.IntPropertyFn,
 	evictionIntervalFn dynamicconfig.DurationPropertyFn,
+	metricsHandler metrics.Handler,
+	enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn,
 ) *registryImpl {
 	m := &registryImpl{
 		buckets:                   make([]*bucket, numBuckets),
