@@ -124,7 +124,7 @@ func recordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.RecordActivityTaskStartedResponse, rejectCode, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}

@@ -35,6 +35,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
@@ -75,7 +76,6 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/grpc/codes"
@@ -133,7 +133,6 @@ type (
 		clusterMetadata                 cluster.Metadata
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
-		deploymentStoreClient           deployment.DeploymentStoreClient
 		workerDeploymentClient          workerdeployment.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
 		archiverProvider                provider.ArchiverProvider
@@ -166,7 +165,6 @@ func NewWorkflowHandler(
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -210,7 +208,6 @@ func NewWorkflowHandler(
 		clusterMetadata:                 clusterMetadata,
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
-		deploymentStoreClient:           deploymentStoreClient,
 		workerDeploymentClient:          workerDeploymentClient,
 		schedulerClient:                 schedulerClient,
 		archiverProvider:                archiverProvider,
@@ -268,7 +265,7 @@ func (wh *WorkflowHandler) Start() {
 
 			if ns.IsGlobalNamespace() &&
 				ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
-				ns.ActiveClusterName() != wh.clusterMetadata.GetCurrentClusterName() {
+				!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName()) {
 				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
 				if ok {
 					for _, cancelFn := range pollers.PopAll() {

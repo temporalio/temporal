@@ -103,6 +103,7 @@ var Module = fx.Options(
 	fx.Provide(FrontendHTTPClientCacheProvider),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
+	fx.Provide(namespace.NewDefaultReplicationResolverFactory),
 	deadlock.Module,
 	config.Module,
 	testhooks.Module,
@@ -216,6 +217,7 @@ func NamespaceRegistryProvider(
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) namespace.Registry {
 	return nsregistry.NewRegistry(
 		metadataManager,
@@ -224,6 +226,7 @@ func NamespaceRegistryProvider(
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
 		logger,
+		replicationResolverFactory,
 	)
 }
 

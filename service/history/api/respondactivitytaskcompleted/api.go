@@ -25,12 +25,6 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RespondActivityTaskCompletedResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	namespace := namespaceEntry.Name()
-
 	tokenSerializer := tasktoken.NewSerializer()
 	request := req.CompleteRequest
 	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
@@ -62,6 +56,11 @@ func Invoke(
 		return response, nil
 	}
 
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+	namespaceName := namespaceEntry.Name()
 	if err := api.SetActivityTaskRunID(ctx, token, workflowConsistencyChecker); err != nil {
 		return nil, err
 	}
@@ -156,7 +155,7 @@ func Invoke(
 	if err == nil {
 		workflow.RecordActivityCompletionMetrics(
 			shard,
-			namespace,
+			namespaceName,
 			taskQueue,
 			workflow.ActivityCompletionMetrics{
 				AttemptStartedTime: attemptStartedTime,
