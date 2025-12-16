@@ -2913,8 +2913,9 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 // convertPollWorkflowTaskQueueResponse converts a PollWorkflowTaskQueueResponse to
 // PollWorkflowTaskQueueResponseWithRawHistory. This is used when forwarding tasks
 // from remote matching nodes where the client has already deserialized the response.
-// This function also processes search attributes since the raw history from remote matching
-// hasn't been processed yet (remote matching passes through raw bytes without processing).
+// When SendRawHistoryBetweenInternalServices is enabled, this function also processes
+// search attributes since the raw history from remote matching hasn't been processed yet
+// (remote matching passes through raw bytes without processing).
 func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
 	resp *matchingservice.PollWorkflowTaskQueueResponse,
 	ns namespace.Name,
@@ -2929,9 +2930,10 @@ func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
 	if history == nil && resp.RawHistory != nil { //nolint:staticcheck
 		history = resp.RawHistory //nolint:staticcheck
 	}
-	// Process search attributes on the history. Remote matching passes through raw bytes
-	// without processing, so we need to do it here for forwarded requests.
-	if history != nil {
+	// Process search attributes on the history only when SendRawHistoryBetweenInternalServices is enabled.
+	// When disabled, history service already processes search attributes before sending.
+	// When enabled, remote matching passes through raw bytes without processing, so we do it here.
+	if history != nil && e.config.SendRawHistoryBetweenInternalServices() {
 		err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, history.Events, ns, e.visibilityManager)
 		if err != nil {
 			return nil, err
