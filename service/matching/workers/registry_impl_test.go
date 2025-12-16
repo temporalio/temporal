@@ -27,7 +27,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          2,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
@@ -64,7 +64,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 
 func TestListNamespacePredicate(t *testing.T) {
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          1,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
@@ -102,7 +102,7 @@ func TestListNamespacePredicate(t *testing.T) {
 
 func TestEvictByTTL(t *testing.T) {
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          1,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(1 * time.Second),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
@@ -137,7 +137,7 @@ func TestEvictByCapacity(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          1,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
@@ -184,7 +184,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          1,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(minEvictAge),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
@@ -234,7 +234,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 
 		// Uses real time.NewTicker - synctest provides virtual time control
 		m := newRegistryImpl(RegistryParams{
-			NumBuckets:          1,
+			NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
 			TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 			MinEvictAge:         dynamicconfig.GetDurationPropertyFn(minEvictAge),
 			MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
@@ -280,7 +280,7 @@ func TestMultipleNamespaces(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          2,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
@@ -337,7 +337,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 		defer captureHandler.StopCapture(capture)
 
 		m := newRegistryImpl(RegistryParams{
-			NumBuckets:          1,
+			NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
 			TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 			MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 			MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
@@ -380,7 +380,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 
 func BenchmarkUpdate(b *testing.B) {
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          16,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(16),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(time.Minute),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(b.N),
@@ -398,7 +398,7 @@ func BenchmarkUpdate(b *testing.B) {
 
 func BenchmarkListNamespace(b *testing.B) {
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          16,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(16),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(time.Minute),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(1000),
@@ -424,7 +424,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 	namespaces := []namespace.ID{"ns1", "ns2", "ns3"}
 	totalHeartbeats := 30 // Total heartbeats per namespace
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          len(namespaces),
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(len(namespaces)),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(time.Minute),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(b.N),
@@ -481,7 +481,7 @@ func TestPluginMetricsExported(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          2,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
@@ -559,7 +559,7 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          2,
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(10),

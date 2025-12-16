@@ -58,6 +58,7 @@ type (
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
+		WorkerRegistryNumBuckets                 dynamicconfig.IntPropertyFn
 		WorkerRegistryEntryTTL                   dynamicconfig.DurationPropertyFn
 		WorkerRegistryMinEvictAge                dynamicconfig.DurationPropertyFn
 		WorkerRegistryMaxEntries                 dynamicconfig.IntPropertyFn
@@ -282,6 +283,7 @@ func NewConfig(
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
+		WorkerRegistryNumBuckets:                 dynamicconfig.MatchingWorkerRegistryNumBuckets.Get(dc),
 		WorkerRegistryEntryTTL:                   dynamicconfig.MatchingWorkerRegistryEntryTTL.Get(dc),
 		WorkerRegistryMinEvictAge:                dynamicconfig.MatchingWorkerRegistryMinEvictAge.Get(dc),
 		WorkerRegistryMaxEntries:                 dynamicconfig.MatchingWorkerRegistryMaxEntries.Get(dc),

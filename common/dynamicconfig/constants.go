@@ -1391,6 +1391,12 @@ an optional feature and also requires a metrics collection system that can handl
 	)
 
 	// Worker registry settings
+	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
+		"matching.workerRegistryNumBuckets",
+		10,
+		`MatchingWorkerRegistryNumBuckets is the number of buckets used to partition the worker registry
+keyspace for reduced lock contention. Changes require a restart to take effect.`,
+	)
 	MatchingWorkerRegistryEntryTTL = NewGlobalDurationSetting(
 		"matching.workerRegistryEntryTTL",
 		5*time.Minute,

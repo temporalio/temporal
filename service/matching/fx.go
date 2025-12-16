@@ -196,6 +196,7 @@ func WorkersRegistryProvider(
 	serviceConfig *Config,
 ) workers.Registry {
 	return workers.NewRegistry(lc, workers.RegistryParams{
+		NumBuckets:          serviceConfig.WorkerRegistryNumBuckets,
 		TTL:                 serviceConfig.WorkerRegistryEntryTTL,
 		MinEvictAge:         serviceConfig.WorkerRegistryMinEvictAge,
 		MaxItems:            serviceConfig.WorkerRegistryMaxEntries,

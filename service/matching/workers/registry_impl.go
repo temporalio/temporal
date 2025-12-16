@@ -15,10 +15,6 @@ import (
 	"go.uber.org/fx"
 )
 
-const (
-	defaultBuckets = 10
-)
-
 type (
 	// entry wraps a WorkerHeartbeat along with its namespace and eviction metadata.
 	entry struct {
@@ -53,7 +49,7 @@ type (
 
 	// RegistryParams contains all parameters for creating a worker registry.
 	RegistryParams struct {
-		NumBuckets          int
+		NumBuckets          dynamicconfig.IntPropertyFn
 		TTL                 dynamicconfig.DurationPropertyFn
 		MinEvictAge         dynamicconfig.DurationPropertyFn
 		MaxItems            dynamicconfig.IntPropertyFn
@@ -193,13 +189,8 @@ func NewRegistry(lc fx.Lifecycle, params RegistryParams) Registry {
 }
 
 func newRegistryImpl(params RegistryParams) *registryImpl {
-	numBuckets := params.NumBuckets
-	if numBuckets == 0 {
-		numBuckets = defaultBuckets
-	}
-
 	m := &registryImpl{
-		buckets:                   make([]*bucket, numBuckets),
+		buckets:                   make([]*bucket, params.NumBuckets()),
 		maxItemsFn:                params.MaxItems,
 		ttlFn:                     params.TTL,
 		minEvictAgeFn:             params.MinEvictAge,

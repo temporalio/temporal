@@ -77,6 +77,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(RegistryParams{
+				NumBuckets:          dynamicconfig.GetIntPropertyFn(10),
 				TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
 				MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
 				MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
@@ -180,6 +181,7 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(RegistryParams{
+				NumBuckets:          dynamicconfig.GetIntPropertyFn(10),
 				TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
 				MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
 				MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
@@ -308,6 +310,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(RegistryParams{
+				NumBuckets:          dynamicconfig.GetIntPropertyFn(10),
 				TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
 				MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
 				MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
@@ -416,6 +419,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := newRegistryImpl(RegistryParams{
+				NumBuckets:          dynamicconfig.GetIntPropertyFn(10),
 				TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
 				MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
 				MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
