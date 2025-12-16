@@ -163,6 +163,7 @@ func AuthorizationInterceptorProvider(
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
+	dc *dynamicconfig.Collection,
 ) *authorization.Interceptor {
 	return authorization.NewInterceptor(
 		claimMapper,
@@ -174,6 +175,7 @@ func AuthorizationInterceptorProvider(
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
 		serviceConfig.ExposeAuthorizerErrors,
+		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 	)
 }
 

@@ -80,15 +80,16 @@ func PeerCert(tlsInfo *credentials.TLSInfo) *x509.Certificate {
 }
 
 type Interceptor struct {
-	claimMapper            ClaimMapper
-	authorizer             Authorizer
-	metricsHandler         metrics.Handler
-	logger                 log.Logger
-	namespaceChecker       NamespaceChecker
-	audienceGetter         JWTAudienceMapper
-	authHeaderName         string
-	authExtraHeaderName    string
-	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn
+	claimMapper                  ClaimMapper
+	authorizer                   Authorizer
+	metricsHandler               metrics.Handler
+	logger                       log.Logger
+	namespaceChecker             NamespaceChecker
+	audienceGetter               JWTAudienceMapper
+	authHeaderName               string
+	authExtraHeaderName          string
+	exposeAuthorizerErrors       dynamicconfig.BoolPropertyFn
+	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
 }
 
 // NewInterceptor creates an authorization interceptor.
@@ -102,17 +103,19 @@ func NewInterceptor(
 	authHeaderName string,
 	authExtraHeaderName string,
 	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn,
+	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn,
 ) *Interceptor {
 	return &Interceptor{
-		claimMapper:            claimMapper,
-		authorizer:             authorizer,
-		logger:                 logger,
-		namespaceChecker:       namespaceChecker,
-		metricsHandler:         metricsHandler,
-		authHeaderName:         cmp.Or(authHeaderName, defaultAuthHeaderName),
-		authExtraHeaderName:    cmp.Or(authExtraHeaderName, defaultAuthExtraHeaderName),
-		audienceGetter:         audienceGetter,
-		exposeAuthorizerErrors: exposeAuthorizerErrors,
+		claimMapper:                  claimMapper,
+		authorizer:                   authorizer,
+		logger:                       logger,
+		namespaceChecker:             namespaceChecker,
+		metricsHandler:               metricsHandler,
+		authHeaderName:               cmp.Or(authHeaderName, defaultAuthHeaderName),
+		authExtraHeaderName:          cmp.Or(authExtraHeaderName, defaultAuthExtraHeaderName),
+		audienceGetter:               audienceGetter,
+		exposeAuthorizerErrors:       exposeAuthorizerErrors,
+		enableCrossNamespaceCommands: enableCrossNamespaceCommands,
 	}
 }
 
@@ -274,43 +277,54 @@ func (a *Interceptor) authorizeTargetNamespaces(
 	sourceNamespace string,
 	req interface{},
 ) error {
+	// Skip if cross-namespace commands are not enabled
+	if !a.enableCrossNamespaceCommands() {
+		return nil
+	}
+
 	wftRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
 	if !ok {
 		return nil
 	}
 
+	// Track namespaces we've already authorized to avoid duplicate checks
+	authorizedNamespaces := make(map[string]struct{})
+
 	for _, cmd := range wftRequest.GetCommands() {
 		var targetNamespace string
-		var apiName string
 
 		switch cmd.GetCommandType() {
 		case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
 			if attr := cmd.GetSignalExternalWorkflowExecutionCommandAttributes(); attr != nil {
 				targetNamespace = attr.GetNamespace()
-				apiName = api.WorkflowServicePrefix + "SignalWorkflowExecution"
 			}
 		case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
 			if attr := cmd.GetStartChildWorkflowExecutionCommandAttributes(); attr != nil {
 				targetNamespace = attr.GetNamespace()
-				apiName = api.WorkflowServicePrefix + "StartWorkflowExecution"
 			}
 		case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
 			if attr := cmd.GetRequestCancelExternalWorkflowExecutionCommandAttributes(); attr != nil {
 				targetNamespace = attr.GetNamespace()
-				apiName = api.WorkflowServicePrefix + "RequestCancelWorkflowExecution"
 			}
 		}
 
-		// Only authorize if target namespace differs from source namespace
-		if targetNamespace != "" && targetNamespace != sourceNamespace {
-			if err := a.Authorize(ctx, claims, &CallTarget{
-				APIName:   apiName,
-				Namespace: targetNamespace,
-				Request:   req,
-			}); err != nil {
-				return err
-			}
+		// Skip if empty, same as source, or already authorized
+		if targetNamespace == "" || targetNamespace == sourceNamespace {
+			continue
 		}
+		if _, ok := authorizedNamespaces[targetNamespace]; ok {
+			continue
+		}
+
+		// Authorize write access to target namespace
+		if err := a.Authorize(ctx, claims, &CallTarget{
+			APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
+			Namespace: targetNamespace,
+			Request:   req,
+		}); err != nil {
+			return err
+		}
+		authorizedNamespaces[targetNamespace] = struct{}{}
 	}
 	return nil
 }
