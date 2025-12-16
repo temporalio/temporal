@@ -7,7 +7,10 @@ import (
 	"crypto/x509/pkix"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -154,6 +157,11 @@ func (a *Interceptor) Intercept(
 		if err := a.Authorize(ctx, claims, ct); err != nil {
 			return nil, err
 		}
+
+		// Authorize target namespaces in cross-namespace commands
+		if err := a.authorizeTargetNamespaces(ctx, claims, namespace, req); err != nil {
+			return nil, err
+		}
 	}
 	return handler(ctx, req)
 }
@@ -254,4 +262,55 @@ func (a *Interceptor) getMetricsHandler(nsName string) metrics.Handler {
 		}
 	}
 	return a.metricsHandler.WithTags(metrics.OperationTag(metrics.AuthorizationScope), nsTag)
+}
+
+// authorizeTargetNamespaces authorizes cross-namespace commands in RespondWorkflowTaskCompleted.
+// Commands like SignalExternalWorkflow, StartChildWorkflow, and CancelExternalWorkflow can target
+// workflows in different namespaces. This method ensures the caller has permission in those target
+// namespaces as well.
+func (a *Interceptor) authorizeTargetNamespaces(
+	ctx context.Context,
+	claims *Claims,
+	sourceNamespace string,
+	req interface{},
+) error {
+	wftRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
+	if !ok {
+		return nil
+	}
+
+	for _, cmd := range wftRequest.GetCommands() {
+		var targetNamespace string
+		var apiName string
+
+		switch cmd.GetCommandType() {
+		case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
+			if attr := cmd.GetSignalExternalWorkflowExecutionCommandAttributes(); attr != nil {
+				targetNamespace = attr.GetNamespace()
+				apiName = api.WorkflowServicePrefix + "SignalWorkflowExecution"
+			}
+		case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+			if attr := cmd.GetStartChildWorkflowExecutionCommandAttributes(); attr != nil {
+				targetNamespace = attr.GetNamespace()
+				apiName = api.WorkflowServicePrefix + "StartWorkflowExecution"
+			}
+		case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
+			if attr := cmd.GetRequestCancelExternalWorkflowExecutionCommandAttributes(); attr != nil {
+				targetNamespace = attr.GetNamespace()
+				apiName = api.WorkflowServicePrefix + "RequestCancelWorkflowExecution"
+			}
+		}
+
+		// Only authorize if target namespace differs from source namespace
+		if targetNamespace != "" && targetNamespace != sourceNamespace {
+			if err := a.Authorize(ctx, claims, &CallTarget{
+				APIName:   apiName,
+				Namespace: targetNamespace,
+				Request:   req,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
