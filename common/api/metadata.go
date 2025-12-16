@@ -91,7 +91,7 @@ var (
 		"CountActivityExecutions":               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"DeleteActivityExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DescribeActivityExecution":             {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
-		"PollActivityExecutionOutcome":          {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
+		"PollActivityExecution":                 {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
 		"ListActivityExecutions":                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"RequestCancelActivityExecution":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"StartActivityExecution":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
