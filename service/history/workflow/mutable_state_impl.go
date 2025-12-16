@@ -6786,7 +6786,7 @@ type closeTransactionResult struct {
 }
 
 func (ms *MutableStateImpl) closeTransaction(
-	ctx context.Context,
+	ctx context.Context, // TODO Attach metadata map to context based on mutable state archetype
 	transactionPolicy historyi.TransactionPolicy,
 ) (closeTransactionResult, error) {
 	if err := ms.closeTransactionWithPolicyCheck(
