@@ -628,9 +628,9 @@ func (v *CommandAttrValidator) validateWorkflowRetryPolicy(
 
 func (v *CommandAttrValidator) validateCrossNamespaceCall(
 	namespaceID namespace.ID,
-	workflowID string,
+	businessID string,
 	targetNamespaceID namespace.ID,
-	targetWorkflowID string,
+	targetBusinessID string,
 ) error {
 
 	// same name, no check needed
@@ -657,8 +657,8 @@ func (v *CommandAttrValidator) validateCrossNamespaceCall(
 		return nil
 	}
 
-	namespaceClusters := namespaceEntry.ClusterNames(workflowID)
-	targetNamespaceClusters := targetNamespaceEntry.ClusterNames(targetWorkflowID)
+	namespaceClusters := namespaceEntry.ClusterNames(businessID)
+	targetNamespaceClusters := targetNamespaceEntry.ClusterNames(targetBusinessID)
 
 	// one is local namespace, another one is global namespace or both global namespace
 	// treat global namespace with one replication cluster as local namespace
