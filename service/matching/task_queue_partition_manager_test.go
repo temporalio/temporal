@@ -20,7 +20,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -73,13 +72,12 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	s.ns = ns
-	config := NewConfig(dynamicconfig.NewNoopCollection())
+	config := defaultTestConfig()
 	if s.fairness {
 		useFairness(config)
 	} else if s.newMatcher {
 		useNewMatcher(config)
 	}
-	config.AutoEnableV2 = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 
 	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	engine := createTestMatchingEngine(logger, s.controller, config, s.matchingClient, registry)
