@@ -287,24 +287,28 @@ func (a *Interceptor) authorizeTargetNamespaces(
 		return nil
 	}
 
-	// Track namespaces we've already authorized to avoid duplicate checks
-	authorizedNamespaces := make(map[string]struct{})
+	// Track namespace+API combinations we've already authorized to avoid duplicate checks
+	authorizedNamespaceAPIs := make(map[string]struct{})
 
 	for _, cmd := range wftRequest.GetCommands() {
 		var targetNamespace string
+		var apiName string
 
 		switch cmd.GetCommandType() {
 		case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
 			if attr := cmd.GetSignalExternalWorkflowExecutionCommandAttributes(); attr != nil {
 				targetNamespace = attr.GetNamespace()
+				apiName = "SignalWorkflowExecution"
 			}
 		case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
 			if attr := cmd.GetStartChildWorkflowExecutionCommandAttributes(); attr != nil {
 				targetNamespace = attr.GetNamespace()
+				apiName = "StartWorkflowExecution"
 			}
 		case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
 			if attr := cmd.GetRequestCancelExternalWorkflowExecutionCommandAttributes(); attr != nil {
 				targetNamespace = attr.GetNamespace()
+				apiName = "RequestCancelWorkflowExecution"
 			}
 		}
 
@@ -312,19 +316,20 @@ func (a *Interceptor) authorizeTargetNamespaces(
 		if targetNamespace == "" || targetNamespace == sourceNamespace {
 			continue
 		}
-		if _, ok := authorizedNamespaces[targetNamespace]; ok {
+		key := targetNamespace + ":" + apiName
+		if _, ok := authorizedNamespaceAPIs[key]; ok {
 			continue
 		}
 
-		// Authorize write access to target namespace
+		// Authorize access to target namespace for this specific API
 		if err := a.Authorize(ctx, claims, &CallTarget{
-			APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
+			APIName:   api.WorkflowServicePrefix + apiName,
 			Namespace: targetNamespace,
 			Request:   req,
 		}); err != nil {
 			return err
 		}
-		authorizedNamespaces[targetNamespace] = struct{}{}
+		authorizedNamespaceAPIs[key] = struct{}{}
 	}
 	return nil
 }
