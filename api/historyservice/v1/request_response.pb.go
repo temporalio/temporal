@@ -1282,8 +1282,8 @@ type RecordWorkflowTaskStartedResponse struct {
 	Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3" json:"version,omitempty"`
 	History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3" json:"history,omitempty"`
 	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	// This field will be deprecated soon. We will use raw_history_bytes to send the raw history batches.
-	// raw_history field is decoded as History in matching service. We do no want matching service to decode history.
+	// Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+	// instead of a proto-decoded History. This avoids matching service having to decode history.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 	RawHistory      *v115.History `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
@@ -1487,8 +1487,8 @@ type RecordWorkflowTaskStartedResponseWithRawHistory struct {
 	Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3" json:"version,omitempty"`
 	History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3" json:"history,omitempty"`
 	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	// This field will be deprecated soon. We will use raw_history_bytes to send the raw history batches.
-	// raw_history field is decoded as History in matching service. We do no want matching service to decode history.
+	// Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+	// instead of a proto-decoded History. This avoids matching service having to decode history.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 	RawHistory      [][]byte `protobuf:"bytes,20,rep,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
