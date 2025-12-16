@@ -2926,8 +2926,8 @@ func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
 	// We don't re-serialize it back to bytes. The History field is used instead.
 	// Use RawHistory only if History is not available (backward compat with old matching services).
 	history := resp.History
-	if history == nil && resp.RawHistory != nil {
-		history = resp.RawHistory
+	if history == nil && resp.RawHistory != nil { //nolint:staticcheck
+		history = resp.RawHistory //nolint:staticcheck
 	}
 	// Process search attributes on the history. Remote matching passes through raw bytes
 	// without processing, so we need to do it here for forwarded requests.
@@ -3079,9 +3079,9 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	// Search attribute processing is NOT done here - it's handled by:
 	// 1. Frontend for non-forwarded requests (processes RawHistory after receiving from matching)
 	// 2. convertPollWorkflowTaskQueueResponse for forwarded requests (processes deserialized history)
-	if resp.RawHistory != nil && resp.History == nil {
+	if resp.RawHistory != nil && resp.History == nil { //nolint:staticcheck
 		// Backward compat: old history service using deprecated RawHistory field (auto-deserialized by gRPC).
-		resp.History = resp.RawHistory
+		resp.History = resp.RawHistory //nolint:staticcheck
 	}
 	return resp, nil
 }
