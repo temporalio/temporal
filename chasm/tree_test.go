@@ -217,6 +217,17 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 	s.Nil(sd1Node)
 }
 
+func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
+	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.Equal(WorkflowArchetypeID, rootNode.ArchetypeID())
+	rootComponent := &TestComponent{
+		MSPointer: NewMSPointer(s.nodeBackend),
+	}
+	rootNode.SetRootComponent(rootComponent)
+	s.Equal(testComponentTypeID, rootNode.ArchetypeID())
+	s.NotEqual(WorkflowArchetypeID, rootNode.ArchetypeID())
+}
+
 func (s *nodeSuite) TestInitSerializedNode_TypeData() {
 	node := newNode(s.nodeBase(), nil, "")
 	node.initSerializedNode(fieldTypeData)
