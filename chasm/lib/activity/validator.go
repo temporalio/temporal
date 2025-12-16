@@ -211,8 +211,7 @@ func validateAndNormalizeSearchAttributes(
 ) error {
 	namespaceName := req.GetNamespace()
 
-	// Unalias search attributes for validation. The validator expects unaliased format,
-	// but we don't modify the request since CHASM visibility expects the aliased format.
+	// Unalias search attributes for validation.
 	saToValidate := req.SearchAttributes
 	if saMapperProvider != nil && saToValidate != nil {
 		var err error
