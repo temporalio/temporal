@@ -478,7 +478,7 @@ func (tm *priTaskMatcher) poll(
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
 		if pollMetadata.forwardedFrom == "" {
-			// Only recording for original polls
+			// Only recording for original polls (i.e. on child if forwarded)
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
 				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
@@ -507,10 +507,11 @@ func (tm *priTaskMatcher) poll(
 	}
 
 	task := res.task
-	pollWasForwarded = task.isStarted()
+	pollWasForwarded = task.isStarted() // true if this poll was forwarded _from_ this matcher
 	priority = task.getPriority().GetPriorityKey()
 
 	if !pollWasForwarded {
+		// Only record these metrics on the parent for forwarded polls
 		if !task.isQuery() {
 			if task.isSyncMatchTask() {
 				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
