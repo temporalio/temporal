@@ -10,7 +10,7 @@ import (
 func GetActiveNamespace(
 	shard historyi.ShardContext,
 	namespaceUUID namespace.ID,
-	workflowID string,
+	businessID string,
 ) (*namespace.Namespace, error) {
 
 	err := ValidateNamespaceUUID(namespaceUUID)
@@ -22,11 +22,11 @@ func GetActiveNamespace(
 	if err != nil {
 		return nil, err
 	}
-	if namespaceEntry.ActiveClusterName(workflowID) != shard.GetClusterMetadata().GetCurrentClusterName() {
+	if namespaceEntry.ActiveClusterName(businessID) != shard.GetClusterMetadata().GetCurrentClusterName() {
 		return nil, serviceerror.NewNamespaceNotActive(
 			namespaceEntry.Name().String(),
 			shard.GetClusterMetadata().GetCurrentClusterName(),
-			namespaceEntry.ActiveClusterName(workflowID))
+			namespaceEntry.ActiveClusterName(businessID))
 	}
 	return namespaceEntry, nil
 }
