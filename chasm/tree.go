@@ -336,6 +336,9 @@ func (n *Node) SetRootComponent(
 	root := n.root()
 	root.value = rootComponent
 	root.setValueState(valueStateNeedSyncStructure)
+	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
+		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
+	}
 }
 
 func (n *Node) setValueState(state valueState) {
