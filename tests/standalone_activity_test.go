@@ -1352,30 +1352,12 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	})
 
 	t.Run("QueryByCustomSearchAttribute", func(t *testing.T) {
-		customSAName := "ActivityCustomKeyword"
+		// Use pre-defined custom search attribute from functional test framework
+		customSAName := "CustomKeywordField"
 		customSAValue := "custom-sa-test-value"
-
-		_, err := s.OperatorClient().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
-			Namespace: s.Namespace().String(),
-			SearchAttributes: map[string]enumspb.IndexedValueType{
-				customSAName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-		})
-		require.NoError(t, err)
-
-		s.Eventually(func() bool {
-			descResp, err := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
-				Namespace: s.Namespace().String(),
-			})
-			if err != nil {
-				return false
-			}
-			_, exists := descResp.CustomAttributes[customSAName]
-			return exists
-		}, 10*time.Second, 100*time.Millisecond)
-
 		customSAActivityID := "custom-sa-activity-id"
-		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           s.Namespace().String(),
 			ActivityId:          customSAActivityID,
 			ActivityType:        &commonpb.ActivityType{Name: "custom-sa-activity-type"},
