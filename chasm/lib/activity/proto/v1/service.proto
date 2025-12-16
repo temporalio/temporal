@@ -16,7 +16,7 @@ service ActivityService {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
     }
 
-    rpc GetActivityExecutionOutcome(GetActivityExecutionOutcomeRequest) returns (GetActivityExecutionOutcomeResponse) {
+    rpc PollActivityExecution(PollActivityExecutionRequest) returns (PollActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
     }
 

@@ -345,20 +345,6 @@ func (c *metricClient) FetchWorkerConfig(
 	return c.client.FetchWorkerConfig(ctx, request, opts...)
 }
 
-func (c *metricClient) GetActivityExecutionOutcome(
-	ctx context.Context,
-	request *workflowservice.GetActivityExecutionOutcomeRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.GetActivityExecutionOutcomeResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientGetActivityExecutionOutcome")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.GetActivityExecutionOutcome(ctx, request, opts...)
-}
-
 func (c *metricClient) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
@@ -735,6 +721,20 @@ func (c *metricClient) PauseWorkflowExecution(
 	}()
 
 	return c.client.PauseWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) PollActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PollActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollActivityExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPollActivityExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollActivityExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) PollActivityTaskQueue(

@@ -144,18 +144,18 @@ func (c *ActivityServiceLayeredClient) DescribeActivityExecution(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
-func (c *ActivityServiceLayeredClient) callGetActivityExecutionOutcomeNoRetry(
+func (c *ActivityServiceLayeredClient) callPollActivityExecutionNoRetry(
 	ctx context.Context,
-	request *GetActivityExecutionOutcomeRequest,
+	request *PollActivityExecutionRequest,
 	opts ...grpc.CallOption,
-) (*GetActivityExecutionOutcomeResponse, error) {
-	var response *GetActivityExecutionOutcomeResponse
+) (*PollActivityExecutionResponse, error) {
+	var response *PollActivityExecutionResponse
 	var err error
 	startTime := time.Now().UTC()
 	// the caller is a namespace, hence the tag below.
 	caller := headers.GetCallerInfo(ctx).CallerName
 	metricsHandler := c.metricsHandler.WithTags(
-		metrics.OperationTag("ActivityService.GetActivityExecutionOutcome"),
+		metrics.OperationTag("ActivityService.PollActivityExecution"),
 		metrics.NamespaceTag(caller),
 		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 	)
@@ -171,19 +171,19 @@ func (c *ActivityServiceLayeredClient) callGetActivityExecutionOutcomeNoRetry(
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
 		defer cancel()
-		response, err = client.GetActivityExecutionOutcome(ctx, request, opts...)
+		response, err = client.PollActivityExecution(ctx, request, opts...)
 		return err
 	}
 	err = c.redirector.Execute(ctx, shardID, op)
 	return response, err
 }
-func (c *ActivityServiceLayeredClient) GetActivityExecutionOutcome(
+func (c *ActivityServiceLayeredClient) PollActivityExecution(
 	ctx context.Context,
-	request *GetActivityExecutionOutcomeRequest,
+	request *PollActivityExecutionRequest,
 	opts ...grpc.CallOption,
-) (*GetActivityExecutionOutcomeResponse, error) {
-	call := func(ctx context.Context) (*GetActivityExecutionOutcomeResponse, error) {
-		return c.callGetActivityExecutionOutcomeNoRetry(ctx, request, opts...)
+) (*PollActivityExecutionResponse, error) {
+	call := func(ctx context.Context) (*PollActivityExecutionResponse, error) {
+		return c.callPollActivityExecutionNoRetry(ctx, request, opts...)
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }

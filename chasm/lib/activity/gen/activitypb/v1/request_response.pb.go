@@ -215,28 +215,28 @@ func (x *DescribeActivityExecutionResponse) GetFrontendResponse() *v1.DescribeAc
 	return nil
 }
 
-type GetActivityExecutionOutcomeRequest struct {
-	state           protoimpl.MessageState                 `protogen:"open.v1"`
-	NamespaceId     string                                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FrontendRequest *v1.GetActivityExecutionOutcomeRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+type PollActivityExecutionRequest struct {
+	state           protoimpl.MessageState           `protogen:"open.v1"`
+	NamespaceId     string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.PollActivityExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *GetActivityExecutionOutcomeRequest) Reset() {
-	*x = GetActivityExecutionOutcomeRequest{}
+func (x *PollActivityExecutionRequest) Reset() {
+	*x = PollActivityExecutionRequest{}
 	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetActivityExecutionOutcomeRequest) String() string {
+func (x *PollActivityExecutionRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetActivityExecutionOutcomeRequest) ProtoMessage() {}
+func (*PollActivityExecutionRequest) ProtoMessage() {}
 
-func (x *GetActivityExecutionOutcomeRequest) ProtoReflect() protoreflect.Message {
+func (x *PollActivityExecutionRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -248,46 +248,46 @@ func (x *GetActivityExecutionOutcomeRequest) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetActivityExecutionOutcomeRequest.ProtoReflect.Descriptor instead.
-func (*GetActivityExecutionOutcomeRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use PollActivityExecutionRequest.ProtoReflect.Descriptor instead.
+func (*PollActivityExecutionRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetActivityExecutionOutcomeRequest) GetNamespaceId() string {
+func (x *PollActivityExecutionRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
 	}
 	return ""
 }
 
-func (x *GetActivityExecutionOutcomeRequest) GetFrontendRequest() *v1.GetActivityExecutionOutcomeRequest {
+func (x *PollActivityExecutionRequest) GetFrontendRequest() *v1.PollActivityExecutionRequest {
 	if x != nil {
 		return x.FrontendRequest
 	}
 	return nil
 }
 
-type GetActivityExecutionOutcomeResponse struct {
-	state            protoimpl.MessageState                  `protogen:"open.v1"`
-	FrontendResponse *v1.GetActivityExecutionOutcomeResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+type PollActivityExecutionResponse struct {
+	state            protoimpl.MessageState            `protogen:"open.v1"`
+	FrontendResponse *v1.PollActivityExecutionResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
-func (x *GetActivityExecutionOutcomeResponse) Reset() {
-	*x = GetActivityExecutionOutcomeResponse{}
+func (x *PollActivityExecutionResponse) Reset() {
+	*x = PollActivityExecutionResponse{}
 	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetActivityExecutionOutcomeResponse) String() string {
+func (x *PollActivityExecutionResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetActivityExecutionOutcomeResponse) ProtoMessage() {}
+func (*PollActivityExecutionResponse) ProtoMessage() {}
 
-func (x *GetActivityExecutionOutcomeResponse) ProtoReflect() protoreflect.Message {
+func (x *PollActivityExecutionResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -299,12 +299,12 @@ func (x *GetActivityExecutionOutcomeResponse) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetActivityExecutionOutcomeResponse.ProtoReflect.Descriptor instead.
-func (*GetActivityExecutionOutcomeResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use PollActivityExecutionResponse.ProtoReflect.Descriptor instead.
+func (*PollActivityExecutionResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetActivityExecutionOutcomeResponse) GetFrontendResponse() *v1.GetActivityExecutionOutcomeResponse {
+func (x *PollActivityExecutionResponse) GetFrontendResponse() *v1.PollActivityExecutionResponse {
 	if x != nil {
 		return x.FrontendResponse
 	}
@@ -501,12 +501,12 @@ const file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_ra
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12l\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2A.temporal.api.workflowservice.v1.DescribeActivityExecutionRequestR\x0ffrontendRequest\"\x94\x01\n" +
 	"!DescribeActivityExecutionResponse\x12o\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2B.temporal.api.workflowservice.v1.DescribeActivityExecutionResponseR\x10frontendResponse\"\xb7\x01\n" +
-	"\"GetActivityExecutionOutcomeRequest\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12n\n" +
-	"\x10frontend_request\x18\x02 \x01(\v2C.temporal.api.workflowservice.v1.GetActivityExecutionOutcomeRequestR\x0ffrontendRequest\"\x98\x01\n" +
-	"#GetActivityExecutionOutcomeResponse\x12q\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2D.temporal.api.workflowservice.v1.GetActivityExecutionOutcomeResponseR\x10frontendResponse\"\xb5\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2B.temporal.api.workflowservice.v1.DescribeActivityExecutionResponseR\x10frontendResponse\"\xab\x01\n" +
+	"\x1cPollActivityExecutionRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12h\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.PollActivityExecutionRequestR\x0ffrontendRequest\"\x8c\x01\n" +
+	"\x1dPollActivityExecutionResponse\x12k\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2>.temporal.api.workflowservice.v1.PollActivityExecutionResponseR\x10frontendResponse\"\xb5\x01\n" +
 	"!TerminateActivityExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12m\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2B.temporal.api.workflowservice.v1.TerminateActivityExecutionRequestR\x0ffrontendRequest\"$\n" +
@@ -534,8 +534,8 @@ var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_goTy
 	(*StartActivityExecutionResponse)(nil),           // 1: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse
 	(*DescribeActivityExecutionRequest)(nil),         // 2: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionRequest
 	(*DescribeActivityExecutionResponse)(nil),        // 3: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionResponse
-	(*GetActivityExecutionOutcomeRequest)(nil),       // 4: temporal.server.chasm.lib.activity.proto.v1.GetActivityExecutionOutcomeRequest
-	(*GetActivityExecutionOutcomeResponse)(nil),      // 5: temporal.server.chasm.lib.activity.proto.v1.GetActivityExecutionOutcomeResponse
+	(*PollActivityExecutionRequest)(nil),             // 4: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest
+	(*PollActivityExecutionResponse)(nil),            // 5: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse
 	(*TerminateActivityExecutionRequest)(nil),        // 6: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest
 	(*TerminateActivityExecutionResponse)(nil),       // 7: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse
 	(*RequestCancelActivityExecutionRequest)(nil),    // 8: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest
@@ -544,8 +544,8 @@ var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_goTy
 	(*v1.StartActivityExecutionResponse)(nil),        // 11: temporal.api.workflowservice.v1.StartActivityExecutionResponse
 	(*v1.DescribeActivityExecutionRequest)(nil),      // 12: temporal.api.workflowservice.v1.DescribeActivityExecutionRequest
 	(*v1.DescribeActivityExecutionResponse)(nil),     // 13: temporal.api.workflowservice.v1.DescribeActivityExecutionResponse
-	(*v1.GetActivityExecutionOutcomeRequest)(nil),    // 14: temporal.api.workflowservice.v1.GetActivityExecutionOutcomeRequest
-	(*v1.GetActivityExecutionOutcomeResponse)(nil),   // 15: temporal.api.workflowservice.v1.GetActivityExecutionOutcomeResponse
+	(*v1.PollActivityExecutionRequest)(nil),          // 14: temporal.api.workflowservice.v1.PollActivityExecutionRequest
+	(*v1.PollActivityExecutionResponse)(nil),         // 15: temporal.api.workflowservice.v1.PollActivityExecutionResponse
 	(*v1.TerminateActivityExecutionRequest)(nil),     // 16: temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
 	(*v1.RequestCancelActivityExecutionRequest)(nil), // 17: temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
 }
@@ -554,8 +554,8 @@ var file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_depI
 	11, // 1: temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.StartActivityExecutionResponse
 	12, // 2: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeActivityExecutionRequest
 	13, // 3: temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeActivityExecutionResponse
-	14, // 4: temporal.server.chasm.lib.activity.proto.v1.GetActivityExecutionOutcomeRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.GetActivityExecutionOutcomeRequest
-	15, // 5: temporal.server.chasm.lib.activity.proto.v1.GetActivityExecutionOutcomeResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.GetActivityExecutionOutcomeResponse
+	14, // 4: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PollActivityExecutionRequest
+	15, // 5: temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.PollActivityExecutionResponse
 	16, // 6: temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.TerminateActivityExecutionRequest
 	17, // 7: temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.RequestCancelActivityExecutionRequest
 	8,  // [8:8] is the sub-list for method output_type

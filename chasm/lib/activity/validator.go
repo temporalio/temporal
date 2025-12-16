@@ -289,9 +289,9 @@ func ValidateDescribeActivityExecutionRequest(
 	return nil
 }
 
-// ValidateGetActivityExecutionOutcomeRequest validates GetActivityExecutionOutcomeRequest.
-func ValidateGetActivityExecutionOutcomeRequest(
-	req *workflowservice.GetActivityExecutionOutcomeRequest,
+// ValidatePollActivityExecutionRequest validates PollActivityExecutionRequest.
+func ValidatePollActivityExecutionRequest(
+	req *workflowservice.PollActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
 	if req.GetActivityId() == "" {

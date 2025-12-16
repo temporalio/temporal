@@ -117,14 +117,6 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.FetchWorkerConfigResponse:
 		return nil
-	case *workflowservice.GetActivityExecutionOutcomeRequest:
-		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
-		}
-	case *workflowservice.GetActivityExecutionOutcomeResponse:
-		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
-		}
 	case *workflowservice.GetClusterInfoRequest:
 		return nil
 	case *workflowservice.GetClusterInfoResponse:
@@ -245,6 +237,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.PauseWorkflowExecutionResponse:
 		return nil
+	case *workflowservice.PollActivityExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.PollActivityExecutionResponse:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.PollActivityTaskQueueRequest:
 		return nil
 	case *workflowservice.PollActivityTaskQueueResponse:

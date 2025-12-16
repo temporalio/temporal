@@ -22,7 +22,7 @@ const StandaloneActivityDisabledError = "Standalone activity is disabled"
 type FrontendHandler interface {
 	StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error)
 	DescribeActivityExecution(ctx context.Context, req *workflowservice.DescribeActivityExecutionRequest) (*workflowservice.DescribeActivityExecutionResponse, error)
-	GetActivityExecutionOutcome(ctx context.Context, req *workflowservice.GetActivityExecutionOutcomeRequest) (*workflowservice.GetActivityExecutionOutcomeResponse, error)
+	PollActivityExecution(ctx context.Context, req *workflowservice.PollActivityExecutionRequest) (*workflowservice.PollActivityExecutionResponse, error)
 	CountActivityExecutions(context.Context, *workflowservice.CountActivityExecutionsRequest) (*workflowservice.CountActivityExecutionsResponse, error)
 	DeleteActivityExecution(context.Context, *workflowservice.DeleteActivityExecutionRequest) (*workflowservice.DeleteActivityExecutionResponse, error)
 	ListActivityExecutions(context.Context, *workflowservice.ListActivityExecutionsRequest) (*workflowservice.ListActivityExecutionsResponse, error)
@@ -130,16 +130,16 @@ func (h *frontendHandler) DescribeActivityExecution(
 	return resp.GetFrontendResponse(), err
 }
 
-// GetActivityExecutionOutcome long-polls for activity outcome.
-func (h *frontendHandler) GetActivityExecutionOutcome(
+// PollActivityExecution long-polls for activity outcome.
+func (h *frontendHandler) PollActivityExecution(
 	ctx context.Context,
-	req *workflowservice.GetActivityExecutionOutcomeRequest,
-) (*workflowservice.GetActivityExecutionOutcomeResponse, error) {
+	req *workflowservice.PollActivityExecutionRequest,
+) (*workflowservice.PollActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
 		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
 	}
 
-	err := ValidateGetActivityExecutionOutcomeRequest(
+	err := ValidatePollActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -150,7 +150,7 @@ func (h *frontendHandler) GetActivityExecutionOutcome(
 	if err != nil {
 		return nil, err
 	}
-	resp, err := h.client.GetActivityExecutionOutcome(ctx, &activitypb.GetActivityExecutionOutcomeRequest{
+	resp, err := h.client.PollActivityExecution(ctx, &activitypb.PollActivityExecutionRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})

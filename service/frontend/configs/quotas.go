@@ -47,7 +47,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 
 		// Long-running if activity outcome is not already available
-		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityExecutionOutcome": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
 		// Long-running if certain request parameters are set
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":   1,
@@ -156,7 +156,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":          3,
 
 		// P4: Poll APIs and other low priority APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/GetActivityExecutionOutcome":        4, // TODO(dan): should it be 4 or 3?
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4, // TODO(dan): should it be 4 or 3?
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        4,
