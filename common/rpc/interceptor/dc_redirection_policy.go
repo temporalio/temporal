@@ -36,7 +36,7 @@ type (
 	// DCRedirectionPolicy is a DC redirection policy interface
 	DCRedirectionPolicy interface {
 		WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, req any, call func(string) error) error
-		WithNamespaceRedirect(ctx context.Context, namespace namespace.Name, apiName string, req any, call func(string) error) error
+		WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, apiName string, req any, call func(string) error) error
 	}
 
 	// NoopRedirectionPolicy is DC redirection policy which does nothing
@@ -148,8 +148,8 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(c
 }
 
 // WithNamespaceRedirect redirect the API call based on namespace name
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace namespace.Name, apiName string, req any, call func(string) error) error {
-	namespaceEntry, err := policy.namespaceRegistry.GetNamespace(namespace)
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, apiName string, req any, call func(string) error) error {
+	namespaceEntry, err := policy.namespaceRegistry.GetNamespace(namespaceName)
 	if err != nil {
 		return err
 	}
