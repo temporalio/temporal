@@ -16,14 +16,6 @@ import (
 	"go.uber.org/fx"
 )
 
-const (
-	defaultBuckets          = 10
-	defaultEntryTTL         = 24 * time.Hour
-	defaultMinEvictAge      = 10 * time.Minute
-	defaultMaxEntries       = 1_000_000
-	defaultEvictionInterval = 1 * time.Hour
-)
-
 type (
 	// entry wraps a WorkerHeartbeat along with its namespace and eviction metadata.
 	entry struct {
@@ -44,16 +36,27 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets                   []*bucket       // buckets for partitioning the keyspace
-		maxItems                  int64           // maximum number of entries allowed across all buckets
-		ttl                       time.Duration   // time after which entries are considered expired
-		minEvictAge               time.Duration   // minimum age of entries to consider for eviction
-		evictionInterval          time.Duration   // interval for periodic eviction checks
-		total                     atomic.Int64    // atomic counter of total entries
-		quit                      chan struct{}   // channel to signal shutdown of the eviction loop
-		seed                      maphash.Seed    // seed for the hasher, used to ensure consistent hashing
-		metricsHandler            metrics.Handler // metrics handler for recording registry metrics
-		enableWorkerPluginMetrics func() bool     // dynamic config function to control plugin metrics export
+		buckets                   []*bucket                        // buckets for partitioning the keyspace
+		maxItemsFn                dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
+		ttlFn                     dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
+		minEvictAgeFn             dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
+		evictionIntervalFn        dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
+		total                     atomic.Int64                     // atomic counter of total entries
+		quit                      chan struct{}                    // channel to signal shutdown of the eviction loop
+		seed                      maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
+		metricsHandler            metrics.Handler                  // metrics handler for recording registry metrics
+		enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn     // dynamic config function to control plugin metrics export
+	}
+
+	// RegistryParams contains all parameters for creating a worker registry.
+	RegistryParams struct {
+		NumBuckets          dynamicconfig.IntPropertyFn
+		TTL                 dynamicconfig.DurationPropertyFn
+		MinEvictAge         dynamicconfig.DurationPropertyFn
+		MaxItems            dynamicconfig.IntPropertyFn
+		EvictionInterval    dynamicconfig.DurationPropertyFn
+		MetricsHandler      metrics.Handler
+		EnablePluginMetrics dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -193,40 +196,23 @@ func (b *bucket) evictByCapacity(threshold time.Time) bool {
 }
 
 // NewRegistry creates a workers heartbeat registry with the given parameters.
-func NewRegistry(lc fx.Lifecycle, metricsHandler metrics.Handler, enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn) Registry {
-	m := newRegistryImpl(
-		defaultBuckets,
-		defaultEntryTTL,
-		defaultMinEvictAge,
-		defaultMaxEntries,
-		defaultEvictionInterval,
-		metricsHandler,
-		enableWorkerPluginMetrics,
-	)
-
+func NewRegistry(lc fx.Lifecycle, params RegistryParams) Registry {
+	m := newRegistryImpl(params)
 	lc.Append(fx.StartStopHook(m.Start, m.Stop))
-
 	return m
 }
 
-func newRegistryImpl(numBuckets int,
-	ttl time.Duration,
-	minEvictAge time.Duration,
-	maxItems int64,
-	evictionInterval time.Duration,
-	metricsHandler metrics.Handler,
-	enableWorkerPluginMetrics func() bool,
-) *registryImpl {
+func newRegistryImpl(params RegistryParams) *registryImpl {
 	m := &registryImpl{
-		buckets:                   make([]*bucket, numBuckets),
-		maxItems:                  maxItems,
-		ttl:                       ttl,
-		minEvictAge:               minEvictAge,
-		evictionInterval:          evictionInterval,
+		buckets:                   make([]*bucket, params.NumBuckets()),
+		maxItemsFn:                params.MaxItems,
+		ttlFn:                     params.TTL,
+		minEvictAgeFn:             params.MinEvictAge,
+		evictionIntervalFn:        params.EvictionInterval,
 		seed:                      maphash.MakeSeed(),
 		quit:                      make(chan struct{}),
-		metricsHandler:            metricsHandler,
-		enableWorkerPluginMetrics: enableWorkerPluginMetrics,
+		metricsHandler:            params.MetricsHandler,
+		enableWorkerPluginMetrics: params.EnablePluginMetrics,
 	}
 
 	for i := range m.buckets {
@@ -257,14 +243,16 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, heartbeats []*workerp
 
 // recordUtilizationMetric records the overall capacity utilization ratio.
 func (m *registryImpl) recordUtilizationMetric() {
-	utilization := float64(m.total.Load()) / float64(m.maxItems)
+	maxItems := int64(m.maxItemsFn())
+	utilization := float64(m.total.Load()) / float64(maxItems)
 	metrics.WorkerRegistryCapacityUtilizationMetric.With(m.metricsHandler).Record(utilization)
 }
 
 // recordEvictionMetric sets the eviction metric based on current capacity state.
 // Assumes EvictByCapacity has already been called.
 func (m *registryImpl) recordEvictionMetric() {
-	if m.total.Load() > m.maxItems {
+	maxItems := int64(m.maxItemsFn())
+	if m.total.Load() > maxItems {
 		// Still over capacity - eviction failed
 		metrics.WorkerRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(1)
 	} else {
@@ -316,15 +304,13 @@ func (m *registryImpl) filterWorkers(
 
 // evictLoop periodically triggers TTL and capacity-based eviction.
 func (m *registryImpl) evictLoop() {
-	ticker := time.NewTicker(m.evictionInterval)
 	for {
 		select {
-		case <-ticker.C:
+		case <-time.After(m.evictionIntervalFn()):
 			m.evictByTTL()
 			m.evictByCapacity()
 			m.recordUtilizationMetric()
 		case <-m.quit:
-			ticker.Stop()
 			return
 		}
 	}
@@ -332,7 +318,8 @@ func (m *registryImpl) evictLoop() {
 
 // evictByTTL removes expired entries across all buckets.
 func (m *registryImpl) evictByTTL() {
-	expireBefore := time.Now().Add(-m.ttl)
+	ttl := m.ttlFn()
+	expireBefore := time.Now().Add(-ttl)
 	var removed int64
 	for _, b := range m.buckets {
 		removed += int64(b.evictByTTL(expireBefore))
@@ -346,14 +333,17 @@ func (m *registryImpl) evictByTTL() {
 func (m *registryImpl) evictByCapacity() {
 	defer m.recordEvictionMetric()
 
+	maxItems := int64(m.maxItemsFn())
+	minEvictAge := m.minEvictAgeFn()
+
 	// Keep evicting until we are under capacity. In each iteration, we remove one entry from each
 	// bucket for fairness.
-	for m.total.Load() > m.maxItems {
+	for m.total.Load() > maxItems {
 		removedAny := false
-		threshold := time.Now().Add(-m.minEvictAge)
+		threshold := time.Now().Add(-minEvictAge)
 
 		for _, b := range m.buckets {
-			if m.total.Load() <= m.maxItems {
+			if m.total.Load() <= maxItems {
 				return
 			}
 			if b.evictByCapacity(threshold) {
