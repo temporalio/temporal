@@ -1389,7 +1389,15 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			100*time.Millisecond,
 		)
 		require.Len(t, resp.GetExecutions(), 1)
-		s.Equal(customSAActivityID, resp.GetExecutions()[0].GetActivityId())
+		exec := resp.GetExecutions()[0]
+		s.Equal(customSAActivityID, exec.GetActivityId())
+		// Verify custom search attributes are returned in the response
+		s.NotNil(exec.GetSearchAttributes())
+		returnedSA := exec.GetSearchAttributes().GetIndexedFields()[customSAName]
+		s.NotNil(returnedSA)
+		var returnedValue string
+		s.NoError(payload.Decode(returnedSA, &returnedValue))
+		s.Equal(customSAValue, returnedValue)
 	})
 
 	t.Run("InvalidQuery", func(t *testing.T) {
