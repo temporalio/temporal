@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -169,7 +171,7 @@ func (h *frontendHandler) ListActivityExecutions(
 		return nil, err
 	}
 
-	resp, err := chasm.ListExecutions[*Activity, *activitypb.ActivityListMemo](ctx, &chasm.ListExecutionsRequest{
+	resp, err := chasm.ListExecutions[*Activity, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
 		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		PageSize:      int(req.GetPageSize()),
@@ -182,6 +184,11 @@ func (h *frontendHandler) ListActivityExecutions(
 
 	executions := make([]*apiactivitypb.ActivityExecutionListInfo, 0, len(resp.Executions))
 	for _, exec := range resp.Executions {
+		activityType, _ := chasm.GetValue(exec.ChasmSearchAttributes, TypeSearchAttribute)
+		taskQueue, _ := chasm.GetValue(exec.ChasmSearchAttributes, TaskQueueSearchAttribute)
+		statusStr, _ := chasm.GetValue(exec.ChasmSearchAttributes, StatusSearchAttribute)
+		status, _ := enumspb.ActivityExecutionStatusFromString(statusStr)
+
 		info := &apiactivitypb.ActivityExecutionListInfo{
 			ActivityId:           exec.BusinessID,
 			RunId:                exec.RunID,
@@ -189,9 +196,9 @@ func (h *frontendHandler) ListActivityExecutions(
 			StateTransitionCount: exec.StateTransitionCount,
 			StateSizeBytes:       exec.HistorySizeBytes,
 			// TODO(dan): exec.CustomSearchAttributes
-			ActivityType: &commonpb.ActivityType{Name: exec.ChasmMemo.GetActivityType()},
-			TaskQueue:    exec.ChasmMemo.GetTaskQueue(),
-			Status:       InternalStatusToAPIStatus(exec.ChasmMemo.GetStatus()),
+			ActivityType: &commonpb.ActivityType{Name: activityType},
+			TaskQueue:    taskQueue,
+			Status:       status,
 		}
 		if !exec.CloseTime.IsZero() {
 			info.CloseTime = timestamppb.New(exec.CloseTime)

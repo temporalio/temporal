@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/tqid"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -45,7 +44,6 @@ var (
 )
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
-var _ chasm.VisibilityMemoProvider = (*Activity)(nil)
 
 type ActivityStore interface {
 	// PopulateRecordStartedResponse populates the response for RecordActivityTaskStarted
@@ -865,15 +863,5 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 		TypeSearchAttribute.Value(a.GetActivityType().GetName()),
 		StatusSearchAttribute.Value(InternalStatusToAPIStatus(a.GetStatus()).String()),
 		TaskQueueSearchAttribute.Value(a.GetTaskQueue().GetName()),
-	}
-}
-
-// Memo implements chasm.VisibilityMemoProvider interface.
-// Returns the memo data to be stored in visibility for list responses.
-func (a *Activity) Memo(_ chasm.Context) proto.Message {
-	return &activitypb.ActivityListMemo{
-		ActivityType: a.GetActivityType().GetName(),
-		TaskQueue:    a.GetTaskQueue().GetName(),
-		Status:       a.GetStatus(),
 	}
 }
