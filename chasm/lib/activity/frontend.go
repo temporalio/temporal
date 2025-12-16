@@ -42,7 +42,6 @@ type frontendHandler struct {
 	namespaceRegistry namespace.Registry
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
-	visibilityManager chasm.VisibilityManager
 }
 
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
@@ -54,7 +53,6 @@ func NewFrontendHandler(
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
-	visibilityManager chasm.VisibilityManager,
 ) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
@@ -64,7 +62,6 @@ func NewFrontendHandler(
 		namespaceRegistry: namespaceRegistry,
 		saMapperProvider:  saMapperProvider,
 		saValidator:       saValidator,
-		visibilityManager: visibilityManager,
 	}
 }
 
@@ -171,7 +168,6 @@ func (h *frontendHandler) ListActivityExecutions(
 	if err != nil {
 		return nil, err
 	}
-	ctx = chasm.NewVisibilityManagerContext(ctx, h.visibilityManager)
 
 	resp, err := chasm.ListExecutions[*Activity, *activitypb.ActivityListMemo](ctx, &chasm.ListExecutionsRequest{
 		NamespaceID:   namespaceID.String(),
@@ -221,7 +217,6 @@ func (h *frontendHandler) CountActivityExecutions(
 	if err != nil {
 		return nil, err
 	}
-	ctx = chasm.NewVisibilityManagerContext(ctx, h.visibilityManager)
 
 	resp, err := chasm.CountExecutions[*Activity](ctx, &chasm.CountExecutionsRequest{
 		NamespaceID:   namespaceID.String(),
