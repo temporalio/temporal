@@ -16,6 +16,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -1435,4 +1436,96 @@ func (s *streamBasedReplicationTestSuite) dumpRecorders() {
 			s.T().Logf("Wrote cluster %d replication stream to %s", i, replicationFile)
 		}
 	}
+}
+
+func (s *streamBasedReplicationTestSuite) TestNamespaceExtensionDataReplication() {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+
+	nsName := "extension-data-test-" + uuid.NewString()[:8]
+
+	initialExtensionData := &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         []byte("initial-extension-data-payload"),
+	}
+
+	_, err := s.clusters[0].FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        nsName,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusters[0].ClusterName(),
+		IsGlobalNamespace:                true,
+		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
+		ExtensionData:                    initialExtensionData,
+	})
+	s.Require().NoError(err)
+
+	s.Require().Eventually(func() bool {
+		resp, err := s.clusters[1].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: nsName,
+		})
+		if err != nil {
+			return false
+		}
+		if resp.NamespaceInfo.ExtensionData == nil {
+			return false
+		}
+		return resp.NamespaceInfo.ExtensionData.EncodingType == enumspb.ENCODING_TYPE_PROTO3 &&
+			string(resp.NamespaceInfo.ExtensionData.Data) == "initial-extension-data-payload"
+	}, 30*time.Second, 1*time.Second, "extension data should replicate to cluster 1")
+
+	updatedExtensionData := &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_JSON,
+		Data:         []byte(`{"updated": true}`),
+	}
+
+	_, err = s.clusters[0].FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: nsName,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+			ExtensionData: updatedExtensionData,
+		},
+	})
+	s.Require().NoError(err)
+
+	s.Require().Eventually(func() bool {
+		resp, err := s.clusters[1].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: nsName,
+		})
+		if err != nil {
+			return false
+		}
+		if resp.NamespaceInfo.ExtensionData == nil {
+			return false
+		}
+		return resp.NamespaceInfo.ExtensionData.EncodingType == enumspb.ENCODING_TYPE_JSON &&
+			string(resp.NamespaceInfo.ExtensionData.Data) == `{"updated": true}`
+	}, 30*time.Second, 1*time.Second, "updated extension data should replicate to cluster 1")
+
+	// Update extension_data on cluster 1 (standby) and verify it replicates back to cluster 0
+	cluster1ExtensionData := &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         []byte("from-cluster-1"),
+	}
+
+	_, err = s.clusters[1].FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: nsName,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+			ExtensionData: cluster1ExtensionData,
+		},
+	})
+	s.Require().NoError(err)
+
+	s.Require().Eventually(func() bool {
+		resp, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: nsName,
+		})
+		if err != nil {
+			return false
+		}
+		if resp.NamespaceInfo.ExtensionData == nil {
+			return false
+		}
+		return resp.NamespaceInfo.ExtensionData.EncodingType == enumspb.ENCODING_TYPE_PROTO3 &&
+			string(resp.NamespaceInfo.ExtensionData.Data) == "from-cluster-1"
+	}, 30*time.Second, 1*time.Second, "extension data from cluster 1 should replicate back to cluster 0")
 }

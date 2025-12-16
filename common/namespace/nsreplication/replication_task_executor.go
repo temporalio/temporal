@@ -137,12 +137,13 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 	request := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:          task.GetId(),
-				Name:        task.Info.GetName(),
-				State:       task.Info.GetState(),
-				Description: task.Info.GetDescription(),
-				Owner:       task.Info.GetOwnerEmail(),
-				Data:        task.Info.Data,
+				Id:            task.GetId(),
+				Name:          task.Info.GetName(),
+				State:         task.Info.GetState(),
+				Description:   task.Info.GetDescription(),
+				Owner:         task.Info.GetOwnerEmail(),
+				Data:          task.Info.Data,
+				ExtensionData: task.Info.GetExtensionData(),
 			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
@@ -269,12 +270,13 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
 		request.Namespace.Info = &persistencespb.NamespaceInfo{
-			Id:          task.GetId(),
-			Name:        task.Info.GetName(),
-			State:       task.Info.GetState(),
-			Description: task.Info.GetDescription(),
-			Owner:       task.Info.GetOwnerEmail(),
-			Data:        task.Info.Data,
+			Id:            task.GetId(),
+			Name:          task.Info.GetName(),
+			State:         task.Info.GetState(),
+			Description:   task.Info.GetDescription(),
+			Owner:         task.Info.GetOwnerEmail(),
+			Data:          task.Info.Data,
+			ExtensionData: task.Info.GetExtensionData(),
 		}
 		request.Namespace.Config = &persistencespb.NamespaceConfig{
 			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),

@@ -11,9 +11,10 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v11 "go.temporal.io/api/common/v1"
 	v1 "go.temporal.io/api/enums/v1"
-	v11 "go.temporal.io/api/namespace/v1"
-	v12 "go.temporal.io/api/rules/v1"
+	v12 "go.temporal.io/api/namespace/v1"
+	v13 "go.temporal.io/api/rules/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -128,6 +129,7 @@ type NamespaceInfo struct {
 	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
 	Owner         string                 `protobuf:"bytes,5,opt,name=owner,proto3" json:"owner,omitempty"`
 	Data          map[string]string      `protobuf:"bytes,6,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ExtensionData *v11.DataBlob          `protobuf:"bytes,7,opt,name=extension_data,json=extensionData,proto3" json:"extension_data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -204,17 +206,24 @@ func (x *NamespaceInfo) GetData() map[string]string {
 	return nil
 }
 
+func (x *NamespaceInfo) GetExtensionData() *v11.DataBlob {
+	if x != nil {
+		return x.ExtensionData
+	}
+	return nil
+}
+
 type NamespaceConfig struct {
 	state                        protoimpl.MessageState       `protogen:"open.v1"`
 	Retention                    *durationpb.Duration         `protobuf:"bytes,1,opt,name=retention,proto3" json:"retention,omitempty"`
 	ArchivalBucket               string                       `protobuf:"bytes,2,opt,name=archival_bucket,json=archivalBucket,proto3" json:"archival_bucket,omitempty"`
-	BadBinaries                  *v11.BadBinaries             `protobuf:"bytes,3,opt,name=bad_binaries,json=badBinaries,proto3" json:"bad_binaries,omitempty"`
+	BadBinaries                  *v12.BadBinaries             `protobuf:"bytes,3,opt,name=bad_binaries,json=badBinaries,proto3" json:"bad_binaries,omitempty"`
 	HistoryArchivalState         v1.ArchivalState             `protobuf:"varint,4,opt,name=history_archival_state,json=historyArchivalState,proto3,enum=temporal.api.enums.v1.ArchivalState" json:"history_archival_state,omitempty"`
 	HistoryArchivalUri           string                       `protobuf:"bytes,5,opt,name=history_archival_uri,json=historyArchivalUri,proto3" json:"history_archival_uri,omitempty"`
 	VisibilityArchivalState      v1.ArchivalState             `protobuf:"varint,6,opt,name=visibility_archival_state,json=visibilityArchivalState,proto3,enum=temporal.api.enums.v1.ArchivalState" json:"visibility_archival_state,omitempty"`
 	VisibilityArchivalUri        string                       `protobuf:"bytes,7,opt,name=visibility_archival_uri,json=visibilityArchivalUri,proto3" json:"visibility_archival_uri,omitempty"`
 	CustomSearchAttributeAliases map[string]string            `protobuf:"bytes,8,rep,name=custom_search_attribute_aliases,json=customSearchAttributeAliases,proto3" json:"custom_search_attribute_aliases,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	WorkflowRules                map[string]*v12.WorkflowRule `protobuf:"bytes,9,rep,name=workflow_rules,json=workflowRules,proto3" json:"workflow_rules,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	WorkflowRules                map[string]*v13.WorkflowRule `protobuf:"bytes,9,rep,name=workflow_rules,json=workflowRules,proto3" json:"workflow_rules,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields                protoimpl.UnknownFields
 	sizeCache                    protoimpl.SizeCache
 }
@@ -263,7 +272,7 @@ func (x *NamespaceConfig) GetArchivalBucket() string {
 	return ""
 }
 
-func (x *NamespaceConfig) GetBadBinaries() *v11.BadBinaries {
+func (x *NamespaceConfig) GetBadBinaries() *v12.BadBinaries {
 	if x != nil {
 		return x.BadBinaries
 	}
@@ -305,7 +314,7 @@ func (x *NamespaceConfig) GetCustomSearchAttributeAliases() map[string]string {
 	return nil
 }
 
-func (x *NamespaceConfig) GetWorkflowRules() map[string]*v12.WorkflowRule {
+func (x *NamespaceConfig) GetWorkflowRules() map[string]*v13.WorkflowRule {
 	if x != nil {
 		return x.WorkflowRules
 	}
@@ -437,7 +446,7 @@ var File_temporal_server_api_persistence_v1_namespaces_proto protoreflect.FileDe
 
 const file_temporal_server_api_persistence_v1_namespaces_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/persistence/v1/namespaces.proto\x12\"temporal.server.api.persistence.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/enums/v1/namespace.proto\x1a'temporal/api/namespace/v1/message.proto\x1a#temporal/api/rules/v1/message.proto\"\xf2\x03\n" +
+	"3temporal/server/api/persistence/v1/namespaces.proto\x12\"temporal.server.api.persistence.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/enums/v1/namespace.proto\x1a'temporal/api/namespace/v1/message.proto\x1a#temporal/api/rules/v1/message.proto\x1a$temporal/api/common/v1/message.proto\"\xf2\x03\n" +
 	"\x0fNamespaceDetail\x12E\n" +
 	"\x04info\x18\x01 \x01(\v21.temporal.server.api.persistence.v1.NamespaceInfoR\x04info\x12K\n" +
 	"\x06config\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.NamespaceConfigR\x06config\x12m\n" +
@@ -445,14 +454,15 @@ const file_temporal_server_api_persistence_v1_namespaces_proto_rawDesc = "" +
 	"\x0econfig_version\x18\x04 \x01(\x03R\rconfigVersion\x12B\n" +
 	"\x1dfailover_notification_version\x18\x05 \x01(\x03R\x1bfailoverNotificationVersion\x12)\n" +
 	"\x10failover_version\x18\x06 \x01(\x03R\x0ffailoverVersion\x12F\n" +
-	"\x11failover_end_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0ffailoverEndTime\"\xb2\x02\n" +
+	"\x11failover_end_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0ffailoverEndTime\"\xfb\x02\n" +
 	"\rNamespaceInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12;\n" +
 	"\x05state\x18\x02 \x01(\x0e2%.temporal.api.enums.v1.NamespaceStateR\x05state\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x14\n" +
 	"\x05owner\x18\x05 \x01(\tR\x05owner\x12O\n" +
-	"\x04data\x18\x06 \x03(\v2;.temporal.server.api.persistence.v1.NamespaceInfo.DataEntryR\x04data\x1a7\n" +
+	"\x04data\x18\x06 \x03(\v2;.temporal.server.api.persistence.v1.NamespaceInfo.DataEntryR\x04data\x12G\n" +
+	"\x0eextension_data\x18\a \x01(\v2 .temporal.api.common.v1.DataBlobR\rextensionData\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xac\a\n" +
@@ -505,11 +515,12 @@ var file_temporal_server_api_persistence_v1_namespaces_proto_goTypes = []any{
 	nil,                                // 7: temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry
 	(*timestamppb.Timestamp)(nil),      // 8: google.protobuf.Timestamp
 	(v1.NamespaceState)(0),             // 9: temporal.api.enums.v1.NamespaceState
-	(*durationpb.Duration)(nil),        // 10: google.protobuf.Duration
-	(*v11.BadBinaries)(nil),            // 11: temporal.api.namespace.v1.BadBinaries
-	(v1.ArchivalState)(0),              // 12: temporal.api.enums.v1.ArchivalState
-	(v1.ReplicationState)(0),           // 13: temporal.api.enums.v1.ReplicationState
-	(*v12.WorkflowRule)(nil),           // 14: temporal.api.rules.v1.WorkflowRule
+	(*v11.DataBlob)(nil),               // 10: temporal.api.common.v1.DataBlob
+	(*durationpb.Duration)(nil),        // 11: google.protobuf.Duration
+	(*v12.BadBinaries)(nil),            // 12: temporal.api.namespace.v1.BadBinaries
+	(v1.ArchivalState)(0),              // 13: temporal.api.enums.v1.ArchivalState
+	(v1.ReplicationState)(0),           // 14: temporal.api.enums.v1.ReplicationState
+	(*v13.WorkflowRule)(nil),           // 15: temporal.api.rules.v1.WorkflowRule
 }
 var file_temporal_server_api_persistence_v1_namespaces_proto_depIdxs = []int32{
 	1,  // 0: temporal.server.api.persistence.v1.NamespaceDetail.info:type_name -> temporal.server.api.persistence.v1.NamespaceInfo
@@ -518,21 +529,22 @@ var file_temporal_server_api_persistence_v1_namespaces_proto_depIdxs = []int32{
 	8,  // 3: temporal.server.api.persistence.v1.NamespaceDetail.failover_end_time:type_name -> google.protobuf.Timestamp
 	9,  // 4: temporal.server.api.persistence.v1.NamespaceInfo.state:type_name -> temporal.api.enums.v1.NamespaceState
 	5,  // 5: temporal.server.api.persistence.v1.NamespaceInfo.data:type_name -> temporal.server.api.persistence.v1.NamespaceInfo.DataEntry
-	10, // 6: temporal.server.api.persistence.v1.NamespaceConfig.retention:type_name -> google.protobuf.Duration
-	11, // 7: temporal.server.api.persistence.v1.NamespaceConfig.bad_binaries:type_name -> temporal.api.namespace.v1.BadBinaries
-	12, // 8: temporal.server.api.persistence.v1.NamespaceConfig.history_archival_state:type_name -> temporal.api.enums.v1.ArchivalState
-	12, // 9: temporal.server.api.persistence.v1.NamespaceConfig.visibility_archival_state:type_name -> temporal.api.enums.v1.ArchivalState
-	6,  // 10: temporal.server.api.persistence.v1.NamespaceConfig.custom_search_attribute_aliases:type_name -> temporal.server.api.persistence.v1.NamespaceConfig.CustomSearchAttributeAliasesEntry
-	7,  // 11: temporal.server.api.persistence.v1.NamespaceConfig.workflow_rules:type_name -> temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry
-	13, // 12: temporal.server.api.persistence.v1.NamespaceReplicationConfig.state:type_name -> temporal.api.enums.v1.ReplicationState
-	4,  // 13: temporal.server.api.persistence.v1.NamespaceReplicationConfig.failover_history:type_name -> temporal.server.api.persistence.v1.FailoverStatus
-	8,  // 14: temporal.server.api.persistence.v1.FailoverStatus.failover_time:type_name -> google.protobuf.Timestamp
-	14, // 15: temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry.value:type_name -> temporal.api.rules.v1.WorkflowRule
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	10, // 6: temporal.server.api.persistence.v1.NamespaceInfo.extension_data:type_name -> temporal.api.common.v1.DataBlob
+	11, // 7: temporal.server.api.persistence.v1.NamespaceConfig.retention:type_name -> google.protobuf.Duration
+	12, // 8: temporal.server.api.persistence.v1.NamespaceConfig.bad_binaries:type_name -> temporal.api.namespace.v1.BadBinaries
+	13, // 9: temporal.server.api.persistence.v1.NamespaceConfig.history_archival_state:type_name -> temporal.api.enums.v1.ArchivalState
+	13, // 10: temporal.server.api.persistence.v1.NamespaceConfig.visibility_archival_state:type_name -> temporal.api.enums.v1.ArchivalState
+	6,  // 11: temporal.server.api.persistence.v1.NamespaceConfig.custom_search_attribute_aliases:type_name -> temporal.server.api.persistence.v1.NamespaceConfig.CustomSearchAttributeAliasesEntry
+	7,  // 12: temporal.server.api.persistence.v1.NamespaceConfig.workflow_rules:type_name -> temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry
+	14, // 13: temporal.server.api.persistence.v1.NamespaceReplicationConfig.state:type_name -> temporal.api.enums.v1.ReplicationState
+	4,  // 14: temporal.server.api.persistence.v1.NamespaceReplicationConfig.failover_history:type_name -> temporal.server.api.persistence.v1.FailoverStatus
+	8,  // 15: temporal.server.api.persistence.v1.FailoverStatus.failover_time:type_name -> google.protobuf.Timestamp
+	15, // 16: temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry.value:type_name -> temporal.api.rules.v1.WorkflowRule
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_namespaces_proto_init() }

@@ -182,12 +182,13 @@ func (d *namespaceHandler) RegisterNamespace(
 	}
 
 	info := &persistencespb.NamespaceInfo{
-		Id:          uuid.NewString(),
-		Name:        registerRequest.GetNamespace(),
-		State:       enumspb.NAMESPACE_STATE_REGISTERED,
-		Owner:       registerRequest.GetOwnerEmail(),
-		Description: registerRequest.GetDescription(),
-		Data:        registerRequest.Data,
+		Id:            uuid.NewString(),
+		Name:          registerRequest.GetNamespace(),
+		State:         enumspb.NAMESPACE_STATE_REGISTERED,
+		Owner:         registerRequest.GetOwnerEmail(),
+		Description:   registerRequest.GetDescription(),
+		Data:          registerRequest.Data,
+		ExtensionData: registerRequest.GetExtensionData(),
 	}
 	config := &persistencespb.NamespaceConfig{
 		Retention:                    registerRequest.GetWorkflowExecutionRetentionPeriod(),
@@ -433,6 +434,10 @@ func (d *namespaceHandler) UpdateNamespace(
 				return nil, err
 			}
 			info.State = updatedInfo.State
+		}
+		if updatedInfo.ExtensionData != nil {
+			configurationChanged = true
+			info.ExtensionData = updatedInfo.ExtensionData
 		}
 	}
 	if updateRequest.Config != nil {
@@ -849,12 +854,13 @@ func (d *namespaceHandler) createResponse(
 	numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute := d.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(info.Name)
 
 	infoResult := &namespacepb.NamespaceInfo{
-		Name:        info.Name,
-		State:       info.State,
-		Description: info.Description,
-		OwnerEmail:  info.Owner,
-		Data:        info.Data,
-		Id:          info.Id,
+		Name:          info.Name,
+		State:         info.State,
+		Description:   info.Description,
+		OwnerEmail:    info.Owner,
+		Data:          info.Data,
+		Id:            info.Id,
+		ExtensionData: info.ExtensionData,
 
 		Capabilities: &namespacepb.NamespaceInfo_Capabilities{
 			EagerWorkflowStart:              d.config.EnableEagerWorkflowStart(info.Name),

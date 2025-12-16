@@ -77,6 +77,8 @@ require (
 	modernc.org/sqlite v1.39.1
 )
 
+require github.com/golang/protobuf v1.5.4 // indirect
+
 require (
 	cel.dev/expr v0.20.0 // indirect
 	cloud.google.com/go v0.118.3 // indirect; indirect e
@@ -170,3 +172,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace go.temporal.io/api => ../api-go

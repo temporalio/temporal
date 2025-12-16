@@ -9,6 +9,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/rules/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
 
 // detail column
 message NamespaceDetail {
@@ -28,6 +29,7 @@ message NamespaceInfo {
     string description = 4;
     string owner = 5;
     map<string, string> data = 6;
+    temporal.api.common.v1.DataBlob extension_data = 7;
 }
 
 message NamespaceConfig {

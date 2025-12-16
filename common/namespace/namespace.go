@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	rulespb "go.temporal.io/api/rules/v1"
@@ -259,6 +260,13 @@ func (ns *Namespace) GetCustomData(key string) string {
 		return ""
 	}
 	return ns.info.Data[key]
+}
+
+func (ns *Namespace) ExtensionData() *commonpb.DataBlob {
+	if ns.info == nil {
+		return nil
+	}
+	return ns.info.ExtensionData
 }
 
 // Retention returns retention duration for this namespace.

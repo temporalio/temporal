@@ -80,11 +80,12 @@ func (r *replicator) HandleTransmissionTask(
 			NamespaceOperation: namespaceOperation,
 			Id:                 info.Id,
 			Info: &namespacepb.NamespaceInfo{
-				Name:        info.Name,
-				State:       info.State,
-				Description: info.Description,
-				OwnerEmail:  info.Owner,
-				Data:        info.Data,
+				Name:          info.Name,
+				State:         info.State,
+				Description:   info.Description,
+				OwnerEmail:    info.Owner,
+				Data:          info.Data,
+				ExtensionData: info.ExtensionData,
 			},
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionTtl: config.Retention,
