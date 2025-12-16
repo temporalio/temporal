@@ -197,7 +197,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"CountActivityExecutions":        {},
 		"ListActivityExecutions":         {},
 		"DescribeActivityExecution":      {},
-		"GetActivityExecutionOutcome":    {},
+		"PollActivityExecution":          {},
 		"RequestCancelActivityExecution": {},
 		"TerminateActivityExecution":     {},
 		"DeleteActivityExecution":        {},

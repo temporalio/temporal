@@ -371,21 +371,6 @@ func (c *retryableClient) FetchWorkerConfig(
 	return resp, err
 }
 
-func (c *retryableClient) GetActivityExecutionOutcome(
-	ctx context.Context,
-	request *workflowservice.GetActivityExecutionOutcomeRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetActivityExecutionOutcomeResponse, error) {
-	var resp *workflowservice.GetActivityExecutionOutcomeResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.GetActivityExecutionOutcome(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
@@ -785,6 +770,21 @@ func (c *retryableClient) PauseWorkflowExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PauseWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PollActivityExecution(
+	ctx context.Context,
+	request *workflowservice.PollActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollActivityExecutionResponse, error) {
+	var resp *workflowservice.PollActivityExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollActivityExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

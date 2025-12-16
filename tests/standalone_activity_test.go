@@ -852,14 +852,14 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 	require.NoError(t, err)
 
 	// Wait for schedule-to-close timeout.
-	getOutcomeResp, err := s.FrontendClient().GetActivityExecutionOutcome(ctx, &workflowservice.GetActivityExecutionOutcomeRequest{
+	pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		ActivityId: activityID,
 		RunId:      startResp.RunId,
 	})
 	require.NoError(t, err)
-	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, getOutcomeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
-		"expected ScheduleToCloseTimeout but is %s", getOutcomeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"expected ScheduleToCloseTimeout but is %s", pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
 // TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is
@@ -1096,12 +1096,12 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 	require.NoError(t, err)
 }
 
-func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 	testCases := []struct {
 		name                   string
 		expectedStatus         enumspb.ActivityExecutionStatus
 		taskCompletionFn       func(context.Context, []byte) error
-		completionValidationFn func(*testing.T, *workflowservice.GetActivityExecutionOutcomeResponse)
+		completionValidationFn func(*testing.T, *workflowservice.PollActivityExecutionResponse)
 	}{
 		{
 			name:           "successful completion",
@@ -1115,7 +1115,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome() {
 
 				return err
 			},
-			completionValidationFn: func(t *testing.T, response *workflowservice.GetActivityExecutionOutcomeResponse) {
+			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
 				protorequire.ProtoEqual(t, defaultResult, response.GetOutcome().GetResult())
 			},
 		},
@@ -1131,7 +1131,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome() {
 
 				return err
 			},
-			completionValidationFn: func(t *testing.T, response *workflowservice.GetActivityExecutionOutcomeResponse) {
+			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
 				protorequire.ProtoEqual(t, defaultFailure, response.GetOutcome().GetFailure())
 			},
 		},
@@ -1151,19 +1151,19 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome() {
 			require.NoError(t, err)
 			err = tc.taskCompletionFn(ctx, pollTaskResp.TaskToken)
 			require.NoError(t, err)
-			getOutcomeResp, err := s.FrontendClient().GetActivityExecutionOutcome(ctx, &workflowservice.GetActivityExecutionOutcomeRequest{
+			pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
 			require.NoError(t, err)
-			require.NotNil(t, getOutcomeResp)
-			tc.completionValidationFn(t, getOutcomeResp)
+			require.NotNil(t, pollActivityResp)
+			tc.completionValidationFn(t, pollActivityResp)
 		})
 	}
 }
 
-func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_NotFound() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 	t := s.T()
 	ctx := testcore.NewContext()
 
@@ -1180,13 +1180,13 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_NotFound()
 
 	testCases := []struct {
 		name           string
-		request        *workflowservice.GetActivityExecutionOutcomeRequest
+		request        *workflowservice.PollActivityExecutionRequest
 		expectedErr    error
 		expectedErrMsg string
 	}{
 		{
 			name: "NonExistentNamespace",
-			request: &workflowservice.GetActivityExecutionOutcomeRequest{
+			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  "non-existent-namespace",
 				ActivityId: existingActivityID,
 				RunId:      existingRunID,
@@ -1196,7 +1196,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_NotFound()
 		},
 		{
 			name: "NonExistentActivityID",
-			request: &workflowservice.GetActivityExecutionOutcomeRequest{
+			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  existingNamespace,
 				ActivityId: "non-existent-activity",
 				RunId:      existingRunID,
@@ -1206,7 +1206,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_NotFound()
 		},
 		{
 			name: "NonExistentRunID",
-			request: &workflowservice.GetActivityExecutionOutcomeRequest{
+			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  existingNamespace,
 				ActivityId: existingActivityID,
 				RunId:      "11111111-2222-3333-4444-555555555555",
@@ -1218,14 +1218,14 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_NotFound()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := s.FrontendClient().GetActivityExecutionOutcome(ctx, tc.request)
+			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
 			require.ErrorAs(t, err, &tc.expectedErr) //nolint:testifylint
 			require.Equal(t, tc.expectedErrMsg, tc.expectedErr.Error())
 		})
 	}
 }
 
-func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_InvalidArgument() {
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument() {
 	t := s.T()
 	ctx := testcore.NewContext()
 
@@ -1234,12 +1234,12 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_InvalidArg
 
 	testCases := []struct {
 		name        string
-		request     *workflowservice.GetActivityExecutionOutcomeRequest
+		request     *workflowservice.PollActivityExecutionRequest
 		expectedErr string
 	}{
 		{
 			name: "EmptyNamespace",
-			request: &workflowservice.GetActivityExecutionOutcomeRequest{
+			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  "",
 				ActivityId: "activity-id",
 				RunId:      validRunID,
@@ -1248,7 +1248,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_InvalidArg
 		},
 		{
 			name: "EmptyActivityID",
-			request: &workflowservice.GetActivityExecutionOutcomeRequest{
+			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  existingNamespace,
 				ActivityId: "",
 				RunId:      validRunID,
@@ -1257,7 +1257,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_InvalidArg
 		},
 		{
 			name: "ActivityIDTooLong",
-			request: &workflowservice.GetActivityExecutionOutcomeRequest{
+			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  existingNamespace,
 				ActivityId: string(make([]byte, 2000)),
 				RunId:      validRunID,
@@ -1266,7 +1266,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_InvalidArg
 		},
 		{
 			name: "InvalidRunID",
-			request: &workflowservice.GetActivityExecutionOutcomeRequest{
+			request: &workflowservice.PollActivityExecutionRequest{
 				Namespace:  existingNamespace,
 				ActivityId: "activity-id",
 				RunId:      "invalid-uuid",
@@ -1277,7 +1277,7 @@ func (s *standaloneActivityTestSuite) TestGetActivityExecutionOutcome_InvalidArg
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := s.FrontendClient().GetActivityExecutionOutcome(ctx, tc.request)
+			_, err := s.FrontendClient().PollActivityExecution(ctx, tc.request)
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
 			require.Contains(t, invalidArgErr.Message, tc.expectedErr)
@@ -1865,7 +1865,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NotEmpty(t, pollTaskResp.TaskToken)
 
 		// Long poll for completion (heartbeat timeout will fire)
-		pollResp, err := s.FrontendClient().GetActivityExecutionOutcome(ctx, &workflowservice.GetActivityExecutionOutcomeRequest{
+		pollResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.RunId,

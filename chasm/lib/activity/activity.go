@@ -653,11 +653,11 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 	}, nil
 }
 
-func (a *Activity) buildGetActivityExecutionOutcomeResponse(
+func (a *Activity) buildPollActivityExecutionResponse(
 	ctx chasm.Context,
-) (*activitypb.GetActivityExecutionOutcomeResponse, error) {
-	return &activitypb.GetActivityExecutionOutcomeResponse{
-		FrontendResponse: &workflowservice.GetActivityExecutionOutcomeResponse{
+) (*activitypb.PollActivityExecutionResponse, error) {
+	return &activitypb.PollActivityExecutionResponse{
+		FrontendResponse: &workflowservice.PollActivityExecutionResponse{
 			RunId:   ctx.ExecutionKey().RunID,
 			Outcome: a.outcome(ctx),
 		},

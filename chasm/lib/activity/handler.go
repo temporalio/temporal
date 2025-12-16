@@ -163,16 +163,15 @@ func (h *handler) DescribeActivityExecution(
 	return response, err
 }
 
-// GetActivityExecutionOutcome handles getActivityExecutionOutcomeRequest from frontend. This method
-// long-polls for activity outcome. It returns an empty non-error response on context deadline
-// expiry, to indicate that the state being waited for was not reached. Callers should interpret
-// this as an invitation to resubmit their long-poll request. This response is sent before the
-// caller's deadline (see chasm.activity.longPollBuffer) so that it is likely that the caller does
-// indeed receive the non-error response.
-func (h *handler) GetActivityExecutionOutcome(
+// PollActivityExecution long-polls for activity outcome. It returns an empty non-error response on
+// context deadline expiry, to indicate that the state being waited for was not reached. Callers
+// should interpret this as an invitation to resubmit their long-poll request. This response is sent
+// before the caller's deadline (see chasm.activity.longPollBuffer) so that it is likely that the
+// caller does indeed receive the non-error response.
+func (h *handler) PollActivityExecution(
 	ctx context.Context,
-	req *activitypb.GetActivityExecutionOutcomeRequest,
-) (response *activitypb.GetActivityExecutionOutcomeResponse, err error) {
+	req *activitypb.PollActivityExecutionRequest,
+) (response *activitypb.PollActivityExecutionResponse, err error) {
 	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
 		NamespaceID: req.GetNamespaceId(),
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
@@ -200,10 +199,10 @@ func (h *handler) GetActivityExecutionOutcome(
 	response, _, err = chasm.PollComponent(ctx, ref, func(
 		a *Activity,
 		ctx chasm.Context,
-		req *activitypb.GetActivityExecutionOutcomeRequest,
-	) (*activitypb.GetActivityExecutionOutcomeResponse, bool, error) {
+		req *activitypb.PollActivityExecutionRequest,
+	) (*activitypb.PollActivityExecutionResponse, bool, error) {
 		if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
-			response, err := a.buildGetActivityExecutionOutcomeResponse(ctx)
+			response, err := a.buildPollActivityExecutionResponse(ctx)
 			return response, true, err
 		}
 		return nil, false, nil
@@ -211,8 +210,8 @@ func (h *handler) GetActivityExecutionOutcome(
 
 	if err != nil && ctx.Err() != nil {
 		// Send an empty non-error response as an invitation to resubmit the long-poll.
-		return &activitypb.GetActivityExecutionOutcomeResponse{
-			FrontendResponse: &workflowservice.GetActivityExecutionOutcomeResponse{},
+		return &activitypb.PollActivityExecutionResponse{
+			FrontendResponse: &workflowservice.PollActivityExecutionResponse{},
 		}, nil
 	}
 	return response, err
