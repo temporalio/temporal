@@ -414,6 +414,9 @@ func (h *nexusHandler) StartOperation(
 		Variant: &nexuspb.Request_StartOperation{
 			StartOperation: &startOperationRequest,
 		},
+		Capabilities: &nexuspb.Request_Capabilities{
+			TemporalFailureResponses: true,
+		},
 	})
 
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
@@ -457,7 +460,7 @@ func (h *nexusHandler) StartOperation(
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
 		// Failure conversions are our fault so only set this after converting the Temporal failure to a HandlerError.
-		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		return nil, he
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
@@ -599,6 +602,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 				OperationId: token,
 			},
 		},
+		Capabilities: &nexuspb.Request_Capabilities{
+			TemporalFailureResponses: true,
+		},
 	})
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive
@@ -631,7 +637,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
 		// Failure conversions are our fault so only set this after converting the Temporal failure to a HandlerError.
-		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		return he
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
