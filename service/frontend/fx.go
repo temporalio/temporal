@@ -74,6 +74,7 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
+	fx.Provide(interceptor.NewWorkflowIDExtractor),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -343,6 +344,7 @@ func RedirectionInterceptorProvider(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	clusterMetadata cluster.Metadata,
+	workflowIDExtractor interceptor.WorkflowIDExtractor,
 ) *interceptor.Redirection {
 	return interceptor.NewRedirection(
 		configuration.EnableNamespaceNotActiveAutoForwarding,
@@ -353,6 +355,7 @@ func RedirectionInterceptorProvider(
 		metricsHandler,
 		timeSource,
 		clusterMetadata,
+		workflowIDExtractor,
 	)
 }
 
