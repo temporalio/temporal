@@ -765,7 +765,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	ctx context.Context,
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,
-	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
+	matchingResp *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory,
 	branchToken []byte,
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {

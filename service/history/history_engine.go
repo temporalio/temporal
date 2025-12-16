@@ -533,7 +533,7 @@ func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordWorkflowTaskStartedRequest,
-) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
+) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 	return recordworkflowtaskstarted.Invoke(
 		ctx,
 		request,

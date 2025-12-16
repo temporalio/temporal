@@ -235,6 +235,9 @@ func (s *engine2Suite) TearDownSubTest() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
+	// Disable raw history to test the non-raw history path
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return false }
+
 	fakeHistory := []*historypb.HistoryEvent{
 		{
 			EventId:   int64(1),
@@ -307,7 +310,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
@@ -417,7 +420,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
@@ -437,7 +440,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	currentBranchTokken, err := ms.GetCurrentBranchToken()
 	s.NoError(err)
 	expectedResponse.BranchToken = currentBranchTokken
-	expectedResponse.RawHistory = [][]byte{historyBlob.Data}
+	expectedResponse.RawHistoryBytes = [][]byte{historyBlob.Data}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)
@@ -445,6 +448,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
+
+	// When raw history is enabled, History is NOT populated - only RawHistoryBytes is set.
+	// The matching service will use RawHistoryBytes which gets auto-deserialized by gRPC.
+	s.Nil(response.History)
 	s.Equal(&expectedResponse, response)
 }
 
@@ -659,6 +666,9 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
+	// Disable raw history to test the non-raw history path
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return false }
+
 	fakeHistory := []*historypb.HistoryEvent{
 		{
 			EventId:   int64(1),

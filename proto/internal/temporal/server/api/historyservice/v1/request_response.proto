@@ -269,7 +269,10 @@ message RecordWorkflowTaskStartedResponse {
     int64 version = 17;
     temporal.api.history.v1.History history = 18;
     bytes next_page_token = 19;
-    temporal.api.history.v1.History raw_history = 20;
+    // Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+    // instead of a proto-decoded History. This avoids matching service having to decode history.
+    temporal.api.history.v1.History raw_history = 20 [deprecated = true];
+    repeated bytes raw_history_bytes = 21;
 }
 
 // RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
@@ -296,7 +299,10 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
     int64 version = 17;
     temporal.api.history.v1.History history = 18;
     bytes next_page_token = 19;
-    repeated bytes raw_history = 20;
+    // Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+    // instead of a proto-decoded History. This avoids matching service having to decode history.
+    repeated bytes raw_history = 20 [deprecated = true];
+    repeated bytes raw_history_bytes = 21;
 }
 
 message RecordActivityTaskStartedRequest {

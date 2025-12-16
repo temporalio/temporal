@@ -40,7 +40,7 @@ func Invoke(
 	eventNotifier events.Notifier,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
+) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func Invoke(
 	requestID := req.GetRequestId()
 
 	var workflowKey definition.WorkflowKey
-	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
+	var resp *historyservice.RecordWorkflowTaskStartedResponse
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -98,7 +98,7 @@ func Invoke(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
+					resp, err = CreateRecordWorkflowTaskStartedResponse(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -215,7 +215,7 @@ func Invoke(
 				),
 			).Record(workflowScheduleToStartLatency)
 
-			resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(
+			resp, err = CreateRecordWorkflowTaskStartedResponse(
 				ctx,
 				mutableState,
 				updateRegistry,
@@ -265,7 +265,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	persistenceVisibilityMgr manager.VisibilityManager,
-	response *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory,
+	response *historyservice.RecordWorkflowTaskStartedResponse,
 ) (retError error) {
 
 	firstEventID := common.FirstEventID
@@ -351,7 +351,9 @@ func setHistoryForRecordWfTaskStartedResp(
 		for i, blob := range rawHistory {
 			historyBlobs[i] = blob.Data
 		}
-		response.RawHistory = historyBlobs
+		response.RawHistoryBytes = historyBlobs
+		// History is left nil - matching service will use RawHistoryBytes which gets
+		// auto-deserialized to RawHistory by gRPC due to wire compatibility.
 	} else {
 		response.History = history
 	}
@@ -367,41 +369,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 	identity string,
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	rawResp, err := CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, ms, updateRegistry, workflowTask, identity, wtHeartbeat)
-	if err != nil {
-		return nil, err
-	}
-	resp := &historyservice.RecordWorkflowTaskStartedResponse{
-		WorkflowType:               rawResp.WorkflowType,
-		PreviousStartedEventId:     rawResp.PreviousStartedEventId,
-		ScheduledEventId:           rawResp.ScheduledEventId,
-		StartedEventId:             rawResp.StartedEventId,
-		NextEventId:                rawResp.NextEventId,
-		Attempt:                    rawResp.Attempt,
-		StickyExecutionEnabled:     rawResp.StickyExecutionEnabled,
-		TransientWorkflowTask:      rawResp.TransientWorkflowTask,
-		WorkflowExecutionTaskQueue: rawResp.WorkflowExecutionTaskQueue,
-		BranchToken:                rawResp.BranchToken,
-		ScheduledTime:              rawResp.ScheduledTime,
-		StartedTime:                rawResp.StartedTime,
-		Queries:                    rawResp.Queries,
-		Clock:                      rawResp.Clock,
-		Messages:                   rawResp.Messages,
-		Version:                    rawResp.Version,
-		NextPageToken:              rawResp.NextPageToken,
-	}
-	return resp, nil
-}
-
-func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
-	ctx context.Context,
-	ms historyi.MutableState,
-	updateRegistry update.Registry,
-	workflowTask *historyi.WorkflowTaskInfo,
-	identity string,
-	wtHeartbeat bool,
-) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
-	response := &historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
+	response := &historyservice.RecordWorkflowTaskStartedResponse{}
 	response.WorkflowType = ms.GetWorkflowType()
 	executionInfo := ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {

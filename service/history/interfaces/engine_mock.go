@@ -602,10 +602,10 @@ func (mr *MockEngineMockRecorder) RecordChildExecutionCompleted(ctx, request any
 }
 
 // RecordWorkflowTaskStarted mocks base method.
-func (m *MockEngine) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
+func (m *MockEngine) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecordWorkflowTaskStarted", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory)
+	ret0, _ := ret[0].(*historyservice.RecordWorkflowTaskStartedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

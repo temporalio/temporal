@@ -946,6 +946,24 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	// When history.sendRawHistoryBetweenInternalServices is enabled, matching service sends
+	// raw history bytes in RawHistory field. The matching client deserializes this to History
+	// in the RawHistory field due to wire compatibility.
+	// We need to process search attributes for raw history since it bypasses the normal processing path.
+	history := matchingResp.History
+	if matchingResp.RawHistory != nil {
+		history = matchingResp.RawHistory
+		if err := api.ProcessOutgoingSearchAttributes(
+			wh.saProvider,
+			wh.saMapperProvider,
+			history.GetEvents(),
+			namespaceEntry.Name(),
+			wh.visibilityMgr,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	return &workflowservice.PollWorkflowTaskQueueResponse{
 		TaskToken:                  matchingResp.TaskToken,
 		WorkflowExecution:          matchingResp.WorkflowExecution,
@@ -955,7 +973,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		Query:                      matchingResp.Query,
 		BacklogCountHint:           matchingResp.BacklogCountHint,
 		Attempt:                    matchingResp.Attempt,
-		History:                    matchingResp.History,
+		History:                    history,
 		NextPageToken:              matchingResp.NextPageToken,
 		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
 		ScheduledTime:              matchingResp.ScheduledTime,

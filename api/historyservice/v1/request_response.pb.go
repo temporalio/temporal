@@ -1282,9 +1282,14 @@ type RecordWorkflowTaskStartedResponse struct {
 	Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3" json:"version,omitempty"`
 	History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3" json:"history,omitempty"`
 	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	RawHistory                 *v115.History                  `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// This field will be deprecated soon. We will use raw_history_bytes to send the raw history batches.
+	// raw_history field is decoded as History in matching service. We do no want matching service to decode history.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
+	RawHistory      *v115.History `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
+	RawHistoryBytes [][]byte      `protobuf:"bytes,21,rep,name=raw_history_bytes,json=rawHistoryBytes,proto3" json:"raw_history_bytes,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedResponse) Reset() {
@@ -1443,9 +1448,17 @@ func (x *RecordWorkflowTaskStartedResponse) GetNextPageToken() []byte {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 func (x *RecordWorkflowTaskStartedResponse) GetRawHistory() *v115.History {
 	if x != nil {
 		return x.RawHistory
+	}
+	return nil
+}
+
+func (x *RecordWorkflowTaskStartedResponse) GetRawHistoryBytes() [][]byte {
+	if x != nil {
+		return x.RawHistoryBytes
 	}
 	return nil
 }
@@ -1474,9 +1487,14 @@ type RecordWorkflowTaskStartedResponseWithRawHistory struct {
 	Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3" json:"version,omitempty"`
 	History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3" json:"history,omitempty"`
 	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	RawHistory                 [][]byte                       `protobuf:"bytes,20,rep,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// This field will be deprecated soon. We will use raw_history_bytes to send the raw history batches.
+	// raw_history field is decoded as History in matching service. We do no want matching service to decode history.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
+	RawHistory      [][]byte `protobuf:"bytes,20,rep,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
+	RawHistoryBytes [][]byte `protobuf:"bytes,21,rep,name=raw_history_bytes,json=rawHistoryBytes,proto3" json:"raw_history_bytes,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) Reset() {
@@ -1635,9 +1653,17 @@ func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetNextPageToken() []b
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetRawHistory() [][]byte {
 	if x != nil {
 		return x.RawHistory
+	}
+	return nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetRawHistoryBytes() [][]byte {
+	if x != nil {
+		return x.RawHistoryBytes
 	}
 	return nil
 }
@@ -10213,7 +10239,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x11version_directive\x18\n" +
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
 	"\x05stamp\x18\v \x01(\x05R\x05stamp\x12A\n" +
-	"\x1dtask_dispatch_revision_number\x18\f \x01(\x03R\x1ataskDispatchRevisionNumber:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\x94\n" +
+	"\x1dtask_dispatch_revision_number\x18\f \x01(\x03R\x1ataskDispatchRevisionNumber:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\xc4\n" +
 	"\n" +
 	"!RecordWorkflowTaskStartedResponse\x12I\n" +
 	"\rworkflow_type\x18\x01 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x129\n" +
@@ -10233,13 +10259,14 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\bmessages\x18\x10 \x03(\v2!.temporal.api.protocol.v1.MessageR\bmessages\x12\x18\n" +
 	"\aversion\x18\x11 \x01(\x03R\aversion\x12:\n" +
 	"\ahistory\x18\x12 \x01(\v2 .temporal.api.history.v1.HistoryR\ahistory\x12&\n" +
-	"\x0fnext_page_token\x18\x13 \x01(\fR\rnextPageToken\x12A\n" +
-	"\vraw_history\x18\x14 \x01(\v2 .temporal.api.history.v1.HistoryR\n" +
-	"rawHistory\x1a`\n" +
+	"\x0fnext_page_token\x18\x13 \x01(\fR\rnextPageToken\x12E\n" +
+	"\vraw_history\x18\x14 \x01(\v2 .temporal.api.history.v1.HistoryB\x02\x18\x01R\n" +
+	"rawHistory\x12*\n" +
+	"\x11raw_history_bytes\x18\x15 \x03(\fR\x0frawHistoryBytes\x1a`\n" +
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\n" +
-	"\x10\v\"\x8e\n" +
+	"\x10\v\"\xbe\n" +
 	"\n" +
 	"/RecordWorkflowTaskStartedResponseWithRawHistory\x12I\n" +
 	"\rworkflow_type\x18\x01 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x129\n" +
@@ -10259,9 +10286,10 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\bmessages\x18\x10 \x03(\v2!.temporal.api.protocol.v1.MessageR\bmessages\x12\x18\n" +
 	"\aversion\x18\x11 \x01(\x03R\aversion\x12:\n" +
 	"\ahistory\x18\x12 \x01(\v2 .temporal.api.history.v1.HistoryR\ahistory\x12&\n" +
-	"\x0fnext_page_token\x18\x13 \x01(\fR\rnextPageToken\x12\x1f\n" +
-	"\vraw_history\x18\x14 \x03(\fR\n" +
-	"rawHistory\x1a`\n" +
+	"\x0fnext_page_token\x18\x13 \x01(\fR\rnextPageToken\x12#\n" +
+	"\vraw_history\x18\x14 \x03(\fB\x02\x18\x01R\n" +
+	"rawHistory\x12*\n" +
+	"\x11raw_history_bytes\x18\x15 \x03(\fR\x0frawHistoryBytes\x1a`\n" +
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\n" +
