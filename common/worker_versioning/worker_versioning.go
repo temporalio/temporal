@@ -265,32 +265,17 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
-		resp, err := matchingClient.GetTaskQueueUserData(ctx,
-			&matchingservice.GetTaskQueueUserDataRequest{
-				NamespaceId:   namespaceID,
-				TaskQueue:     tq,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			})
+		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     tq,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
+		})
 		if err != nil {
 			return false, err
 		}
-		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
-		if !ok {
-			// The TQ is unversioned
-			return false, nil
-		}
-		return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
+		return resp.GetIsMember(), nil
 	}
-}
-
-// [cleanup-wv-pre-release]
-func FindDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
-	for i, d := range deployments.GetDeployments() { //nolint:staticcheck // SA1019: worker versioning v0.30
-		if d.Deployment.Equal(deployment) {
-			return i
-		}
-	}
-	return -1
 }
 
 func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
@@ -309,11 +294,6 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 		return false
 	}
 
-	for _, d := range deployments.GetDeployments() {
-		if d.Deployment.Equal(DeploymentFromDeploymentVersion(v)) {
-			return true
-		}
-	}
 	for _, vd := range deployments.GetVersions() {
 		if proto.Equal(v, vd.GetVersion()) {
 			return true
@@ -322,7 +302,8 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 
 	// Check for the presence of the version in the new DeploymentData format.
 	if deploymentData, ok := deployments.GetDeploymentsData()[v.GetDeploymentName()]; ok {
-		return deploymentData.GetVersions()[v.GetBuildId()] != nil
+		vd := deploymentData.GetVersions()[v.GetBuildId()]
+		return vd != nil && !vd.GetDeleted()
 	}
 
 	return false
@@ -704,19 +685,6 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 
 	var current *deploymentspb.DeploymentVersionData
 	ramping := deployments.GetUnversionedRampData() // nil if there is no unversioned ramp
-
-	// Find old current
-	for _, d := range deployments.GetDeployments() {
-		// [cleanup-old-wv]
-		if d.Data.LastBecameCurrentTime != nil {
-			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
-				current = &deploymentspb.DeploymentVersionData{
-					Version:           DeploymentVersionFromDeployment(d.Deployment),
-					RoutingUpdateTime: d.Data.LastBecameCurrentTime,
-				}
-			}
-		}
-	}
 
 	// Find current and ramping
 	// [cleanup-pp-wv]

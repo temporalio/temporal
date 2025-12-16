@@ -90,16 +90,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
-	t.Run("async_without_revision_number", func(t *testing.T) {
-		suite.Run(t, &Versioning3Suite{
-			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-			useV32:                    true,
-			useNewDeploymentData:      true,
-			useRevisionNumbers:        false,
-		})
-	})
-
-	t.Run("async_with_revision_number", func(t *testing.T) {
+	t.Run("async", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
 			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
 			useV32:                    true,
@@ -108,6 +99,14 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
+	t.Run("async_version_rev_no", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.VersionDataRevisionNumber,
+			useV32:                    true,
+			useRevisionNumbers:        true,
+			useNewDeploymentData:      true,
+		})
+	})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -2182,7 +2181,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
-		if behavior == vbUnpinned && s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		if behavior == vbUnpinned && s.deploymentWorkflowVersion >= workerdeployment.AsyncSetCurrentAndRamping {
 			// Unpinned CaN should inherit parent deployment version and behaviour
 			s.verifyWorkflowVersioning(tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
 		} else {
@@ -2957,9 +2956,9 @@ func (s *Versioning3Suite) forgetTaskQueueDeploymentVersion(
 	}
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
-			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     tv.TaskQueue().GetName(),
-			TaskQueueType: t,
+			NamespaceId:    s.NamespaceID().String(),
+			TaskQueue:      tv.TaskQueue().GetName(),
+			TaskQueueTypes: []enumspb.TaskQueueType{t},
 			Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
 				ForgetVersion: v,
 			},
@@ -3525,15 +3524,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			s.NoError(err)
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
-				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()
 				deploymentsData := perTypes[int32(pt.tp)].GetDeploymentData().GetDeploymentsData()
 				workerDeploymentData := deploymentsData[tv.DeploymentVersion().GetDeploymentName()]
 
-				for _, d := range deps {
-					if d.GetDeployment().Equal(tv.Deployment()) {
-						delete(remaining, pt)
-					}
-				}
 				if unversionedRamp {
 					if perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
 						delete(remaining, pt)
@@ -4570,4 +4563,43 @@ func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_AfterCAN_NoBounceBack()
 
 func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_ChildNoBounceBack() {
 	s.testRetryNoBounceBack(false, true)
+}
+
+// The following tests test out the CheckTaskQueueVersionMembership RPC.
+func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// No version exists in the task queue's userData as of now
+	s.Eventually(func() bool {
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv1.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
+		})
+		s.NoError(err)
+		return !resp.GetIsMember() // the check should pass if no version is present
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Start v1 worker which shall register the version in the task queue
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+	})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// The version should eventually show up in the task queue's user data
+	s.Eventually(func() bool {
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv1.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv1.Deployment()),
+		})
+		s.NoError(err)
+		return resp.GetIsMember()
+	}, 10*time.Second, 100*time.Millisecond)
 }

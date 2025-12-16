@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
 	"go.temporal.io/server/service/matching/workers"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -30,7 +29,6 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
-	deployment.Module,
 	workerdeployment.Module,
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),

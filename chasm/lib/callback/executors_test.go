@@ -131,13 +131,16 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			defer ctrl.Finish()
 
 			// Setup namespace
-			ns := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
 					Id:   "namespace-id",
 					Name: "namespace-name",
 				},
 				Config: &persistencespb.NamespaceConfig{},
-			})
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
 
 			// Setup metrics expectations
 			metricsHandler := metrics.NewMockHandler(ctrl)
@@ -181,7 +184,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
-			err := chasmRegistry.Register(&Library{
+			err = chasmRegistry.Register(&Library{
 				InvocationTaskExecutor: executor,
 			})
 			require.NoError(t, err)
@@ -545,13 +548,16 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			defer ctrl.Finish()
 
 			// Setup namespace
-			ns := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
 					Id:   "namespace-id",
 					Name: "namespace-name",
 				},
 				Config: &persistencespb.NamespaceConfig{},
-			})
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
 
 			// Setup history client
 			historyClient := tc.setupHistoryClient(t, ctrl)
@@ -581,7 +587,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 
 			chasmRegistry := chasm.NewRegistry(logger)
-			err := chasmRegistry.Register(&Library{
+			err = chasmRegistry.Register(&Library{
 				InvocationTaskExecutor: executor,
 			})
 			require.NoError(t, err)

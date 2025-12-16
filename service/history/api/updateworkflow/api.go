@@ -124,6 +124,11 @@ func (u *Updater) ApplyRequest(
 		return nil, consts.ErrWorkflowCompleted
 	}
 
+	// We don't accept the request to update the workflow if the workflow is paused.
+	if ms.IsWorkflowExecutionStatusPaused() {
+		return nil, serviceerror.NewFailedPrecondition("Workflow is paused. Cannot update the workflow.")
+	}
+
 	if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
 		// If workflow task is constantly failing, the update to that workflow will also fail.
 		// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
