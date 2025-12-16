@@ -510,16 +510,18 @@ func (tm *priTaskMatcher) poll(
 	pollWasForwarded = task.isStarted()
 	priority = task.getPriority().GetPriorityKey()
 
-	if !task.isQuery() {
-		if task.isSyncMatchTask() {
+	if !pollWasForwarded {
+		if !task.isQuery() {
+			if task.isSyncMatchTask() {
+				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			}
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		} else {
 			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-	} else {
-		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom)
 	}
-	tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom, pollWasForwarded)
 
 	return task, nil
 }
@@ -531,14 +533,7 @@ func (tm *priTaskMatcher) isForwardingAllowed() bool {
 func (tm *priTaskMatcher) emitForwardedSourceStats(
 	isTaskForwarded bool,
 	pollForwardedSource string,
-	forwardedPoll bool,
 ) {
-	if forwardedPoll {
-		// This means we forwarded the poll to another partition. Skipping this to prevent duplicate emits.
-		// Only the partition in which the match happened should emit this metric.
-		return
-	}
-
 	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
