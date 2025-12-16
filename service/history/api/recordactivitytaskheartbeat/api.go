@@ -20,16 +20,16 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
-	_, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
 	request := req.HeartbeatRequest
 	tokenSerializer := tasktoken.NewSerializer()
 	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
+	}
+
+	_, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	if err != nil {
+		return nil, err
 	}
 	if err := api.SetActivityTaskRunID(ctx, token, workflowConsistencyChecker); err != nil {
 		return nil, err

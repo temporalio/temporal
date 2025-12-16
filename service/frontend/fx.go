@@ -7,7 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
-	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
@@ -63,7 +62,6 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
-	deployment.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
@@ -114,7 +112,7 @@ var Module = fx.Options(
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
-	fx.Provide(chasm.ChasmRequestVisibilityInterceptorProvider),
+	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
 
 func NewServiceProvider(
@@ -215,7 +213,7 @@ func GrpcServerOptionsProvider(
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
-	chasmRequestVisibilityInterceptor *chasm.ChasmRequestVisibilityInterceptor,
+	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
@@ -749,7 +747,6 @@ func HandlerProvider(
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentStoreClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -777,7 +774,6 @@ func HandlerProvider(
 		persistenceMetadataManager,
 		historyClient,
 		matchingClient,
-		deploymentStoreClient,
 		workerDeploymentStoreClient,
 		schedulerClient,
 		archiverProvider,

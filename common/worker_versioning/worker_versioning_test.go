@@ -44,12 +44,6 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	}{
 		{name: "nil data"},
 		{name: "empty data", data: &persistencespb.DeploymentData{}},
-		{name: "old data", wantCurrent: v1,
-			data: &persistencespb.DeploymentData{
-				Deployments: []*persistencespb.DeploymentData_DeploymentDataItem{
-					{Deployment: DeploymentFromDeploymentVersion(v1), Data: &deploymentspb.TaskQueueData{LastBecameCurrentTime: t1}},
-				}},
-		},
 		{name: "old deployment data: two current + two ramping",
 			wantCurrent: v2,
 			wantRamping: v3,
@@ -107,16 +101,6 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: nil},
 				},
 				UnversionedRampData: &deploymentspb.DeploymentVersionData{Version: nil, RampPercentage: 100, RoutingUpdateTime: t2, RampingSinceTime: t2},
-			},
-		},
-		{name: "mix of prerelease and public preview deployment data: one current", wantCurrent: v2,
-			data: &persistencespb.DeploymentData{
-				Deployments: []*persistencespb.DeploymentData_DeploymentDataItem{
-					{Deployment: DeploymentFromDeploymentVersion(v1), Data: &deploymentspb.TaskQueueData{LastBecameCurrentTime: t1}},
-				},
-				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v2, CurrentSinceTime: t2, RoutingUpdateTime: t2},
-				},
 			},
 		},
 		// Membership related tests
@@ -322,6 +306,141 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 							RampingVersionPercentageChangedTime: t3,
 						},
 						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
+					},
+				},
+			}},
+		// Tests with deleted versions
+		{name: "new format: current version marked as deleted should be ignored", wantCurrent: nil,
+			data: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+							CurrentVersionChangedTime: t2,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v1.GetBuildId(): {Deleted: true},
+						},
+					},
+				},
+			}},
+		{name: "new format: ramping version marked as deleted should be ignored", wantRamping: nil,
+			data: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							RampingVersionPercentage:            50,
+							RampingVersionPercentageChangedTime: t2,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v2.GetBuildId(): {Deleted: true},
+						},
+					},
+				},
+			}},
+		{name: "new format: current deleted, ramping not deleted -> only ramping returned", wantCurrent: nil, wantRamping: v2,
+			data: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+							CurrentVersionChangedTime:           t1,
+							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							RampingVersionPercentage:            30,
+							RampingVersionPercentageChangedTime: t2,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v1.GetBuildId(): {Deleted: true},
+							v2.GetBuildId(): {Deleted: false},
+						},
+					},
+				},
+			}},
+		{name: "new format: ramping deleted, current not deleted -> only current returned", wantCurrent: v1, wantRamping: nil,
+			data: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+							CurrentVersionChangedTime:           t1,
+							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							RampingVersionPercentage:            30,
+							RampingVersionPercentageChangedTime: t2,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v1.GetBuildId(): {Deleted: false},
+							v2.GetBuildId(): {Deleted: true},
+						},
+					},
+				},
+			}},
+		{name: "new format: both current and ramping deleted -> both nil", wantCurrent: nil, wantRamping: nil,
+			data: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+							CurrentVersionChangedTime:           t1,
+							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							RampingVersionPercentage:            30,
+							RampingVersionPercentageChangedTime: t2,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v1.GetBuildId(): {Deleted: true},
+							v2.GetBuildId(): {Deleted: true},
+						},
+					},
+				},
+			}},
+		{name: "mixed: new current deleted falls back to old current", wantCurrent: v1,
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
+				},
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							CurrentVersionChangedTime: t2,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v2.GetBuildId(): {Deleted: true},
+						},
+					},
+				},
+			}},
+		{name: "mixed: new ramping deleted falls back to old ramping", wantRamping: v1,
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{
+					{Version: v1, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 40},
+				},
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							RampingVersionPercentage:            50,
+							RampingVersionPercentageChangedTime: t2,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v2.GetBuildId(): {Deleted: true},
+						},
+					},
+				},
+			}},
+		{name: "new format: version exists but marked as deleted alongside non-deleted version", wantCurrent: v2,
+			data: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion:  &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v2.GetBuildId()},
+							CurrentVersionChangedTime: t2,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v1.GetBuildId(): {Deleted: true},
+							v2.GetBuildId(): {Deleted: false},
+							v3.GetBuildId(): {Deleted: true},
+						},
 					},
 				},
 			}},

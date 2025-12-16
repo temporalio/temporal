@@ -59,8 +59,8 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
-	fx.Provide(chasm.ChasmRequestEngineInterceptorProvider),
-	fx.Provide(chasm.ChasmRequestVisibilityInterceptorProvider),
+	fx.Provide(chasm.ChasmEngineInterceptorProvider),
+	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
@@ -210,8 +210,8 @@ func HealthCheckInterceptorProvider(
 
 func HistoryAdditionalInterceptorsProvider(
 	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
-	chasmRequestEngineInterceptor *chasm.ChasmRequestEngineInterceptor,
-	chasmRequestVisibilityInterceptor *chasm.ChasmRequestVisibilityInterceptor,
+	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
+	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
 		healthCheckInterceptor.UnaryIntercept,

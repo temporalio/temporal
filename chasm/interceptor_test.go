@@ -43,11 +43,11 @@ func (l *ServiceLibrary) RegisterServices(server *grpc.Server) {
 	testspb.RegisterTestServiceServer(server, ServiceHandler{})
 }
 
-func TestChasmRequestEngineInterceptor_ShouldRespond(t *testing.T) {
+func TestChasmEngineInterceptor_ShouldRespond(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	mockEngine := chasm.NewMockEngine(ctrl)
-	engineInterceptor := chasm.ChasmRequestEngineInterceptorProvider(
+	engineInterceptor := chasm.ChasmEngineInterceptorProvider(
 		mockEngine,
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
@@ -60,11 +60,11 @@ func TestChasmRequestEngineInterceptor_ShouldRespond(t *testing.T) {
 	require.True(t, response.HasEngineCtx)
 }
 
-func TestChasmRequestVisibilityInterceptor_ShouldRespond(t *testing.T) {
+func TestChasmVisibilityInterceptor_ShouldRespond(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	mockVisibilityManager := chasm.NewMockVisibilityManager(ctrl)
-	visibilityInterceptor := chasm.ChasmRequestVisibilityInterceptorProvider(mockVisibilityManager)
+	visibilityInterceptor := chasm.ChasmVisibilityInterceptorProvider(mockVisibilityManager)
 
 	server, address := startTestServer(t, grpc.UnaryInterceptor(visibilityInterceptor.Intercept))
 	defer server.Stop()

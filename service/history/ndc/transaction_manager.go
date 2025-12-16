@@ -266,7 +266,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		return 0, historyi.TransactionPolicyActive, err
 	}
 	isWorkflowRunning := targetWorkflow.GetMutableState().IsWorkflowExecutionRunning()
-	targetWorkflowActiveCluster := targetWorkflow.GetMutableState().GetNamespaceEntry().ActiveClusterName()
+	targetWorkflowActiveCluster := targetWorkflow.GetMutableState().GetNamespaceEntry().ActiveClusterName(targetWorkflow.GetMutableState().GetExecutionInfo().WorkflowId)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 	isActiveCluster := targetWorkflowActiveCluster == currentCluster
 

@@ -622,7 +622,17 @@ func (e *ExecutableTaskImpl) SyncState(
 	}
 
 	targetClusterInfo := e.ClusterMetadata.GetAllClusterInfo()[e.ClusterMetadata.GetCurrentClusterName()]
-	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
+
+	// Remove branch tokens from version histories to reduce request size
+	versionHistories := syncStateErr.VersionHistories
+	if versionHistories != nil {
+		versionHistories = versionhistory.CopyVersionHistories(versionHistories)
+		for _, history := range versionHistories.Histories {
+			history.BranchToken = nil
+		}
+	}
+
+	req := &adminservice.SyncWorkflowStateRequest{
 		NamespaceId: syncStateErr.NamespaceId,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: syncStateErr.WorkflowId,
@@ -630,10 +640,15 @@ func (e *ExecutableTaskImpl) SyncState(
 		},
 		ArchetypeId:         syncStateErr.ArchetypeId,
 		VersionedTransition: syncStateErr.VersionedTransition,
-		VersionHistories:    syncStateErr.VersionHistories,
+		VersionHistories:    versionHistories,
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
-	})
+	}
+	resp, err := remoteAdminClient.SyncWorkflowState(ctx, req)
 	if err != nil {
+		var resourceExhaustedError *serviceerror.ResourceExhausted
+		if errors.As(err, &resourceExhaustedError) {
+			return false, serviceerror.NewInvalidArgumentf("sync workflow state failed due to resource exhausted: %v, request payload size: %v", err, req.Size())
+		}
 		logger := log.With(e.Logger,
 			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
 			tag.WorkflowID(syncStateErr.WorkflowId),
