@@ -39,7 +39,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 
 	// No entries initially
 	list := m.filterWorkers("ns1", alwaysTrue)
-	assert.Len(t, list, 0, "expected empty list before updates")
+	assert.Empty(t, list, "expected empty list before updates")
 
 	// Add some heartbeats
 	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerA", Status: enumspb.WORKER_STATUS_RUNNING}
@@ -74,23 +74,25 @@ func TestShutdownStatusRemovesWorker(t *testing.T) {
 	})
 	defer m.Stop()
 
-	// Add a running worker
-	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_RUNNING}
-	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb})
+	// Add two running workers
+	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_RUNNING}
+	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker2", Status: enumspb.WORKER_STATUS_RUNNING}
+	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
 
-	// Verify worker is registered
+	// Verify both workers are registered
 	list := m.filterWorkers("ns1", alwaysTrue)
-	assert.Len(t, list, 1, "worker should be registered")
-	assert.Equal(t, int64(1), m.total.Load(), "total should be 1")
+	assert.Len(t, list, 2, "both workers should be registered")
+	assert.Equal(t, int64(2), m.total.Load(), "total should be 2")
 
-	// Worker sends shutdown status
+	// Worker1 sends shutdown status
 	hbShutdown := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_SHUTDOWN}
 	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hbShutdown})
 
-	// Verify worker is immediately removed
+	// Verify only worker1 is removed, worker2 remains
 	list = m.filterWorkers("ns1", alwaysTrue)
-	assert.Len(t, list, 0, "worker should be removed on shutdown")
-	assert.Equal(t, int64(0), m.total.Load(), "total should be 0 after shutdown")
+	assert.Len(t, list, 1, "only one worker should remain")
+	assert.Equal(t, "worker2", list[0].WorkerInstanceKey, "worker2 should remain")
+	assert.Equal(t, int64(1), m.total.Load(), "total should be 1 after shutdown")
 }
 
 func TestShutdownStatusForNonExistentWorker(t *testing.T) {
@@ -111,8 +113,8 @@ func TestShutdownStatusForNonExistentWorker(t *testing.T) {
 
 	// Verify nothing happened
 	list := m.filterWorkers("ns1", alwaysTrue)
-	assert.Len(t, list, 0, "no workers should exist")
-	assert.Equal(t, int64(0), m.total.Load(), "total should remain 0")
+	assert.Empty(t, list, "no workers should exist")
+	assert.Zero(t, m.total.Load(), "total should remain 0")
 }
 
 func TestListNamespacePredicate(t *testing.T) {
@@ -177,8 +179,8 @@ func TestEvictByTTL(t *testing.T) {
 	m.evictByTTL()
 
 	list := m.filterWorkers("ns", alwaysTrue)
-	assert.Len(t, list, 0, "entry should be evicted by TTL")
-	assert.Equal(t, int64(0), m.total.Load(), "total counter should be decremented")
+	assert.Empty(t, list, "entry should be evicted by TTL")
+	assert.Zero(t, m.total.Load(), "total counter should be decremented")
 }
 
 func TestEvictByCapacity(t *testing.T) {
