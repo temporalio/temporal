@@ -587,7 +587,7 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
 		return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 	default:
-		panic(fmt.Sprintf("unknown activity execution status: %v", status))
+		panic(fmt.Sprintf("unknown activity execution status: %v", status)) //nolint:forbidigo
 	}
 }
 
@@ -603,12 +603,11 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
-		return enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
+		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
 		return enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED
 	default:
-		panic(fmt.Sprintf("unknown activity execution status: %v", status))
+		panic(fmt.Sprintf("unknown activity execution status: %v", status)) //nolint:forbidigo
 	}
 }
 

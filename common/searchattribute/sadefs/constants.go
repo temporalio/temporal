@@ -60,7 +60,7 @@ const (
 	ScheduleID = "ScheduleId"
 
 	// TODO: Remove this hardcoded constant.
-	ActivityId = "ActivityId"
+	ActivityID = "ActivityId"
 
 	// TemporalPauseInfo is a search attribute that stores the information about paused entities in the workflow.
 	// Format of a single paused entity: "<key>:<value>".

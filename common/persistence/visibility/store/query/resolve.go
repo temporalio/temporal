@@ -40,7 +40,7 @@ func ResolveSearchAttributeAlias(
 
 		// Handle ActivityId → WorkflowID transformation for standalone activities.
 		// TODO: Remove this hardcoded transformation.
-		if name == sadefs.ActivityId {
+		if name == sadefs.ActivityID {
 			saType, _ := saTypeMap.GetType(sadefs.WorkflowID)
 			return sadefs.WorkflowID, saType, nil
 		}
