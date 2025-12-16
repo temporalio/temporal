@@ -30,13 +30,19 @@ variable "TAG_LATEST" {
   default = false
 }
 
-# Legacy targets (legacy-admin-tools, legacy-server) are for building images with server versions
-# older than v1.27.0 (3 minor versions behind v1.30.0). Once support for pre-1.27.0 versions is
-# no longer needed, these legacy targets can be removed and only the standard targets should be used.
+# IMPORTANT: When updating ALPINE_TAG, also update the default value in:
+# - docker/targets/admin-tools.Dockerfile
+# - docker/targets/server.Dockerfile
+variable "ALPINE_TAG" {
+  default = "3.23@sha256:c78ded0fee4493809c8ca71d4a6057a46237763d952fae15ea418f6d14137f2d"
+}
 
 target "admin-tools" {
   context = "docker"
   dockerfile = "targets/admin-tools.Dockerfile"
+  args = {
+    ALPINE_TAG = "${ALPINE_TAG}"
+  }
   tags = compact([
     "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}",
     "${IMAGE_REPO}/admin-tools:${SAFE_IMAGE_BRANCH_TAG}",
@@ -60,6 +66,9 @@ target "admin-tools" {
 target "server" {
   context = "docker"
   dockerfile = "targets/server.Dockerfile"
+  args = {
+    ALPINE_TAG = "${ALPINE_TAG}"
+  }
   tags = compact([
     "${IMAGE_REPO}/server:${IMAGE_SHA_TAG}",
     "${IMAGE_REPO}/server:${SAFE_IMAGE_BRANCH_TAG}",
