@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -19,31 +20,21 @@ import (
 // alwaysTrue predicate for convenience
 func alwaysTrue(_ *workerpb.WorkerHeartbeat) bool { return true }
 
-// enablePluginMetrics returns a config function that always returns true.
-func enablePluginMetrics() func() bool {
-	return func() bool { return true }
-}
-
-// disablePluginMetrics returns a config function that always returns false.
-func disablePluginMetrics() func() bool {
-	return func() bool { return false }
-}
-
 func TestUpdateAndListNamespace(t *testing.T) {
 	// Use capture handler to verify metrics
 	captureHandler := metricstest.NewCaptureHandler()
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(
-		2,                     // numBuckets
-		time.Hour,             // TTL
-		0,                     // MinEvictAge
-		10,                    // maxItems
-		time.Hour,             // evictionInterval
-		captureHandler,        // metricsHandler
-		enablePluginMetrics(), // enableWorkerPluginMetrics
-	)
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      captureHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 
 	// No entries initially
@@ -72,7 +63,15 @@ func TestUpdateAndListNamespace(t *testing.T) {
 }
 
 func TestListNamespacePredicate(t *testing.T) {
-	m := newRegistryImpl(1, time.Hour, 0, 10, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 
 	// Set up multiple entries
@@ -102,7 +101,15 @@ func TestListNamespacePredicate(t *testing.T) {
 }
 
 func TestEvictByTTL(t *testing.T) {
-	m := newRegistryImpl(1, 1*time.Second, 0, 10, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(1 * time.Second),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "oldWorker"}
@@ -122,14 +129,22 @@ func TestEvictByTTL(t *testing.T) {
 }
 
 func TestEvictByCapacity(t *testing.T) {
-	maxItems := int64(3)
+	maxItems := 3
 
 	// Use capture handler to verify metrics
 	captureHandler := metricstest.NewCaptureHandler()
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(1, time.Hour, 0, maxItems, time.Hour, captureHandler, enablePluginMetrics())
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      captureHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 
 	// Insert more entries than maxItems
@@ -145,7 +160,7 @@ func TestEvictByCapacity(t *testing.T) {
 	// Ensure we evicted down to maxItems
 	remaining := m.filterWorkers("ns", alwaysTrue)
 	assert.Len(t, remaining, int(maxItems), "should evict down to maxItems")
-	assert.LessOrEqual(t, m.total.Load(), maxItems, "total counter should not exceed maxItems")
+	assert.LessOrEqual(t, m.total.Load(), int64(maxItems), "total counter should not exceed maxItems")
 
 	// Verify metrics: eviction should succeed (no age protection issues)
 	snapshot := capture.Snapshot()
@@ -160,7 +175,7 @@ func TestEvictByCapacity(t *testing.T) {
 // protected by minEvictAge. This verifies that we do not keep checking the same entries repeatedly
 // when there is no space.
 func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
-	maxItems := int64(2)
+	maxItems := 2
 	minEvictAge := 5 * time.Second
 
 	// Use capture handler to verify metrics
@@ -168,7 +183,15 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler, enablePluginMetrics())
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(minEvictAge),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      captureHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 
 	// Add 3 entries (over capacity) - all will be "new" (< minEvictAge)
@@ -180,7 +203,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 
 	// Verify we're over capacity
 	assert.Equal(t, int64(3), m.total.Load(), "should have 3 entries initially")
-	assert.Greater(t, m.total.Load(), maxItems, "should be over capacity")
+	assert.Greater(t, m.total.Load(), int64(maxItems), "should be over capacity")
 
 	// Attempt eviction - should not happen because all entries are too new
 	m.evictByCapacity()
@@ -202,7 +225,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 // Tests that entries can be evicted once they exceed minEvictAge.
 func TestEvictByCapacityAfterMinAge(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		maxItems := int64(2)
+		maxItems := 2
 		minEvictAge := 100 * time.Millisecond // Short age for test
 
 		captureHandler := metricstest.NewCaptureHandler()
@@ -210,7 +233,15 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		defer captureHandler.StopCapture(capture)
 
 		// Uses real time.NewTicker - synctest provides virtual time control
-		m := newRegistryImpl(1, time.Hour, minEvictAge, maxItems, time.Hour, captureHandler, enablePluginMetrics())
+		m := newRegistryImpl(RegistryParams{
+			NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+			TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+			MinEvictAge:         dynamicconfig.GetDurationPropertyFn(minEvictAge),
+			MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
+			EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+			MetricsHandler:      captureHandler,
+			EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+		})
 		defer m.Stop()
 
 		// Add 3 entries (over capacity)
@@ -229,7 +260,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		// Should have evicted down to maxItems
 		workers := m.filterWorkers("ns", alwaysTrue)
 		assert.LessOrEqual(t, len(workers), int(maxItems), "should evict down to maxItems")
-		assert.LessOrEqual(t, m.total.Load(), maxItems, "total should be within limits")
+		assert.LessOrEqual(t, m.total.Load(), int64(maxItems), "total should be within limits")
 
 		// Verify metrics: eviction should succeed (entries were old enough)
 		snapshot := capture.Snapshot()
@@ -243,12 +274,20 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 
 // TestMultipleNamespaces tests with registry with multiple namespaces.
 func TestMultipleNamespaces(t *testing.T) {
-	maxItems := int64(10)
+	maxItems := 10
 	captureHandler := metricstest.NewCaptureHandler()
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(2, time.Hour, 0, maxItems, time.Hour, captureHandler, enablePluginMetrics())
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      captureHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 
 	// Add 3 workers to namespace1
@@ -290,14 +329,22 @@ func TestMultipleNamespaces(t *testing.T) {
 func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 	// Using synctest as it provides virtual time control.
 	synctest.Test(t, func(t *testing.T) {
-		maxItems := int64(5)
+		maxItems := 5
 		evictionInterval := 100 * time.Millisecond
 
 		captureHandler := metricstest.NewCaptureHandler()
 		capture := captureHandler.StartCapture()
 		defer captureHandler.StopCapture(capture)
 
-		m := newRegistryImpl(1, time.Hour, 0, maxItems, evictionInterval, captureHandler, enablePluginMetrics())
+		m := newRegistryImpl(RegistryParams{
+			NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+			TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+			MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+			MaxItems:            dynamicconfig.GetIntPropertyFn(maxItems),
+			EvictionInterval:    dynamicconfig.GetDurationPropertyFn(evictionInterval),
+			MetricsHandler:      captureHandler,
+			EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+		})
 
 		// Add some entries to create utilization
 		for i := 1; i <= 3; i++ {
@@ -332,7 +379,15 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 }
 
 func BenchmarkUpdate(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, int64(b.N), time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(16),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(time.Minute),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(b.N),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "benchWorker"}
 	b.ResetTimer()
@@ -342,7 +397,15 @@ func BenchmarkUpdate(b *testing.B) {
 }
 
 func BenchmarkListNamespace(b *testing.B) {
-	m := newRegistryImpl(16, time.Hour, time.Minute, 1000, time.Hour, metrics.NoopMetricsHandler, enablePluginMetrics())
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(16),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(time.Minute),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(1000),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 	// Pre-populate with entries
 	for i := 0; i < 1000; i++ {
@@ -360,15 +423,15 @@ func BenchmarkListNamespace(b *testing.B) {
 func BenchmarkRandomUpdate(b *testing.B) {
 	namespaces := []namespace.ID{"ns1", "ns2", "ns3"}
 	totalHeartbeats := 30 // Total heartbeats per namespace
-	m := newRegistryImpl(
-		len(namespaces),
-		time.Hour,
-		time.Minute,
-		int64(b.N),
-		time.Hour,
-		metrics.NoopMetricsHandler,
-		enablePluginMetrics(),
-	)
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(len(namespaces)),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(time.Minute),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(b.N),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 
 	// Pre-populate heartbeats per namespace
@@ -417,15 +480,15 @@ func TestPluginMetricsExported(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(
-		2,                     // numBuckets
-		time.Hour,             // TTL
-		0,                     // MinEvictAge
-		10,                    // maxItems
-		time.Hour,             // evictionInterval
-		captureHandler,        // metricsHandler
-		enablePluginMetrics(), // enableWorkerPluginMetrics
-	)
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      captureHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
 	defer m.Stop()
 
 	// Test data with 3 workers (tests uniqueness logic):
@@ -495,15 +558,15 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	m := newRegistryImpl(
-		2,                      // numBuckets
-		time.Hour,              // TTL
-		0,                      // MinEvictAge
-		10,                     // maxItems
-		time.Hour,              // evictionInterval
-		captureHandler,         // metricsHandler
-		disablePluginMetrics(), // enableWorkerPluginMetrics - DISABLED
-	)
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      captureHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(false),
+	})
 	defer m.Stop()
 
 	// Test data with workers having plugins
