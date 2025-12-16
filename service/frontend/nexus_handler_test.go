@@ -158,6 +158,7 @@ func newOperationContext(options contextOptions) *operationContext {
 		oc.metricsHandlerForInterceptors,
 		clock.NewRealTimeSource(),
 		oc.clusterMetadata,
+		interceptor.NewWorkflowIDExtractor(),
 	)
 
 	return oc
