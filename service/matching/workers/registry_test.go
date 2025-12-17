@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -193,11 +194,11 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 
 			resp, err := r.ListWorkers(tt.nsID, ListWorkersParams{})
 			if tt.expectError {
-				assert.Error(t, err, "expected an error for non-existent namespace")
+				require.Error(t, err, "expected an error for non-existent namespace")
 				assert.Empty(t, resp.Workers, "result should be empty when an error occurs")
 				return
 			}
-			assert.NoError(t, err, "unexpected error when listing workers")
+			require.NoError(t, err, "unexpected error when listing workers")
 			result := resp.Workers
 			assert.Len(t, result, tt.expectedCount, "unexpected number of workers returned")
 
@@ -324,13 +325,13 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 			resp, err := r.ListWorkers(tt.nsID, ListWorkersParams{Query: tt.query})
 
 			if tt.expectedError != "" {
-				assert.Error(t, err, "expected an error for invalid query")
+				require.Error(t, err, "expected an error for invalid query")
 				assert.Contains(t, err.Error(), tt.expectedError, "error message should contain expected text")
 				assert.Empty(t, resp.Workers, "result should be empty when an error occurs")
 				return
 			}
 
-			assert.NoError(t, err, "unexpected error when listing workers with query")
+			require.NoError(t, err, "unexpected error when listing workers with query")
 			result := resp.Workers
 			assert.Len(t, result, tt.expectedCount, "unexpected number of workers returned")
 
@@ -433,11 +434,11 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 
 			result, err := r.DescribeWorker(tt.nsID, tt.workerInstanceKey)
 			if tt.expectError {
-				assert.Error(t, err, "expected an error for non-existent namespace")
+				require.Error(t, err, "expected an error for non-existent namespace")
 				assert.Nil(t, result, "result should be nil when an error occurs")
 				return
 			}
-			assert.NoError(t, err, "unexpected error when listing workers")
+			require.NoError(t, err, "unexpected error when listing workers")
 			assert.NotNil(t, result, "result should not be nil when worker exists")
 			assert.Equal(t, tt.workerInstanceKey, result.WorkerInstanceKey)
 		})
@@ -467,7 +468,7 @@ func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
 	// Test page size of 2
 	t.Run("first page", func(t *testing.T) {
 		resp, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, resp.Workers, 2)
 		assert.Equal(t, "worker-a", resp.Workers[0].WorkerInstanceKey)
 		assert.Equal(t, "worker-b", resp.Workers[1].WorkerInstanceKey)
@@ -480,7 +481,7 @@ func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
 		resp1, _ := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2})
 
 		resp2, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp1.NextPageToken})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, resp2.Workers, 2)
 		assert.Equal(t, "worker-c", resp2.Workers[0].WorkerInstanceKey)
 		assert.Equal(t, "worker-d", resp2.Workers[1].WorkerInstanceKey)
@@ -494,7 +495,7 @@ func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
 		resp2, _ := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp1.NextPageToken})
 
 		resp3, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp2.NextPageToken})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, resp3.Workers, 1)
 		assert.Equal(t, "worker-e", resp3.Workers[0].WorkerInstanceKey)
 		assert.Nil(t, resp3.NextPageToken, "should not have next page token on last page")
@@ -520,7 +521,7 @@ func TestRegistryImpl_ListWorkersNoPagination(t *testing.T) {
 
 	// When pageSize is 0, return all workers without pagination
 	resp, err := r.ListWorkers("ns1", ListWorkersParams{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, resp.Workers, 3)
 	assert.Nil(t, resp.NextPageToken, "should not have next page token when returning all")
 }
@@ -541,6 +542,6 @@ func TestRegistryImpl_ListWorkersInvalidPageToken(t *testing.T) {
 	})
 
 	_, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: []byte("invalid-json")})
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid next_page_token")
 }
