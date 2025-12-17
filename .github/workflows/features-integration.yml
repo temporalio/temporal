@@ -82,33 +82,3 @@ jobs:
           if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
             exit 1
           fi
-
-  notify-failure:
-    name: Notify Slack on Failure
-    if: |
-      always() &&
-      github.ref == 'refs/heads/main' &&
-      needs.feature-tests-status.result == 'failure'
-    needs: feature-tests-status
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-          cache: true
-
-      - name: Send Slack notification
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          go run ./cmd/tools/ci-notify \
-            --run-id "${{ github.run_id }}" \
-            --slack-webhook "$SLACK_WEBHOOK"
