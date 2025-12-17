@@ -1192,8 +1192,8 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		)
 		require.Empty(t, diff)
 		require.Greater(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0))
-		require.Greater(t, respInfo.GetScheduleTime().AsTime().Unix(), int64(0))
-		require.Greater(t, respInfo.GetStateTransitionCount(), int64(0))
+		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
+		require.Positive(t, respInfo.GetStateTransitionCount())
 
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
 

@@ -682,8 +682,8 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
 		StateTransitionCount:    a.Visibility.Get(ctx).Data.TransitionCount,
-		//StateSizeBytes: TODO do we still want this?
-		//SearchAttributes: TODO populate from saa-visibility work
+		// StateSizeBytes: TODO do we still want this?
+		// SearchAttributes: TODO populate from saa-visibility work
 		Status:       status,
 		TaskQueue:    a.GetTaskQueue().GetName(),
 		UserMetadata: requestData.GetUserMetadata(),
