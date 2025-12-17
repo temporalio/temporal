@@ -1,9 +1,13 @@
 package history
 
 import (
+	"context"
+	"time"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -75,6 +79,7 @@ var Module = fx.Options(
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
+	fx.Provide(VersionMembershipCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
@@ -345,4 +350,20 @@ func ReplicationProgressCacheProvider(
 	handler metrics.Handler,
 ) replication.ProgressCache {
 	return replication.NewProgressCache(serviceConfig, logger, handler)
+}
+
+func VersionMembershipCacheProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+) commoncache.Cache {
+	c := commoncache.New(10000, &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
+	})
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			c.Stop()
+			return nil
+		},
+	})
+	return c
 }

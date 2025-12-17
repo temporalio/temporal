@@ -532,19 +532,25 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 	tqType enumspb.TaskQueueType,
 	namespaceID string) error {
 
-	// Check if we have recently queried matching recently to validate if this version exists in the task queue.
-	// Key format: namespaceID:taskQueue:DeploymentName:BuildID
-	key := fmt.Sprintf("%s:%s:%s:%s", namespaceID, tq, pinnedVersion.DeploymentName, pinnedVersion.BuildId)
+	// Check if we have recently queried matching to validate if this version exists in the task queue.
+	key := versionMembershipCacheKey{
+		namespaceID:    namespaceID,
+		taskQueue:      tq,
+		deploymentName: pinnedVersion.DeploymentName,
+		buildID:        pinnedVersion.BuildId,
+	}
 	if cached := versionMembershipCache.Get(key); cached != nil {
-		if isMember, ok := cached.(bool); ok && isMember {
-			return nil
+		if isMember, ok := cached.(bool); ok {
+			if isMember {
+				return nil
+			}
+			return serviceerror.NewFailedPrecondition(
+				"Pinned version is not present in the task queue",
+			)
 		}
-		return serviceerror.NewFailedPrecondition(
-			"Pinned version is not present in the task queue",
-		)
 	}
 
-	resp, err := matchingClient.CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
 		NamespaceId:   namespaceID,
 		TaskQueue:     tq,
 		TaskQueueType: tqType,
@@ -562,6 +568,13 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		)
 	}
 	return nil
+}
+
+type versionMembershipCacheKey struct {
+	namespaceID    string
+	taskQueue      string
+	deploymentName string
+	buildID        string
 }
 
 func ValidateVersioningOverride(ctx context.Context,

@@ -153,6 +153,7 @@ func NewEngineWithShardContext(
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
 	config *configs.Config,
+	versionMembershipCache cache.Cache,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
 	replicationProgressCache replication.ProgressCache,
@@ -220,6 +221,7 @@ func NewEngineWithShardContext(
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
 		testHooks:                  testHooks,
+		versionMembershipCache:     versionMembershipCache,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -316,9 +318,6 @@ func NewEngineWithShardContext(
 		dlqWriter,
 	)
 
-	historyEngImpl.versionMembershipCache = cache.New(10000, &cache.Options{
-		TTL: max(1*time.Second, config.VersionMembershipCacheTTL())}, // ensure TTL is never zero (which would disable TTL)
-	)
 	return historyEngImpl
 }
 

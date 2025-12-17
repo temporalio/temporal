@@ -521,8 +521,12 @@ func TestValidateVersioningOverride(t *testing.T) {
 				},
 			},
 			setupCache: func(c cache.Cache) {
-				key := testNamespaceID + ":" + testTaskQueue + ":" + testVersion.DeploymentName + ":" + testVersion.BuildId
-				c.Put(key, true)
+				c.Put(versionMembershipCacheKey{
+					namespaceID:    testNamespaceID,
+					taskQueue:      testTaskQueue,
+					deploymentName: testVersion.DeploymentName,
+					buildID:        testVersion.BuildId,
+				}, true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -540,8 +544,12 @@ func TestValidateVersioningOverride(t *testing.T) {
 				},
 			},
 			setupCache: func(c cache.Cache) {
-				key := testNamespaceID + ":" + testTaskQueue + ":" + testVersion.DeploymentName + ":" + testVersion.BuildId
-				c.Put(key, false)
+				c.Put(versionMembershipCacheKey{
+					namespaceID:    testNamespaceID,
+					taskQueue:      testTaskQueue,
+					deploymentName: testVersion.DeploymentName,
+					buildID:        testVersion.BuildId,
+				}, false)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -663,8 +671,12 @@ func TestValidateVersioningOverride(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c cache.Cache) {
-				key := testNamespaceID + ":" + testTaskQueue + ":test-deployment:test-build-id"
-				c.Put(key, true)
+				c.Put(versionMembershipCacheKey{
+					namespaceID:    testNamespaceID,
+					taskQueue:      testTaskQueue,
+					deploymentName: "test-deployment",
+					buildID:        "test-build-id",
+				}, true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -678,8 +690,12 @@ func TestValidateVersioningOverride(t *testing.T) {
 				PinnedVersion: "test-deployment.test-build-id",
 			},
 			setupCache: func(c cache.Cache) {
-				key := testNamespaceID + ":" + testTaskQueue + ":test-deployment:test-build-id"
-				c.Put(key, false)
+				c.Put(versionMembershipCacheKey{
+					namespaceID:    testNamespaceID,
+					taskQueue:      testTaskQueue,
+					deploymentName: "test-deployment",
+					buildID:        "test-build-id",
+				}, false)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)

@@ -95,9 +95,6 @@ func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
 	sa *commonpb.SearchAttributes,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	// Start a versioned poller so that the version, which will be set as an override, is present in the task queue.
-	fmt.Println("task queue name ", tv.TaskQueue().Name)
-	fmt.Println("deployment name ", tv.DeploymentSeries())
-	fmt.Println("build ID ", tv.BuildID())
 	s.startVersionedPollerAndValidate(ctx, tv.TaskQueue().Name, tv.DeploymentSeries(), tv.BuildID())
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

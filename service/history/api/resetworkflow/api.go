@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -65,10 +64,7 @@ func Invoke(
 
 	// Validate versioning override, if any.
 	err = validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionMembershipCache,
-		&taskqueuepb.TaskQueue{
-			Name: baseMutableState.GetExecutionInfo().GetTaskQueue(),
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}, namespaceID.String())
+		baseMutableState.GetExecutionInfo().GetTaskQueue(), namespaceID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -220,13 +216,13 @@ func validatePostResetOperationInputs(ctx context.Context,
 	postResetOperations []*workflowpb.PostResetOperation,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache cache.Cache,
-	taskQueue *taskqueuepb.TaskQueue,
+	taskQueue string,
 	namespaceID string) error {
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
+			if err := worker_versioning.ValidateVersioningOverride(ctx, opts.GetVersioningOverride(), matchingClient, versionMembershipCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID); err != nil {
 				return err
 			}
 		default:
