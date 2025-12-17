@@ -2744,7 +2744,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	}
 
 	// route heartbeat to the matching service
-	if request.WorkerHeartbeat != nil {
+	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
 		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
 		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 			NamespaceId: namespaceId.String(),
@@ -5159,7 +5159,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	// route heartbeat to the matching service
-	if len(request.WorkerHeartbeat) > 0 {
+	if len(request.WorkerHeartbeat) > 0 && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
 		workerHeartbeat := request.WorkerHeartbeat
 		request.WorkerHeartbeat = nil // Clear the field to avoid sending it to matching service.
 
@@ -6268,7 +6268,7 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	ctx context.Context, request *workflowservice.RecordWorkerHeartbeatRequest,
 ) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
 	if !wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method RecordWorkerHeartbeat not supported")
+		return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
 	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
