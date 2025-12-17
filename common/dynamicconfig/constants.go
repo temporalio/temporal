@@ -2713,6 +2713,12 @@ instead of the previous HSM backed implementation.`,
 		`TTL for caching RPC results that check whether a version is present in a task queue.`,
 	)
 
+	VersionMembershipCacheMaxSize = NewGlobalIntSetting(
+		"history.versionMembershipCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version membership cache.`,
+	)
+
 	// keys for worker
 
 	WorkerPersistenceMaxQPS = NewGlobalIntSetting(

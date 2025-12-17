@@ -363,7 +363,7 @@ func VersionMembershipCacheProvider(
 	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 ) commoncache.Cache {
-	c := commoncache.New(10000, &commoncache.Options{
+	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
 		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
 	})
 	lc.Append(fx.Hook{
