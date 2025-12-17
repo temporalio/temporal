@@ -143,7 +143,7 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy_AllowDuplicateFailedOnly
 	require.NoError(t, err)
 }
 
-func (s *standaloneActivityTestSuite) TestIDConflictPolicy_FailsIfExists() {
+func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -151,61 +151,57 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy_FailsIfExists() {
 	activityID := s.tv.ActivityID()
 	taskQueue := s.tv.TaskQueue().String()
 
-	startResponse := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	t.Run("FailsIfExists", func(t *testing.T) {
+		startResponse := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
-	// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
-	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
-		Identity:     s.tv.WorkerIdentity(),
-		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-		},
-		StartToCloseTimeout: durationpb.New(1 * time.Minute),
-	})
+		// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
+		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		})
 
-	require.Error(t, err)
-	statusErr := serviceerror.ToStatus(err)
-	require.Equal(t, codes.AlreadyExists, statusErr.Code())
+		require.Error(t, err)
+		statusErr := serviceerror.ToStatus(err)
+		require.Equal(t, codes.AlreadyExists, statusErr.Code())
 
-	var details *errordetailspb.ActivityExecutionAlreadyStartedFailure
-	for _, detail := range statusErr.Details() {
-		if d, ok := detail.(*errordetailspb.ActivityExecutionAlreadyStartedFailure); ok {
-			details = d
-			break
+		var details *errordetailspb.ActivityExecutionAlreadyStartedFailure
+		for _, detail := range statusErr.Details() {
+			if d, ok := detail.(*errordetailspb.ActivityExecutionAlreadyStartedFailure); ok {
+				details = d
+				break
+			}
 		}
-	}
-	require.NotNil(t, details, "expected ActivityExecutionAlreadyStartedFailure in error details")
-	require.Equal(t, s.tv.RequestID(), details.StartRequestId)
-	require.Equal(t, startResponse.GetRunId(), details.RunId)
-}
-
-func (s *standaloneActivityTestSuite) TestIDConflictPolicy_UseExistingNoError() {
-	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue().String()
-
-	s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-
-	// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
-	_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
-		Identity:     s.tv.WorkerIdentity(),
-		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-		},
-		StartToCloseTimeout: durationpb.New(1 * time.Minute),
-		IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+		require.NotNil(t, details, "expected ActivityExecutionAlreadyStartedFailure in error details")
+		require.Equal(t, s.tv.RequestID(), details.StartRequestId)
+		require.Equal(t, startResponse.GetRunId(), details.RunId)
 	})
-	require.NoError(t, err)
+
+	t.Run("UseExistingNoError", func(t *testing.T) {
+		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+
+		secondStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+		})
+		require.NoError(t, err)
+		require.Equal(t, firstStartResp.RunId, secondStartResp.RunId)
+		//require.Equal(t, false, secondStartResp.GetStarted()) TODO enable this when we can set the flag correctly
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCompleted() {

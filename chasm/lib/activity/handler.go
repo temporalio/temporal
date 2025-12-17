@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc/codes"
@@ -35,13 +37,15 @@ var (
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
+	logger            log.Logger
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config, metricsHandler metrics.Handler, namespaceRegistry namespace.Registry) *handler {
+func newHandler(config *Config, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
 	return &handler{
 		config:            config,
+		logger:            logger,
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -78,7 +82,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			return newActivity, &workflowservice.StartActivityExecutionResponse{
-				Started: true,
+				Started: true, // TODO for ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING, we need a know from chasm the execution is existing and to set false
 				// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 			}, nil
 		},
@@ -95,11 +99,16 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				RunId:          alreadyStartedErr.CurrentRunID,
 			}
 
-			errStatus, errDetail := status.New(codes.AlreadyExists, "activity execution already started").WithDetails(details)
+			errStatus := status.New(codes.AlreadyExists, "activity execution already started")
+
+			errStatusWithDetails, errDetail := status.New(codes.AlreadyExists, "activity execution already started").WithDetails(details)
 			if errDetail != nil {
-				return nil, errDetail
+				h.logger.Error("Failed to add error details to ActivityExecutionAlreadyStartedFailure",
+					tag.Error(errDetail), tag.ActivityID(frontendReq.GetActivityId()))
+				return nil, errStatus.Err()
 			}
-			return nil, errStatus.Err()
+
+			return nil, errStatusWithDetails.Err()
 		}
 
 		return nil, err
