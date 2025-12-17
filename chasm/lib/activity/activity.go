@@ -335,6 +335,21 @@ func (a *Activity) HandleCanceled(
 func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateEvent) (
 	*activitypb.TerminateActivityExecutionResponse, error,
 ) {
+	frontendReq := req.request.GetFrontendRequest()
+
+	// If already in terminated state, fail if request ID is different, else no-op
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
+		newReqID := frontendReq.GetRequestId()
+		existingReqID := a.GetTerminateState().GetRequestId()
+
+		if existingReqID != newReqID {
+			return nil, serviceerror.NewFailedPrecondition(
+				fmt.Sprintf("already terminated with request ID %s", existingReqID))
+		}
+
+		return &activitypb.TerminateActivityExecutionResponse{}, nil
+	}
+
 	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
