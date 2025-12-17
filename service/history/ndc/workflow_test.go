@@ -262,6 +262,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		"",
 		"",
 		int64(0),
+		nil,
 	).Return(&historypb.HistoryEvent{EventId: wtFailedEventID}, nil)
 	s.mockMutableState.EXPECT().FlushBufferedEvents()
 

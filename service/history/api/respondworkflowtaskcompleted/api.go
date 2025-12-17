@@ -1043,6 +1043,7 @@ func failWorkflowTask(
 		"",
 		"",
 		0,
+		request.GetExternalPayloadStats(),
 	)
 	if err != nil {
 		return nil, common.EmptyEventID, err

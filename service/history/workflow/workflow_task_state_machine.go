@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -739,6 +740,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)),
 		vb,
+		request.ExternalPayloadStats,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
@@ -772,6 +774,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 	baseRunID string,
 	newRunID string,
 	forkEventVersion int64,
+	externalPayloadStats *sdkpb.ExternalPayloadDownloadStats,
 ) (*historypb.HistoryEvent, error) {
 
 	// IMPORTANT: returned event can be nil under some circumstances. Specifically, if WT is transient.
@@ -814,6 +817,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			newRunID,
 			forkEventVersion,
 			binaryChecksum,
+			externalPayloadStats,
 		)
 
 		if event != nil {

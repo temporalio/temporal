@@ -20,6 +20,7 @@ import (
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
 	history "go.temporal.io/api/history/v1"
+	sdk "go.temporal.io/api/sdk/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	update "go.temporal.io/api/update/v1"
 	workflow "go.temporal.io/api/workflow/v1"
@@ -834,18 +835,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskCompletedEvent(arg0, arg1
 }
 
 // AddWorkflowTaskFailedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowTaskFailedEvent(workflowTask *WorkflowTaskInfo, cause enums.WorkflowTaskFailedCause, arg2 *failure.Failure, identity string, versioningStamp *common.WorkerVersionStamp, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowTaskFailedEvent(workflowTask *WorkflowTaskInfo, cause enums.WorkflowTaskFailedCause, arg2 *failure.Failure, identity string, versioningStamp *common.WorkerVersionStamp, binChecksum, baseRunID, newRunID string, forkEventVersion int64, externalPayloadStats *sdk.ExternalPayloadDownloadStats) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowTaskFailedEvent", workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion)
+	ret := m.ctrl.Call(m, "AddWorkflowTaskFailedEvent", workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion, externalPayloadStats)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowTaskFailedEvent indicates an expected call of AddWorkflowTaskFailedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowTaskFailedEvent(workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowTaskFailedEvent(workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion, externalPayloadStats any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskFailedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskFailedEvent), workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskFailedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskFailedEvent), workflowTask, cause, arg2, identity, versioningStamp, binChecksum, baseRunID, newRunID, forkEventVersion, externalPayloadStats)
 }
 
 // AddWorkflowTaskScheduleToStartTimeoutEvent mocks base method.

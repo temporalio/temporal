@@ -40,6 +40,7 @@ func failWorkflowTask(
 		"",
 		"",
 		0,
+		nil,
 	)
 	if err != nil {
 		return nil, err

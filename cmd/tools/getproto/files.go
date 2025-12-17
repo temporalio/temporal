@@ -75,6 +75,7 @@ func init() {
 	importMap["temporal/api/replication/v1/message.proto"] = replication.File_temporal_api_replication_v1_message_proto
 	importMap["temporal/api/rules/v1/message.proto"] = rules.File_temporal_api_rules_v1_message_proto
 	importMap["temporal/api/schedule/v1/message.proto"] = schedule.File_temporal_api_schedule_v1_message_proto
+	importMap["temporal/api/sdk/v1/external_payload_download_stats.proto"] = sdk.File_temporal_api_sdk_v1_external_payload_download_stats_proto
 	importMap["temporal/api/sdk/v1/task_complete_metadata.proto"] = sdk.File_temporal_api_sdk_v1_task_complete_metadata_proto
 	importMap["temporal/api/sdk/v1/user_metadata.proto"] = sdk.File_temporal_api_sdk_v1_user_metadata_proto
 	importMap["temporal/api/sdk/v1/worker_config.proto"] = sdk.File_temporal_api_sdk_v1_worker_config_proto

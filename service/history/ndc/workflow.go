@@ -251,6 +251,7 @@ func (r *WorkflowImpl) failWorkflowTask() (*historypb.HistoryEvent, error) {
 		"",
 		"",
 		0,
+		nil,
 	)
 	if err != nil {
 		return nil, err

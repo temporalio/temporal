@@ -1286,6 +1286,7 @@ func (s *sutTestingAdapter) AddWorkflowTaskFailedEvent(_ ...eventConfig) *histor
 		"new-run-1",
 		0,
 		"checksum",
+		nil,
 	)
 }
 

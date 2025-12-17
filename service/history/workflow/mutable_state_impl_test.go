@@ -308,6 +308,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchApplied
 		"",
 		"",
 		0,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -1036,6 +1037,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 		"",
 		"",
 		0,
+		nil,
 	)
 	s.NoError(err)
 	// WFT failure does not fail transition

@@ -142,6 +142,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
+	externalPayloadStats *sdkpb.ExternalPayloadDownloadStats,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
@@ -156,6 +157,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 			WorkerDeploymentName: deploymentName,
 			DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
 			VersioningBehavior:   behavior,
+			ExternalPayloadStats: externalPayloadStats,
 		},
 	}
 
@@ -189,19 +191,21 @@ func (b *EventFactory) CreateWorkflowTaskFailedEvent(
 	newRunID string,
 	forkEventVersion int64,
 	checksum string,
+	externalPayloadStats *sdkpb.ExternalPayloadDownloadStats,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
 		WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			StartedEventId:   startedEventID,
-			Cause:            cause,
-			Failure:          failure,
-			Identity:         identity,
-			BaseRunId:        baseRunID,
-			NewRunId:         newRunID,
-			ForkEventVersion: forkEventVersion,
-			BinaryChecksum:   checksum,
+			ScheduledEventId:     scheduledEventID,
+			StartedEventId:       startedEventID,
+			Cause:                cause,
+			Failure:              failure,
+			Identity:             identity,
+			BaseRunId:            baseRunID,
+			NewRunId:             newRunID,
+			ForkEventVersion:     forkEventVersion,
+			BinaryChecksum:       checksum,
+			ExternalPayloadStats: externalPayloadStats,
 		},
 	}
 	return event

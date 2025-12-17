@@ -399,6 +399,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		baseRunID,
 		resetRunID,
 		baseRebuildLastEventVersion,
+		nil,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.failWorkflowTask(
@@ -440,6 +441,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 		baseRunID,
 		resetRunID,
 		baseRebuildLastEventVersion,
+		nil,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.failWorkflowTask(
@@ -542,6 +544,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		"",
 		int64(0),
+		nil,
 	).Return(&historypb.HistoryEvent{EventId: wtFailedEventID}, nil)
 	mutableState.EXPECT().FlushBufferedEvents()
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
@@ -1548,6 +1551,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		s.baseRunID,
 		s.resetRunID,
 		baseRebuildLastEventVersion,
+		nil,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	resetWorkflow, err := s.workflowResetter.prepareResetWorkflow(

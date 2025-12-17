@@ -110,7 +110,8 @@ func Invoke(
 				request.GetBinaryChecksum(),
 				"",
 				"",
-				0); err != nil {
+				0,
+				request.GetExternalPayloadStats()); err != nil {
 				return nil, err
 			}
 

@@ -223,6 +223,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
+	externalPayloadStats *sdkpb.ExternalPayloadDownloadStats,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskCompletedEvent(
 		scheduledEventID,
@@ -235,6 +236,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 		deploymentName,
 		deployment,
 		behavior,
+		externalPayloadStats,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
@@ -260,6 +262,7 @@ func (b *HistoryBuilder) AddWorkflowTaskFailedEvent(
 	newRunID string,
 	forkEventVersion int64,
 	checksum string,
+	externalPayloadStats *sdkpb.ExternalPayloadDownloadStats,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskFailedEvent(
 		scheduledEventID,
@@ -271,6 +274,7 @@ func (b *HistoryBuilder) AddWorkflowTaskFailedEvent(
 		newRunID,
 		forkEventVersion,
 		checksum,
+		externalPayloadStats,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

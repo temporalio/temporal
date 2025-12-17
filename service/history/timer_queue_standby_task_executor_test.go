@@ -952,6 +952,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Atte
 		"",
 		"",
 		0,
+		nil,
 	)
 	s.NoError(err)
 

@@ -734,6 +734,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
 		newRunID,
 		forkEventVersion,
 		checksum,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{

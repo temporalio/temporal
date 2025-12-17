@@ -14,6 +14,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -465,6 +466,52 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestForceCreateNewWorkflowTaskOnPaus
 		var failedPrecondition *serviceerror.FailedPrecondition
 		s.ErrorAs(err, &failedPrecondition)
 		s.Contains(err.Error(), "Workflow is paused and force create new workflow task is not allowed")
+	})
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestExternalPayloadStatsPropagation() {
+	s.Run("Ensures external payload stats propagated to workflow task completed event", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		wfContext := s.createStartedWorkflow(tv)
+
+		writtenHistoryCh := make(chan []*historypb.HistoryEvent, 1)
+		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			var historyEvents []*historypb.HistoryEvent
+			for _, wfEvents := range append(request.UpdateWorkflowEvents, request.NewWorkflowEvents...) {
+				historyEvents = append(historyEvents, wfEvents.Events...)
+			}
+			writtenHistoryCh <- historyEvents
+			return tests.UpdateWorkflowExecutionResponse, nil
+		}).Times(1)
+
+		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		updRequestMsg, _, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+
+		externalPayloadStats := &sdkpb.ExternalPayloadDownloadStats{PayloadCount: 5, TotalSizeBytes: 1024}
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:            serializedTaskToken,
+				Commands:             s.UpdateAcceptCompleteCommands(tv),
+				Messages:             s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+				Identity:             tv.Any().String(),
+				ExternalPayloadStats: externalPayloadStats,
+			},
+		})
+		s.NoError(err)
+
+		for _, event := range <-writtenHistoryCh {
+			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+				s.ProtoEqual(externalPayloadStats, event.GetWorkflowTaskCompletedEventAttributes().ExternalPayloadStats)
+				return
+			}
+		}
+		s.Fail("WorkflowTaskCompletedEvent not found")
 	})
 }
 

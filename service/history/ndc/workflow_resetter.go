@@ -543,6 +543,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 		baseRunID,
 		resetRunID,
 		baseRebuildLastEventVersion,
+		nil,
 	)
 	return err
 }

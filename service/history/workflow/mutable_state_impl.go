@@ -20,6 +20,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	rulespb "go.temporal.io/api/rules/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -3706,6 +3707,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	binChecksum, baseRunID, newRunID string,
 	forkEventVersion int64,
+	externalPayloadStats *sdkpb.ExternalPayloadDownloadStats,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskFailed
 	if err := ms.checkMutability(opTag); err != nil {
@@ -3721,6 +3723,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 		baseRunID,
 		newRunID,
 		forkEventVersion,
+		externalPayloadStats,
 	)
 }
 
