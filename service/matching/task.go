@@ -133,7 +133,7 @@ func newInternalTaskForSyncMatch(
 		redirectInfo:      redirectInfo,
 		responseC:         make(chan taskResponse, 1),
 		effectivePriority: priorityKey(info.GetPriority().GetPriorityKey()),
-		
+
 		targetWorkerDeploymentVersion: targetVersion,
 	}
 }
