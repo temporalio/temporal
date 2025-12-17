@@ -635,25 +635,58 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 	attempt := a.LastAttempt.Get(ctx)
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
+	currentTime := ctx.Now(a)
+
+	executionDuration := durationpb.New(currentTime.Sub(a.GetScheduleTime().AsTime()))
+	var nextAttemptScheduleTime *timestamppb.Timestamp
+	if interval := attempt.GetCurrentRetryInterval(); interval != nil && interval.AsDuration() > 0 {
+		nextAttemptScheduleTime = timestamppb.New(
+			attempt.GetCompleteTime().AsTime().Add(interval.AsDuration()),
+		)
+	}
+
+	var closeTime *timestamppb.Timestamp
+	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
+		closeTime = attempt.GetCompleteTime()
+	}
+
+	var expirationTime *timestamppb.Timestamp
+	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		expirationTime = timestamppb.New(a.GetScheduleTime().AsTime().Add(timeout))
+	}
 
 	info := &activity.ActivityExecutionInfo{
 		ActivityId:              key.BusinessID,
 		ActivityType:            a.GetActivityType(),
 		Attempt:                 attempt.GetCount(),
 		CanceledReason:          a.CancelState.GetReason(),
+		CloseTime:               closeTime,
+		CurrentRetryInterval:    attempt.GetCurrentRetryInterval(),
+		ExecutionDuration:       executionDuration,
+		ExpirationTime:          expirationTime,
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
+		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetStartedTime(),
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
+		NextAttemptScheduleTime: nextAttemptScheduleTime,
 		Priority:                a.GetPriority(),
+		RetryPolicy:             a.GetRetryPolicy(),
 		RunId:                   key.RunID,
 		RunState:                runState,
 		ScheduleTime:            a.GetScheduleTime(),
-		Status:                  status,
-		// TODO(dan): populate remaining fields
+		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
+		StateTransitionCount:    a.Visibility.Get(ctx).Data.TransitionCount,
+		//StateSizeBytes: TODO do we still want this?
+		//SearchAttributes: TODO populate from saa-visibility work
+		Status:       status,
+		TaskQueue:    a.GetTaskQueue().GetName(),
+		UserMetadata: requestData.GetUserMetadata(),
 	}
 
 	return info, nil

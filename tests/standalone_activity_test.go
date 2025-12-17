@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -14,6 +15,7 @@ import (
 	errordetailspb "go.temporal.io/api/errordetails/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -25,21 +27,44 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // TODO(fred) add tests for retries when we implement search attributes
+
+const (
+	defaultStartToCloseTimeout = 1 * time.Minute
+	defaultIdentity            = "test-worker"
+)
 
 var (
 	defaultInput            = payloads.EncodeString("Input")
 	defaultHeartbeatDetails = payloads.EncodeString("Heartbeat Details")
 	defaultResult           = payloads.EncodeString("Done")
-	defaultFailure          = &failurepb.Failure{
+	defaultRetryPolicy      = &commonpb.RetryPolicy{
+		InitialInterval:    durationpb.New(time.Second),
+		BackoffCoefficient: 2.0,
+		MaximumAttempts:    0,
+		MaximumInterval:    durationpb.New(100 * time.Second),
+	}
+	defaultFailure = &failurepb.Failure{
 		Message: "Failed Activity",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 			Type:         "Test",
 			NonRetryable: true,
 		}},
+	}
+	defaultHeader = &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{
+			"key-1": payload.EncodeString("value-1"),
+			"key-2": payload.EncodeString("value-2"),
+		},
+	}
+	defaultUserMetadata = &sdkpb.UserMetadata{
+		Summary: payload.EncodeString("test-summary"),
+		Details: payload.EncodeString("test-details"),
 	}
 )
 
@@ -677,42 +702,38 @@ func (s *standaloneActivityTestSuite) TestRequestCancellation_FailsValidation() 
 	}
 }
 
-// TODO running into "unable to change workflow state from Created to Completed, status Failed from the chasm engine"
-// This should be re-enabled after its addressed from the chasm engine and we implement the search attributes interface.
 func (s *standaloneActivityTestSuite) TestActivityImmediatelyCancelled_WhenInScheduledState() {
-	s.T().Skip("Temporarily disabled")
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
 
-	/*	t := s.T()
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		defer cancel()
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue().String()
 
-		activityID := s.tv.ActivityID()
-		taskQueue := s.tv.TaskQueue().String()
+	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
 
-		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
+	_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: s.tv.ActivityID(),
+		RunId:      runID,
+		Identity:   "cancelling-worker",
+		RequestId:  s.tv.RequestID(),
+		Reason:     "Test Cancellation",
+	})
+	require.NoError(t, err)
 
-		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: s.tv.ActivityID(),
-			RunId:      runID,
-			Identity:   "cancelling-worker",
-			RequestId:  s.tv.RequestID(),
-			Reason:     "Test Cancellation",
-		})
-		require.NoError(t, err)
+	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          runID,
+		IncludeInput:   true,
+		IncludeOutcome: true,
+	})
+	require.NoError(t, err)
 
-		activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:      s.Namespace().String(),
-			ActivityId:     activityID,
-			RunId:          runID,
-			IncludeInput:   true,
-			IncludeOutcome: true,
-		})
-		require.NoError(t, err)
-
-		info := activityResp.GetInfo()
-		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus()) */
+	info := activityResp.GetInfo()
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus())
 }
 
 func (s *standaloneActivityTestSuite) TestActivityTerminated() {
@@ -1078,7 +1099,34 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 	activityID := s.tv.ActivityID()
 	taskQueue := s.tv.TaskQueue()
 
-	startResp, err := s.startActivity(ctx, activityID, taskQueue.Name)
+	startReq := &workflowservice.StartActivityExecutionRequest{
+		Namespace:              s.Namespace().String(),
+		ActivityId:             activityID,
+		ActivityType:           s.tv.ActivityType(),
+		Header:                 defaultHeader,
+		HeartbeatTimeout:       durationpb.New(45 * time.Second),
+		Identity:               s.tv.WorkerIdentity(),
+		Input:                  defaultInput,
+		ScheduleToStartTimeout: durationpb.New(30 * time.Second),
+		ScheduleToCloseTimeout: durationpb.New(3 * time.Minute),
+		StartToCloseTimeout:    durationpb.New(1 * time.Minute),
+		RequestId:              s.tv.RequestID(),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(2 * time.Second),
+			BackoffCoefficient: 1.5,
+			MaximumAttempts:    3,
+			MaximumInterval:    durationpb.New(111 * time.Second),
+		},
+		Priority: &commonpb.Priority{
+			FairnessKey: "test-key",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue.GetName(),
+		},
+		UserMetadata: defaultUserMetadata,
+	}
+
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, startReq)
 	require.NoError(t, err)
 
 	t.Run("MinimalResponse", func(t *testing.T) {
@@ -1106,16 +1154,47 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			IncludeOutcome: true,
 		})
 		require.NoError(t, err)
+
+		respInfo := describeResp.GetInfo()
 		require.NotNil(t, describeResp.LongPollToken)
-		require.NotNil(t, describeResp.Info)
-		s.assertActivityExecutionInfo(
-			t,
-			describeResp.Info,
-			activityID,
-			startResp.RunId,
-			enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
-			enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		require.NotNil(t, respInfo)
+
+		expectedExpirationTime := timestamppb.New(describeResp.GetInfo().GetScheduleTime().AsTime().Add(
+			startReq.GetScheduleToCloseTimeout().AsDuration()))
+
+		expected := &activitypb.ActivityExecutionInfo{
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Attempt:                1,
+			ExpirationTime:         expectedExpirationTime,
+			Header:                 defaultHeader,
+			HeartbeatTimeout:       startReq.GetHeartbeatTimeout(),
+			RetryPolicy:            startReq.GetRetryPolicy(),
+			RunId:                  startResp.RunId,
+			RunState:               enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+			Priority:               startReq.GetPriority(),
+			ScheduleToCloseTimeout: startReq.GetScheduleToCloseTimeout(),
+			ScheduleToStartTimeout: startReq.GetScheduleToStartTimeout(),
+			StartToCloseTimeout:    startReq.GetStartToCloseTimeout(),
+			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+			TaskQueue:              taskQueue.Name,
+			UserMetadata:           defaultUserMetadata,
+		}
+
+		diff := cmp.Diff(expected, respInfo,
+			protocmp.Transform(),
+			// Ignore non-deterministic fields. Validated separately.
+			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+				"execution_duration",
+				"schedule_time",
+				"state_transition_count",
+			),
 		)
+		require.Empty(t, diff)
+		require.Greater(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0))
+		require.Greater(t, respInfo.GetScheduleTime().AsTime().Unix(), int64(0))
+		require.Greater(t, respInfo.GetStateTransitionCount(), int64(0))
+
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
 
 		// Activity is scheduled but not completed, so no outcome yet
@@ -1146,14 +1225,31 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 	require.NotNil(t, firstDescribeResp.LongPollToken)
 	require.NotNil(t, firstDescribeResp.Info)
 	require.Equal(t, firstDescribeResp.RunId, startResp.RunId)
-	s.assertActivityExecutionInfo(
-		t,
-		firstDescribeResp.Info,
-		activityID,
-		startResp.RunId,
-		enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
-		enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+
+	expected := &activitypb.ActivityExecutionInfo{
+		ActivityId:             activityID,
+		ActivityType:           s.tv.ActivityType(),
+		Attempt:                1,
+		HeartbeatTimeout:       durationpb.New(0),
+		RetryPolicy:            defaultRetryPolicy,
+		RunId:                  startResp.RunId,
+		RunState:               enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		ScheduleToCloseTimeout: durationpb.New(0),
+		ScheduleToStartTimeout: durationpb.New(0),
+		StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+		Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+		TaskQueue:              taskQueue.Name,
+	}
+	diff := cmp.Diff(expected, firstDescribeResp.GetInfo(),
+		protocmp.Transform(),
+		// Ignore non-deterministic fields. Validated separately.
+		protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+			"execution_duration",
+			"schedule_time",
+			"state_transition_count",
+		),
 	)
+	require.Empty(t, diff)
 
 	taskQueuePollErr := make(chan error, 1)
 	activityPollDone := make(chan struct{})
@@ -1185,14 +1281,34 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		require.NoError(t, describeErr)
 		require.NotNil(t, describeResp)
 		require.NotNil(t, describeResp.Info)
-		s.assertActivityExecutionInfo(
-			t,
-			describeResp.Info,
-			activityID,
-			startResp.RunId,
-			enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
-			enumspb.PENDING_ACTIVITY_STATE_STARTED,
+
+		expected := &activitypb.ActivityExecutionInfo{
+			ActivityId:             activityID,
+			ActivityType:           s.tv.ActivityType(),
+			Attempt:                1,
+			HeartbeatTimeout:       durationpb.New(0),
+			LastWorkerIdentity:     defaultIdentity,
+			RetryPolicy:            defaultRetryPolicy,
+			RunId:                  startResp.RunId,
+			RunState:               enumspb.PENDING_ACTIVITY_STATE_STARTED,
+			ScheduleToCloseTimeout: durationpb.New(0),
+			ScheduleToStartTimeout: durationpb.New(0),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+			TaskQueue:              taskQueue.Name,
+		}
+		diff := cmp.Diff(expected, describeResp.GetInfo(),
+			protocmp.Transform(),
+			// Ignore non-deterministic fields. Validated separately.
+			protocmp.IgnoreFields(&activitypb.ActivityExecutionInfo{},
+				"execution_duration",
+				"last_started_time",
+				"schedule_time",
+				"state_transition_count",
+			),
 		)
+		require.Empty(t, diff)
+
 		protorequire.ProtoEqual(t, defaultInput, describeResp.Input)
 
 	case <-ctx.Done():
@@ -2447,40 +2563,6 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) assertActivityExecutionInfo(
-	t *testing.T,
-	info *activitypb.ActivityExecutionInfo,
-	activityID string,
-	runID string,
-	runStatus enumspb.ActivityExecutionStatus,
-	runState enumspb.PendingActivityState,
-) {
-	t.Helper()
-	require.Equal(t, activityID, info.ActivityId)
-	require.Equal(t, runID, info.RunId)
-	require.NotNil(t, info.ActivityType)
-	require.Equal(t, s.tv.ActivityType(), info.ActivityType)
-	require.Equal(t, runStatus, info.Status)
-	require.Equal(t, runState, info.RunState)
-
-	// TODO(dan): This test to be finalized when full API surface area implemented.
-	if info.ScheduleTime != nil && info.ExpirationTime != nil {
-		require.Less(t, info.ScheduleTime, info.ExpirationTime)
-	}
-	// info.Attempt
-	// info.MaximumAttempts
-	// info.Priority.PriorityKey
-	// info.LastStartedTime
-	// info.LastWorkerIdentity
-	// info.HeartbeatDetails
-	// info.LastHeartbeatTime
-	// info.LastFailure
-	// info.CurrentRetryInterval
-	// info.LastAttemptCompleteTime
-	// info.NextAttemptScheduleTime
-	// info.LastDeploymentVersion
-}
-
 func (s *standaloneActivityTestSuite) pollActivityTaskQueue(ctx context.Context, taskQueue string) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	return s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -2488,7 +2570,7 @@ func (s *standaloneActivityTestSuite) pollActivityTaskQueue(ctx context.Context,
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		Identity: "test-identity",
+		Identity: defaultIdentity,
 	})
 }
 
@@ -2671,7 +2753,7 @@ func (s *standaloneActivityTestSuite) startActivityWithType(ctx context.Context,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 		},
-		StartToCloseTimeout: durationpb.New(1 * time.Minute),
+		StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 		RequestId:           s.tv.RequestID(),
 	})
 }
