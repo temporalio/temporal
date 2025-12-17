@@ -43,10 +43,8 @@ func (e WorkflowIDExtractor) Extract(req any, pattern WorkflowIDPattern) string 
 		return namespace.EmptyBusinessID
 	}
 
+	//nolint:revive // identical-switch-branches: PatternNone and default both fall through intentionally
 	switch pattern {
-	case PatternNone:
-		return namespace.EmptyBusinessID
-
 	case PatternWorkflowID:
 		if getter, ok := req.(workflowIDGetter); ok {
 			return getter.GetWorkflowId()
@@ -78,8 +76,11 @@ func (e WorkflowIDExtractor) Extract(req any, pattern WorkflowIDPattern) string 
 	case PatternMultiOperation:
 		return e.extractMultiOperation(req)
 
+	case PatternNone:
+		// No extraction needed
+
 	default:
-		return namespace.EmptyBusinessID
+		// Unknown pattern
 	}
 
 	return namespace.EmptyBusinessID
