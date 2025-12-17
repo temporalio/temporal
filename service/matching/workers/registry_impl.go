@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"hash/maphash"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -419,13 +420,7 @@ func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPage
 
 	// Sort by WorkerInstanceKey for deterministic pagination
 	slices.SortFunc(workers, func(a, b *workerpb.WorkerHeartbeat) int {
-		if a.WorkerInstanceKey < b.WorkerInstanceKey {
-			return -1
-		}
-		if a.WorkerInstanceKey > b.WorkerInstanceKey {
-			return 1
-		}
-		return 0
+		return strings.Compare(a.WorkerInstanceKey, b.WorkerInstanceKey)
 	})
 
 	// Decode page token to find the cursor
@@ -438,25 +433,28 @@ func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPage
 		cursor = token.LastWorkerInstanceKey
 	}
 
-	// Find the starting index (first worker with key > cursor)
+	// Find the starting index using binary search (O(log n))
 	startIdx := 0
 	if cursor != "" {
-		for i, w := range workers {
-			if w.WorkerInstanceKey > cursor {
-				startIdx = i
-				break
-			}
-			// If we reach the end without finding a worker > cursor, return empty
-			if i == len(workers)-1 {
-				return ListWorkersResponse{}, nil
-			}
+		// BinarySearchFunc returns the index where cursor would be inserted.
+		// We want the first worker with key > cursor.
+		startIdx, _ = slices.BinarySearchFunc(workers, cursor, func(worker *workerpb.WorkerHeartbeat, target string) int {
+			return strings.Compare(worker.WorkerInstanceKey, target)
+		})
+		// If exact match found, move past it to get first key > cursor
+		if startIdx < len(workers) && workers[startIdx].WorkerInstanceKey == cursor {
+			startIdx++
+		}
+		// If we've gone past the end, return empty
+		if startIdx >= len(workers) {
+			return ListWorkersResponse{}, nil
 		}
 	}
 
 	// Apply page size (0 means no limit)
 	endIdx := len(workers)
-	if pageSize > 0 && startIdx+pageSize < endIdx {
-		endIdx = startIdx + pageSize
+	if pageSize > 0 {
+		endIdx = min(startIdx+pageSize, len(workers))
 	}
 
 	result := workers[startIdx:endIdx]
