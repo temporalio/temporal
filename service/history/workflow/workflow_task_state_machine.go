@@ -481,12 +481,18 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
+	if behavior := m.ms.GetEffectiveVersioningBehavior(); behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
 			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
 				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
 			suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
 			suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)
+			metrics.WorkflowExecutionTargetVersionChangedContinueAsNewSuggestions.With(
+				m.metricsHandler.WithTags(
+					metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
+					metrics.VersioningBehaviorTag(behavior),
+				),
+			).Record(1)
 		}
 	}
 
@@ -1353,9 +1359,11 @@ func (m *workflowTaskStateMachine) getHistorySizeInfo() (int64, []enumspb.Sugges
 	sizeLimit := int64(config.HistorySizeSuggestContinueAsNew(namespaceName))
 	countLimit := int64(config.HistoryCountSuggestContinueAsNew(namespaceName))
 	if historySize >= sizeLimit {
+		m.metricsHandler.Counter(metrics.WorkflowExecutionHistorySizeContinueAsNewSuggestions.Name()).Record(1)
 		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)
 	}
 	if historyCount >= countLimit {
+		m.metricsHandler.Counter(metrics.WorkflowExecutionHistoryLengthContinueAsNewSuggestions.Name()).Record(1)
 		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)
 	}
 	return historySize, reasons
