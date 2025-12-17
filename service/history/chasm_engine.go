@@ -321,12 +321,9 @@ func (e *ChasmEngine) PollComponent(
 	for {
 		select {
 		case <-ch:
-			ref, err := checkPredicateOrSubscribe()
-			if err != nil {
-				return nil, err
-			}
-			if ref != nil {
-				return ref, nil
+			ref, err = checkPredicateOrSubscribe()
+			if err != nil || ref != nil {
+				return ref, err
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
