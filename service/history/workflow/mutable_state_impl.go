@@ -492,10 +492,6 @@ func NewMutableStateFromDB(
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	if mutableState.executionInfo.ExecutionStats == nil {
-		mutableState.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
-	}
-
 	// StartTime was moved from ExecutionInfo to executionState
 	if mutableState.executionState.StartTime == nil && dbRecord.ExecutionInfo.StartTime != nil {
 		mutableState.executionState.StartTime = dbRecord.ExecutionInfo.StartTime
@@ -6388,6 +6384,9 @@ func (ms *MutableStateImpl) GetExternalPayloadSize() int64 {
 }
 
 func (ms *MutableStateImpl) AddExternalPayloadSize(size int64) {
+	if ms.executionInfo.ExecutionStats == nil {
+		ms.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
+	}
 	ms.executionInfo.ExecutionStats.ExternalPayloadSize += size
 }
 
@@ -6396,6 +6395,9 @@ func (ms *MutableStateImpl) GetExternalPayloadCount() int64 {
 }
 
 func (ms *MutableStateImpl) AddExternalPayloadCount(count int64) {
+	if ms.executionInfo.ExecutionStats == nil {
+		ms.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
+	}
 	ms.executionInfo.ExecutionStats.ExternalPayloadCount += count
 }
 
