@@ -60,8 +60,9 @@ type (
 )
 
 const (
-	EmptyName Name = ""
-	EmptyID   ID   = ""
+	EmptyName       Name = ""
+	EmptyID         ID   = ""
+	EmptyBusinessID      = ""
 
 	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
 	// applicable to local namespace & global namespace with one cluster
@@ -184,19 +185,19 @@ func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
 
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
-func (ns *Namespace) ActiveClusterName() string {
+func (ns *Namespace) ActiveClusterName(businessID string) string {
 	return ns.replicationResolver.ActiveClusterName()
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
 // replicated.
-func (ns *Namespace) ClusterNames() []string {
+func (ns *Namespace) ClusterNames(businessID string) []string {
 	return ns.replicationResolver.ClusterNames()
 }
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.
 func (ns *Namespace) IsOnCluster(clusterName string) bool {
-	for _, cluster := range ns.ClusterNames() {
+	for _, cluster := range ns.ClusterNames(EmptyBusinessID) {
 		if cluster == clusterName {
 			return true
 		}
@@ -239,7 +240,7 @@ func (ns *Namespace) ActiveInCluster(clusterName string) bool {
 		// "active" within each cluster
 		return true
 	}
-	return clusterName == ns.ActiveClusterName()
+	return clusterName == ns.ActiveClusterName(EmptyBusinessID)
 }
 
 // ReplicationPolicy return the derived workflow replication policy
@@ -247,7 +248,7 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 	// frontend guarantee that the clusters always contains the active
 	// namespace, so if the # of clusters is 1 then we do not need to send out
 	// any events for replication
-	if ns.replicationResolver.IsGlobalNamespace() && len(ns.ClusterNames()) > 1 {
+	if ns.replicationResolver.IsGlobalNamespace() && len(ns.ClusterNames(EmptyBusinessID)) > 1 {
 		return ReplicationPolicyMultiCluster
 	}
 	return ReplicationPolicyOneCluster

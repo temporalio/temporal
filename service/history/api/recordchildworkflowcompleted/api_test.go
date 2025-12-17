@@ -72,6 +72,7 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 
 	newParentMutableState := historyi.NewMockMutableState(ctrl)
 	newParentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	newParentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	newParentMutableState.EXPECT().GetNextEventID().Return(int64(10))
 	newParentMutableState.EXPECT().AddChildWorkflowExecutionCompletedEvent(anyArg, anyArg, anyArg).Return(nil, nil)
 	childExecutionInfo := &persistencespb.ChildExecutionInfo{

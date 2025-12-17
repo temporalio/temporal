@@ -38,6 +38,9 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Run("v1", func(t *testing.T) {
 		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: AsyncSetCurrentAndRamping})
 	})
+	t.Run("v2", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: VersionDataRevisionNumber})
+	})
 }
 
 func (s *WorkerDeploymentSuite) SetupTest() {
@@ -1088,6 +1091,87 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_ConcurrentDeletes() {
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				CurrentVersion: worker_versioning.UnversionedVersionId,
 			},
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_SetCurrent_AddsPropagatingRevision tests that when SetCurrent is called in async mode,
+// the propagating revision number is added to the state for tracking.
+func (s *WorkerDeploymentSuite) Test_SetCurrent_AddsPropagatingRevision() {
+	s.skipBeforeVersion(AsyncSetCurrentAndRamping)
+
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	var a *Activities
+	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
+	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
+			return &deploymentspb.SyncVersionStateActivityResult{
+				Summary: &deploymentspb.WorkerDeploymentVersionSummary{
+					Version: args.Version,
+				},
+			}, nil
+		},
+	)
+
+	version1 := tv.DeploymentVersionString()
+	buildID := tv.BuildID()
+	initialRevision := int64(5)
+
+	// Set current version to trigger revision tracking
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(SetCurrentVersion, version1, &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("SetCurrentVersion update should not have failed", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result interface{}, err error) {
+				s.Require().NoError(err)
+
+				// Query the state to verify propagating revision was added
+				queryResult, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+				s.Require().NoError(err)
+				var state deploymentspb.QueryDescribeWorkerDeploymentResponse
+				s.Require().NoError(queryResult.Get(&state))
+
+				// Verify revision number incremented
+				expectedRevision := initialRevision + 1
+				s.Equal(expectedRevision, state.State.RoutingConfig.RevisionNumber,
+					"revision number should be incremented")
+
+				// Verify propagating revisions map contains the build ID
+				s.Require().Contains(state.State.PropagatingRevisions, buildID,
+					"propagating revisions should contain the build ID")
+
+				// Verify the revision number is tracked for this build
+				revisions := state.State.PropagatingRevisions[buildID].RevisionNumbers
+				s.Require().Contains(revisions, expectedRevision,
+					"propagating revisions should track the new revision number")
+			},
+		}, &deploymentspb.SetCurrentVersionArgs{
+			Identity:                tv.ClientIdentity(),
+			Version:                 version1,
+			IgnoreMissingTaskQueues: true,
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+				version1: {
+					Version: version1,
+				},
+			},
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				RevisionNumber: initialRevision,
+			},
+			PropagatingRevisions: make(map[string]*deploymentspb.PropagatingRevisions),
 		},
 	})
 
