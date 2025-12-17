@@ -191,13 +191,14 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 			})
 			tt.setup(r)
 
-			result, err := r.ListWorkers(tt.nsID, "", nil)
+			resp, err := r.ListWorkers(tt.nsID, ListWorkersParams{})
 			if tt.expectError {
 				assert.Error(t, err, "expected an error for non-existent namespace")
-				assert.Nil(t, result, "result should be nil when an error occurs")
+				assert.Empty(t, resp.Workers, "result should be empty when an error occurs")
 				return
 			}
 			assert.NoError(t, err, "unexpected error when listing workers")
+			result := resp.Workers
 			assert.Len(t, result, tt.expectedCount, "unexpected number of workers returned")
 
 			// Check that all expected workers are present
@@ -320,16 +321,17 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 			})
 			tt.setup(r)
 
-			result, err := r.ListWorkers(tt.nsID, tt.query, nil)
+			resp, err := r.ListWorkers(tt.nsID, ListWorkersParams{Query: tt.query})
 
 			if tt.expectedError != "" {
 				assert.Error(t, err, "expected an error for invalid query")
 				assert.Contains(t, err.Error(), tt.expectedError, "error message should contain expected text")
-				assert.Nil(t, result, "result should be nil when an error occurs")
+				assert.Empty(t, resp.Workers, "result should be empty when an error occurs")
 				return
 			}
 
 			assert.NoError(t, err, "unexpected error when listing workers with query")
+			result := resp.Workers
 			assert.Len(t, result, tt.expectedCount, "unexpected number of workers returned")
 
 			// Check that all expected workers are present
@@ -440,4 +442,105 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 			assert.Equal(t, tt.workerInstanceKey, result.WorkerInstanceKey)
 		})
 	}
+}
+
+func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
+	r := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(10),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
+
+	// Add 5 workers with predictable keys
+	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "worker-a"},
+		{WorkerInstanceKey: "worker-b"},
+		{WorkerInstanceKey: "worker-c"},
+		{WorkerInstanceKey: "worker-d"},
+		{WorkerInstanceKey: "worker-e"},
+	})
+
+	// Test page size of 2
+	t.Run("first page", func(t *testing.T) {
+		resp, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2})
+		assert.NoError(t, err)
+		assert.Len(t, resp.Workers, 2)
+		assert.Equal(t, "worker-a", resp.Workers[0].WorkerInstanceKey)
+		assert.Equal(t, "worker-b", resp.Workers[1].WorkerInstanceKey)
+		assert.NotNil(t, resp.NextPageToken, "should have next page token")
+	})
+
+	// Test second page
+	t.Run("second page", func(t *testing.T) {
+		// Get first page to get the token
+		resp1, _ := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2})
+
+		resp2, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp1.NextPageToken})
+		assert.NoError(t, err)
+		assert.Len(t, resp2.Workers, 2)
+		assert.Equal(t, "worker-c", resp2.Workers[0].WorkerInstanceKey)
+		assert.Equal(t, "worker-d", resp2.Workers[1].WorkerInstanceKey)
+		assert.NotNil(t, resp2.NextPageToken, "should have next page token")
+	})
+
+	// Test last page
+	t.Run("last page", func(t *testing.T) {
+		// Get first two pages
+		resp1, _ := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2})
+		resp2, _ := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp1.NextPageToken})
+
+		resp3, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: resp2.NextPageToken})
+		assert.NoError(t, err)
+		assert.Len(t, resp3.Workers, 1)
+		assert.Equal(t, "worker-e", resp3.Workers[0].WorkerInstanceKey)
+		assert.Nil(t, resp3.NextPageToken, "should not have next page token on last page")
+	})
+}
+
+func TestRegistryImpl_ListWorkersNoPagination(t *testing.T) {
+	r := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(10),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
+
+	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "worker-a"},
+		{WorkerInstanceKey: "worker-b"},
+		{WorkerInstanceKey: "worker-c"},
+	})
+
+	// When pageSize is 0, return all workers without pagination
+	resp, err := r.ListWorkers("ns1", ListWorkersParams{})
+	assert.NoError(t, err)
+	assert.Len(t, resp.Workers, 3)
+	assert.Nil(t, resp.NextPageToken, "should not have next page token when returning all")
+}
+
+func TestRegistryImpl_ListWorkersInvalidPageToken(t *testing.T) {
+	r := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(10),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
+		MetricsHandler:      metrics.NoopMetricsHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
+
+	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "worker-a"},
+	})
+
+	_, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: []byte("invalid-json")})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid next_page_token")
 }

@@ -2,7 +2,9 @@ package workers
 
 import (
 	"container/list"
+	"encoding/json"
 	"hash/maphash"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +17,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
 )
+
+// listWorkersPageToken is the cursor for paginating ListWorkers results.
+type listWorkersPageToken struct {
+	// LastWorkerInstanceKey is the WorkerInstanceKey of the last worker returned in the previous page.
+	// The next page will return workers with keys > this value.
+	LastWorkerInstanceKey string `json:"l"`
+}
 
 type (
 	// entry wraps a WorkerHeartbeat along with its namespace and eviction metadata.
@@ -374,21 +383,97 @@ func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespac
 	m.recordPluginMetric(nsName, workerHeartbeat)
 }
 
-func (m *registryImpl) ListWorkers(nsID namespace.ID, query string, _ []byte) ([]*workerpb.WorkerHeartbeat, error) {
-	if query == "" {
-		return m.filterWorkers(nsID, func(_ *workerpb.WorkerHeartbeat) bool { return true }), nil
+func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {
+	// Build the predicate for filtering
+	var predicate func(*workerpb.WorkerHeartbeat) bool
+	if params.Query == "" {
+		predicate = func(_ *workerpb.WorkerHeartbeat) bool { return true }
+	} else {
+		queryEngine, err := newWorkerQueryEngine(nsID.String(), params.Query)
+		if err != nil {
+			return ListWorkersResponse{}, err
+		}
+		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
+			result, err := queryEngine.EvaluateWorker(heartbeat)
+			return err == nil && result
+		}
 	}
 
-	queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
-	if err != nil {
-		return nil, err
+	// Get all matching workers and paginate
+	workers := m.filterWorkers(nsID, predicate)
+	return paginateWorkers(workers, params.PageSize, params.NextPageToken)
+}
+
+// paginateWorkers applies cursor-based pagination to a list of workers.
+// Workers are sorted by WorkerInstanceKey for deterministic ordering.
+// Returns the paginated slice and a token for the next page (nil if no more pages).
+func paginateWorkers(workers []*workerpb.WorkerHeartbeat, pageSize int, nextPageToken []byte) (ListWorkersResponse, error) {
+	if len(workers) == 0 {
+		return ListWorkersResponse{Workers: workers}, nil
 	}
 
-	predicate := func(heartbeat *workerpb.WorkerHeartbeat) bool {
-		result, err := queryEngine.EvaluateWorker(heartbeat)
-		return err == nil && result
+	// If pagination is not requested, return all workers without sorting.
+	if pageSize == 0 && len(nextPageToken) == 0 {
+		return ListWorkersResponse{Workers: workers}, nil
 	}
-	return m.filterWorkers(nsID, predicate), nil
+
+	// Sort by WorkerInstanceKey for deterministic pagination
+	slices.SortFunc(workers, func(a, b *workerpb.WorkerHeartbeat) int {
+		if a.WorkerInstanceKey < b.WorkerInstanceKey {
+			return -1
+		}
+		if a.WorkerInstanceKey > b.WorkerInstanceKey {
+			return 1
+		}
+		return 0
+	})
+
+	// Decode page token to find the cursor
+	var cursor string
+	if len(nextPageToken) > 0 {
+		var token listWorkersPageToken
+		if err := json.Unmarshal(nextPageToken, &token); err != nil {
+			return ListWorkersResponse{}, serviceerror.NewInvalidArgument("invalid next_page_token")
+		}
+		cursor = token.LastWorkerInstanceKey
+	}
+
+	// Find the starting index (first worker with key > cursor)
+	startIdx := 0
+	if cursor != "" {
+		for i, w := range workers {
+			if w.WorkerInstanceKey > cursor {
+				startIdx = i
+				break
+			}
+			// If we reach the end without finding a worker > cursor, return empty
+			if i == len(workers)-1 {
+				return ListWorkersResponse{}, nil
+			}
+		}
+	}
+
+	// Apply page size (0 means no limit)
+	endIdx := len(workers)
+	if pageSize > 0 && startIdx+pageSize < endIdx {
+		endIdx = startIdx + pageSize
+	}
+
+	result := workers[startIdx:endIdx]
+
+	// Generate next page token if there are more results
+	var newNextPageToken []byte
+	if endIdx < len(workers) {
+		token := listWorkersPageToken{
+			LastWorkerInstanceKey: result[len(result)-1].WorkerInstanceKey,
+		}
+		newNextPageToken, _ = json.Marshal(token)
+	}
+
+	return ListWorkersResponse{
+		Workers:       result,
+		NextPageToken: newNextPageToken,
+	}, nil
 }
 
 func (m *registryImpl) DescribeWorker(nsID namespace.ID, workerInstanceKey string) (*workerpb.WorkerHeartbeat, error) {
