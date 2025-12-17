@@ -1396,6 +1396,40 @@ The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default a
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
 
+	// Worker registry settings
+	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
+		"matching.workerRegistryNumBuckets",
+		10,
+		`MatchingWorkerRegistryNumBuckets is the number of buckets used to partition the worker registry
+keyspace for reduced lock contention. Changes require a restart to take effect.`,
+	)
+	MatchingWorkerRegistryEntryTTL = NewGlobalDurationSetting(
+		"matching.workerRegistryEntryTTL",
+		5*time.Minute,
+		`MatchingWorkerRegistryEntryTTL is the time after which worker heartbeat entries are considered expired
+and eligible for eviction. Workers typically heartbeat every 30-60 seconds, so 5 minutes without a
+heartbeat indicates the worker is likely dead.`,
+	)
+	MatchingWorkerRegistryMinEvictAge = NewGlobalDurationSetting(
+		"matching.workerRegistryMinEvictAge",
+		1*time.Minute,
+		`MatchingWorkerRegistryMinEvictAge is the minimum age of worker heartbeat entries before they can be
+evicted due to capacity pressure. This prevents evicting recently-heartbeated workers even when
+the registry is at capacity. Lower values help handle crash-looping workers more aggressively.`,
+	)
+	MatchingWorkerRegistryMaxEntries = NewGlobalIntSetting(
+		"matching.workerRegistryMaxEntries",
+		1_000_000,
+		`MatchingWorkerRegistryMaxEntries is the maximum number of worker heartbeat entries allowed across
+all namespaces. When exceeded, the oldest entries (older than MinEvictAge) are evicted.`,
+	)
+	MatchingWorkerRegistryEvictionInterval = NewGlobalDurationSetting(
+		"matching.workerRegistryEvictionInterval",
+		1*time.Minute,
+		`MatchingWorkerRegistryEvictionInterval is how often the worker registry runs background eviction
+to remove expired entries. Should be shorter than EntryTTL for timely cleanup. Lower values mean faster cleanup but more CPU overhead.`,
+	)
+
 	// keys for history
 
 	EnableReplicationStream = NewGlobalBoolSetting(

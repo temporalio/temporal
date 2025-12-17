@@ -2926,6 +2926,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
+func (ms *MutableStateImpl) IsWorkflowExecutionStatusPaused() bool {
+	return ms.executionState.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+}
+
 func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
 	identity string,
 	reason string,
@@ -6905,7 +6909,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 			return serviceerror.NewInternalf("no event definition registered for %v", t)
 		}
 		if def.IsWorkflowTaskTrigger() {
-			if !ms.HasPendingWorkflowTask() {
+			if !ms.HasPendingWorkflowTask() && !ms.IsWorkflowExecutionStatusPaused() {
 				if _, err := ms.AddWorkflowTaskScheduledEvent(
 					false,
 					enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
@@ -7997,7 +8001,7 @@ func (ms *MutableStateImpl) closeTransactionCollapseVisibilityTasks() {
 }
 
 func (ms *MutableStateImpl) generateReplicationTask() bool {
-	return len(ms.namespaceEntry.ClusterNames()) > 1
+	return len(ms.namespaceEntry.ClusterNames(ms.GetWorkflowKey().WorkflowID)) > 1
 }
 
 func (ms *MutableStateImpl) checkMutability(
