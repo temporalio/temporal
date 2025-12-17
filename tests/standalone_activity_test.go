@@ -197,6 +197,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			RequestId:           s.tv.RequestID(),
 		})
 		require.NoError(t, err)
 		require.Equal(t, firstStartResp.RunId, secondStartResp.RunId)
