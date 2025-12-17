@@ -4603,3 +4603,78 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 		return resp.GetIsMember()
 	}, 10*time.Second, 100*time.Millisecond)
 }
+
+// TestMaxVersionsInTaskQueue tests that polling from a task queue with too many
+// versions returns a RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS error
+func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
+	// This test is not dependent on a particular deployment workflow version, but we don't want it repetitively
+	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Set a low limit for the test to make it faster
+	maxVersions := 5
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInTaskQueue, maxVersions)
+
+	tv := testvars.New(s)
+
+	// Pre-populate the task queue with maxVersions different deployment versions
+	// Each version will be in a separate deployment to ensure they count toward the limit
+	for i := 0; i < maxVersions; i++ {
+		tvVersion := tv.WithDeploymentSeriesNumber(i).WithBuildIDNumber(i)
+		upsertVersions := make(map[string]*deploymentspb.WorkerDeploymentVersionData)
+		upsertVersions[tvVersion.BuildID()] = &deploymentspb.WorkerDeploymentVersionData{
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		}
+
+		deploymentName := tvVersion.DeploymentVersion().GetDeploymentName()
+		_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+			ctx, &matchingservice.SyncDeploymentUserDataRequest{
+				NamespaceId:        s.NamespaceID().String(),
+				TaskQueue:          tv.TaskQueue().GetName(),
+				TaskQueueTypes:     []enumspb.TaskQueueType{tqTypeWf},
+				DeploymentName:     deploymentName,
+				UpsertVersionsData: upsertVersions,
+			},
+		)
+		s.NoError(err)
+	}
+
+	// Now try to poll with a new version from a new deployment
+	// This should fail with RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS
+	tvNewVersion := tv.WithDeploymentSeriesNumber(maxVersions).WithBuildIDNumber(maxVersions)
+
+	pollCtx, pollCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer pollCancel()
+
+	_, pollErr := s.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue:         tvNewVersion.TaskQueue(),
+		DeploymentOptions: tvNewVersion.WorkerDeploymentOptions(true),
+		Namespace:         s.Namespace().String(),
+		Identity:          tvNewVersion.WorkerIdentity(),
+	})
+
+	// Verify we got the expected resource exhausted error
+	s.Error(pollErr)
+	var resourceExhausted *serviceerror.ResourceExhausted
+	s.ErrorAs(pollErr, &resourceExhausted)
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, resourceExhausted.Cause,
+		"Expected RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS")
+	s.Contains(resourceExhausted.Message, "exceeding maximum number of Deployment Versions in this task queue",
+		"Error message should mention exceeding deployment version limit")
+	s.Contains(resourceExhausted.Message, fmt.Sprintf("limit = %d", maxVersions),
+		"Error message should include the limit value")
+}
+
+func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.deploymentWorkflowVersion < version {
+		s.T().Skipf("test supports workflow version %v and newer", version)
+	}
+}
+
+func (s *Versioning3Suite) skipFromVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.deploymentWorkflowVersion >= version {
+		s.T().Skipf("test supports workflow version older than %v", version)
+	}
+}
