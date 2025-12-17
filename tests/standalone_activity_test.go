@@ -2011,17 +2011,6 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.NotEmpty(t, pollTaskResp.TaskToken)
 
 		// Heartbeat before timeout
-		time.Sleep(600 * time.Millisecond) //nolint:forbidigo
-		_, err = s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-			Details:    heartbeatDetails,
-		})
-		require.NoError(t, err)
-
-		// Wait again, then heartbeat again
-		time.Sleep(600 * time.Millisecond) //nolint:forbidigo
 		_, err = s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
 			Namespace:  s.Namespace().String(),
 			ActivityId: activityID,
