@@ -148,6 +148,8 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.Config.TaskChanFullBackoff,
+		f.Config.TaskChanFullBackoffJitterCoefficient,
 	)
 
 	factory := queues.NewExecutableFactory(

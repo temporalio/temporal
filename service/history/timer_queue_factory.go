@@ -104,6 +104,8 @@ func (f *timerQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.Config.TaskChanFullBackoff,
+		f.Config.TaskChanFullBackoffJitterCoefficient,
 	)
 
 	activeExecutor := newTimerQueueActiveTaskExecutor(

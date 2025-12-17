@@ -1759,6 +1759,16 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		time.Hour,
 		`TaskSchedulerInactiveChannelDeletionDelay the time delay before a namespace's' channel is removed from the scheduler`,
 	)
+	ReschedulerTaskChanFullBackoff = NewGlobalDurationSetting(
+		"history.reschedulerTaskChanFullBackoff",
+		2*time.Second,
+		`ReschedulerTaskChanFullBackoff is the backoff duration when the rescheduler's task channel is full`,
+	)
+	ReschedulerTaskChanFullBackoffJitterCoefficient = NewGlobalFloatSetting(
+		"history.reschedulerTaskChanFullBackoffJitterCoefficient",
+		0.5,
+		`ReschedulerTaskChanFullBackoffJitterCoefficient is the jitter coefficient for rescheduler task channel full backoff`,
+	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(
 		"history.timerTaskBatchSize",
