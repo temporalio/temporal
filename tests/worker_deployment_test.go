@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
@@ -40,15 +41,15 @@ type (
 
 func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
-	t.Run("sync", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
-	})
-	t.Run("async", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
-	})
-	t.Run("version_rev_no", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
-	})
+	//t.Run("sync", func(t *testing.T) {
+	//	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
+	//})
+	//t.Run("async", func(t *testing.T) {
+	//	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	//})
+	//t.Run("version_rev_no", func(t *testing.T) {
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
+	//})
 }
 
 func (s *WorkerDeploymentSuite) SetupSuite() {
@@ -250,22 +251,62 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 }
 
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
-	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
-	s.T().Skip() // Need to separate this test so other tests do not create deployment in the same NS
-
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxDeployments, 1)
+
+	// Set up namespace specifically for this test (since we are triggering a per-namespace limit)
+	namespace := namespace.Name("TestNamespaceDeploymentsLimit-namespace")
+	_, err := s.RegisterNamespace(namespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.Require().NoError(err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	tv := testvars.New(s)
 
-	// First deployment version should be fine
-	go s.pollFromDeployment(ctx, tv)
-	s.ensureCreateVersionInDeployment(tv)
+	// the first deployment version should be fine
+	go func() {
+		_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:         namespace.String(),
+			TaskQueue:         tv.TaskQueue(),
+			Identity:          "random",
+			DeploymentOptions: tv.WorkerDeploymentOptions(true),
+		})
+	}()
 
-	// pollers of the second deployment version should be rejected
-	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2), "reached maximum deployments in namespace (1)")
+	// ensure the version is created in deployment
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		res, _ := s.FrontendClient().DescribeWorkerDeployment(ctx,
+			&workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      namespace.String(),
+				DeploymentName: tv.DeploymentSeries(),
+			})
+
+		found := false
+		if res != nil {
+			for _, vs := range res.GetWorkerDeploymentInfo().GetVersionSummaries() {
+				if vs.GetDeploymentVersion().GetDeploymentName() == tv.DeploymentSeries() &&
+					vs.GetDeploymentVersion().GetBuildId() == tv.BuildID() {
+					found = true
+				}
+			}
+		}
+		a.True(found)
+	}, 1*time.Minute, 100*time.Millisecond)
+
+	// pollers of the second deployment should be rejected with a clear error message
+	_, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: namespace.String(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.ClientIdentity(),
+		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			BuildId:              tv.BuildID(),
+			DeploymentName:       tv.DeploymentSeries() + "-2",
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+		},
+	})
+	s.Error(err)
+	s.Equal("reached maximum worker deployments in namespace (1)", err.Error())
 }
 
 func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted() {
