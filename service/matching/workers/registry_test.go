@@ -455,13 +455,13 @@ func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
 		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
 	})
 
-	// Add 5 workers with predictable keys
+	// Add 5 workers in non-sorted order to verify sorting works
 	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
-		{WorkerInstanceKey: "worker-a"},
-		{WorkerInstanceKey: "worker-b"},
 		{WorkerInstanceKey: "worker-c"},
-		{WorkerInstanceKey: "worker-d"},
+		{WorkerInstanceKey: "worker-a"},
 		{WorkerInstanceKey: "worker-e"},
+		{WorkerInstanceKey: "worker-b"},
+		{WorkerInstanceKey: "worker-d"},
 	})
 
 	// Test page size of 2
