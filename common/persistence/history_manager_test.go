@@ -131,6 +131,6 @@ func requireInvalidArgumentError(t *testing.T, err error, operation string) {
 		"%s should return InvalidArgument error for invalid branch token, got: %T - %v",
 		operation, err, err)
 
-	require.Contains(t, err.Error(), "unable to parse",
-		"%s error message should contain 'unable to parse'", operation)
+	require.Contains(t, err.Error(), "unable to parse branch token",
+		"%s error message should contain 'unable to parse branch token'", operation)
 }
