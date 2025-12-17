@@ -283,7 +283,7 @@ func (a *Interceptor) authorizeTargetNamespaces(
 	}
 
 	// Cross-namespace commands can only be initiated via RespondWorkflowTaskCompletedRequest.
-	// This function handles authorization for all such commands: SignalExternalWorkflow,
+	// Here we handle authorization for all such commands: SignalExternalWorkflow,
 	// StartChildWorkflow, and RequestCancelExternalWorkflow targeting a different namespace.
 	wftRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
 	if !ok {
