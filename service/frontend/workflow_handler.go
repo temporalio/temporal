@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -73,7 +73,6 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/grpc/codes"
@@ -129,7 +128,6 @@ type (
 		clusterMetadata                 cluster.Metadata
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
-		deploymentStoreClient           deployment.DeploymentStoreClient
 		workerDeploymentClient          workerdeployment.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
 		archiverProvider                provider.ArchiverProvider
@@ -161,7 +159,6 @@ func NewWorkflowHandler(
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -202,7 +199,6 @@ func NewWorkflowHandler(
 		clusterMetadata:                 clusterMetadata,
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
-		deploymentStoreClient:           deploymentStoreClient,
 		workerDeploymentClient:          workerDeploymentClient,
 		schedulerClient:                 schedulerClient,
 		archiverProvider:                archiverProvider,
@@ -259,7 +255,7 @@ func (wh *WorkflowHandler) Start() {
 
 			if ns.IsGlobalNamespace() &&
 				ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
-				ns.ActiveClusterName() != wh.clusterMetadata.GetCurrentClusterName() {
+				!ns.ActiveInCluster(wh.clusterMetadata.GetCurrentClusterName()) {
 				pollers, ok := wh.outstandingPollers.Get(ns.ID().String())
 				if ok {
 					for _, cancelFn := range pollers.PopAll() {
@@ -619,7 +615,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	errs := make([]error, len(request.Operations))
 
 	for i, op := range request.Operations {
-		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, op)
+		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, namespace.Name(request.Namespace), op)
 		if err != nil {
 			hasError = true
 		} else {
@@ -651,12 +647,16 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 
 func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	op *workflowservice.ExecuteMultiOperationRequest_Operation,
 ) (*historyservice.ExecuteMultiOperationRequest_Operation, string, error) {
 	var workflowId string
 	var opReq *historyservice.ExecuteMultiOperationRequest_Operation
 
 	if startReq := op.GetStartWorkflow(); startReq != nil {
+		if startReq.Namespace != "" && startReq.Namespace != namespaceName.String() {
+			return nil, "", errMultiOpNamespaceMismatch
+		}
 		var err error
 		if startReq, err = wh.prepareStartWorkflowRequest(startReq); err != nil {
 			return nil, "", err
@@ -684,6 +684,9 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 			},
 		}
 	} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
+		if updateReq.Namespace != "" && updateReq.Namespace != namespaceName.String() {
+			return nil, "", errMultiOpNamespaceMismatch
+		}
 		if err := wh.prepareUpdateWorkflowRequest(updateReq); err != nil {
 			return nil, "", err
 		}

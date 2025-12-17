@@ -316,7 +316,7 @@ func newTreeInitSearchAttributesAndMemo(
 		root.currentSA = searchAttributeKeyValuesToMap(saSlice)
 	}
 	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
-		root.currentMemo = memoProvider.Memo(immutableContext)
+		root.currentMemo = proto.Clone(memoProvider.Memo(immutableContext))
 	}
 
 	return nil
@@ -336,6 +336,9 @@ func (n *Node) SetRootComponent(
 	root := n.root()
 	root.value = rootComponent
 	root.setValueState(valueStateNeedSyncStructure)
+	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
+		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
+	}
 }
 
 func (n *Node) setValueState(state valueState) {
@@ -1498,7 +1501,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 		if !proto.Equal(n.currentMemo, newMemo) {
 			needUpdate = true
 		}
-		n.currentMemo = newMemo
+		n.currentMemo = proto.Clone(newMemo)
 	}
 
 	if !needUpdate {
@@ -2082,7 +2085,7 @@ func (n *Node) ApplyMutation(
 	}
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
-		n.currentMemo = memoProvider.Memo(immutableContext)
+		n.currentMemo = proto.Clone(memoProvider.Memo(immutableContext))
 	}
 
 	return nil

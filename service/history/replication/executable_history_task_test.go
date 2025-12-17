@@ -195,7 +195,7 @@ func (s *executableHistoryTaskSuite) TearDownTest() {
 
 func (s *executableHistoryTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -230,7 +230,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Skip_TerminalState() {
 
 func (s *executableHistoryTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -241,7 +241,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Skip_Namespace() {
 func (s *executableHistoryTaskSuite) TestExecute_Err() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	err := errors.New("OwO")
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		"", false, err,
 	).AnyTimes()
 
@@ -250,7 +250,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Err() {
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := historyi.NewMockShardContext(s.controller)
@@ -287,7 +287,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	err := serviceerrors.NewRetryReplication(

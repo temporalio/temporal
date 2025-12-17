@@ -280,7 +280,7 @@ func (s *xdcBaseSuite) createNamespace(
 					require.NoError(t, err)
 					require.NotNil(t, resp)
 					require.Equal(t, isGlobal, resp.IsGlobalNamespace())
-					require.Equal(t, clusterNames, resp.ClusterNames())
+					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -377,7 +377,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, clusterNames, resp.ClusterNames())
+			require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 			isGlobalNamespace = resp.IsGlobalNamespace()
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
@@ -394,7 +394,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 					resp, err := r.GetNamespace(namespace.Name(ns))
 					require.NoError(t, err)
 					require.NotNil(t, resp)
-					require.Equal(t, clusterNames, resp.ClusterNames())
+					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -449,7 +449,7 @@ func (s *xdcBaseSuite) failover(
 				resp, err := r.GetNamespace(namespace.Name(ns))
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				require.Equal(t, targetCluster, resp.ActiveClusterName())
+				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.EmptyBusinessID))
 			}
 		}
 	}, replicationWaitTime, replicationCheckInterval)
