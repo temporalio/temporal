@@ -1703,6 +1703,8 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	sourceClusterName := "test-cluster"
 
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
 	mockShard := historyi.NewMockShardContext(s.controller)
 	taskId := int64(100)
 	mockShard.EXPECT().GenerateTaskID().Return(taskId, nil).Times(1)
