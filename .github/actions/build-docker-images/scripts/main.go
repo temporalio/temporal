@@ -13,6 +13,9 @@ import (
 
 var validArchs = []string{"amd64", "arm64"}
 
+// defaultCliVersion should be updated to the latest cli version
+const defaultCliVersion = "1.5.1"
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <command>\n", os.Args[0])
@@ -319,7 +322,7 @@ func downloadCLI() error {
 func downloadCLIForArch(arch string) error {
 	cliVersion := os.Getenv("CLI_VERSION")
 	if cliVersion == "" {
-		cliVersion = "1.5.1" // default fallback
+		defaultCliVersion
 	}
 
 	tarballName := fmt.Sprintf("temporal_cli_%s_linux_%s.tar.gz", cliVersion, arch)
@@ -536,7 +539,7 @@ func copyRecursive(src, dst string) error {
 	return nil
 }
 
-func downloadFile(url, filepath string) error {
+func downloadFile(url, fpath string) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -547,7 +550,7 @@ func downloadFile(url, filepath string) error {
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
 
-	out, err := os.Create(filepath)
+	out, err := os.Create(fpath)
 	if err != nil {
 		return err
 	}
