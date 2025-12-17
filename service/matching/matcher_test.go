@@ -334,9 +334,7 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, in *matchingservice.PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 			forwardPoll <- struct{}{}
-			return &matchingservice.PollWorkflowTaskQueueResponse{
-				TaskToken: []byte("some token"),
-			}, errMatchingHostThrottleTest
+			return nil, errMatchingHostThrottleTest
 		})
 	go t.childMatcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
 	select {
