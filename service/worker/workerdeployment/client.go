@@ -1622,6 +1622,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			CurrentSinceTime:     v.GetCurrentSinceTime(),
 			RampingSinceTime:     v.GetRampingSinceTime(),
 			FirstActivationTime:  v.GetFirstActivationTime(),
+			FirstCurrentTime:     v.GetFirstCurrentTime(),
 			LastDeactivationTime: v.GetLastDeactivationTime(),
 			Status:               v.GetStatus(),
 		})

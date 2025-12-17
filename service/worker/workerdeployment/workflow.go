@@ -191,13 +191,16 @@ func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeplo
 		return
 	}
 
-	// Preserve create_time and first_activation_time if they exist in current summary. This is to ensure that if the version
+	// Preserve create_time, first_activation_time, and first_current_time if they exist in current summary. This is to ensure that if the version
 	// had already been activated before, we don't override the first activation time by setting it to a wrong value.
 	if existingSummary := d.State.Versions[summary.GetVersion()]; existingSummary.GetCreateTime() != nil {
 		summary.CreateTime = existingSummary.GetCreateTime()
 
 		if existingSummary.GetFirstActivationTime() != nil {
 			summary.FirstActivationTime = existingSummary.GetFirstActivationTime()
+		}
+		if existingSummary.GetFirstCurrentTime() != nil {
+			summary.FirstCurrentTime = existingSummary.GetFirstCurrentTime()
 		}
 	}
 
@@ -1482,6 +1485,7 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 		RampingSinceTime:     versionSummary.GetRampingSinceTime(),
 		RoutingUpdateTime:    versionSummary.GetRoutingUpdateTime(),
 		FirstActivationTime:  versionSummary.GetFirstActivationTime(),
+		FirstCurrentTime:     versionSummary.GetFirstCurrentTime(),
 		LastDeactivationTime: versionSummary.GetLastDeactivationTime(),
 	}
 }

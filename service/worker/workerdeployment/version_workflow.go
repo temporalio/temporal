@@ -676,6 +676,11 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		state.LastDeactivationTime = nil
 	}
 
+	if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT && state.FirstCurrentTime == nil {
+		// First time this version is set to current
+		state.FirstCurrentTime = args.RoutingUpdateTime
+	}
+
 	return &deploymentspb.SyncVersionStateResponse{
 		Summary: versionStateToSummary(state),
 	}, nil
@@ -761,6 +766,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		CurrentSinceTime:     s.CurrentSinceTime,
 		RampingSinceTime:     s.RampingSinceTime,
 		FirstActivationTime:  s.FirstActivationTime,
+		FirstCurrentTime:     s.FirstCurrentTime,
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 	}
