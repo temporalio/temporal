@@ -82,32 +82,32 @@ type Versioning3Suite struct {
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	//t.Run("sync_old_deployment_data", func(t *testing.T) {
-	//	suite.Run(t, &Versioning3Suite{
-	//		deploymentWorkflowVersion: workerdeployment.InitialVersion,
-	//		useV32:                    true,
-	//		useNewDeploymentData:      false,
-	//		useRevisionNumbers:        false,
-	//	})
-	//})
-	//
-	//t.Run("async_without_revision_number", func(t *testing.T) {
-	//	suite.Run(t, &Versioning3Suite{
-	//		deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-	//		useV32:                    true,
-	//		useNewDeploymentData:      true,
-	//		useRevisionNumbers:        false,
-	//	})
-	//})
-
-	//t.Run("async_with_revision_number", func(t *testing.T) {
-	suite.Run(t, &Versioning3Suite{
-		deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-		useV32:                    true,
-		useRevisionNumbers:        true,
-		useNewDeploymentData:      true,
+	t.Run("sync_old_deployment_data", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.InitialVersion,
+			useV32:                    true,
+			useNewDeploymentData:      false,
+			useRevisionNumbers:        false,
+		})
 	})
-	//})
+
+	t.Run("async_without_revision_number", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			useV32:                    true,
+			useNewDeploymentData:      true,
+			useRevisionNumbers:        false,
+		})
+	})
+
+	t.Run("async_with_revision_number", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			useV32:                    true,
+			useRevisionNumbers:        true,
+			useNewDeploymentData:      true,
+		})
+	})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
