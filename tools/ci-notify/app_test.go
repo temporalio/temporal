@@ -1,9 +1,11 @@
 package cinotify
 
 import (
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildFailureMessage(t *testing.T) {
@@ -38,22 +40,13 @@ func TestBuildFailureMessage(t *testing.T) {
 
 	msg := BuildFailureMessage(report)
 
-	if msg == nil {
-		t.Fatal("BuildFailureMessage returned nil")
-	}
-
-	if !strings.Contains(msg.Text, "CI Failed") {
-		t.Errorf("Message text should contain 'CI Failed', got: %s", msg.Text)
-	}
-
-	if len(msg.Blocks) == 0 {
-		t.Error("Message should have at least one block")
-	}
+	require.NotNil(t, msg, "BuildFailureMessage returned nil")
+	assert.Contains(t, msg.Text, "CI Failed")
+	assert.NotEmpty(t, msg.Blocks, "Message should have at least one block")
 
 	// Check that the first block contains the header
-	if msg.Blocks[0].Text == nil || !strings.Contains(msg.Blocks[0].Text.Text, "CI Failed") {
-		t.Error("First block should be the header with 'CI Failed'")
-	}
+	require.NotNil(t, msg.Blocks[0].Text)
+	assert.Contains(t, msg.Blocks[0].Text.Text, "CI Failed")
 }
 
 func TestFormatMessageForDebug(t *testing.T) {
@@ -77,25 +70,11 @@ func TestFormatMessageForDebug(t *testing.T) {
 
 	output := FormatMessageForDebug(report)
 
-	if !strings.Contains(output, "CI Failed") {
-		t.Error("Debug output should contain 'CI Failed'")
-	}
-
-	if !strings.Contains(output, "All Tests") {
-		t.Error("Debug output should contain workflow name")
-	}
-
-	if !strings.Contains(output, "abc1234") {
-		t.Error("Debug output should contain short SHA")
-	}
-
-	if !strings.Contains(output, "Test Author") {
-		t.Error("Debug output should contain author")
-	}
-
-	if !strings.Contains(output, "test-job-1") {
-		t.Error("Debug output should contain failed job name")
-	}
+	assert.Contains(t, output, "CI Failed")
+	assert.Contains(t, output, "All Tests")
+	assert.Contains(t, output, "abc1234")
+	assert.Contains(t, output, "Test Author")
+	assert.Contains(t, output, "test-job-1")
 }
 
 func TestShortSHA(t *testing.T) {
@@ -128,9 +107,7 @@ func TestShortSHA(t *testing.T) {
 				shortSHA = shortSHA[:7]
 			}
 
-			if shortSHA != tt.expected {
-				t.Errorf("Expected %s, got %s", tt.expected, shortSHA)
-			}
+			assert.Equal(t, tt.expected, shortSHA)
 		})
 	}
 }
@@ -158,13 +135,9 @@ func TestSlackMessageStructure(t *testing.T) {
 
 	// Verify we have the expected number of blocks
 	// Header, Info, Summary, Jobs List, Link = 5 blocks
-	if len(msg.Blocks) != 5 {
-		t.Errorf("Expected 5 blocks, got %d", len(msg.Blocks))
-	}
+	assert.Len(t, msg.Blocks, 5)
 
 	// Verify the info block has 4 fields
 	infoBlock := msg.Blocks[1]
-	if len(infoBlock.Fields) != 4 {
-		t.Errorf("Info block should have 4 fields, got %d", len(infoBlock.Fields))
-	}
+	assert.Len(t, infoBlock.Fields, 4)
 }

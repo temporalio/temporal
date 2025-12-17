@@ -952,16 +952,11 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Build ci-notify tool
-        run: |
-          cd cmd/tools/ci-notify
-          go build -o /tmp/ci-notify .
-
       - name: Send Slack notification
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          /tmp/ci-notify \
+          go run ./cmd/tools/ci-notify \
             --run-id "${{ github.run_id }}" \
             --slack-webhook "$SLACK_WEBHOOK"
