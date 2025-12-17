@@ -200,7 +200,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, firstStartResp.RunId, secondStartResp.RunId)
-		//require.Equal(t, false, secondStartResp.GetStarted()) TODO enable this when we can set the flag correctly
+		// require.Equal(t, false, secondStartResp.GetStarted()) TODO enable this when we can set the flag correctly
 	})
 }
 
