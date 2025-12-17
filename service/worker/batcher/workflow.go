@@ -6,9 +6,9 @@ import (
 	"time"
 
 	batchpb "go.temporal.io/api/batch/v1"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -59,6 +59,11 @@ var (
 		sadefs.ExecutionStatus,
 		int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 	)
+
+	OpenAdminBatchOperationQuery = fmt.Sprintf("%s = '%s'",
+		sadefs.TemporalNamespaceDivision,
+		AdminNamespaceDivision,
+	)
 )
 
 type (
@@ -76,7 +81,7 @@ type (
 
 	task struct {
 		// the workflow execution to process
-		execution *commonpb.WorkflowExecution
+		executionInfo *workflowpb.WorkflowExecutionInfo
 		// the number of attempts to process the workflow execution
 		attempts int
 		// reference to the page this task belongs to (for tracking page completion)

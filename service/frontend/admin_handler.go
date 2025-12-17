@@ -1598,18 +1598,18 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace.Name(request.GetNamespace()),
-		Query:       batcher.OpenBatchOperationQuery,
+		Query:       batcher.OpenAdminBatchOperationQuery,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	openBatchOperationCount := int(countResp.Count)
-	if openBatchOperationCount >= maxConcurrentBatchOperation {
+	openAdminBatchOperationCount := int(countResp.Count)
+	if openAdminBatchOperationCount >= maxConcurrentBatchOperation {
 		return nil, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			Message: "Max concurrent batch operations is reached",
+			Message: "Max concurrent admin batch operations is reached",
 		}
 	}
 
@@ -1621,9 +1621,9 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	var identity string
 	var batchTypeMemo string
 	switch op := request.Operation.(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation:
+	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		batchTypeMemo = "refresh_workflow_tasks"
-		identity = op.RefreshWorkflowTasksOperation.GetIdentity()
+		identity = op.RefreshTasksOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
@@ -1642,7 +1642,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 
 	var searchAttributes *commonpb.SearchAttributes
 	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
@@ -1656,7 +1656,6 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		Memo:                     memo,
 		SearchAttributes:         searchAttributes,
-		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
 	_, err = adh.historyClient.StartWorkflowExecution(
@@ -1691,7 +1690,7 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	}
 
 	switch op := params.GetOperation().(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation:
+	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		// No additional validation needed
 		return nil
 	default:

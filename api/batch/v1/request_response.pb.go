@@ -33,10 +33,11 @@ type BatchOperationInput struct {
 	AttemptsOnRetryableError int64                  `protobuf:"varint,3,opt,name=attempts_on_retryable_error,json=attemptsOnRetryableError,proto3" json:"attempts_on_retryable_error,omitempty"`
 	ActivityHeartbeatTimeout *durationpb.Duration   `protobuf:"bytes,4,opt,name=activity_heartbeat_timeout,json=activityHeartbeatTimeout,proto3" json:"activity_heartbeat_timeout,omitempty"`
 	NonRetryableErrors       []string               `protobuf:"bytes,5,rep,name=non_retryable_errors,json=nonRetryableErrors,proto3" json:"non_retryable_errors,omitempty"`
-	BatchType                v1.BatchOperationType  `protobuf:"varint,6,opt,name=batch_type,json=batchType,proto3,enum=temporal.api.enums.v1.BatchOperationType" json:"batch_type,omitempty"`
-	// The request to start the batch operation.
+	// Only needed if StartBatchOperationRequest request is set.
+	BatchType v1.BatchOperationType `protobuf:"varint,6,opt,name=batch_type,json=batchType,proto3,enum=temporal.api.enums.v1.BatchOperationType" json:"batch_type,omitempty"`
+	// The request to start the batch operation. Mutually exclusive with StartAdminBatchOperationRequest admin_request.
 	Request *v11.StartBatchOperationRequest `protobuf:"bytes,7,opt,name=request,proto3" json:"request,omitempty"`
-	// The request to start an admin batch operation.
+	// The request to start an admin batch operation. Mutually exclusive with StartBatchOperationRequest request.
 	AdminRequest  *v12.StartAdminBatchOperationRequest `protobuf:"bytes,8,opt,name=admin_request,json=adminRequest,proto3" json:"admin_request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -210,11 +210,6 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Name:  FlagJobID,
 					Usage: "Optional job ID (auto-generated if not provided)",
 				},
-				&cli.StringFlag{
-					Name:        FlagArchetype,
-					Usage:       "Fully qualified archetype name of the executions",
-					DefaultText: chasm.WorkflowArchetype,
-				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminBatchRefreshWorkflowTasks(c, clientFactory)

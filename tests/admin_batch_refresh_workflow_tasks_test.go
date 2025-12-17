@@ -70,8 +70,8 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 			{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()},
 			{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()},
 		},
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
-			RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
 				Identity: "test-identity",
 			},
 		},
@@ -113,10 +113,9 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 		VisibilityQuery: "WorkflowType='simpleWorkflow'",
 		JobId:           uuid.NewString(),
 		Reason:          "test refresh workflow tasks with query",
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
-			RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
-				Identity:  "test-identity",
-				Archetype: "test-archetype",
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
+				Identity: "test-identity",
 			},
 		},
 	})
@@ -152,8 +151,8 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: "test-wf-id", RunId: "test-run-id"},
 		},
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
-			RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
 				Identity: "test-identity",
 			},
 		},
@@ -173,8 +172,8 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: "test-wf-id", RunId: "test-run-id"},
 		},
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
-			RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
 				Identity: "test-identity",
 			},
 		},
@@ -192,8 +191,8 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 		Namespace: s.Namespace().String(),
 		JobId:     uuid.NewString(),
 		Reason:    "test",
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
-			RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
 				Identity: "test-identity",
 			},
 		},

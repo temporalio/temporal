@@ -3335,35 +3335,35 @@ func (this *StartAdminBatchOperationResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type BatchOperationRefreshWorkflowTasks to the protobuf v3 wire format
-func (val *BatchOperationRefreshWorkflowTasks) Marshal() ([]byte, error) {
+// Marshal an object of type BatchOperationRefreshTasks to the protobuf v3 wire format
+func (val *BatchOperationRefreshTasks) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type BatchOperationRefreshWorkflowTasks from the protobuf v3 wire format
-func (val *BatchOperationRefreshWorkflowTasks) Unmarshal(buf []byte) error {
+// Unmarshal an object of type BatchOperationRefreshTasks from the protobuf v3 wire format
+func (val *BatchOperationRefreshTasks) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *BatchOperationRefreshWorkflowTasks) Size() int {
+func (val *BatchOperationRefreshTasks) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two BatchOperationRefreshWorkflowTasks values are equivalent by recursively
+// Equal returns whether two BatchOperationRefreshTasks values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *BatchOperationRefreshWorkflowTasks) Equal(that interface{}) bool {
+func (this *BatchOperationRefreshTasks) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *BatchOperationRefreshWorkflowTasks
+	var that1 *BatchOperationRefreshTasks
 	switch t := that.(type) {
-	case *BatchOperationRefreshWorkflowTasks:
+	case *BatchOperationRefreshTasks:
 		that1 = t
-	case BatchOperationRefreshWorkflowTasks:
+	case BatchOperationRefreshTasks:
 		that1 = &t
 	default:
 		return false

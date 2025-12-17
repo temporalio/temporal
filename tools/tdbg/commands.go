@@ -707,10 +707,9 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory)
 		VisibilityQuery: query,
 		JobId:           jobID,
 		Reason:          reason,
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshWorkflowTasksOperation{
-			RefreshWorkflowTasksOperation: &adminservice.BatchOperationRefreshWorkflowTasks{
-				Identity:  getCurrentUserFromEnv(),
-				Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
+				Identity: getCurrentUserFromEnv(),
 			},
 		},
 	})

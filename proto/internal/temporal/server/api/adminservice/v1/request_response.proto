@@ -606,6 +606,7 @@ message ForceUnloadTaskQueuePartitionResponse {
 }
 
 // StartAdminBatchOperationRequest starts an admin batch operation.
+// WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 message StartAdminBatchOperationRequest {
   // Namespace that contains the batch operation.
   string namespace = 1;
@@ -626,19 +627,16 @@ message StartAdminBatchOperationRequest {
 
   // The admin batch operation to perform.
   oneof operation {
-    BatchOperationRefreshWorkflowTasks refresh_workflow_tasks_operation = 10;
+    BatchOperationRefreshTasks refresh_tasks_operation = 10;
   }
 }
 
 message StartAdminBatchOperationResponse {
 }
 
-// BatchOperationRefreshWorkflowTasks refreshes workflow tasks for batch workflows.
-// This regenerates all pending tasks for each workflow.
-message BatchOperationRefreshWorkflowTasks {
+// BatchOperationRefreshTasks refreshes tasks for batch executions.
+// This regenerates all pending tasks for each execution.
+message BatchOperationRefreshTasks {
   // The identity of the worker/client.
   string identity = 1;
-
-  // Archetype to use for the refresh operation. If not specified, defaults to workflow archetype.
-  string archetype = 2;
 }
