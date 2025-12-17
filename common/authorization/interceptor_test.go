@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	testNamespace       string = "test-namespace"
-	targetNamespace     string = "target-namespace"
-	anotherNamespace    string = "another-namespace"
+	testNamespace    string = "test-namespace"
+	targetNamespace  string = "target-namespace"
+	anotherNamespace string = "another-namespace"
 )
 
 var (
@@ -323,9 +323,9 @@ func (s *authorizerInterceptorSuite) newCrossNamespaceInterceptor(namespaces ...
 
 func (s *authorizerInterceptorSuite) TestCrossNamespaceCommands_Authorized() {
 	testCases := []struct {
-		name          string
-		commandType   enumspb.CommandType
-		expectedAPI   string
+		name        string
+		commandType enumspb.CommandType
+		expectedAPI string
 	}{
 		{
 			name:        "SignalExternalWorkflow",
@@ -416,9 +416,9 @@ func (s *authorizerInterceptorSuite) TestCrossNamespaceCommand_Unauthorized() {
 
 func (s *authorizerInterceptorSuite) TestNoExtraAuthCheck() {
 	testCases := []struct {
-		name           string
-		targetNs       string
-		description    string
+		name        string
+		targetNs    string
+		description string
 	}{
 		{
 			name:        "SameNamespace",
