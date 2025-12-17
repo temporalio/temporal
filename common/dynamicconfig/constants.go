@@ -1319,6 +1319,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
 	)
+	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
+		"matching.maxVersionsInTaskQueue",
+		200,
+		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue. 
+ Should be larger than MatchingMaxVersionsInDeployment because a task queue can be in versions spanning across more than one deployments.`,
+	)
 	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeploymentVersion",
 		100,
