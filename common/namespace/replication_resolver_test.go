@@ -273,7 +273,7 @@ func TestDefaultReplicationResolver_FailoverVersion(t *testing.T) {
 				FailoverVersion: tt.failoverVersion,
 			}
 			resolver := factory(detail)
-			assert.Equal(t, tt.want, resolver.FailoverVersion())
+			assert.Equal(t, tt.want, resolver.FailoverVersion(namespace.EmptyBusinessID))
 		})
 	}
 }
@@ -332,7 +332,7 @@ func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	assert.Equal(t, resolver.ActiveClusterName(), cloned.ActiveClusterName())
 	assert.Equal(t, resolver.ClusterNames(), cloned.ClusterNames())
 	assert.Equal(t, resolver.IsGlobalNamespace(), cloned.IsGlobalNamespace())
-	assert.Equal(t, resolver.FailoverVersion(), cloned.FailoverVersion())
+	assert.Equal(t, resolver.FailoverVersion(namespace.EmptyBusinessID), cloned.FailoverVersion(namespace.EmptyBusinessID))
 	assert.Equal(t, resolver.FailoverNotificationVersion(), cloned.FailoverNotificationVersion())
 	assert.Equal(t, resolver.ReplicationState(), cloned.ReplicationState())
 

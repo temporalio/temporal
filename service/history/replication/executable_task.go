@@ -746,7 +746,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
-		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion() {
+		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion(namespace.EmptyBusinessID) {
 			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
 				return "", false, err
@@ -766,8 +766,8 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 		return "", false, err
 	}
 	// need to make sure ns in cache is up-to-date
-	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion() < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
-		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion())
+	if e.replicationTask.VersionedTransition != nil && namespaceEntry.FailoverVersion(namespace.EmptyBusinessID) < e.replicationTask.VersionedTransition.NamespaceFailoverVersion {
+		return "", false, serviceerror.NewInternalf("cannot process task because namespace failover version is not up to date after sync, task version: %v, namespace version: %v", e.replicationTask.VersionedTransition.NamespaceFailoverVersion, namespaceEntry.FailoverVersion(namespace.EmptyBusinessID))
 	}
 
 	e.namespace.Store(namespaceEntry.Name())

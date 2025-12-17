@@ -211,8 +211,8 @@ func (ns *Namespace) ConfigVersion() int64 {
 }
 
 // FailoverVersion return the namespace failover version
-func (ns *Namespace) FailoverVersion() int64 {
-	return ns.replicationResolver.FailoverVersion()
+func (ns *Namespace) FailoverVersion(businessID string) int64 {
+	return ns.replicationResolver.FailoverVersion(businessID)
 }
 
 // IsGlobalNamespace returns whether the namespace is a global namespace.

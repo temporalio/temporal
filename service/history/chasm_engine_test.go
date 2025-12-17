@@ -540,7 +540,7 @@ func (s *chasmEngineSuite) currentRunConditionFailedErr(
 		RunID:            tv.RunID(),
 		State:            state,
 		Status:           status,
-		LastWriteVersion: s.namespaceEntry.FailoverVersion() - 1,
+		LastWriteVersion: s.namespaceEntry.FailoverVersion(tv.WorkflowID()) - 1,
 	}
 }
 
@@ -653,7 +653,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			},
 			TransitionHistory: []*persistencespb.VersionedTransition{
 				{
-					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 					TransitionCount:          10,
 				},
 			},
@@ -669,11 +669,11 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			"": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition: &persistencespb.VersionedTransition{
-						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          1,
 					},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          10,
 					},
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{

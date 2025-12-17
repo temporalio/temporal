@@ -10,7 +10,7 @@ type ReplicationResolver interface {
 	ClusterNames() []string
 	ReplicationState() enumspb.ReplicationState
 	IsGlobalNamespace() bool
-	FailoverVersion() int64
+	FailoverVersion(businessID string) int64
 	FailoverNotificationVersion() int64
 
 	// Mutation methods for modifying resolver state
@@ -72,7 +72,7 @@ func (r *defaultReplicationResolver) IsGlobalNamespace() bool {
 	return r.isGlobalNamespace
 }
 
-func (r *defaultReplicationResolver) FailoverVersion() int64 {
+func (r *defaultReplicationResolver) FailoverVersion(businessID string) int64 {
 	return r.failoverVersion
 }
 
