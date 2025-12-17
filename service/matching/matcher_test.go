@@ -482,7 +482,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().ErrorIs(err, errNoTasks)
+	t.ErrorIs(err, errNoTasks)
 	cancel()
 
 	// send query and expect generic DeadlineExceeded error
@@ -513,7 +513,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
-	t.Assert().ErrorIs(err, errNoTasks)
+	t.ErrorIs(err, errNoTasks)
 	cancel()
 
 	// wait 10ms after the poll
@@ -718,7 +718,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		func(ctx context.Context, in *matchingservice.PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 			wg.Done()
 			<-pollSigC
-			time.Sleep(time.Millisecond * 500) // delay poll to verify that offer blocks on parent
+			time.Sleep(time.Millisecond * 500) // nolint:forbidigo // delay poll to verify that offer blocks on parent
 			task, err := t.rootMatcher.Poll(ctx, &pollMetadata{})
 			if err != nil {
 				return nil, err
