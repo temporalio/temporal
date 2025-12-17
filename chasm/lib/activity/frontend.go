@@ -172,6 +172,18 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
+	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
+	req = common.CloneProto(req)
+
+	maxIDLen := h.config.MaxIDLengthLimit()
+	if len(req.GetRequestId()) > maxIDLen {
+		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	}
+
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
 	if err := validateInputSize(
 		req.GetActivityId(),
 		"activity-termination",
@@ -182,8 +194,6 @@ func (h *frontendHandler) TerminateActivityExecution(
 		namespaceName); err != nil {
 		return nil, err
 	}
-
-	// TODO add request ID validation when API updated
 
 	_, err = h.client.TerminateActivityExecution(ctx, &activitypb.TerminateActivityExecutionRequest{
 		NamespaceId:     namespaceID.String(),

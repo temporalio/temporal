@@ -94,8 +94,11 @@ message ActivityState {
     // Priority metadata.
     temporal.api.common.v1.Priority priority = 10;
 
-    // Set if activity cancelation was requested.
+    // Set if activity cancellation was requested.
     ActivityCancelState cancel_state = 11;
+
+    // Set if the activity was terminated
+    ActivityTerminateState terminate_state = 12;
 }
 
 message ActivityCancelState {
@@ -103,6 +106,10 @@ message ActivityCancelState {
     google.protobuf.Timestamp request_time = 2;
     string identity = 3;
     string reason = 4;
+}
+
+message ActivityTerminateState {
+  string request_id = 1;
 }
 
 message ActivityAttemptState {
