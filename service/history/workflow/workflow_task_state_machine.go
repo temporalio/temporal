@@ -491,18 +491,20 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		}
 	}
 	// emit metric
-	metrics.WorkflowSuggestContinueAsNewCount.With(m.metricsHandler.WithTags(
-		metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
-		metrics.VersioningBehaviorTag(m.ms.GetEffectiveVersioningBehavior()),
-		metrics.SuggestContinueAsNewReasonTooManyUpdatesTag(
-			slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)),
-		metrics.SuggestContinueAsNewReasonHistorySizeTooLargeTag(
-			slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)),
-		metrics.SuggestContinueAsNewReasonTooManyHistoryEventsTag(
-			slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)),
-		metrics.SuggestContinueAsNewReasonTargetVersionChangedTag(
-			slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)),
-	)).Record(1)
+	if suggestContinueAsNew {
+		metrics.WorkflowSuggestContinueAsNewCount.With(m.metricsHandler.WithTags(
+			metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
+			metrics.VersioningBehaviorTag(m.ms.GetEffectiveVersioningBehavior()),
+			metrics.SuggestContinueAsNewReasonTooManyUpdatesTag(
+				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)),
+			metrics.SuggestContinueAsNewReasonHistorySizeTooLargeTag(
+				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)),
+			metrics.SuggestContinueAsNewReasonTooManyHistoryEventsTag(
+				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)),
+			metrics.SuggestContinueAsNewReasonTargetVersionChangedTag(
+				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)),
+		)).Record(1)
+	}
 
 	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)
 	if err != nil {
