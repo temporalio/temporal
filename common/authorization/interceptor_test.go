@@ -270,77 +270,120 @@ func (m multiNamespaceChecker) Exists(name namespace.Name) error {
 	return errors.New("doesn't exist")
 }
 
-func (s *authorizerInterceptorSuite) TestCrossNamespaceSignalExternalWorkflow_Authorized() {
-	// Create request with cross-namespace signal command
-	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: testNamespace,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace,
-					},
+// Helper to create a cross-namespace command
+func makeCrossNamespaceCommand(commandType enumspb.CommandType, targetNs string) *commandpb.Command {
+	switch commandType {
+	case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
+		return &commandpb.Command{
+			CommandType: commandType,
+			Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
+				SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+					Namespace: targetNs,
 				},
 			},
-		},
+		}
+	case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+		return &commandpb.Command{
+			CommandType: commandType,
+			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+				StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+					Namespace: targetNs,
+				},
+			},
+		}
+	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
+		return &commandpb.Command{
+			CommandType: commandType,
+			Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{
+				RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
+					Namespace: targetNs,
+				},
+			},
+		}
+	default:
+		return nil
 	}
-
-	sourceTarget := &CallTarget{
-		Namespace: testNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-	}
-	crossNsTarget := &CallTarget{
-		Namespace: targetNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
-	}
-
-	// Setup interceptor with multi-namespace checker
-	interceptor := NewInterceptor(
-		s.mockClaimMapper,
-		s.mockAuthorizer,
-		s.mockMetricsHandler,
-		log.NewNoopLogger(),
-		multiNamespaceChecker{testNamespace, targetNamespace},
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
-	)
-
-	// Expect authorization for source namespace
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-	// Expect authorization for target namespace
-	s.mockMetricsHandler.EXPECT().WithTags(
-		metrics.OperationTag(metrics.AuthorizationScope),
-		metrics.NamespaceTag(targetNamespace),
-	).Return(s.mockMetricsHandler)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, crossNsTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-
-	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
-	s.True(res.(bool))
-	s.NoError(err)
 }
 
-func (s *authorizerInterceptorSuite) TestCrossNamespaceSignalExternalWorkflow_Unauthorized() {
-	// Create request with cross-namespace signal command
+// Helper to create interceptor with cross-namespace commands enabled
+func (s *authorizerInterceptorSuite) newCrossNamespaceInterceptor(namespaces ...string) *Interceptor {
+	return NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		multiNamespaceChecker(namespaces),
+		nil,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
+		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
+	)
+}
+
+func (s *authorizerInterceptorSuite) TestCrossNamespaceCommands_Authorized() {
+	testCases := []struct {
+		name          string
+		commandType   enumspb.CommandType
+		expectedAPI   string
+	}{
+		{
+			name:        "SignalExternalWorkflow",
+			commandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			expectedAPI: "SignalWorkflowExecution",
+		},
+		{
+			name:        "StartChildWorkflow",
+			commandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+			expectedAPI: "StartWorkflowExecution",
+		},
+		{
+			name:        "CancelExternalWorkflow",
+			commandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
+			expectedAPI: "RequestCancelWorkflowExecution",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			request := &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Namespace: testNamespace,
+				Commands:  []*commandpb.Command{makeCrossNamespaceCommand(tc.commandType, targetNamespace)},
+			}
+
+			sourceTarget := &CallTarget{
+				Namespace: testNamespace,
+				Request:   request,
+				APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
+			}
+			crossNsTarget := &CallTarget{
+				Namespace: targetNamespace,
+				Request:   request,
+				APIName:   api.WorkflowServicePrefix + tc.expectedAPI,
+			}
+
+			interceptor := s.newCrossNamespaceInterceptor(testNamespace, targetNamespace)
+
+			s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
+				Return(Result{Decision: DecisionAllow}, nil)
+			s.mockMetricsHandler.EXPECT().WithTags(
+				metrics.OperationTag(metrics.AuthorizationScope),
+				metrics.NamespaceTag(targetNamespace),
+			).Return(s.mockMetricsHandler)
+			s.mockAuthorizer.EXPECT().Authorize(ctx, nil, crossNsTarget).
+				Return(Result{Decision: DecisionAllow}, nil)
+
+			res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
+			s.True(res.(bool))
+			s.NoError(err)
+		})
+	}
+}
+
+func (s *authorizerInterceptorSuite) TestCrossNamespaceCommand_Unauthorized() {
 	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: testNamespace,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace,
-					},
-				},
-			},
-		},
+		Commands:  []*commandpb.Command{makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION, targetNamespace)},
 	}
 
 	sourceTarget := &CallTarget{
@@ -354,24 +397,10 @@ func (s *authorizerInterceptorSuite) TestCrossNamespaceSignalExternalWorkflow_Un
 		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
 	}
 
-	// Setup interceptor with multi-namespace checker
-	interceptor := NewInterceptor(
-		s.mockClaimMapper,
-		s.mockAuthorizer,
-		s.mockMetricsHandler,
-		log.NewNoopLogger(),
-		multiNamespaceChecker{testNamespace, targetNamespace},
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
-	)
+	interceptor := s.newCrossNamespaceInterceptor(testNamespace, targetNamespace)
 
-	// Expect authorization for source namespace (allowed)
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
 		Return(Result{Decision: DecisionAllow}, nil)
-	// Expect authorization for target namespace (denied)
 	s.mockMetricsHandler.EXPECT().WithTags(
 		metrics.OperationTag(metrics.AuthorizationScope),
 		metrics.NamespaceTag(targetNamespace),
@@ -385,128 +414,53 @@ func (s *authorizerInterceptorSuite) TestCrossNamespaceSignalExternalWorkflow_Un
 	s.Error(err)
 }
 
-func (s *authorizerInterceptorSuite) TestCrossNamespaceStartChildWorkflow_Authorized() {
-	// Create request with cross-namespace start child workflow command
-	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: testNamespace,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
-					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace,
-					},
-				},
-			},
+func (s *authorizerInterceptorSuite) TestNoExtraAuthCheck() {
+	testCases := []struct {
+		name           string
+		targetNs       string
+		description    string
+	}{
+		{
+			name:        "SameNamespace",
+			targetNs:    testNamespace, // Same as source
+			description: "command targeting same namespace should not trigger extra auth",
+		},
+		{
+			name:        "EmptyNamespace",
+			targetNs:    "", // Empty defaults to source
+			description: "command with empty namespace should not trigger extra auth",
 		},
 	}
 
-	sourceTarget := &CallTarget{
-		Namespace: testNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			request := &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Namespace: testNamespace,
+				Commands:  []*commandpb.Command{makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION, tc.targetNs)},
+			}
+
+			sourceTarget := &CallTarget{
+				Namespace: testNamespace,
+				Request:   request,
+				APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
+			}
+
+			// Only expect authorization for source namespace
+			s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
+				Return(Result{Decision: DecisionAllow}, nil)
+
+			res, err := s.interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
+			s.True(res.(bool))
+			s.NoError(err)
+		})
 	}
-	crossNsTarget := &CallTarget{
-		Namespace: targetNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "StartWorkflowExecution",
-	}
-
-	interceptor := NewInterceptor(
-		s.mockClaimMapper,
-		s.mockAuthorizer,
-		s.mockMetricsHandler,
-		log.NewNoopLogger(),
-		multiNamespaceChecker{testNamespace, targetNamespace},
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
-	)
-
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-	s.mockMetricsHandler.EXPECT().WithTags(
-		metrics.OperationTag(metrics.AuthorizationScope),
-		metrics.NamespaceTag(targetNamespace),
-	).Return(s.mockMetricsHandler)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, crossNsTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-
-	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
-	s.True(res.(bool))
-	s.NoError(err)
 }
 
-func (s *authorizerInterceptorSuite) TestCrossNamespaceCancelExternalWorkflow_Authorized() {
-	// Create request with cross-namespace cancel external workflow command
+func (s *authorizerInterceptorSuite) TestCrossNamespaceCommand_DisabledFeature() {
+	// When cross-namespace commands are disabled, no extra auth check should happen
 	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: testNamespace,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{
-					RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace,
-					},
-				},
-			},
-		},
-	}
-
-	sourceTarget := &CallTarget{
-		Namespace: testNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-	}
-	crossNsTarget := &CallTarget{
-		Namespace: targetNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "RequestCancelWorkflowExecution",
-	}
-
-	interceptor := NewInterceptor(
-		s.mockClaimMapper,
-		s.mockAuthorizer,
-		s.mockMetricsHandler,
-		log.NewNoopLogger(),
-		multiNamespaceChecker{testNamespace, targetNamespace},
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
-	)
-
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-	s.mockMetricsHandler.EXPECT().WithTags(
-		metrics.OperationTag(metrics.AuthorizationScope),
-		metrics.NamespaceTag(targetNamespace),
-	).Return(s.mockMetricsHandler)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, crossNsTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-
-	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
-	s.True(res.(bool))
-	s.NoError(err)
-}
-
-func (s *authorizerInterceptorSuite) TestSameNamespaceCommand_NoExtraAuthCheck() {
-	// Create request with command targeting the same namespace
-	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: testNamespace,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: testNamespace, // Same as source namespace
-					},
-				},
-			},
-		},
+		Commands:  []*commandpb.Command{makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION, targetNamespace)},
 	}
 
 	sourceTarget := &CallTarget{
@@ -515,7 +469,7 @@ func (s *authorizerInterceptorSuite) TestSameNamespaceCommand_NoExtraAuthCheck()
 		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
 	}
 
-	// Only expect authorization for source namespace, not for target (since they're the same)
+	// Interceptor with cross-namespace commands DISABLED (uses default s.interceptor which has it disabled)
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
 		Return(Result{Decision: DecisionAllow}, nil)
 
@@ -524,19 +478,16 @@ func (s *authorizerInterceptorSuite) TestSameNamespaceCommand_NoExtraAuthCheck()
 	s.NoError(err)
 }
 
-func (s *authorizerInterceptorSuite) TestEmptyNamespaceCommand_NoExtraAuthCheck() {
-	// Create request with command with empty namespace (defaults to source)
+func (s *authorizerInterceptorSuite) TestMultipleCommands_AuthDeduplication() {
+	// Test that authorization is deduplicated per namespace+API combination
 	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: testNamespace,
 		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: "", // Empty namespace
-					},
-				},
-			},
+			makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION, targetNamespace),
+			makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION, targetNamespace),
+			makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION, targetNamespace),
+			// Duplicate signal to same namespace - should not trigger extra auth
+			makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION, targetNamespace),
 		},
 	}
 
@@ -546,170 +497,37 @@ func (s *authorizerInterceptorSuite) TestEmptyNamespaceCommand_NoExtraAuthCheck(
 		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
 	}
 
-	// Only expect authorization for source namespace
+	interceptor := s.newCrossNamespaceInterceptor(testNamespace, targetNamespace)
+
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
 		Return(Result{Decision: DecisionAllow}, nil)
-
-	res, err := s.interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
-	s.True(res.(bool))
-	s.NoError(err)
-}
-
-func (s *authorizerInterceptorSuite) TestCrossNamespaceCommand_DisabledFeature_NoExtraAuthCheck() {
-	// Create request with cross-namespace signal command
-	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: testNamespace,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace, // Different namespace
-					},
-				},
-			},
-		},
-	}
-
-	sourceTarget := &CallTarget{
-		Namespace: testNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-	}
-
-	// Setup interceptor with cross-namespace commands DISABLED
-	interceptor := NewInterceptor(
-		s.mockClaimMapper,
-		s.mockAuthorizer,
-		s.mockMetricsHandler,
-		log.NewNoopLogger(),
-		multiNamespaceChecker{testNamespace, targetNamespace},
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands = false
-	)
-
-	// Only expect authorization for source namespace, NOT for target namespace
-	// because cross-namespace commands are disabled
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-
-	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
-	s.True(res.(bool))
-	s.NoError(err)
-}
-
-func (s *authorizerInterceptorSuite) TestDuplicateTargetNamespace_AuthPerAPIType() {
-	// Create request with multiple commands targeting the SAME namespace but different APIs
-	// Each API type should be authorized once per namespace
-	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: testNamespace,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace,
-					},
-				},
-			},
-			{
-				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
-					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace, // Same namespace as above
-					},
-				},
-			},
-			{
-				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{
-					RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace, // Same namespace again
-					},
-				},
-			},
-		},
-	}
-
-	sourceTarget := &CallTarget{
-		Namespace: testNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-	}
-	signalTarget := &CallTarget{
-		Namespace: targetNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
-	}
-	childTarget := &CallTarget{
-		Namespace: targetNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "StartWorkflowExecution",
-	}
-	cancelTarget := &CallTarget{
-		Namespace: targetNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "RequestCancelWorkflowExecution",
-	}
-
-	interceptor := NewInterceptor(
-		s.mockClaimMapper,
-		s.mockAuthorizer,
-		s.mockMetricsHandler,
-		log.NewNoopLogger(),
-		multiNamespaceChecker{testNamespace, targetNamespace},
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
-	)
-
-	// Expect authorization for source namespace
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-	// Expect authorization for each API type in target namespace
+	// Expect 3 auth checks (one per unique API type), not 4
 	s.mockMetricsHandler.EXPECT().WithTags(
 		metrics.OperationTag(metrics.AuthorizationScope),
 		metrics.NamespaceTag(targetNamespace),
 	).Return(s.mockMetricsHandler).Times(3)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, signalTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, childTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, cancelTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, &CallTarget{
+		Namespace: targetNamespace, Request: request, APIName: api.WorkflowServicePrefix + "SignalWorkflowExecution",
+	}).Return(Result{Decision: DecisionAllow}, nil)
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, &CallTarget{
+		Namespace: targetNamespace, Request: request, APIName: api.WorkflowServicePrefix + "StartWorkflowExecution",
+	}).Return(Result{Decision: DecisionAllow}, nil)
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, &CallTarget{
+		Namespace: targetNamespace, Request: request, APIName: api.WorkflowServicePrefix + "RequestCancelWorkflowExecution",
+	}).Return(Result{Decision: DecisionAllow}, nil)
 
 	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
 	s.True(res.(bool))
 	s.NoError(err)
 }
 
-func (s *authorizerInterceptorSuite) TestDuplicateNamespaceAndAPI_OnlyOneAuthCheck() {
-	// Create request with multiple commands of the SAME type targeting the SAME namespace
-	// Should only authorize once for the namespace+API combination
+func (s *authorizerInterceptorSuite) TestMultipleTargetNamespaces() {
+	// Test commands targeting different namespaces
 	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: testNamespace,
 		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace,
-					},
-				},
-			},
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace, // Same namespace and same command type
-					},
-				},
-			},
+			makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION, targetNamespace),
+			makeCrossNamespaceCommand(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION, anotherNamespace),
 		},
 	}
 
@@ -718,93 +536,8 @@ func (s *authorizerInterceptorSuite) TestDuplicateNamespaceAndAPI_OnlyOneAuthChe
 		Request:   request,
 		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
 	}
-	signalTarget := &CallTarget{
-		Namespace: targetNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
-	}
 
-	interceptor := NewInterceptor(
-		s.mockClaimMapper,
-		s.mockAuthorizer,
-		s.mockMetricsHandler,
-		log.NewNoopLogger(),
-		multiNamespaceChecker{testNamespace, targetNamespace},
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
-	)
-
-	// Expect authorization for source namespace
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-	// Expect authorization for target namespace ONLY ONCE despite 2 signal commands
-	s.mockMetricsHandler.EXPECT().WithTags(
-		metrics.OperationTag(metrics.AuthorizationScope),
-		metrics.NamespaceTag(targetNamespace),
-	).Return(s.mockMetricsHandler)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, signalTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-
-	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
-	s.True(res.(bool))
-	s.NoError(err)
-}
-
-func (s *authorizerInterceptorSuite) TestMultipleCrossNamespaceCommands_Authorized() {
-	// Create request with multiple cross-namespace commands
-	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: testNamespace,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
-					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-						Namespace: targetNamespace,
-					},
-				},
-			},
-			{
-				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
-					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						Namespace: anotherNamespace,
-					},
-				},
-			},
-		},
-	}
-
-	sourceTarget := &CallTarget{
-		Namespace: testNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
-	}
-	signalTarget := &CallTarget{
-		Namespace: targetNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
-	}
-	childTarget := &CallTarget{
-		Namespace: anotherNamespace,
-		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "StartWorkflowExecution",
-	}
-
-	interceptor := NewInterceptor(
-		s.mockClaimMapper,
-		s.mockAuthorizer,
-		s.mockMetricsHandler,
-		log.NewNoopLogger(),
-		multiNamespaceChecker{testNamespace, targetNamespace, anotherNamespace},
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
-	)
+	interceptor := s.newCrossNamespaceInterceptor(testNamespace, targetNamespace, anotherNamespace)
 
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
 		Return(Result{Decision: DecisionAllow}, nil)
@@ -812,14 +545,16 @@ func (s *authorizerInterceptorSuite) TestMultipleCrossNamespaceCommands_Authoriz
 		metrics.OperationTag(metrics.AuthorizationScope),
 		metrics.NamespaceTag(targetNamespace),
 	).Return(s.mockMetricsHandler)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, signalTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, &CallTarget{
+		Namespace: targetNamespace, Request: request, APIName: api.WorkflowServicePrefix + "SignalWorkflowExecution",
+	}).Return(Result{Decision: DecisionAllow}, nil)
 	s.mockMetricsHandler.EXPECT().WithTags(
 		metrics.OperationTag(metrics.AuthorizationScope),
 		metrics.NamespaceTag(anotherNamespace),
 	).Return(s.mockMetricsHandler)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, childTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, &CallTarget{
+		Namespace: anotherNamespace, Request: request, APIName: api.WorkflowServicePrefix + "StartWorkflowExecution",
+	}).Return(Result{Decision: DecisionAllow}, nil)
 
 	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
 	s.True(res.(bool))
