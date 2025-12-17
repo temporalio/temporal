@@ -115,7 +115,6 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 		s.currentClusterName,
 		s.forwardingEnabled,
 		s.mockNamespaceCache,
-		NewWorkflowIDExtractor(),
 	)
 }
 

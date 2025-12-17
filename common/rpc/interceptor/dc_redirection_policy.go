@@ -47,11 +47,10 @@ type (
 	// SelectedAPIsForwardingRedirectionPolicy is a DC redirection policy
 	// which (based on namespace) forwards selected APIs calls to active cluster
 	SelectedAPIsForwardingRedirectionPolicy struct {
-		currentClusterName  string
-		enabledForNS        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		namespaceRegistry   namespace.Registry
-		enableForAllAPIs    bool
-		workflowIDExtractor WorkflowIDExtractor
+		currentClusterName string
+		enabledForNS       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		namespaceRegistry  namespace.Registry
+		enableForAllAPIs   bool
 	}
 )
 
@@ -71,7 +70,6 @@ func RedirectionPolicyGenerator(
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
 	policy config.DCRedirectionPolicy,
-	workflowIDExtractor WorkflowIDExtractor,
 ) DCRedirectionPolicy {
 	switch policy.Policy {
 	case DCRedirectionPolicyDefault:
@@ -81,10 +79,10 @@ func RedirectionPolicyGenerator(
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry, workflowIDExtractor)
+		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
 	case DCRedirectionPolicyAllAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry, workflowIDExtractor)
+		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -112,13 +110,11 @@ func NewSelectedAPIsForwardingPolicy(
 	currentClusterName string,
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
-	workflowIDExtractor WorkflowIDExtractor,
 ) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
-		currentClusterName:  currentClusterName,
-		enabledForNS:        enabledForNS,
-		namespaceRegistry:   namespaceRegistry,
-		workflowIDExtractor: workflowIDExtractor,
+		currentClusterName: currentClusterName,
+		enabledForNS:       enabledForNS,
+		namespaceRegistry:  namespaceRegistry,
 	}
 }
 
@@ -127,37 +123,35 @@ func NewAllAPIsForwardingPolicy(
 	currentClusterName string,
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
-	workflowIDExtractor WorkflowIDExtractor,
 ) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
-		currentClusterName:  currentClusterName,
-		enabledForNS:        enabledForNS,
-		namespaceRegistry:   namespaceRegistry,
-		enableForAllAPIs:    true,
-		workflowIDExtractor: workflowIDExtractor,
+		currentClusterName: currentClusterName,
+		enabledForNS:       enabledForNS,
+		namespaceRegistry:  namespaceRegistry,
+		enableForAllAPIs:   true,
 	}
 }
 
 // WithNamespaceIDRedirect redirect the API call based on namespace ID
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, req any, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, _ any, call func(string) error) error {
 	namespaceEntry, err := policy.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(ctx, namespaceEntry, apiName, req, call)
+	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
 }
 
 // WithNamespaceRedirect redirect the API call based on namespace name
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, apiName string, req any, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, apiName string, _ any, call func(string) error) error {
 	namespaceEntry, err := policy.namespaceRegistry.GetNamespace(namespaceName)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(ctx, namespaceEntry, apiName, req, call)
+	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string, req any, call func(string) error) error {
-	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, apiName, req)
+func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string, call func(string) error) error {
+	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, apiName)
 
 	err := call(targetDC)
 
@@ -176,7 +170,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) isNamespaceNotActiveError
 	return namespaceNotActiveErr.ActiveCluster, true
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string, req any) (string, bool) {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string) (string, bool) {
 	if !namespaceEntry.IsGlobalNamespace() {
 		return policy.currentClusterName, false
 	}
@@ -186,7 +180,8 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	workflowID := policy.workflowIDExtractor.Extract(req)
+	// Get workflow ID from context (set by WorkflowIDInterceptor)
+	workflowID := GetWorkflowIDFromContext(ctx)
 
 	if policy.enableForAllAPIs {
 		return namespaceEntry.ActiveClusterName(workflowID), true

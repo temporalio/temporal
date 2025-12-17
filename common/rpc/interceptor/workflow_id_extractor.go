@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 )
@@ -35,50 +36,79 @@ type (
 	}
 )
 
-// Extract returns workflow ID from request using multiple patterns:
-// 1. Direct GetWorkflowId() field
-// 2. GetWorkflowExecution().GetWorkflowId()
-// 3. GetExecution().GetWorkflowId()
-// 4. TaskToken deserialization
-// Returns namespace.EmptyBusinessID if no workflow ID can be extracted.
-func (e WorkflowIDExtractor) Extract(req any) string {
+// Extract extracts workflow ID from the request using the specified pattern.
+// Returns the workflow ID or namespace.EmptyBusinessID if not found.
+func (e WorkflowIDExtractor) Extract(req any, pattern WorkflowIDPattern) string {
 	if req == nil {
 		return namespace.EmptyBusinessID
 	}
 
-	// Pattern 1: Direct WorkflowId field
-	if getter, ok := req.(workflowIDGetter); ok {
-		if wfID := getter.GetWorkflowId(); wfID != "" {
-			return wfID
-		}
-	}
+	switch pattern {
+	case PatternNone:
+		return namespace.EmptyBusinessID
 
-	// Pattern 2: WorkflowExecution.WorkflowId field
-	if getter, ok := req.(workflowExecutionGetter); ok {
-		if exec := getter.GetWorkflowExecution(); exec != nil {
-			if wfID := exec.GetWorkflowId(); wfID != "" {
-				return wfID
+	case PatternWorkflowID:
+		if getter, ok := req.(workflowIDGetter); ok {
+			return getter.GetWorkflowId()
+		}
+
+	case PatternWorkflowExecution:
+		if getter, ok := req.(workflowExecutionGetter); ok {
+			if exec := getter.GetWorkflowExecution(); exec != nil {
+				return exec.GetWorkflowId()
 			}
 		}
-	}
 
-	// Pattern 3: Execution.WorkflowId field
-	if getter, ok := req.(executionGetter); ok {
-		if exec := getter.GetExecution(); exec != nil {
-			if wfID := exec.GetWorkflowId(); wfID != "" {
-				return wfID
+	case PatternExecution:
+		if getter, ok := req.(executionGetter); ok {
+			if exec := getter.GetExecution(); exec != nil {
+				return exec.GetWorkflowId()
 			}
 		}
-	}
 
-	// Pattern 4: TaskToken containing WorkflowId
-	if getter, ok := req.(taskTokenGetter); ok {
-		if tokenBytes := getter.GetTaskToken(); len(tokenBytes) > 0 {
-			if taskToken, err := e.serializer.Deserialize(tokenBytes); err == nil {
-				return taskToken.GetWorkflowId()
+	case PatternTaskToken:
+		if getter, ok := req.(taskTokenGetter); ok {
+			if tokenBytes := getter.GetTaskToken(); len(tokenBytes) > 0 {
+				if taskToken, err := e.serializer.Deserialize(tokenBytes); err == nil {
+					return taskToken.GetWorkflowId()
+				}
 			}
 		}
+
+	case PatternMultiOperation:
+		return e.extractMultiOperation(req)
 	}
 
 	return namespace.EmptyBusinessID
+}
+
+// extractMultiOperation extracts workflow ID from ExecuteMultiOperationRequest.
+// The workflow ID is extracted from the first operation's StartWorkflow request.
+func (e WorkflowIDExtractor) extractMultiOperation(req any) string {
+	multiOpReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
+	if !ok {
+		return namespace.EmptyBusinessID
+	}
+
+	ops := multiOpReq.GetOperations()
+	if len(ops) == 0 {
+		return namespace.EmptyBusinessID
+	}
+
+	firstOp := ops[0]
+	if firstOp == nil {
+		return namespace.EmptyBusinessID
+	}
+
+	startWorkflow := firstOp.GetStartWorkflow()
+	if startWorkflow == nil {
+		// First operation is not StartWorkflow - try to get from UpdateWorkflow
+		updateWorkflow := firstOp.GetUpdateWorkflow()
+		if updateWorkflow != nil && updateWorkflow.GetWorkflowExecution() != nil {
+			return updateWorkflow.GetWorkflowExecution().GetWorkflowId()
+		}
+		return namespace.EmptyBusinessID
+	}
+
+	return startWorkflow.GetWorkflowId()
 }

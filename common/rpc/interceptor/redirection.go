@@ -165,14 +165,12 @@ func NewRedirection(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	clusterMetadata cluster.Metadata,
-	workflowIDExtractor WorkflowIDExtractor,
 ) *Redirection {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		clusterMetadata,
 		enabledForNS,
 		namespaceCache,
 		policy,
-		workflowIDExtractor,
 	)
 
 	return &Redirection{

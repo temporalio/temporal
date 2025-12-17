@@ -71,7 +71,6 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
 		s.clusterMetadata,
-		NewWorkflowIDExtractor(),
 	)
 }
 
