@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -859,19 +860,25 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 	}
 
 	combinedTypeMap := store.CombineTypeMaps(saTypeMap, chasmMapper)
+	registeredSearchAttributes := sqlplugin.VisibilitySearchAttributes{}
 
 	// Fix SQLite keyword list handling (convert string to []string for keyword lists)
 	for name, value := range rowSearchAttributes {
 		tp, err := combinedTypeMap.GetType(name)
 		if err != nil {
+			// Silently ignore ErrInvalidName for unregistered chasm search attributes
+			if sadefs.IsChasmSearchAttribute(name) && errors.Is(err, searchattribute.ErrInvalidName) {
+				continue
+			}
 			return nil, err
 		}
+		registeredSearchAttributes[name] = value
 		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
 			switch v := value.(type) {
 			case []string:
 				// no-op
 			case string:
-				rowSearchAttributes[name] = []string{v}
+				registeredSearchAttributes[name] = []string{v}
 			default:
 				return nil, serviceerror.NewInternal(
 					fmt.Sprintf("Unexpected data type for keyword list: %T (expected list of strings)", v),
@@ -881,7 +888,7 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 	}
 
 	// Encode all search attributes together
-	encodedSAs, err := searchattribute.Encode(rowSearchAttributes, &combinedTypeMap)
+	encodedSAs, err := searchattribute.Encode(registeredSearchAttributes, &combinedTypeMap)
 	if err != nil {
 		return nil, err
 	}

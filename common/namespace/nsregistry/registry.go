@@ -105,6 +105,7 @@ type (
 
 		// Temporary solution to force read search attributes from persistence
 		forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn
+		replicationResolverFactory              namespace.ReplicationResolverFactory
 	}
 )
 
@@ -119,6 +120,7 @@ func NewRegistry(
 	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) *registry {
 	reg := &registry{
 		persistence:              aPersistence,
@@ -133,6 +135,7 @@ func NewRegistry(
 		readthroughNotFoundCache: cache.New(readthroughCacheSize, &readthroughNotFoundCacheOpts),
 
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
+		replicationResolverFactory:              replicationResolverFactory,
 	}
 	return reg
 }
@@ -348,10 +351,15 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 			return err
 		}
 		for _, namespaceDb := range response.Namespaces {
-			ns := namespace.FromPersistentState(
+			ns, err := namespace.FromPersistentState(
 				namespaceDb.Namespace,
+				r.replicationResolverFactory(namespaceDb.Namespace),
 				namespace.WithGlobalFlag(namespaceDb.IsGlobalNamespace),
-				namespace.WithNotificationVersion(namespaceDb.NotificationVersion))
+				namespace.WithNotificationVersion(namespaceDb.NotificationVersion),
+			)
+			if err != nil {
+				return err
+			}
 			namespacesDb = append(namespacesDb, ns)
 			namespaceIDsDb[namespace.ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
 		}
@@ -378,6 +386,10 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	var stateChanged []*namespace.Namespace
 	for _, aNamespace := range namespacesDb {
 		oldNS := r.updateIDToNamespace(newIDToNamespace, aNamespace.ID(), aNamespace)
+		// If namespace was renamed, remove entry for the old name
+		if oldNS != nil && oldNS.Name() != aNamespace.Name() {
+			delete(newNameToID, oldNS.Name())
+		}
 		newNameToID[aNamespace.Name()] = aNamespace.ID()
 
 		if namespaceStateChanged(oldNS, aNamespace) {
@@ -524,6 +536,10 @@ func (r *registry) updateSingleNamespace(ns *namespace.Namespace) {
 	}
 
 	oldNS := r.updateIDToNamespace(r.idToNamespace, ns.ID(), ns)
+	// If namespace was renamed, remove entry for the old name
+	if oldNS != nil && oldNS.Name() != ns.Name() {
+		delete(r.nameToID, oldNS.Name())
+	}
 	r.nameToID[ns.Name()] = ns.ID()
 	if namespaceStateChanged(oldNS, ns) {
 		r.stateChangedDuringReadthrough = append(r.stateChangedDuringReadthrough, ns)
@@ -574,8 +590,10 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	}
 	return namespace.FromPersistentState(
 		response.Namespace,
+		r.replicationResolverFactory(response.Namespace),
 		namespace.WithGlobalFlag(response.IsGlobalNamespace),
-		namespace.WithNotificationVersion(response.NotificationVersion)), nil
+		namespace.WithNotificationVersion(response.NotificationVersion),
+	)
 }
 
 // this test should include anything that might affect whether a namespace is active on
@@ -584,7 +602,9 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 func namespaceStateChanged(old *namespace.Namespace, new *namespace.Namespace) bool {
 	return old == nil ||
 		old.State() != new.State() ||
+		old.Name() != new.Name() ||
 		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
-		old.ActiveClusterName() != new.ActiveClusterName() ||
+		// TODO: Refactor to use ns.ActiveInCluster() api
+		old.ActiveClusterName(namespace.EmptyBusinessID) != new.ActiveClusterName(namespace.EmptyBusinessID) ||
 		old.ReplicationState() != new.ReplicationState()
 }

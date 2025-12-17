@@ -59,12 +59,13 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
-	fx.Provide(chasm.ChasmRequestInterceptorProvider),
+	fx.Provide(chasm.ChasmEngineInterceptorProvider),
+	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(ChasmVisibilityManagerProvider),
+	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -208,9 +209,15 @@ func HealthCheckInterceptorProvider(
 }
 
 func HistoryAdditionalInterceptorsProvider(
-	healthCheckInterceptor *interceptor.HealthCheckInterceptor, chasmRequestInterceptor *chasm.ChasmRequestInterceptor,
+	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
+	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
+	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
-	return []grpc.UnaryServerInterceptor{healthCheckInterceptor.UnaryIntercept, chasmRequestInterceptor.Intercept}
+	return []grpc.UnaryServerInterceptor{
+		healthCheckInterceptor.UnaryIntercept,
+		chasmRequestEngineInterceptor.Intercept,
+		chasmRequestVisibilityInterceptor.Intercept,
+	}
 }
 
 func RateLimitInterceptorProvider(
