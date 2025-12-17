@@ -217,6 +217,21 @@ func TestValidateFailures(t *testing.T) {
 	}
 }
 
+func newTestFrontendHandler(
+	blobSizeLimitError func(string) int,
+	blobSizeLimitWarn func(string) int,
+	maxIDLengthLimit int,
+) *frontendHandler {
+	return &frontendHandler{
+		config: &Config{
+			BlobSizeLimitError: blobSizeLimitError,
+			BlobSizeLimitWarn:  blobSizeLimitWarn,
+			MaxIDLengthLimit:   func() int { return maxIDLengthLimit },
+		},
+		logger: log.NewNoopLogger(),
+	}
+}
+
 func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 	req := &workflowservice.StartActivityExecutionRequest{
 		ActivityId:   defaultActivityID,
@@ -231,13 +246,8 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 		Input:                  payloads.EncodeString("test-input"),
 	}
 
-	err := validateAndNormalizeStartActivityExecutionRequest(
-		req,
-		defaultBlobSizeLimitError,
-		defaultBlobSizeLimitWarn,
-		log.NewNoopLogger(),
-		defaultMaxIDLengthLimit,
-		nil)
+	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
+	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -256,13 +266,8 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 		Input:                  payloads.EncodeString(string(make([]byte, 1000))),
 	}
 
-	err := validateAndNormalizeStartActivityExecutionRequest(
-		req,
-		defaultBlobSizeLimitError,
-		defaultBlobSizeLimitWarn,
-		log.NewNoopLogger(),
-		defaultMaxIDLengthLimit,
-		nil)
+	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
+	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -284,13 +289,12 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		Input:                  payload,
 	}
 
-	err := validateAndNormalizeStartActivityExecutionRequest(
-		req,
+	h := newTestFrontendHandler(
 		func(ns string) int { return payloadSize + 1 },
 		func(ns string) int { return payloadSize },
-		log.NewNoopLogger(),
 		defaultMaxIDLengthLimit,
-		nil)
+	)
+	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 	require.NoError(t, err)
 }
 
@@ -307,13 +311,8 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 		RequestId:              "test-request-id",
 	}
 
-	err := validateAndNormalizeStartActivityExecutionRequest(
-		req,
-		defaultBlobSizeLimitError,
-		defaultBlobSizeLimitWarn,
-		log.NewNoopLogger(),
-		defaultMaxIDLengthLimit,
-		nil)
+	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
+	err := h.validateAndNormalizeStartActivityExecutionRequest(req)
 
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)
