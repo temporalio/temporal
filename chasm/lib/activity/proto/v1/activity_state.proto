@@ -97,7 +97,7 @@ message ActivityState {
     // Set if activity cancellation was requested.
     ActivityCancelState cancel_state = 11;
 
-    // Set if activity termination was requested.
+    // Set if the activity was terminated
     ActivityTerminateState terminate_state = 12;
 }
 

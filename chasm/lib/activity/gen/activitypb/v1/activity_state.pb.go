@@ -182,7 +182,7 @@ type ActivityState struct {
 	Priority *v1.Priority `protobuf:"bytes,10,opt,name=priority,proto3" json:"priority,omitempty"`
 	// Set if activity cancellation was requested.
 	CancelState *ActivityCancelState `protobuf:"bytes,11,opt,name=cancel_state,json=cancelState,proto3" json:"cancel_state,omitempty"`
-	// Set if activity termination was requested.
+	// Set if the activity was terminated
 	TerminateState *ActivityTerminateState `protobuf:"bytes,12,opt,name=terminate_state,json=terminateState,proto3" json:"terminate_state,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
