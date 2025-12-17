@@ -58,7 +58,7 @@ func Invoke(
 	versionMembershipCache cache.Cache,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
 	if err != nil {
 		return nil, err
 	}

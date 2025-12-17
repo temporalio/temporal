@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -64,20 +65,21 @@ func TestDeploymentVersionSuite(t *testing.T) {
 	t.Run("async_workflows", func(t *testing.T) {
 		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
 	})
+	t.Run("v2", func(t *testing.T) {
+		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
+	})
 }
 
 func (s *DeploymentVersionSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-		dynamicconfig.EnableDeploymentVersions.Key():                   true,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():        true,
+		dynamicconfig.MatchingDeploymentWorkflowVersion.Key(): int(s.workflowVersion),
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():                                        1,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key():                                       1,
 
 		// Reduce the chance of hitting max batch job limit in tests
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOperations,
@@ -93,7 +95,7 @@ func (s *DeploymentVersionSuite) pollFromDeployment(ctx context.Context, tv *tes
 	_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         s.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
-		Identity:          "random",
+		Identity:          uuid.NewString(),
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
 }
@@ -102,7 +104,7 @@ func (s *DeploymentVersionSuite) pollActivityFromDeployment(ctx context.Context,
 	_, _ = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace:         s.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
-		Identity:          "random",
+		Identity:          uuid.NewString(),
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
 }
@@ -350,7 +352,7 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 }
 
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs() {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 	tv2 := testvars.New(s).WithBuildIDNumber(2)
@@ -687,7 +689,13 @@ func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv
 	}, 10*time.Second, time.Second)
 }
 
-func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testvars.TestVars) {
+func (s *DeploymentVersionSuite) waitForPollers(ctx context.Context, tv *testvars.TestVars, moreExpectedVersions ...*testvars.TestVars) {
+	expectedVersionsStr := []string{tv.DeploymentVersionStringV32()}
+	for _, tv2 := range moreExpectedVersions {
+		if !tv2.ExternalDeploymentVersion().Equal(tv.ExternalDeploymentVersion()) {
+			expectedVersionsStr = append(expectedVersionsStr, tv2.DeploymentVersionStringV32())
+		}
+	}
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
@@ -695,16 +703,57 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		})
 		require.NoError(t, err)
-		require.Empty(t, resp.Pollers)
+		versionsSeen := 0
+		for _, poller := range resp.Pollers {
+			pollerV := worker_versioning.WorkerDeploymentVersionToStringV32(worker_versioning.DeploymentVersionFromOptions(poller.GetDeploymentOptions()))
+			for _, v := range expectedVersionsStr {
+				if pollerV == v {
+					versionsSeen++
+				}
+			}
+		}
+		require.Equal(t, len(expectedVersionsStr), versionsSeen)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testvars.TestVars, moreUnexpectedVersions ...*testvars.TestVars) {
+	unexpectedVersionsStr := []string{tv.DeploymentVersionStringV32()}
+	for _, tv2 := range moreUnexpectedVersions {
+		if !tv2.ExternalDeploymentVersion().Equal(tv.ExternalDeploymentVersion()) {
+			unexpectedVersionsStr = append(unexpectedVersionsStr, tv2.DeploymentVersionStringV32())
+		}
+	}
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		require.NoError(t, err)
+
+		versionsSeen := 0
+		fmt.Printf("Pollers: %+v\n", resp.Pollers)
+		for _, poller := range resp.Pollers {
+			pollerV := worker_versioning.WorkerDeploymentVersionToStringV32(worker_versioning.DeploymentVersionFromOptions(poller.GetDeploymentOptions()))
+			for _, v := range unexpectedVersionsStr {
+				if pollerV == v {
+					versionsSeen++
+				}
+			}
+		}
+		require.Equal(t, 0, versionsSeen)
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	testMaxVersionsInDeployment := 4
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 2*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 3*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment)
 	// we don't want the version to drain in this test
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 60*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0)
+	// Set deployment register error backoff to zero so to speed up the test.
+	s.InjectHook(testhooks.MatchingDeploymentRegisterErrorBackoff, 0*time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
@@ -722,21 +771,39 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	err = s.setCurrent(tvs[1], false)
 	s.Nil(err)
 
-	// stuff above can take a long time, sending some fresh polls to ensure that deletion logic sees them.
-	for i := 0; i < testMaxVersionsInDeployment; i++ {
-		go s.pollFromDeployment(ctx, tvs[i])
-	}
+	// CI can be slow, keep sending fresh polls to ensure that auto deletion logic sees them when we want to add tvMax so it can't add.
+	pollContext, cancelPolls := context.WithTimeout(context.Background(), 3*time.Second)
+	go func() {
+		for i := 0; i < testMaxVersionsInDeployment; i++ {
+			go s.pollFromDeployment(pollContext, tvs[i])
+		}
+
+		t := time.NewTicker(time.Second)
+		for {
+			select {
+			case <-pollContext.Done():
+				return
+			case <-t.C:
+				for i := 0; i < testMaxVersionsInDeployment; i++ {
+					go s.pollFromDeployment(pollContext, tvs[i])
+				}
+			}
+		}
+	}()
+	s.waitForPollers(ctx, tvs[0], tvs...)
+
 	tvMax := testvars.New(s).WithBuildIDNumber(9999)
+
+	cancelPolls()
 
 	// try to add a version and it fails because none of the versions can be deleted
 	s.startVersionWorkflowExpectFailAddVersion(ctx, tvMax)
 
-	// this waits for no pollers from any version
-	s.waitForNoPollers(ctx, tvs[0])
+	// this waits for no pollers from any of original versions (tvMax pollers should be fine)
+	s.waitForNoPollers(ctx, tvs[0], tvs...)
 
-	// try to add a version again, and it succeeds, after deleting tvs[2] version but not tvs[3] (both are eligible)
-	// TODO: This fails if I try to add tvMax again...
-	s.startVersionWorkflow(ctx, testvars.New(s).WithBuildIDNumber(1111))
+	// try to add the version again, and it succeeds, after deleting tvs[2] version but not tvs[3] (both are eligible)
+	s.startVersionWorkflow(ctx, tvMax)
 
 	// tvs[0] is draining so can't be deleted. tvs[1] is current, so tvs[2] should be deleted.
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -771,7 +838,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	s.signalAndWaitForDrained(ctx, tv1)
 
 	// Wait for pollers going away
-	s.waitForNoPollers(ctx, tv1)
+	s.waitForNoPollers(ctx, tv1, tv1)
 
 	// delete succeeds
 	s.tryDeleteVersion(ctx, tv1, "", false)

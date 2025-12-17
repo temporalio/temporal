@@ -94,7 +94,7 @@ func NewStarter(
 	versionMembershipCache cache.Cache,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}

@@ -691,7 +691,7 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 
 	if namespaceEntry != nil {
 	FilterLoop:
-		for _, targetCluster := range namespaceEntry.ClusterNames() {
+		for _, targetCluster := range namespaceEntry.ClusterNames(item.GetWorkflowID()) {
 			if s.clientClusterName == targetCluster {
 				shouldProcessTask = true
 				break FilterLoop

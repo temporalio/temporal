@@ -10,4 +10,5 @@ const (
 	UpdateWithStartOnClosingWorkflowRetry
 	TaskQueuesInDeploymentSyncBatchSize
 	MatchingIgnoreRoutingConfigRevisionCheck
+	MatchingDeploymentRegisterErrorBackoff
 )

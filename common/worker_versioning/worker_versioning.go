@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -279,16 +280,6 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 	}
 }
 
-// [cleanup-wv-pre-release]
-func FindDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
-	for i, d := range deployments.GetDeployments() { //nolint:staticcheck // SA1019: worker versioning v0.30
-		if d.Deployment.Equal(deployment) {
-			return i
-		}
-	}
-	return -1
-}
-
 func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
 	for i, vd := range deployments.GetVersions() {
 		if proto.Equal(v, vd.GetVersion()) {
@@ -305,11 +296,6 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 		return false
 	}
 
-	for _, d := range deployments.GetDeployments() {
-		if d.Deployment.Equal(DeploymentFromDeploymentVersion(v)) {
-			return true
-		}
-	}
 	for _, vd := range deployments.GetVersions() {
 		if proto.Equal(v, vd.GetVersion()) {
 			return true
@@ -318,10 +304,27 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 
 	// Check for the presence of the version in the new DeploymentData format.
 	if deploymentData, ok := deployments.GetDeploymentsData()[v.GetDeploymentName()]; ok {
-		return deploymentData.GetVersions()[v.GetBuildId()] != nil
+		vd := deploymentData.GetVersions()[v.GetBuildId()]
+		return vd != nil && !vd.GetDeleted()
 	}
 
 	return false
+}
+
+func CountDeploymentVersions(deployments *persistencespb.DeploymentData) int {
+	//nolint:staticcheck // SA1019
+	res := len(deployments.GetVersions())
+
+	// Check for the presence of the version in the new DeploymentData format.
+	for _, d := range deployments.GetDeploymentsData() {
+		for _, vd := range d.GetVersions() {
+			if vd != nil && !vd.GetDeleted() {
+				res++
+			}
+		}
+	}
+
+	return res
 }
 
 // DeploymentVersionFromDeployment Temporary helper function to convert Deployment to
@@ -765,19 +768,6 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	var current *deploymentspb.DeploymentVersionData
 	ramping := deployments.GetUnversionedRampData() // nil if there is no unversioned ramp
 
-	// Find old current
-	for _, d := range deployments.GetDeployments() {
-		// [cleanup-old-wv]
-		if d.Data.LastBecameCurrentTime != nil {
-			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
-				current = &deploymentspb.DeploymentVersionData{
-					Version:           DeploymentVersionFromDeployment(d.Deployment),
-					RoutingUpdateTime: d.Data.LastBecameCurrentTime,
-				}
-			}
-		}
-	}
-
 	// Find current and ramping
 	// [cleanup-pp-wv]
 	for _, v := range deployments.GetVersions() {
@@ -1062,4 +1052,53 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 		DeploymentName: before,
 		BuildId:        after,
 	}, nil
+}
+
+// CleanupOldDeletedVersions removes versions deleted more than 7 days ago. Also removes more deleted versions if
+// the limit is being exceeded. Never removes undeleted versions.
+func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData, maxVersions int) bool {
+	now := time.Now()
+	aWeekAgo := now.Add(-time.Hour * 24 * 7)
+
+	// Collect all deleted versions with their metadata
+	type deletedVersion struct {
+		buildID    string
+		updateTime time.Time
+	}
+	var deletedVersions []deletedVersion
+	undeletedCount := 0
+
+	for buildID, versionData := range deploymentData.Versions {
+		if versionData.GetDeleted() {
+			deletedVersions = append(deletedVersions, deletedVersion{
+				buildID:    buildID,
+				updateTime: versionData.GetUpdateTime().AsTime(),
+			})
+		} else {
+			undeletedCount++
+		}
+	}
+
+	// Sort deleted versions by update time (oldest first)
+	sort.Slice(deletedVersions, func(i, j int) bool {
+		return deletedVersions[i].updateTime.Before(deletedVersions[j].updateTime)
+	})
+
+	cleaned := false
+	totalCount := undeletedCount + len(deletedVersions)
+	for _, dv := range deletedVersions {
+		// Stop if:
+		// 1. This version is not older than 7 days AND
+		// 2. We're not exceeding the limit because of deleted versions
+		if !dv.updateTime.Before(aWeekAgo) && totalCount <= maxVersions {
+			break
+		}
+
+		// Remove this deleted version
+		delete(deploymentData.Versions, dv.buildID)
+		totalCount--
+		cleaned = true
+	}
+
+	return cleaned
 }
