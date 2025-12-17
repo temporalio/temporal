@@ -574,6 +574,7 @@ func FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
 	// Partial ramp. Decide based on workflow ID
 	wfRampThreshold := calcRampThreshold(workflowId)
 	if wfRampThreshold <= float64(rampingPercentage) {
+		fmt.Println("Choosing ramping version for this workflow ID:", workflowId)
 		return ramping, rampingRevisionNumber
 	}
 	return current, currentRevisionNumber

@@ -389,6 +389,11 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 
+	// TODO (Shivam): Right now, this only considers the backlog of the versioned queue for the poller scaling decision.
+	// The backlog of the unversioned queue should be considered for these decisions since current/ramping versions have their
+	// tasks sent to the unversioned queue.
+	// The right fix is to move MakePollerScalingDecision to the task queue partition manager and call the partitionManager.Describe method
+	// with the right buildID.
 	if task != nil {
 		task.pollerScalingDecision = dbq.MakePollerScalingDecision(pollMetadata.localPollStartTime)
 	}
@@ -421,10 +426,6 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 		if err != nil {
 			return err
 		}
-		fmt.Println("--------------------------------")
-		fmt.Println("newBacklogQueue", newBacklogQueue.QueueKey().Version().BuildId())
-		fmt.Println("syncMatchQueue", syncMatchQueue.QueueKey().Version().BuildId())
-		fmt.Println("--------------------------------")
 
 		// Update the task dispatch revision number on the task since the routingConfig of the partition
 		// may have changed after the task was spooled.
@@ -868,6 +869,7 @@ func splitAggregatedStatsByRampPercentage(
 	} else if rampCount > total {
 		rampCount = total
 	}
+
 	currentCount := total - rampCount
 
 	rampAddRate := unversionedAgg.GetTasksAddRate() * rampPct / 100

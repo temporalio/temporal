@@ -1464,13 +1464,13 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 			})
 	}
 
-	fmt.Println("--------------------------------")
-	fmt.Println("Number of version task queues:", len(resp.VersionTaskQueues))
-	for _, tq := range resp.VersionTaskQueues {
-		fmt.Println("Name:", tq.Name)
-		fmt.Println("Type:", tq.Type)
-		fmt.Println("Backlog count:", tq.Stats.ApproximateBacklogCount)
-	}
+	// fmt.Println("--------------------------------")
+	// fmt.Println("Number of version task queues:", len(resp.VersionTaskQueues))
+	// for _, tq := range resp.VersionTaskQueues {
+	// 	fmt.Println("Name:", tq.Name)
+	// 	fmt.Println("Type:", tq.Type)
+	// 	fmt.Println("Backlog count:", tq.Stats.ApproximateBacklogCount)
+	// }
 
 	pm.PutCache(cacheKey, resp)
 	return resp, nil
