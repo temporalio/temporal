@@ -409,7 +409,7 @@ func (s *authorizerInterceptorSuite) TestCrossNamespaceStartChildWorkflow_Author
 	crossNsTarget := &CallTarget{
 		Namespace: targetNamespace,
 		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution", // All cross-ns commands use SignalWorkflowExecution for auth
+		APIName:   api.WorkflowServicePrefix + "StartWorkflowExecution",
 	}
 
 	interceptor := NewInterceptor(
@@ -463,7 +463,7 @@ func (s *authorizerInterceptorSuite) TestCrossNamespaceCancelExternalWorkflow_Au
 	crossNsTarget := &CallTarget{
 		Namespace: targetNamespace,
 		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution", // All cross-ns commands use SignalWorkflowExecution for auth
+		APIName:   api.WorkflowServicePrefix + "RequestCancelWorkflowExecution",
 	}
 
 	interceptor := NewInterceptor(
@@ -601,8 +601,9 @@ func (s *authorizerInterceptorSuite) TestCrossNamespaceCommand_DisabledFeature_N
 	s.NoError(err)
 }
 
-func (s *authorizerInterceptorSuite) TestDuplicateTargetNamespace_OnlyOneAuthCheck() {
-	// Create request with multiple commands targeting the SAME namespace
+func (s *authorizerInterceptorSuite) TestDuplicateTargetNamespace_AuthPerAPIType() {
+	// Create request with multiple commands targeting the SAME namespace but different APIs
+	// Each API type should be authorized once per namespace
 	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: testNamespace,
 		Commands: []*commandpb.Command{
@@ -638,7 +639,86 @@ func (s *authorizerInterceptorSuite) TestDuplicateTargetNamespace_OnlyOneAuthChe
 		Request:   request,
 		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
 	}
-	crossNsTarget := &CallTarget{
+	signalTarget := &CallTarget{
+		Namespace: targetNamespace,
+		Request:   request,
+		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
+	}
+	childTarget := &CallTarget{
+		Namespace: targetNamespace,
+		Request:   request,
+		APIName:   api.WorkflowServicePrefix + "StartWorkflowExecution",
+	}
+	cancelTarget := &CallTarget{
+		Namespace: targetNamespace,
+		Request:   request,
+		APIName:   api.WorkflowServicePrefix + "RequestCancelWorkflowExecution",
+	}
+
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		multiNamespaceChecker{testNamespace, targetNamespace},
+		nil,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
+		dynamicconfig.GetBoolPropertyFn(true),  // enableCrossNamespaceCommands
+	)
+
+	// Expect authorization for source namespace
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+	// Expect authorization for each API type in target namespace
+	s.mockMetricsHandler.EXPECT().WithTags(
+		metrics.OperationTag(metrics.AuthorizationScope),
+		metrics.NamespaceTag(targetNamespace),
+	).Return(s.mockMetricsHandler).Times(3)
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, signalTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, childTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, cancelTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+
+	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
+	s.True(res.(bool))
+	s.NoError(err)
+}
+
+func (s *authorizerInterceptorSuite) TestDuplicateNamespaceAndAPI_OnlyOneAuthCheck() {
+	// Create request with multiple commands of the SAME type targeting the SAME namespace
+	// Should only authorize once for the namespace+API combination
+	request := &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: testNamespace,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
+					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+						Namespace: targetNamespace,
+					},
+				},
+			},
+			{
+				CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
+					SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+						Namespace: targetNamespace, // Same namespace and same command type
+					},
+				},
+			},
+		},
+	}
+
+	sourceTarget := &CallTarget{
+		Namespace: testNamespace,
+		Request:   request,
+		APIName:   api.WorkflowServicePrefix + "RespondWorkflowTaskCompleted",
+	}
+	signalTarget := &CallTarget{
 		Namespace: targetNamespace,
 		Request:   request,
 		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution",
@@ -660,12 +740,12 @@ func (s *authorizerInterceptorSuite) TestDuplicateTargetNamespace_OnlyOneAuthChe
 	// Expect authorization for source namespace
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, sourceTarget).
 		Return(Result{Decision: DecisionAllow}, nil)
-	// Expect authorization for target namespace ONLY ONCE despite 3 commands
+	// Expect authorization for target namespace ONLY ONCE despite 2 signal commands
 	s.mockMetricsHandler.EXPECT().WithTags(
 		metrics.OperationTag(metrics.AuthorizationScope),
 		metrics.NamespaceTag(targetNamespace),
 	).Return(s.mockMetricsHandler)
-	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, crossNsTarget).
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, signalTarget).
 		Return(Result{Decision: DecisionAllow}, nil)
 
 	res, err := interceptor.Intercept(ctx, request, respondWorkflowTaskCompletedInfo, s.handler)
@@ -710,7 +790,7 @@ func (s *authorizerInterceptorSuite) TestMultipleCrossNamespaceCommands_Authoriz
 	childTarget := &CallTarget{
 		Namespace: anotherNamespace,
 		Request:   request,
-		APIName:   api.WorkflowServicePrefix + "SignalWorkflowExecution", // All cross-ns commands use SignalWorkflowExecution for auth
+		APIName:   api.WorkflowServicePrefix + "StartWorkflowExecution",
 	}
 
 	interceptor := NewInterceptor(
