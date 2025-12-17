@@ -239,6 +239,12 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		}, cancelWorkflowsInRange, 0, numTargetWorkflows)
 		s.NoError(err)
 
+		{
+			ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+			defer cancel()
+			s.Error(run.Get(ctx, nil))
+		}
+
 		s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -247,12 +253,6 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 		}, 3*time.Second, 500*time.Millisecond)
-
-		{
-			ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-			defer cancel()
-			s.Error(run.Get(ctx, nil))
-		}
 		shardID := common.WorkflowIDToHistoryShard(s.NamespaceID().String(), cancelerWorkflowId, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 		workflowExecution, err := s.GetTestCluster().ExecutionManager().GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
