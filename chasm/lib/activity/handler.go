@@ -6,13 +6,18 @@ import (
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	errordetailspb "go.temporal.io/api/errordetails/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -24,20 +29,23 @@ var (
 
 	// TODO this will change once we rebase on main
 	businessIDConflictPolicyMap = map[enumspb.ActivityIdConflictPolicy]chasm.BusinessIDConflictPolicy{
-		enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL: chasm.BusinessIDConflictPolicyFail,
+		enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL:         chasm.BusinessIDConflictPolicyFail,
+		enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING: chasm.BusinessIDConflictPolicyUseExisting,
 	}
 )
 
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
+	logger            log.Logger
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config, metricsHandler metrics.Handler, namespaceRegistry namespace.Registry) *handler {
+func newHandler(config *Config, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
 	return &handler{
 		config:            config,
+		logger:            logger,
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -77,7 +85,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			return newActivity, &workflowservice.StartActivityExecutionResponse{
-				Started: true,
+				Started: true, // TODO for ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING, we need a know from chasm the execution is existing and to set false
 				// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 			}, nil
 		},
@@ -85,7 +93,27 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
+
 	if err != nil {
+		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
+		if errors.As(err, &alreadyStartedErr) {
+			details := &errordetailspb.ActivityExecutionAlreadyStartedFailure{
+				StartRequestId: alreadyStartedErr.CurrentRequestID,
+				RunId:          alreadyStartedErr.CurrentRunID,
+			}
+
+			errStatus := status.New(codes.AlreadyExists, "activity execution already started")
+
+			errStatusWithDetails, errDetail := status.New(codes.AlreadyExists, "activity execution already started").WithDetails(details)
+			if errDetail != nil {
+				h.logger.Error("Failed to add error details to ActivityExecutionAlreadyStartedFailure",
+					tag.Error(errDetail), tag.ActivityID(frontendReq.GetActivityId()))
+				return nil, errStatus.Err()
+			}
+
+			return nil, errStatusWithDetails.Err()
+		}
+
 		return nil, err
 	}
 
