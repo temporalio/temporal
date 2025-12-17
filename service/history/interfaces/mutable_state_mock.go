@@ -1769,9 +1769,9 @@ func (mr *MockMutableStateMockRecorder) CloneToProto() *gomock.Call {
 }
 
 // CloseTransactionAsMutation mocks base method.
-func (m *MockMutableState) CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence0.WorkflowMutation, []*persistence0.WorkflowEvents, error) {
+func (m *MockMutableState) CloseTransactionAsMutation(ctx context.Context, transactionPolicy TransactionPolicy) (*persistence0.WorkflowMutation, []*persistence0.WorkflowEvents, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseTransactionAsMutation", transactionPolicy)
+	ret := m.ctrl.Call(m, "CloseTransactionAsMutation", ctx, transactionPolicy)
 	ret0, _ := ret[0].(*persistence0.WorkflowMutation)
 	ret1, _ := ret[1].([]*persistence0.WorkflowEvents)
 	ret2, _ := ret[2].(error)
@@ -1779,15 +1779,15 @@ func (m *MockMutableState) CloseTransactionAsMutation(transactionPolicy Transact
 }
 
 // CloseTransactionAsMutation indicates an expected call of CloseTransactionAsMutation.
-func (mr *MockMutableStateMockRecorder) CloseTransactionAsMutation(transactionPolicy any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) CloseTransactionAsMutation(ctx, transactionPolicy any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsMutation", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsMutation), transactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsMutation", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsMutation), ctx, transactionPolicy)
 }
 
 // CloseTransactionAsSnapshot mocks base method.
-func (m *MockMutableState) CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence0.WorkflowSnapshot, []*persistence0.WorkflowEvents, error) {
+func (m *MockMutableState) CloseTransactionAsSnapshot(ctx context.Context, transactionPolicy TransactionPolicy) (*persistence0.WorkflowSnapshot, []*persistence0.WorkflowEvents, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseTransactionAsSnapshot", transactionPolicy)
+	ret := m.ctrl.Call(m, "CloseTransactionAsSnapshot", ctx, transactionPolicy)
 	ret0, _ := ret[0].(*persistence0.WorkflowSnapshot)
 	ret1, _ := ret[1].([]*persistence0.WorkflowEvents)
 	ret2, _ := ret[2].(error)
@@ -1795,9 +1795,9 @@ func (m *MockMutableState) CloseTransactionAsSnapshot(transactionPolicy Transact
 }
 
 // CloseTransactionAsSnapshot indicates an expected call of CloseTransactionAsSnapshot.
-func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(transactionPolicy any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(ctx, transactionPolicy any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), transactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), ctx, transactionPolicy)
 }
 
 // ContinueAsNewMinBackoff mocks base method.
@@ -3152,6 +3152,20 @@ func (m *MockMutableState) IsWorkflowExecutionRunning() bool {
 func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionRunning() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionRunning", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowExecutionRunning))
+}
+
+// IsWorkflowExecutionStatusPaused mocks base method.
+func (m *MockMutableState) IsWorkflowExecutionStatusPaused() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWorkflowExecutionStatusPaused")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsWorkflowExecutionStatusPaused indicates an expected call of IsWorkflowExecutionStatusPaused.
+func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionStatusPaused() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionStatusPaused", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowExecutionStatusPaused))
 }
 
 // IsWorkflowPendingOnWorkflowTaskBackoff mocks base method.

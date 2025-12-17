@@ -176,7 +176,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TearDownTest() {
 func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(s.replicationTask)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -215,7 +215,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Skip_TerminalStat
 
 func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -226,7 +226,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Skip_Namespace() 
 func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Err() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	err := errors.New("OwO")
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		"", false, err,
 	).AnyTimes()
 
@@ -236,7 +236,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Err() {
 func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(s.replicationTask)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := historyi.NewMockShardContext(s.controller)
@@ -270,7 +270,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success(
 }
 
 func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Error() {
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	err := serviceerrors.NewRetryReplication(
