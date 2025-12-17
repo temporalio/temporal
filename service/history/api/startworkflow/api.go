@@ -87,7 +87,7 @@ func NewStarter(
 	request *historyservice.StartWorkflowExecutionRequest,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (s *Starter) Invoke(
 		return nil, StartErr, err
 	}
 
-	creationParams, err := s.prepareNewWorkflow(request.GetWorkflowId())
+	creationParams, err := s.prepareNewWorkflow(ctx, request.GetWorkflowId())
 	if err != nil {
 		return nil, StartErr, err
 	}
@@ -230,7 +230,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
-func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
+func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*creationParams, error) {
 	runID := primitives.NewUUID().String()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
@@ -258,6 +258,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		)
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {

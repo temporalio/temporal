@@ -2942,6 +2942,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
+func (ms *MutableStateImpl) IsWorkflowExecutionStatusPaused() bool {
+	return ms.executionState.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+}
+
 func (ms *MutableStateImpl) AddWorkflowExecutionPausedEvent(
 	identity string,
 	reason string,
@@ -6661,9 +6665,10 @@ func (ms *MutableStateImpl) StartTransaction(
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsMutation(
+	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
-	result, err := ms.closeTransaction(transactionPolicy)
+	result, err := ms.closeTransaction(ctx, transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -6706,9 +6711,10 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
+	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
-	result, err := ms.closeTransaction(transactionPolicy)
+	result, err := ms.closeTransaction(ctx, transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -6797,6 +6803,7 @@ type closeTransactionResult struct {
 }
 
 func (ms *MutableStateImpl) closeTransaction(
+	ctx context.Context, // TODO Attach metadata map to context based on mutable state archetype
 	transactionPolicy historyi.TransactionPolicy,
 ) (closeTransactionResult, error) {
 	if err := ms.closeTransactionWithPolicyCheck(
@@ -6922,7 +6929,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 			return serviceerror.NewInternalf("no event definition registered for %v", t)
 		}
 		if def.IsWorkflowTaskTrigger() {
-			if !ms.HasPendingWorkflowTask() {
+			if !ms.HasPendingWorkflowTask() && !ms.IsWorkflowExecutionStatusPaused() {
 				if _, err := ms.AddWorkflowTaskScheduledEvent(
 					false,
 					enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
@@ -8014,7 +8021,7 @@ func (ms *MutableStateImpl) closeTransactionCollapseVisibilityTasks() {
 }
 
 func (ms *MutableStateImpl) generateReplicationTask() bool {
-	return len(ms.namespaceEntry.ClusterNames()) > 1
+	return len(ms.namespaceEntry.ClusterNames(ms.GetWorkflowKey().WorkflowID)) > 1
 }
 
 func (ms *MutableStateImpl) checkMutability(

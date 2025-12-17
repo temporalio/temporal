@@ -91,18 +91,18 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 		})
 	})
 
-	t.Run("async_without_revision_number", func(t *testing.T) {
+	t.Run("async", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
 			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
 			useV32:                    true,
+			useRevisionNumbers:        true,
 			useNewDeploymentData:      true,
-			useRevisionNumbers:        false,
 		})
 	})
 
-	t.Run("async_with_revision_number", func(t *testing.T) {
+	t.Run("async_version_rev_no", func(t *testing.T) {
 		suite.Run(t, &Versioning3Suite{
-			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			deploymentWorkflowVersion: workerdeployment.VersionDataRevisionNumber,
 			useV32:                    true,
 			useRevisionNumbers:        true,
 			useNewDeploymentData:      true,
@@ -2470,7 +2470,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
-		if behavior == vbUnpinned && s.deploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
+		if behavior == vbUnpinned && s.deploymentWorkflowVersion >= workerdeployment.AsyncSetCurrentAndRamping {
 			// Unpinned CaN should inherit parent deployment version and behaviour
 			s.verifyWorkflowVersioning(tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
 		} else {
@@ -3245,9 +3245,9 @@ func (s *Versioning3Suite) forgetTaskQueueDeploymentVersion(
 	}
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
-			NamespaceId:   s.NamespaceID().String(),
-			TaskQueue:     tv.TaskQueue().GetName(),
-			TaskQueueType: t,
+			NamespaceId:    s.NamespaceID().String(),
+			TaskQueue:      tv.TaskQueue().GetName(),
+			TaskQueueTypes: []enumspb.TaskQueueType{t},
 			Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
 				ForgetVersion: v,
 			},
@@ -3813,15 +3813,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			s.NoError(err)
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
-				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()
 				deploymentsData := perTypes[int32(pt.tp)].GetDeploymentData().GetDeploymentsData()
 				workerDeploymentData := deploymentsData[tv.DeploymentVersion().GetDeploymentName()]
 
-				for _, d := range deps {
-					if d.GetDeployment().Equal(tv.Deployment()) {
-						delete(remaining, pt)
-					}
-				}
 				if unversionedRamp {
 					if perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
 						delete(remaining, pt)
@@ -4897,4 +4891,79 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 		s.NoError(err)
 		return resp.GetIsMember()
 	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// TestMaxVersionsInTaskQueue tests that polling from a task queue with too many
+// versions returns a RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS error
+func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
+	// This test is not dependent on a particular deployment workflow version, but we don't want it repetitively
+	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Set a low limit for the test to make it faster
+	maxVersions := 5
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInTaskQueue, maxVersions)
+
+	tv := testvars.New(s)
+
+	// Pre-populate the task queue with maxVersions different deployment versions
+	// Each version will be in a separate deployment to ensure they count toward the limit
+	for i := 0; i < maxVersions; i++ {
+		tvVersion := tv.WithDeploymentSeriesNumber(i).WithBuildIDNumber(i)
+		upsertVersions := make(map[string]*deploymentspb.WorkerDeploymentVersionData)
+		upsertVersions[tvVersion.BuildID()] = &deploymentspb.WorkerDeploymentVersionData{
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		}
+
+		deploymentName := tvVersion.DeploymentVersion().GetDeploymentName()
+		_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+			ctx, &matchingservice.SyncDeploymentUserDataRequest{
+				NamespaceId:        s.NamespaceID().String(),
+				TaskQueue:          tv.TaskQueue().GetName(),
+				TaskQueueTypes:     []enumspb.TaskQueueType{tqTypeWf},
+				DeploymentName:     deploymentName,
+				UpsertVersionsData: upsertVersions,
+			},
+		)
+		s.NoError(err)
+	}
+
+	// Now try to poll with a new version from a new deployment
+	// This should fail with RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS
+	tvNewVersion := tv.WithDeploymentSeriesNumber(maxVersions).WithBuildIDNumber(maxVersions)
+
+	pollCtx, pollCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer pollCancel()
+
+	_, pollErr := s.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue:         tvNewVersion.TaskQueue(),
+		DeploymentOptions: tvNewVersion.WorkerDeploymentOptions(true),
+		Namespace:         s.Namespace().String(),
+		Identity:          tvNewVersion.WorkerIdentity(),
+	})
+
+	// Verify we got the expected resource exhausted error
+	s.Error(pollErr)
+	var resourceExhausted *serviceerror.ResourceExhausted
+	s.ErrorAs(pollErr, &resourceExhausted)
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, resourceExhausted.Cause,
+		"Expected RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS")
+	s.Contains(resourceExhausted.Message, "exceeding maximum number of Deployment Versions in this task queue",
+		"Error message should mention exceeding deployment version limit")
+	s.Contains(resourceExhausted.Message, fmt.Sprintf("limit = %d", maxVersions),
+		"Error message should include the limit value")
+}
+
+func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.deploymentWorkflowVersion < version {
+		s.T().Skipf("test supports workflow version %v and newer", version)
+	}
+}
+
+func (s *Versioning3Suite) skipFromVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.deploymentWorkflowVersion >= version {
+		s.T().Skipf("test supports workflow version older than %v", version)
+	}
 }
