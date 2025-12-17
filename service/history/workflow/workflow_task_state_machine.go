@@ -5,6 +5,7 @@ package workflow
 import (
 	"cmp"
 	"math"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -481,20 +482,27 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	if behavior := m.ms.GetEffectiveVersioningBehavior(); behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
+	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
 			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
 				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
 			suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
 			suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)
-			metrics.WorkflowExecutionTargetVersionChangedContinueAsNewSuggestions.With(
-				m.metricsHandler.WithTags(
-					metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
-					metrics.VersioningBehaviorTag(behavior),
-				),
-			).Record(1)
 		}
 	}
+	// emit metric
+	metrics.WorkflowSuggestContinueAsNewCount.With(m.metricsHandler.WithTags(
+		metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
+		metrics.VersioningBehaviorTag(m.ms.GetEffectiveVersioningBehavior()),
+		metrics.SuggestContinueAsNewReasonTooManyUpdatesTag(
+			slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)),
+		metrics.SuggestContinueAsNewReasonHistorySizeTooLargeTag(
+			slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)),
+		metrics.SuggestContinueAsNewReasonTooManyHistoryEventsTag(
+			slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)),
+		metrics.SuggestContinueAsNewReasonTargetVersionChangedTag(
+			slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)),
+	)).Record(1)
 
 	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)
 	if err != nil {
@@ -1359,11 +1367,9 @@ func (m *workflowTaskStateMachine) getHistorySizeInfo() (int64, []enumspb.Sugges
 	sizeLimit := int64(config.HistorySizeSuggestContinueAsNew(namespaceName))
 	countLimit := int64(config.HistoryCountSuggestContinueAsNew(namespaceName))
 	if historySize >= sizeLimit {
-		m.metricsHandler.Counter(metrics.WorkflowExecutionHistorySizeContinueAsNewSuggestions.Name()).Record(1)
 		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)
 	}
 	if historyCount >= countLimit {
-		m.metricsHandler.Counter(metrics.WorkflowExecutionHistoryLengthContinueAsNewSuggestions.Name()).Record(1)
 		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)
 	}
 	return historySize, reasons

@@ -1288,11 +1288,8 @@ var (
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 
 	// Continue-as-new
-	WorkflowExecutionUpdateContinueAsNewSuggestions               = NewCounterDef("workflow_update_continue_as_new_suggestions")
-	WorkflowExecutionHistoryLengthContinueAsNewSuggestions        = NewCounterDef("workflow_history_length_continue_as_new_suggestions")
-	WorkflowExecutionHistorySizeContinueAsNewSuggestions          = NewCounterDef("workflow_history_size_continue_as_new_suggestions")
-	WorkflowExecutionTargetVersionChangedContinueAsNewSuggestions = NewCounterDef("workflow_target_version_changed_continue_as_new_suggestions")
-	WorkflowContinueAsNewCount                                    = NewCounterDef("workflow_continue_as_new_count")
+	WorkflowContinueAsNewCount        = NewCounterDef("workflow_continue_as_new_count")
+	WorkflowSuggestContinueAsNewCount = NewCounterDef("workflow_suggest_continue_as_new_count")
 
 	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
 	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_success_count")
