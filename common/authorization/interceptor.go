@@ -282,6 +282,8 @@ func (a *Interceptor) authorizeTargetNamespaces(
 		return nil
 	}
 
+	// This is the only way to authorize cross-namespace commands since the target namespace
+	// is embedded in the commands within RespondWorkflowTaskCompletedRequest.
 	wftRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
 	if !ok {
 		return nil
