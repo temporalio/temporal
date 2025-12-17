@@ -77,6 +77,9 @@ func (e WorkflowIDExtractor) Extract(req any, pattern WorkflowIDPattern) string 
 
 	case PatternMultiOperation:
 		return e.extractMultiOperation(req)
+
+	default:
+		return namespace.EmptyBusinessID
 	}
 
 	return namespace.EmptyBusinessID
