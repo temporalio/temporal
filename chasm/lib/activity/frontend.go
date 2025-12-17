@@ -6,8 +6,10 @@ import (
 	"github.com/google/uuid"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -15,6 +17,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const StandaloneActivityDisabledError = "Standalone activity is disabled"
@@ -157,6 +161,101 @@ func (h *frontendHandler) PollActivityExecution(
 	return resp.GetFrontendResponse(), err
 }
 
+// ListActivityExecutions lists activity executions matching the query in the request.
+func (h *frontendHandler) ListActivityExecutions(
+	ctx context.Context,
+	req *workflowservice.ListActivityExecutionsRequest,
+) (*workflowservice.ListActivityExecutionsResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := chasm.ListExecutions[*Activity, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		NamespaceName: req.GetNamespace(),
+		PageSize:      int(req.GetPageSize()),
+		NextPageToken: req.GetNextPageToken(),
+		Query:         req.GetQuery(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	executions := make([]*apiactivitypb.ActivityExecutionListInfo, 0, len(resp.Executions))
+	for _, exec := range resp.Executions {
+		activityType, _ := chasm.GetValue(exec.ChasmSearchAttributes, TypeSearchAttribute)
+		taskQueue, _ := chasm.GetValue(exec.ChasmSearchAttributes, TaskQueueSearchAttribute)
+		statusStr, _ := chasm.GetValue(exec.ChasmSearchAttributes, StatusSearchAttribute)
+		status, _ := enumspb.ActivityExecutionStatusFromString(statusStr)
+
+		info := &apiactivitypb.ActivityExecutionListInfo{
+			ActivityId:           exec.BusinessID,
+			RunId:                exec.RunID,
+			ScheduleTime:         timestamppb.New(exec.StartTime),
+			StateTransitionCount: exec.StateTransitionCount,
+			StateSizeBytes:       exec.HistorySizeBytes,
+			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: exec.CustomSearchAttributes},
+			ActivityType:         &commonpb.ActivityType{Name: activityType},
+			TaskQueue:            taskQueue,
+			Status:               status,
+		}
+		if !exec.CloseTime.IsZero() {
+			info.CloseTime = timestamppb.New(exec.CloseTime)
+			if !exec.StartTime.IsZero() {
+				info.ExecutionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
+			}
+		}
+		executions = append(executions, info)
+	}
+
+	return &workflowservice.ListActivityExecutionsResponse{
+		Executions:    executions,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+// CountActivityExecutions counts activity executions matching the query in the request.
+func (h *frontendHandler) CountActivityExecutions(
+	ctx context.Context,
+	req *workflowservice.CountActivityExecutionsRequest,
+) (*workflowservice.CountActivityExecutionsResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := chasm.CountExecutions[*Activity](ctx, &chasm.CountExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		NamespaceName: req.GetNamespace(),
+		Query:         req.GetQuery(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountActivityExecutionsResponse_AggregationGroup, 0, len(resp.Groups))
+	for _, g := range resp.Groups {
+		groups = append(groups, &workflowservice.CountActivityExecutionsResponse_AggregationGroup{
+			GroupValues: g.Values,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountActivityExecutionsResponse{
+		Count:  resp.Count,
+		Groups: groups,
+	}, nil
+}
+
 // TerminateActivityExecution terminates a standalone activity execution
 func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,
@@ -275,18 +374,53 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	applyActivityOptionsToStartRequest(opts, req)
 
-	err = validateAndNormalizeStartActivityExecutionRequest(
-		req,
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
-		h.logger,
-		h.config.MaxIDLengthLimit(),
-		h.saValidator)
+	err = h.validateAndNormalizeStartActivityExecutionRequest(req)
 	if err != nil {
 		return nil, err
 	}
 
 	return req, nil
+}
+
+// validateAndNormalizeStartActivityExecutionRequest validates and normalizes the standalone
+// activity specific attributes. Note that this method mutates the input params; the caller must
+// clone the request if necessary (e.g. if it may be retried).
+func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
+	req *workflowservice.StartActivityExecutionRequest,
+) error {
+	if req.GetRequestId() == "" {
+		req.RequestId = uuid.NewString()
+	}
+
+	if len(req.GetRequestId()) > h.config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	}
+
+	if err := normalizeAndValidateIDPolicy(req); err != nil {
+		return err
+	}
+
+	if err := validateInputSize(
+		req.GetActivityId(),
+		req.GetActivityType().GetName(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		req.Input.Size(),
+		h.logger,
+		req.GetNamespace()); err != nil {
+		return err
+	}
+
+	if req.GetSearchAttributes() != nil {
+		if err := validateAndNormalizeSearchAttributes(
+			req,
+			h.saMapperProvider,
+			h.saValidator); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // activityOptionsFromStartRequest builds an ActivityOptions from the inlined fields

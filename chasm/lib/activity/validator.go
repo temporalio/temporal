@@ -165,51 +165,6 @@ func normalizeAndValidateTimeouts(
 	return nil
 }
 
-// validateAndNormalizeStartActivityExecutionRequest validates and normalizes the standalone activity specific attributes.
-// IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
-// (i.e., when incoming request can potentially be retried), clone the params first before passing it in.
-func validateAndNormalizeStartActivityExecutionRequest(
-	req *workflowservice.StartActivityExecutionRequest,
-	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	logger log.Logger,
-	maxIDLengthLimit int,
-	saValidator *searchattribute.Validator,
-) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
-	if len(req.GetRequestId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
-	}
-
-	if err := normalizeAndValidateIDPolicy(req); err != nil {
-		return err
-	}
-
-	if err := validateInputSize(
-		req.GetActivityId(),
-		req.GetActivityType().GetName(),
-		blobSizeLimitError,
-		blobSizeLimitWarn,
-		req.Input.Size(),
-		logger,
-		req.GetNamespace()); err != nil {
-		return err
-	}
-
-	if req.GetSearchAttributes() != nil {
-		if err := validateAndNormalizeSearchAttributes(
-			req,
-			saValidator); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
 	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
 		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
@@ -251,15 +206,26 @@ func validateInputSize(
 
 func validateAndNormalizeSearchAttributes(
 	req *workflowservice.StartActivityExecutionRequest,
+	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
 	namespaceName := req.GetNamespace()
 
-	if err := saValidator.Validate(req.SearchAttributes, namespaceName); err != nil {
+	// Unalias search attributes for validation.
+	saToValidate := req.SearchAttributes
+	if saMapperProvider != nil && saToValidate != nil {
+		var err error
+		saToValidate, err = searchattribute.UnaliasFields(saMapperProvider, saToValidate, namespaceName)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := saValidator.Validate(saToValidate, namespaceName); err != nil {
 		return err
 	}
 
-	return saValidator.ValidateSize(req.SearchAttributes, namespaceName)
+	return saValidator.ValidateSize(saToValidate, namespaceName)
 }
 
 // ValidateDescribeActivityExecutionRequest validates DescribeActivityExecutionRequest.
