@@ -8001,7 +8001,7 @@ func (ms *MutableStateImpl) closeTransactionCollapseVisibilityTasks() {
 }
 
 func (ms *MutableStateImpl) generateReplicationTask() bool {
-	return len(ms.namespaceEntry.ClusterNames()) > 1
+	return len(ms.namespaceEntry.ClusterNames(ms.GetWorkflowKey().WorkflowID)) > 1
 }
 
 func (ms *MutableStateImpl) checkMutability(
