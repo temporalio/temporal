@@ -5,11 +5,9 @@ inputs:
   image-tags:
     description: "Image tags (one per line or comma-separated). First tag will be used for scanning."
     required: true
-    type: string
   image-name:
     description: "Image name without tag (e.g., temporaliotest/server)"
     required: true
-    type: string
 
 outputs:
   scan-result:
