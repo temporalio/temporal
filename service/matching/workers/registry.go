@@ -10,13 +10,13 @@ type (
 	ListWorkersParams struct {
 		Query         string
 		PageSize      int
-		NextPageToken []byte
+		NextPageToken []byte // Opaque token from a previous response to resume pagination.
 	}
 
 	// ListWorkersResponse contains the result of listing workers.
 	ListWorkersResponse struct {
 		Workers       []*workerpb.WorkerHeartbeat
-		NextPageToken []byte
+		NextPageToken []byte // Opaque token for the next page; nil if no more results.
 	}
 
 	Registry interface {
