@@ -203,6 +203,8 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, nexus.HandlerErrorRetryBehaviorUnspecified, handlerErr.RetryBehavior)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
+				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
+				require.NotNil(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
 		},
@@ -223,6 +225,8 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, nexus.HandlerErrorRetryBehaviorNonRetryable, handlerErr.RetryBehavior)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
+				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
+				require.NotNil(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
 		},
@@ -248,7 +252,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
-				require.Equal(t, "upstream timeout", handlerErr.Cause.Error())
+				require.Equal(t, "upstream timeout", handlerErr.Message)
 			},
 		},
 	}
@@ -343,7 +347,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Na
 	var handlerError *nexus.HandlerError
 	s.ErrorAs(err, &handlerError)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerError.Type)
-	s.Equal(fmt.Sprintf("namespace not found: %q", namespace), handlerError.Cause.Error())
+	s.Equal(fmt.Sprintf("namespace not found: %q", namespace), handlerError.Message)
 
 	snap := capture.Snapshot()
 
@@ -406,7 +410,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 			},
 			checkFailure: func(t *testing.T, handlerErr *nexus.HandlerError) {
 				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-				require.Equal(t, "permission denied: unauthorized in test", handlerErr.Cause.Error())
+				require.Equal(t, "permission denied: unauthorized in test", handlerErr.Message)
 			},
 			expectedOutcomeMetric:  "unauthorized",
 			exposeAuthorizerErrors: false,
@@ -427,7 +431,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 			},
 			checkFailure: func(t *testing.T, handlerErr *nexus.HandlerError) {
 				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-				require.Equal(t, "permission denied", handlerErr.Cause.Error())
+				require.Equal(t, "permission denied", handlerErr.Message)
 			},
 			expectedOutcomeMetric:  "unauthorized",
 			exposeAuthorizerErrors: false,
@@ -448,7 +452,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 			},
 			checkFailure: func(t *testing.T, handlerErr *nexus.HandlerError) {
 				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-				require.Equal(t, "permission denied", handlerErr.Cause.Error())
+				require.Equal(t, "permission denied", handlerErr.Message)
 			},
 			expectedOutcomeMetric:  "unauthorized",
 			exposeAuthorizerErrors: false,
@@ -469,7 +473,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 			},
 			checkFailure: func(t *testing.T, handlerErr *nexus.HandlerError) {
 				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
-				require.Equal(t, "exposed error", handlerErr.Cause.Error())
+				require.Equal(t, "exposed error", handlerErr.Message)
 			},
 			expectedOutcomeMetric:  "internal_auth_error",
 			exposeAuthorizerErrors: true,
@@ -536,7 +540,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-				require.Equal(t, "permission denied", handlerErr.Cause.Error())
+				require.Equal(t, "permission denied", handlerErr.Message)
 				require.Equal(t, 0, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
@@ -549,7 +553,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnauthenticated, handlerErr.Type)
-				require.Equal(t, "unauthorized", handlerErr.Cause.Error())
+				require.Equal(t, "401 Unauthorized", handlerErr.Message)
 				require.Equal(t, 1, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
@@ -662,7 +666,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_PayloadSizeLimit() {
 		var handlerErr *nexus.HandlerError
 		require.ErrorAs(t, err, &handlerErr)
 		require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
-		require.Equal(t, "input exceeds size limit", handlerErr.Cause.Error())
+		require.Equal(t, "input exceeds size limit", handlerErr.Message)
 	}
 
 	s.T().Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
@@ -722,6 +726,8 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
+				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
+				require.NotNil(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
 		},
@@ -741,7 +747,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
-				require.Equal(t, "upstream timeout", handlerErr.Cause.Error())
+				require.Equal(t, "upstream timeout", handlerErr.Message)
 			},
 		},
 	}

@@ -765,17 +765,12 @@ func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.D
 	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE:
 		retryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
 	}
-
-	nf := commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure())
 	handlerError := &nexus.HandlerError{
-		Type:          nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
-		Message:       nf.Message,
+		Type: nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
+		Cause: &nexus.FailureError{
+			Failure: commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure()),
+		},
 		RetryBehavior: retryBehavior,
-	}
-	if nf.Cause != nil {
-		handlerError.Cause = &nexus.FailureError{
-			Failure: *nf.Cause,
-		}
 	}
 
 	switch handlerError.Type {

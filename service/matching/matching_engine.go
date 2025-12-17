@@ -2405,8 +2405,14 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 			return nil, result.internalError
 		}
 		if result.failedWorkerResponse != nil {
-			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{
-				HandlerError: result.failedWorkerResponse.GetRequest().GetError(),
+			if result.failedWorkerResponse.GetRequest().GetError() != nil {
+				// Deprecated case. Kept for backwards-compatibility with older SDKs that are sending errors instead of failures.
+				return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{
+					HandlerError: result.failedWorkerResponse.GetRequest().GetError(),
+				}}, nil
+			}
+			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
+				Failure: result.failedWorkerResponse.GetRequest().GetFailure(),
 			}}, nil
 		}
 

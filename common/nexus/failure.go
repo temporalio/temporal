@@ -142,8 +142,11 @@ func NexusFailureToAPIFailure(f nexus.Failure) (*failurepb.Failure, error) {
 					State: se.State,
 				},
 			}
-			if err := protojson.Unmarshal([]byte(se.EncodedAttributes), apiFailure.EncodedAttributes); err != nil {
-				return nil, fmt.Errorf("failed to deserialize OperationError attributes: %w", err)
+			if len(se.EncodedAttributes) > 0 {
+				apiFailure.EncodedAttributes = &commonpb.Payload{}
+				if err := protojson.Unmarshal([]byte(se.EncodedAttributes), apiFailure.EncodedAttributes); err != nil {
+					return nil, fmt.Errorf("failed to deserialize OperationError attributes: %w", err)
+				}
 			}
 			if f.Cause != nil {
 				apiFailure.Cause, err = NexusFailureToAPIFailure(*f.Cause)
@@ -172,8 +175,11 @@ func NexusFailureToAPIFailure(f nexus.Failure) (*failurepb.Failure, error) {
 					RetryBehavior: retryBehavior,
 				},
 			}
-			if err := protojson.Unmarshal([]byte(se.EncodedAttributes), apiFailure.EncodedAttributes); err != nil {
-				return nil, fmt.Errorf("failed to deserialize HandlerError attributes: %w", err)
+			if len(se.EncodedAttributes) > 0 {
+				apiFailure.EncodedAttributes = &commonpb.Payload{}
+				if err := protojson.Unmarshal([]byte(se.EncodedAttributes), apiFailure.EncodedAttributes); err != nil {
+					return nil, fmt.Errorf("failed to deserialize HandlerError attributes: %w", err)
+				}
 			}
 			if f.Cause != nil {
 				apiFailure.Cause, err = NexusFailureToAPIFailure(*f.Cause)
@@ -199,9 +205,10 @@ func NexusFailureToAPIFailure(f nexus.Failure) (*failurepb.Failure, error) {
 	return apiFailure, nil
 }
 
-func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError, retryable bool) (*failurepb.Failure, error) {
 	var nexusFailure nexus.Failure
-	failureErr, ok := opErr.Cause.(*nexus.FailureError)
+	var failureErr *nexus.FailureError
+	ok := errors.As(opErr.Cause, &failureErr)
 	if ok {
 		nexusFailure = failureErr.Failure
 	} else if opErr.Cause != nil {
@@ -236,7 +243,14 @@ func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Fa
 		}, nil
 	}
 
-	return NexusFailureToAPIFailure(nexusFailure)
+	f, err := NexusFailureToAPIFailure(nexusFailure)
+	if err != nil {
+		return nil, err
+	}
+	if f.GetApplicationFailureInfo() != nil {
+		f.GetApplicationFailureInfo().NonRetryable = !retryable
+	}
+	return f, nil
 }
 
 func nexusFailureMetadataToPayloads(failure nexus.Failure) (*commonpb.Payloads, error) {

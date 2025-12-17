@@ -867,7 +867,14 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 		if err != nil {
 			return nil, err
 		}
-		return commonnexus.NexusFailureToAPIFailure(nf)
+		f, err := commonnexus.NexusFailureToAPIFailure(nf)
+		if err != nil {
+			return nil, err
+		}
+		if f.GetApplicationFailureInfo() != nil {
+			f.GetApplicationFailureInfo().NonRetryable = !retryable
+		}
+		return f, nil
 	}
 
 	return &failurepb.Failure{

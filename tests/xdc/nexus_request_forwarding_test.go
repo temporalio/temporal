@@ -191,6 +191,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
+				require.NotNil(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error:INTERNAL")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
@@ -211,7 +213,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
-				require.Equal(t, "cluster inactive", handlerErr.Cause.Error())
+				require.Equal(t, "cluster inactive", handlerErr.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -315,6 +317,8 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
+				require.NotNil(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error:INTERNAL")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
@@ -335,7 +339,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
-				require.Equal(t, "cluster inactive", handlerErr.Cause.Error())
+				require.Equal(t, "cluster inactive", handlerErr.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},

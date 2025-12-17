@@ -201,15 +201,22 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		failureErr, ok := r.Error.(*nexus.FailureError)
-		if !ok {
+		var failureErr *nexus.FailureError
+		var operationErr *nexus.OperationError
+		switch {
+		case errors.As(r.Error, &failureErr):
+			hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
+				Failure: commonnexus.NexusFailureToProtoFailure(failureErr.Failure),
+			}
+		case errors.As(r.Error, &operationErr):
+			hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
+				Failure: commonnexus.NexusFailureToProtoFailure(*operationErr.OriginalFailure),
+			}
+		default:
 			// This shouldn't happen as the Nexus SDK is always expected to convert Failures from the wire to
-			// FailureErrors.
-			logger.Error("result error is not a FailureError", tag.Error(err))
+			// FailureError or OperationErrors.
+			logger.Error("result error is not an OperationError or FailureError", tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
-		}
-		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
-			Failure: commonnexus.NexusFailureToProtoFailure(failureErr.Failure),
 		}
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload

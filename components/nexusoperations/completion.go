@@ -49,7 +49,7 @@ func handleOperationError(
 	if err != nil {
 		return err
 	}
-	failure, err := commonnexus.OperationErrorToTemporalFailure(opFailedError)
+	failure, err := commonnexus.OperationErrorToTemporalFailure(opFailedError, false)
 	if err != nil {
 		return err
 	}

@@ -234,8 +234,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/ncruces/go-strftime v0.1.9 h1:bY0MQC28UADQmHmaF5dgpLmImcShSi2kHU9XLdhx/f4=
 github.com/ncruces/go-strftime v0.1.9/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
-github.com/nexus-rpc/sdk-go v0.5.2-0.20251205193432-20a8501a0c1b h1:JOkfj0lBDtxFiHaU0eCSfsM6mI/gc8GCOd5AFNxjAjQ=
-github.com/nexus-rpc/sdk-go v0.5.2-0.20251205193432-20a8501a0c1b/go.mod h1:FHdPfVQwRuJFZFTF0Y2GOAxCrbIBNrcPna9slkGKPYk=
+github.com/nexus-rpc/sdk-go v0.5.2-0.20251217172131-63a8027ef960 h1:ljAYqlX3IFBf7zqF8JGAgn21k7PBq4qyS8d45LcLDmQ=
+github.com/nexus-rpc/sdk-go v0.5.2-0.20251217172131-63a8027ef960/go.mod h1:FHdPfVQwRuJFZFTF0Y2GOAxCrbIBNrcPna9slkGKPYk=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/olekukonko/tablewriter v0.0.5 h1:P2Ga83D34wi1o9J6Wh1mRuqd4mF/x/lgBS7N7AbDhec=
 github.com/olekukonko/tablewriter v0.0.5/go.mod h1:hPp6KlRPjbx+hW8ykQs1w3UBbZlj6HuIJcUGPhkA7kY=

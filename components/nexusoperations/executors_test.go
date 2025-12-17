@@ -288,7 +288,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (INTERNAL): internal server error", op.LastAttemptFailure.Message)
+				require.Equal(t, "internal server error", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
 		},
@@ -352,7 +352,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, 1, len(events))
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
+				require.Equal(t, "endpoint not registered", failure.Message)
 			},
 		},
 		{
@@ -366,9 +366,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, 1, len(events))
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
-				require.NotNil(t, failure.Cause.GetApplicationFailureInfo())
-				require.Equal(t, "endpoint not registered", failure.Cause.Message)
+				require.Equal(t, "endpoint not registered", failure.Message)
 			},
 		},
 		{
@@ -654,7 +652,9 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (INTERNAL): operation not found", c.LastAttemptFailure.Message)
+				require.Equal(t, "500 Internal Server Error", c.LastAttemptFailure.Message)
+				require.NotNil(t, c.LastAttemptFailure.Cause)
+				require.Equal(t, "operation not found", c.LastAttemptFailure.Cause.Message)
 			},
 		},
 		{
@@ -698,7 +698,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (INTERNAL): internal server error", c.LastAttemptFailure.Message)
+				require.Equal(t, "internal server error", c.LastAttemptFailure.Message)
 			},
 		},
 		{
@@ -738,7 +738,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", c.LastAttemptFailure.Message)
+				require.Equal(t, "endpoint not registered", c.LastAttemptFailure.Message)
 			},
 		},
 	}
