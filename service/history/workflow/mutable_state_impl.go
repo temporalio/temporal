@@ -2611,16 +2611,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		ms.metricsHandler.WithTags(
 			metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
 			metrics.VersioningBehaviorTag(previousExecutionState.GetEffectiveVersioningBehavior()),
+			metrics.ContinueAsNewVersioningBehaviorTag(command.GetInitialVersioningBehavior()),
 		),
 	).Record(1)
-	if command.GetInitialVersioningBehavior() == enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-		metrics.WorkflowContinueAsNewWithAutoUpgradeCount.With(
-			ms.metricsHandler.WithTags(
-				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
-				metrics.VersioningBehaviorTag(previousExecutionState.GetEffectiveVersioningBehavior()),
-			),
-		).Record(1)
-	}
 	return event, nil
 }
 

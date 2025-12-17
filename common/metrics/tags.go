@@ -39,25 +39,26 @@ const (
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
-	replicationTaskType     = "replicationTaskType"
-	replicationTaskPriority = "replicationTaskPriority"
-	taskExpireStage         = "task_expire_stage"
-	versioningBehavior      = "versioning_behavior"
-	isFirstAttempt          = "first-attempt"
-	workflowStatus          = "workflow_status"
-	behaviorBefore          = "behavior_before"
-	behaviorAfter           = "behavior_after"
-	runInitiator            = "run_initiator"
-	fromUnversioned         = "from_unversioned"
-	toUnversioned           = "to_unversioned"
-	queryTypeTag            = "query_type"
-	namespaceAllValue       = "all"
-	unknownValue            = "_unknown_"
-	totalMetricSuffix       = "_total"
-	tagExcludedValue        = "_tag_excluded_"
-	falseValue              = "false"
-	trueValue               = "true"
-	errorPrefix             = "*"
+	replicationTaskType             = "replicationTaskType"
+	replicationTaskPriority         = "replicationTaskPriority"
+	taskExpireStage                 = "task_expire_stage"
+	versioningBehavior              = "versioning_behavior"
+	continueAsNewVersioningBehavior = "continue_as_new_versioning_behavior"
+	isFirstAttempt                  = "first-attempt"
+	workflowStatus                  = "workflow_status"
+	behaviorBefore                  = "behavior_before"
+	behaviorAfter                   = "behavior_after"
+	runInitiator                    = "run_initiator"
+	fromUnversioned                 = "from_unversioned"
+	toUnversioned                   = "to_unversioned"
+	queryTypeTag                    = "query_type"
+	namespaceAllValue               = "all"
+	unknownValue                    = "_unknown_"
+	totalMetricSuffix               = "_total"
+	tagExcludedValue                = "_tag_excluded_"
+	falseValue                      = "false"
+	trueValue                       = "true"
+	errorPrefix                     = "*"
 
 	queryTypeStackTrace       = "__stack_trace"
 	queryTypeOpenSessions     = "__open_sessions"
@@ -403,6 +404,10 @@ func DestinationTag(value string) Tag {
 
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
 	return Tag{Key: versioningBehavior, Value: behavior.String()}
+}
+
+func ContinueAsNewVersioningBehaviorTag(canBehavior enumspb.ContinueAsNewVersioningBehavior) Tag {
+	return Tag{Key: continueAsNewVersioningBehavior, Value: canBehavior.String()}
 }
 
 func WorkflowStatusTag(status string) Tag {

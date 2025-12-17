@@ -1293,7 +1293,6 @@ var (
 	WorkflowExecutionHistorySizeContinueAsNewSuggestions          = NewCounterDef("workflow_history_size_continue_as_new_suggestions")
 	WorkflowExecutionTargetVersionChangedContinueAsNewSuggestions = NewCounterDef("workflow_target_version_changed_continue_as_new_suggestions")
 	WorkflowContinueAsNewCount                                    = NewCounterDef("workflow_continue_as_new_count")
-	WorkflowContinueAsNewWithAutoUpgradeCount                     = NewCounterDef("workflow_continue_as_new_with_auto_upgrade_count")
 
 	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
 	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_success_count")
