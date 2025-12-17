@@ -62,6 +62,11 @@ var (
 			"key-2": payload.EncodeString("value-2"),
 		},
 	}
+	defaultSearchAttributes = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString("value1"),
+		},
+	}
 	defaultUserMetadata = &sdkpb.UserMetadata{
 		Summary: payload.EncodeString("test-summary"),
 		Details: payload.EncodeString("test-details"),
@@ -1120,6 +1125,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		Priority: &commonpb.Priority{
 			FairnessKey: "test-key",
 		},
+		SearchAttributes: defaultSearchAttributes,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue.GetName(),
 		},
@@ -1177,6 +1183,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			ScheduleToStartTimeout: startReq.GetScheduleToStartTimeout(),
 			StartToCloseTimeout:    startReq.GetStartToCloseTimeout(),
 			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+			SearchAttributes:       defaultSearchAttributes,
 			TaskQueue:              taskQueue.Name,
 			UserMetadata:           defaultUserMetadata,
 		}
@@ -1234,6 +1241,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 		RetryPolicy:            defaultRetryPolicy,
 		RunId:                  startResp.RunId,
 		RunState:               enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		SearchAttributes:       &commonpb.SearchAttributes{},
 		ScheduleToCloseTimeout: durationpb.New(0),
 		ScheduleToStartTimeout: durationpb.New(0),
 		StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
@@ -1293,6 +1301,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 			RunState:               enumspb.PENDING_ACTIVITY_STATE_STARTED,
 			ScheduleToCloseTimeout: durationpb.New(0),
 			ScheduleToStartTimeout: durationpb.New(0),
+			SearchAttributes:       &commonpb.SearchAttributes{},
 			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
 			Status:                 enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			TaskQueue:              taskQueue.Name,

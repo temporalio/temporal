@@ -55,7 +55,6 @@ type ActivityStore interface {
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
 // embedded within a workflow.
-// TODO implement VisibilitySearchAttributesProvider to support timeout status
 type Activity struct {
 	chasm.UnimplementedComponent
 
@@ -655,6 +654,10 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		expirationTime = timestamppb.New(a.GetScheduleTime().AsTime().Add(timeout))
 	}
 
+	sa := &commonpb.SearchAttributes{
+		IndexedFields: a.Visibility.Get(ctx).GetSearchAttributes(ctx),
+	}
+
 	info := &activity.ActivityExecutionInfo{
 		ActivityId:              key.BusinessID,
 		ActivityType:            a.GetActivityType(),
@@ -683,10 +686,10 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
 		StateTransitionCount:    a.Visibility.Get(ctx).Data.TransitionCount,
 		// StateSizeBytes: TODO do we still want this?
-		// SearchAttributes: TODO populate from saa-visibility work
-		Status:       status,
-		TaskQueue:    a.GetTaskQueue().GetName(),
-		UserMetadata: requestData.GetUserMetadata(),
+		SearchAttributes: sa,
+		Status:           status,
+		TaskQueue:        a.GetTaskQueue().GetName(),
+		UserMetadata:     requestData.GetUserMetadata(),
 	}
 
 	return info, nil
