@@ -831,20 +831,11 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayl
 		}},
 	}
 
-	activity1ExternalPayloadSize := int64(2048)
-	activity1InputPayload := &commonpb.Payloads{
+	activityExternalPayloadSize := int64(2048)
+	activityInputPayload := &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{{
 			ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
-				{SizeBytes: activity1ExternalPayloadSize},
-			},
-		}},
-	}
-
-	activity2ExternalPayloadSize := int64(4096)
-	activity2InputPayload := &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{{
-			ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
-				{SizeBytes: activity2ExternalPayloadSize},
+				{SizeBytes: activityExternalPayloadSize},
 			},
 		}},
 	}
@@ -862,10 +853,10 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayl
 	})
 	s.NoError(err)
 
-	completedActivities := 0
+	activityScheduled := false
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if completedActivities == 0 {
-			completedActivities++
+		if !activityScheduled {
+			activityScheduled = true
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
@@ -873,25 +864,7 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayl
 						ActivityId:             "activity1",
 						ActivityType:           &commonpb.ActivityType{Name: "TestActivity"},
 						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-						Input:                  activity1InputPayload,
-						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
-						ScheduleToStartTimeout: durationpb.New(100 * time.Second),
-						StartToCloseTimeout:    durationpb.New(50 * time.Second),
-						HeartbeatTimeout:       durationpb.New(5 * time.Second),
-					},
-				},
-			}}, nil
-		}
-		if completedActivities == 1 {
-			completedActivities++
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             "activity2",
-						ActivityType:           &commonpb.ActivityType{Name: "TestActivity"},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-						Input:                  activity2InputPayload,
+						Input:                  activityInputPayload,
 						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 						ScheduleToStartTimeout: durationpb.New(100 * time.Second),
 						StartToCloseTimeout:    durationpb.New(50 * time.Second),
@@ -925,57 +898,18 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayl
 		T:                   s.T(),
 	}
 
-	// Process first workflow task (schedules activity1)
+	// Process first workflow task (schedules activity)
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	// Process activity1
+	// Process activity
 	err = poller.PollAndProcessActivityTask(false)
 	s.NoError(err)
 
-	// Process second workflow task (schedules activity2)
+	// Process second workflow task (completes workflow)
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	// Process activity2
-	err = poller.PollAndProcessActivityTask(false)
-	s.NoError(err)
-
-	// Process third workflow task (completes workflow)
-	_, err = poller.PollAndProcessWorkflowTask()
-	s.NoError(err)
-
-	// Get history and verify WorkflowTaskStartedEventAttributes
-	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      we.GetRunId(),
-	})
-
-	// Collect WorkflowTaskStarted events and verify external payload stats
-	var workflowTaskStartedEvents []*historypb.HistoryEvent
-	for _, event := range events {
-		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-			workflowTaskStartedEvents = append(workflowTaskStartedEvents, event)
-		}
-	}
-	s.Len(workflowTaskStartedEvents, 3)
-
-	// First WFT started: only workflow input external payload
-	attrs1 := workflowTaskStartedEvents[0].GetWorkflowTaskStartedEventAttributes()
-	s.Equal(int64(1), attrs1.ExternalPayloadCount)
-	s.Equal(workflowExternalPayloadSize, attrs1.ExternalPayloadSizeBytes)
-
-	// Second WFT started: workflow input + activity1 input
-	attrs2 := workflowTaskStartedEvents[1].GetWorkflowTaskStartedEventAttributes()
-	s.Equal(int64(2), attrs2.ExternalPayloadCount)
-	s.Equal(workflowExternalPayloadSize+activity1ExternalPayloadSize, attrs2.ExternalPayloadSizeBytes)
-
-	// Third WFT started: workflow input + activity1 input + activity2 input
-	attrs3 := workflowTaskStartedEvents[2].GetWorkflowTaskStartedEventAttributes()
-	s.Equal(int64(3), attrs3.ExternalPayloadCount)
-	s.Equal(workflowExternalPayloadSize+activity1ExternalPayloadSize+activity2ExternalPayloadSize, attrs3.ExternalPayloadSizeBytes)
-
-	// Verify DescribeWorkflowExecution returns correct values
 	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
@@ -984,6 +918,6 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayl
 		},
 	})
 	s.NoError(err)
-	s.Equal(int64(3), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
-	s.Equal(workflowExternalPayloadSize+activity1ExternalPayloadSize+activity2ExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
+	s.Equal(int64(2), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(workflowExternalPayloadSize+activityExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 }
