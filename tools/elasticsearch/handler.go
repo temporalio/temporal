@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/urfave/cli"
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -117,6 +118,17 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 			cfg.AWSRequestSigning.Static.AccessKeyID = cfg.Username
 			cfg.AWSRequestSigning.Static.SecretAccessKey = cfg.Password
 			cfg.AWSRequestSigning.Static.Token = cli.GlobalString(CLIOptAWSToken)
+		}
+	}
+
+	if cli.GlobalBool(commonschema.CLIFlagEnableTLS) {
+		cfg.TLS = &auth.TLS{
+			Enabled:                true,
+			CertFile:               cli.GlobalString(commonschema.CLIFlagTLSCertFile),
+			KeyFile:                cli.GlobalString(commonschema.CLIFlagTLSKeyFile),
+			CaFile:                 cli.GlobalString(commonschema.CLIFlagTLSCaFile),
+			ServerName:             cli.GlobalString(commonschema.CLIFlagTLSHostName),
+			EnableHostVerification: !cli.GlobalBool(commonschema.CLIFlagTLSDisableHostVerification),
 		}
 	}
 
