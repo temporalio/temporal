@@ -262,24 +262,46 @@ func (s *standaloneActivityTestSuite) TestActivityCompletedByID() {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue().String()
+	t.Run("WithRunID", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
 
-	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	runID := startResp.RunId
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
 
-	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-	_, err := s.FrontendClient().RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
-		Namespace:  s.Namespace().String(),
-		RunId:      runID,
-		ActivityId: activityID,
-		Result:     defaultResult,
-		Identity:   s.tv.WorkerIdentity(),
+		_, err := s.FrontendClient().RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+			Namespace:  s.Namespace().String(),
+			RunId:      runID,
+			ActivityId: activityID,
+			Result:     defaultResult,
+			Identity:   s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		s.validateCompletion(ctx, t, activityID, runID, s.tv.WorkerIdentity())
 	})
-	require.NoError(t, err)
 
-	s.validateCompletion(ctx, t, activityID, runID, s.tv.WorkerIdentity())
+	t.Run("WithoutRunID", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := s.FrontendClient().RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Result:     defaultResult,
+			Identity:   s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		s.validateCompletion(ctx, t, activityID, runID, s.tv.WorkerIdentity())
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestActivityFailed() {
@@ -336,24 +358,46 @@ func (s *standaloneActivityTestSuite) TestActivityFailedByID() {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue().String()
+	t.Run("WithRunID", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
 
-	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	runID := startResp.RunId
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
 
-	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-	_, err := s.FrontendClient().RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
-		Namespace:  s.Namespace().String(),
-		RunId:      runID,
-		ActivityId: activityID,
-		Failure:    defaultFailure,
-		Identity:   s.tv.WorkerIdentity(),
+		_, err := s.FrontendClient().RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
+			Namespace:  s.Namespace().String(),
+			RunId:      runID,
+			ActivityId: activityID,
+			Failure:    defaultFailure,
+			Identity:   s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		s.validateFailure(ctx, t, activityID, runID, nil, s.tv.WorkerIdentity())
 	})
-	require.NoError(t, err)
 
-	s.validateFailure(ctx, t, activityID, runID, nil, s.tv.WorkerIdentity())
+	t.Run("WithoutRunID", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := s.FrontendClient().RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Failure:    defaultFailure,
+			Identity:   s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		s.validateFailure(ctx, t, activityID, runID, nil, s.tv.WorkerIdentity())
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCancelled() {
@@ -379,7 +423,12 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 	})
 	require.NoError(t, err)
 
-	// TODO: we should get the cancel request from heart beat once we implement it
+	heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+	})
+	require.NoError(t, err)
+	require.True(t, heartbeatResp.GetCancelRequested(), "expected CancelRequested to be true but was false")
 
 	details := &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{
@@ -412,59 +461,88 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCancelledByID() {
-	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue().String()
-
-	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	runID := startResp.RunId
-
-	s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
-
-	_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		ActivityId: s.tv.ActivityID(),
-		RunId:      runID,
-		Identity:   "cancelling-worker",
-		RequestId:  s.tv.RequestID(),
-		Reason:     "Test Cancellation",
-	})
-	require.NoError(t, err)
-
-	// TODO: we should get the cancel request from heart beat once we implement it
-
-	details := &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			payload.EncodeString("Canceled Details"),
+	testCases := []struct {
+		name         string
+		includeRunID bool
+	}{
+		{
+			name:         "with run ID",
+			includeRunID: true,
+		},
+		{
+			name:         "without run ID",
+			includeRunID: false,
 		},
 	}
 
-	_, err = s.FrontendClient().RespondActivityTaskCanceledById(ctx, &workflowservice.RespondActivityTaskCanceledByIdRequest{
-		Namespace:  s.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      runID,
-		Details:    details,
-		Identity:   "new-worker",
-	})
-	require.NoError(t, err)
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			t := s.T()
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			t.Cleanup(cancel)
 
-	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-		Namespace:      s.Namespace().String(),
-		ActivityId:     activityID,
-		RunId:          runID,
-		IncludeInput:   true,
-		IncludeOutcome: true,
-	})
-	require.NoError(t, err)
+			activityID := testcore.RandomizeStr(tc.name)
+			taskQueue := testcore.RandomizeStr(tc.name)
 
-	info := activityResp.GetInfo()
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
-		"expected Canceled but is %s", info.GetStatus())
-	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
-	protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
+			startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+			runID := startResp.RunId
+
+			s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      runID,
+				Identity:   "cancelling-worker",
+				RequestId:  s.tv.RequestID(),
+				Reason:     "Test Cancellation",
+			})
+			require.NoError(t, err)
+
+			heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			require.NoError(t, err)
+			require.True(t, heartbeatResp.GetCancelRequested(), "expected CancelRequested to be true but was false")
+
+			details := &commonpb.Payloads{
+				Payloads: []*commonpb.Payload{
+					payload.EncodeString("Canceled Details"),
+				},
+			}
+
+			cancelReq := &workflowservice.RespondActivityTaskCanceledByIdRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				Details:    details,
+				Identity:   "new-worker",
+			}
+
+			if tc.includeRunID {
+				cancelReq.RunId = runID
+			}
+
+			_, err = s.FrontendClient().RespondActivityTaskCanceledById(ctx, cancelReq)
+			require.NoError(t, err)
+
+			activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:      s.Namespace().String(),
+				ActivityId:     activityID,
+				RunId:          runID,
+				IncludeInput:   true,
+				IncludeOutcome: true,
+			})
+			require.NoError(t, err)
+
+			info := activityResp.GetInfo()
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
+				"expected Canceled but is %s", info.GetStatus())
+			require.Equal(t, "Test Cancellation", info.GetCanceledReason())
+			protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
+		})
+	}
 }
 
 func (s *standaloneActivityTestSuite) TestActivityCancelled_FailsIfNeverRequested() {
@@ -521,7 +599,13 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled_DuplicateRequestIDSu
 		require.NoError(t, err)
 	}
 
-	// TODO: we should get the cancel request from heartbeat once we implement it
+	heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+	require.True(t, heartbeatResp.GetCancelRequested(), "expected CancelRequested to be true but was false")
 
 	activityResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:      s.Namespace().String(),
