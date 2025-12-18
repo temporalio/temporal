@@ -45,10 +45,12 @@ type VisibilityMemoProvider interface {
 
 // VisibilitySearchAttributesMapper is a mapper for CHASM search attributes.
 type VisibilitySearchAttributesMapper struct {
+	// map from CHASM and predefined search attribute aliases to field names.
 	aliasToField map[string]string
 	fieldToAlias map[string]string
 	saTypeMap    map[string]enumspb.IndexedValueType
 
+	// map from system search attribute aliases to field names.
 	systemAliasToField map[string]string
 }
 
@@ -93,11 +95,12 @@ func (v *VisibilitySearchAttributesMapper) resolveSystemAlias(alias string) (str
 		if field, ok := v.systemAliasToField[withoutPrefix]; ok {
 			return field, true
 		}
-	}
-	// Try with the `Temporal` prefix.
-	withPrefix := sadefs.ReservedPrefix + alias
-	if field, ok := v.systemAliasToField[withPrefix]; ok {
-		return field, true
+	} else {
+		// Try with the `Temporal` prefix.
+		withPrefix := sadefs.ReservedPrefix + alias
+		if field, ok := v.systemAliasToField[withPrefix]; ok {
+			return field, true
+		}
 	}
 	return "", false
 }

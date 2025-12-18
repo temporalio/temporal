@@ -70,10 +70,6 @@ var (
 	SearchAttributeTemporalWorkerDeploymentVersion    = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeploymentVersion)
 	SearchAttributeTemporalWorkflowVersioningBehavior = newSearchAttributeKeywordByField(sadefs.TemporalWorkflowVersioningBehavior)
 	SearchAttributeTemporalWorkerDeployment           = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeployment)
-
-	// SearchAttributeBusinessIDField is a search attribute field mapping to underlying system search attribute WorkflowID.
-	// Used only with WithBusinessIDAlias option.
-	searchAttributeBusinessIDField = newSearchAttributeFieldKeywordByField(sadefs.WorkflowID)
 )
 
 var (
@@ -173,12 +169,6 @@ type SearchAttributeFieldKeyword struct {
 func newSearchAttributeFieldKeyword(index int) SearchAttributeFieldKeyword {
 	return SearchAttributeFieldKeyword{
 		field: resolveFieldName(enumspb.INDEXED_VALUE_TYPE_KEYWORD, index),
-	}
-}
-
-func newSearchAttributeFieldKeywordByField(field string) SearchAttributeFieldKeyword {
-	return SearchAttributeFieldKeyword{
-		field: field,
 	}
 }
 
@@ -293,16 +283,6 @@ func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) Searc
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     alias,
 			field:     intField.field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
-		},
-	}
-}
-
-func newSearchAttributeIntByField(field string) SearchAttributeInt {
-	return SearchAttributeInt{
-		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
 			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
 		},
 	}
