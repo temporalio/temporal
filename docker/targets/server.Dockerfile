@@ -1,4 +1,9 @@
-FROM alpine:3.22@sha256:4b7ce07002c69e8f3d704a9c5d6fd3053be500b7f1c69fc0d80990c2ad8dd412
+# IMPORTANT: When updating ALPINE_TAG, also update the default value in:
+# - docker/docker-bake.hcl (variable "ALPINE_TAG")
+# - docker/targets/admin-tools.Dockerfile (ARG ALPINE_TAG)
+ARG ALPINE_TAG=3.23@sha256:c78ded0fee4493809c8ca71d4a6057a46237763d952fae15ea418f6d14137f2d
+
+FROM alpine:${ALPINE_TAG}
 
 ARG TARGETARCH
 
