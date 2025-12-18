@@ -231,17 +231,18 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 	targetBranchToken []byte,
 	requestID string,
 ) (historyi.MutableState, int64, error) {
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(targetWorkflowIdentifier.NamespaceID))
+	if err != nil {
+		return nil, 0, err
+	}
+
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		ctx,
 		common.FirstEventID,
 		baseLastEventID+1,
 		baseBranchToken,
+		namespaceEntry.Name().String(),
 	))
-
-	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(targetWorkflowIdentifier.NamespaceID))
-	if err != nil {
-		return nil, 0, err
-	}
 
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
@@ -356,6 +357,7 @@ func (r *StateRebuilderImpl) getPaginationFn(
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
+	namespaceName string,
 ) collection.PaginationFn[HistoryBlobsPaginationItem] {
 	return func(paginationToken []byte) ([]HistoryBlobsPaginationItem, []byte, error) {
 		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
@@ -380,12 +382,14 @@ func (r *StateRebuilderImpl) getPaginationFn(
 			paginateItems = append(paginateItems, nextBatch)
 
 			// Calculate and accumulate external payload size and count for this batch of history events
-			externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(history.Events)
-			if err != nil {
-				return nil, nil, err
+			if r.shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
+				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(history.Events)
+				if err != nil {
+					return nil, nil, err
+				}
+				r.rebuiltExternalPayloadSize += externalPayloadSize
+				r.rebuiltExternalPayloadCount += externalPayloadCount
 			}
-			r.rebuiltExternalPayloadSize += externalPayloadSize
-			r.rebuiltExternalPayloadCount += externalPayloadCount
 		}
 		return paginateItems, resp.NextPageToken, nil
 	}

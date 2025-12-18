@@ -75,6 +75,7 @@ func (s *stateRebuilderSuite) SetupTest() {
 	s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
 	config := tests.NewDynamicConfig()
 	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
+	config.ExternalPayloadsEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -222,7 +223,7 @@ func (s *stateRebuilderSuite) TestPagination() {
 		Size:           67890,
 	}, nil)
 
-	paginationFn := s.nDCStateRebuilder.getPaginationFn(context.Background(), firstEventID, nextEventID, branchToken)
+	paginationFn := s.nDCStateRebuilder.getPaginationFn(context.Background(), firstEventID, nextEventID, branchToken, tests.Namespace.String())
 	iter := collection.NewPagingIterator(paginationFn)
 
 	var result []HistoryBlobsPaginationItem
