@@ -457,6 +457,7 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, info.GetStatus(),
 		"expected Canceled but is %s", info.GetStatus())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
+	require.Equal(t, info.GetExecutionDuration().AsDuration(), time.Duration(0)) // Canceled doesn't set attempt completion, thus expect 0 here
 	protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
 }
 
@@ -860,6 +861,7 @@ func (s *standaloneActivityTestSuite) TestActivityTerminated() {
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
 		"expected Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
+	require.Equal(t, info.GetExecutionDuration().AsDuration(), time.Duration(0)) // Terminated doesn't set attempt completion, thus expect 0 here
 	require.Equal(t, s.tv.WorkerIdentity(), info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	require.Nil(t, info.GetLastFailure())
@@ -1073,6 +1075,14 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 	require.NoError(t, err)
 	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected ScheduleToCloseTimeout but is %s", pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+
+	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+	require.Greater(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0)) // should have non-zero as attempts have been made
 }
 
 // TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is
@@ -1164,6 +1174,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	// failure should be in ActivityExecutionInfo.LastFailure as well as set as the outcome failure.
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp.GetInfo().GetStatus(),
 		"expected TimedOut but is %s", describeResp.GetInfo().GetStatus())
+	require.Greater(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
 	failure := describeResp.GetInfo().GetLastFailure()
 	require.NotNil(t, failure)
 	timeoutFailure := failure.GetTimeoutFailureInfo()
@@ -1224,6 +1235,9 @@ func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp.GetInfo().GetStatus(),
 		"expected TimedOut but is %s", describeResp.GetInfo().GetStatus())
+	// Schedule to Start timeout does not overwrite attempt fields therefore execution duration should be zero and an
+	// attempt was never made
+	require.Equal(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
 	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected ScheduleToStartTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
@@ -1329,7 +1343,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 			),
 		)
 		require.Empty(t, diff)
-		require.Greater(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0))
+		require.Equal(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0)) // Never completed, so expect 0
 		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
 		require.Positive(t, respInfo.GetStateTransitionCount())
 
@@ -2822,6 +2836,7 @@ func (s *standaloneActivityTestSuite) validateCompletion(
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
 		"expected Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
+	require.Greater(t, info.GetExecutionDuration().AsDuration(), time.Duration(0))
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	require.Nil(t, info.GetLastFailure())
@@ -2855,6 +2870,7 @@ func (s *standaloneActivityTestSuite) validateFailure(
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
 		"expected Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
+	require.Greater(t, info.GetExecutionDuration().AsDuration(), time.Duration(0))
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	protorequire.ProtoEqual(t, defaultFailure, info.GetLastFailure())

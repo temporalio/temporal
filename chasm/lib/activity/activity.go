@@ -463,16 +463,16 @@ func (a *Activity) recordFailedAttempt(
 	ctx chasm.MutableContext,
 	retryInterval time.Duration,
 	failure *failurepb.Failure,
+	currentTime time.Time,
 	noRetriesLeft bool,
 ) error {
 	attempt := a.LastAttempt.Get(ctx)
-	currentTime := timestamppb.New(ctx.Now(a))
 
 	attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
 		Failure: failure,
-		Time:    currentTime,
+		Time:    timestamppb.New(currentTime),
 	}
-	attempt.CompleteTime = currentTime
+	attempt.CompleteTime = timestamppb.New(currentTime)
 
 	if noRetriesLeft {
 		attempt.CurrentRetryInterval = nil
@@ -634,9 +634,8 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 	attempt := a.LastAttempt.Get(ctx)
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
-	currentTime := ctx.Now(a)
 
-	executionDuration := durationpb.New(currentTime.Sub(a.GetScheduleTime().AsTime()))
+	// TODO (saa-preview): debating if we should persist next attempt schedule time for stronger consistency
 	var nextAttemptScheduleTime *timestamppb.Timestamp
 	interval := attempt.GetCurrentRetryInterval()
 	completeTime := attempt.GetCompleteTime()
@@ -645,8 +644,10 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 	}
 
 	var closeTime *timestamppb.Timestamp
-	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
+	var executionDuration = durationpb.New(0)
+	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning && attempt.GetCompleteTime() != nil {
 		closeTime = attempt.GetCompleteTime()
+		executionDuration = durationpb.New(closeTime.AsTime().Sub(a.GetScheduleTime().AsTime()))
 	}
 
 	var expirationTime *timestamppb.Timestamp
