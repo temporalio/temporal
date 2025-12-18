@@ -709,6 +709,7 @@ func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
 		switch newStatus {
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT:
 			state.CurrentSinceTime = rg.GetCurrentVersionChangedTime()
+			state.LastCurrentTime = rg.GetCurrentVersionChangedTime()
 			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING:
 			state.RampingSinceTime = rg.GetRampingVersionChangedTime()
@@ -718,7 +719,10 @@ func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING:
 			// Version just became draining. So we need to update RoutingUpdateTime which is the max of the following:
 			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
-			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RampingSinceTime.AsTime()) {
+			if rg.GetRampingVersionChangedTime().AsTime().After(state.RoutingUpdateTime.AsTime()) {
+				state.RoutingUpdateTime = rg.GetRampingVersionChangedTime()
+			}
+			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RoutingUpdateTime.AsTime()) {
 				state.RoutingUpdateTime = rg.GetRampingVersionPercentageChangedTime()
 			}
 		default: // Shouldn't happen

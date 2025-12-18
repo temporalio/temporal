@@ -917,7 +917,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentUpdateTime,
 					LastCurrentTime:      rePromoteCurrentUpdateTime, // updated
-					LastDeactivationTime: nil,                        // TODO: maybe this should still be setRampingAsCurrentUpdateTime
+					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
 				{
@@ -926,7 +926,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					DrainageInfo: &deploymentpb.VersionDrainageInfo{
 						Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
 					},
-					RoutingUpdateTime:    setRampingAsCurrentUpdateTime, // TODO: why is the server setting this to setRampingAsCurrentUpdateTime, I think it should be rePromoteCurrentUpdateTime
+					RoutingUpdateTime:    rePromoteCurrentUpdateTime,
 					CurrentSinceTime:     nil,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setRampingUpdateTime,
