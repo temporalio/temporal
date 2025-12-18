@@ -2983,7 +2983,9 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 			},
 		},
 	)
-	assert.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	versioningInfo := dwf.WorkflowExecutionInfo.GetVersioningInfo()
 	assert.Equal(t, behavior.String(), versioningInfo.GetBehavior().String())
@@ -2991,7 +2993,9 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	if versioningInfo.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		v, err = worker_versioning.WorkerDeploymentVersionFromStringV31(versioningInfo.GetVersion())
-		assert.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return
+		}
 		// make sure we are always populating this whenever Version string is populated
 		assert.NotNil(t, versioningInfo.GetDeploymentVersion())
 	}
@@ -2999,7 +3003,12 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		v = worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(dv))
 	}
 	actualDeployment := worker_versioning.DeploymentFromDeploymentVersion(v)
-	assert.Equal(t, deployment, actualDeployment, "deployment version mismatch. expected: {%s}, actual: {%s}", deployment, actualDeployment)
+	if deployment == nil {
+		assert.Nil(t, actualDeployment)
+	} else {
+		assert.True(t, deployment.Equal(actualDeployment),
+			"deployment version mismatch. expected: {%s}, actual: {%s}", deployment, actualDeployment)
+	}
 
 	if s.useV32 {
 		// v0.32 override
@@ -3025,7 +3034,14 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		}
 	}
 
-	assert.Equal(t, versioningInfo.GetVersionTransition(), transition, "version transition mismatch. expected: {%s}, actual: {%s}", transition, versioningInfo.GetVersionTransition())
+	gotTransition := versioningInfo.GetVersionTransition()
+	if transition == nil {
+		assert.Nil(t, gotTransition)
+	} else {
+		assert.NotNil(t, gotTransition)
+		assert.True(t, gotTransition.Equal(transition),
+			"version transition mismatch. expected: {%s}, actual: {%s}", transition, gotTransition)
+	}
 }
 
 func respondActivity() *workflowservice.RespondActivityTaskCompletedRequest {
