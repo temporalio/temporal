@@ -2983,7 +2983,8 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 			},
 		},
 	)
-	if !assert.NoError(t, err) {
+	if err != nil {
+		assert.Fail(t, "DescribeWorkflowExecution failed", "error: %v", err)
 		return
 	}
 
@@ -2993,7 +2994,9 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	if versioningInfo.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		v, err = worker_versioning.WorkerDeploymentVersionFromStringV31(versioningInfo.GetVersion())
-		if !assert.NoError(t, err) {
+		if err != nil {
+			//nolint:staticcheck // SA1019: worker versioning v0.31
+			assert.Fail(t, "WorkerDeploymentVersionFromStringV31 failed", "version: %q, error: %v", versioningInfo.GetVersion(), err)
 			return
 		}
 		// make sure we are always populating this whenever Version string is populated
