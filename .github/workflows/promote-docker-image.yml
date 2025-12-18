@@ -1,0 +1,211 @@
+name: Promote Docker Image
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: "Image name (e.g., server, admin-tools)"
+        required: true
+        type: string
+      source-tag:
+        description: "Source tag from temporaliotest registry (e.g. sha-abc123)"
+        required: true
+        type: string
+      target-tags:
+        description: "Target tags for temporalio registry (comma or newline separated, e.g., 1.29.1, latest)"
+        required: true
+        type: string
+      override-security-scan:
+        description: "Override security scan failures (use with caution)"
+        type: boolean
+        default: false
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+
+jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      source-tag-safe: ${{ steps.validate.outputs.source-tag }}
+      target-tags-safe: ${{ steps.validate.outputs.target-tags }}
+    steps:
+      - name: Validate input tags
+        id: validate
+        uses: actions/github-script@v8
+        env:
+          SOURCE_TAG: ${{ inputs.source-tag }}
+          TARGET_TAGS: ${{ inputs.target-tags }}
+        with:
+          script: |
+            const sourceTag = process.env.SOURCE_TAG;
+            const targetTagsInput = process.env.TARGET_TAGS;
+
+            // Source tag: must be short SHA (sha-XXXXXXX) or full sha256 digest
+            // Examples: sha-b5b2dfe, sha256:082943409e71ae50d8dd8693593070eac8173f01fb5bfd4970ae59e52176753e
+            const sourceTagPattern = /^sha-[a-f0-9]{7,}$|^sha256:[a-f0-9]{64}$/;
+
+            // Target tag: semantic version pattern (major.minor.patch.build or shorter)
+            // Examples: 1.29.1, 1.29.1.1, 1.29, latest
+            const targetTagPattern = /^(\d+\.)*\d+$|^latest$/;
+
+            // Validate source tag format
+            if (!sourceTagPattern.test(sourceTag)) {
+              core.setFailed('Error: Invalid source tag format. Must be sha-XXXXXXX or sha256:...');
+              return;
+            }
+
+            // Parse and validate target tags (split by newline or comma)
+            const targetTags = targetTagsInput
+              .split(/[\n,]/)
+              .map(tag => tag.trim())
+              .filter(tag => tag.length > 0);
+
+            if (targetTags.length === 0) {
+              core.setFailed('Error: At least one target tag must be provided');
+              return;
+            }
+
+            for (const tag of targetTags) {
+              if (!targetTagPattern.test(tag)) {
+                core.setFailed(`Error: Invalid target tag format: "${tag}". Must be semantic version (e.g., 1.29.1, 1.29.1.1) or "latest"`);
+                return;
+              }
+            }
+
+            core.setOutput('source-tag', sourceTag);
+            core.setOutput('target-tags', JSON.stringify(targetTags));
+
+            core.info('✓ Tag validation passed');
+            core.info(`  Source: ${sourceTag}`);
+            core.info(`  Target tags: ${targetTags.join(', ')}`);
+
+  scan-image:
+    needs: validate-inputs
+    runs-on: ubuntu-latest
+    outputs:
+      scan-result: ${{ steps.scan.outputs.scan-result }}
+      critical-count: ${{ steps.scan.outputs.critical-count }}
+      high-count: ${{ steps.scan.outputs.high-count }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Pull source image
+        env:
+          SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+        run: |
+          echo "Pulling temporaliotest/${IMAGE_NAME}:${SOURCE_TAG}"
+          docker pull "temporaliotest/${IMAGE_NAME}:${SOURCE_TAG}"
+
+      - name: Scan image with Trivy
+        id: scan
+        uses: ./.github/actions/trivy-scan
+        with:
+          image-name: temporaliotest/${{ inputs.image-name }}
+          image-tags: ${{ needs.validate-inputs.outputs.source-tag-safe }}
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ inputs.image-name }}-scan-results
+          path: trivy-scan-${{ inputs.image-name }}.json
+          retention-days: 30
+
+  check-security-gate:
+    needs: [scan-image]
+    runs-on: ubuntu-latest
+    outputs:
+      can-promote: ${{ steps.check.outputs.can-promote }}
+    steps:
+      - name: Evaluate security scan results
+        id: check
+        uses: actions/github-script@v8
+        env:
+          OVERRIDE: ${{ inputs.override-security-scan }}
+          SCAN_RESULT: ${{ needs.scan-image.outputs.scan-result }}
+          CRITICAL_COUNT: ${{ needs.scan-image.outputs.critical-count }}
+          HIGH_COUNT: ${{ needs.scan-image.outputs.high-count }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+        with:
+          script: |
+            const override = process.env.OVERRIDE === 'true';
+            const scanResult = process.env.SCAN_RESULT;
+            const criticalCount = process.env.CRITICAL_COUNT;
+            const highCount = process.env.HIGH_COUNT;
+            const imageName = process.env.IMAGE_NAME;
+
+            core.info('=== Security Scan Results ===');
+            core.info(`${imageName} image: ${scanResult}`);
+            core.info(`  Critical: ${criticalCount}`);
+            core.info(`  High: ${highCount}`);
+            core.info('');
+            core.info(`Override enabled: ${override}`);
+            core.info('==============================');
+
+            if (scanResult === 'fail') {
+              if (override) {
+                core.info('');
+                core.warning('Security vulnerabilities detected but OVERRIDE is enabled!');
+                core.info('Proceeding with image promotion despite security issues.');
+                core.setOutput('can-promote', 'true');
+              } else {
+                core.info('');
+                core.error('Security vulnerabilities detected. Promotion BLOCKED.');
+                core.info("To proceed anyway, re-run with 'override-security-scan' enabled.");
+                core.setOutput('can-promote', 'false');
+                core.setFailed('Security vulnerabilities detected');
+              }
+            } else {
+              core.info('');
+              core.info('✓ Security scan passed. Proceeding with promotion.');
+              core.setOutput('can-promote', 'true');
+            }
+
+  promote:
+    needs: [validate-inputs, check-security-gate]
+    if: needs.check-security-gate.outputs.can-promote == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull, tag, and push image
+        uses: actions/github-script@v8
+        env:
+          SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
+          TARGET_TAGS: ${{ needs.validate-inputs.outputs.target-tags-safe }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const sourceTag = process.env.SOURCE_TAG;
+            const targetTags = JSON.parse(process.env.TARGET_TAGS);
+            const imageName = process.env.IMAGE_NAME;
+
+            core.info(`Promoting ${imageName} image...`);
+            core.info(`  From: temporaliotest/${imageName}:${sourceTag}`);
+            core.info(`  To: ${targetTags.map(t => `temporalio/${imageName}:${t}`).join(', ')}`);
+
+            // Pull from test registry
+            core.info('Pulling source image...');
+            execSync(`docker pull temporaliotest/${imageName}:${sourceTag}`, { stdio: 'inherit' });
+
+            // Tag for each target tag
+            for (const targetTag of targetTags) {
+              core.info(`Tagging as temporalio/${imageName}:${targetTag}`);
+              execSync(`docker tag temporaliotest/${imageName}:${sourceTag} temporalio/${imageName}:${targetTag}`, { stdio: 'inherit' });
+            }
+
+            // Push all tags at once
+            core.info('Pushing all tags to production registry...');
+            execSync(`docker push --all-tags temporalio/${imageName}`, { stdio: 'inherit' });
+
+            core.info(`✓ ${imageName} image promoted successfully to all tags`);
