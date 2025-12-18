@@ -458,6 +458,7 @@ func (s *standaloneActivityTestSuite) TestActivityCancelled() {
 		"expected Canceled but is %s", info.GetStatus())
 	require.Equal(t, "Test Cancellation", info.GetCanceledReason())
 	require.Equal(t, info.GetExecutionDuration().AsDuration(), time.Duration(0)) // Canceled doesn't set attempt completion, thus expect 0 here
+	require.Nil(t, info.GetCloseTime())
 	protorequire.ProtoEqual(t, details, activityResp.GetOutcome().GetFailure().GetCanceledFailureInfo().GetDetails())
 }
 
@@ -861,6 +862,7 @@ func (s *standaloneActivityTestSuite) TestActivityTerminated() {
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
 		"expected Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
+	require.Nil(t, info.GetCloseTime())
 	require.Equal(t, info.GetExecutionDuration().AsDuration(), time.Duration(0)) // Terminated doesn't set attempt completion, thus expect 0 here
 	require.Equal(t, s.tv.WorkerIdentity(), info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
@@ -1083,6 +1085,7 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 	})
 	require.NoError(t, err)
 	require.Greater(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0)) // should have non-zero as attempts have been made
+	require.False(t, describeResp.GetInfo().GetCloseTime().AsTime().IsZero())
 }
 
 // TestStartToCloseTimeout tests that a start-to-close timeout is recorded after the activity is
@@ -1175,6 +1178,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp.GetInfo().GetStatus(),
 		"expected TimedOut but is %s", describeResp.GetInfo().GetStatus())
 	require.Greater(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
+	require.False(t, describeResp.GetInfo().GetCloseTime().AsTime().IsZero())
 	failure := describeResp.GetInfo().GetLastFailure()
 	require.NotNil(t, failure)
 	timeoutFailure := failure.GetTimeoutFailureInfo()
@@ -1238,6 +1242,7 @@ func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
 	// Schedule to Start timeout does not overwrite attempt fields therefore execution duration should be zero and an
 	// attempt was never made
 	require.Equal(t, describeResp.GetInfo().GetExecutionDuration().AsDuration(), time.Duration(0))
+	require.Nil(t, describeResp.GetInfo().GetCloseTime())
 	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected ScheduleToStartTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
@@ -1344,6 +1349,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		)
 		require.Empty(t, diff)
 		require.Equal(t, respInfo.GetExecutionDuration().AsDuration(), time.Duration(0)) // Never completed, so expect 0
+		require.Nil(t, describeResp.GetInfo().GetCloseTime())
 		require.Positive(t, respInfo.GetScheduleTime().AsTime().Unix())
 		require.Positive(t, respInfo.GetStateTransitionCount())
 
@@ -2837,6 +2843,7 @@ func (s *standaloneActivityTestSuite) validateCompletion(
 		"expected Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Greater(t, info.GetExecutionDuration().AsDuration(), time.Duration(0))
+	require.False(t, info.GetCloseTime().AsTime().IsZero())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	require.Nil(t, info.GetLastFailure())
@@ -2871,6 +2878,7 @@ func (s *standaloneActivityTestSuite) validateFailure(
 		"expected Unspecified but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
 	require.Greater(t, info.GetExecutionDuration().AsDuration(), time.Duration(0))
+	require.False(t, info.GetCloseTime().AsTime().IsZero())
 	require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	protorequire.ProtoEqual(t, defaultFailure, info.GetLastFailure())
