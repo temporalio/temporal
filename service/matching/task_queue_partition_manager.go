@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -693,8 +692,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	pm.versionedQueuesLock.RLock()
 
 	versions := make(map[PhysicalTaskQueueVersion]bool)
-	fmt.Println("buildIDs requested:", buildIds)
-	fmt.Println("Versioned Queues:", pm.versionedQueues)
 
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
