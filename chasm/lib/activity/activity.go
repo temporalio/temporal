@@ -638,10 +638,10 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 
 	executionDuration := durationpb.New(currentTime.Sub(a.GetScheduleTime().AsTime()))
 	var nextAttemptScheduleTime *timestamppb.Timestamp
-	if interval := attempt.GetCurrentRetryInterval(); interval != nil && interval.AsDuration() > 0 {
-		nextAttemptScheduleTime = timestamppb.New(
-			attempt.GetCompleteTime().AsTime().Add(interval.AsDuration()),
-		)
+	interval := attempt.GetCurrentRetryInterval()
+	completeTime := attempt.GetCompleteTime()
+	if interval != nil && interval.AsDuration() > 0 && completeTime != nil {
+		nextAttemptScheduleTime = timestamppb.New(completeTime.AsTime().Add(interval.AsDuration()))
 	}
 
 	var closeTime *timestamppb.Timestamp
