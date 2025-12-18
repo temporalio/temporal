@@ -92,9 +92,9 @@ message VersionLocalState {
     // Timestamp when this version first became current or ramping.
     google.protobuf.Timestamp first_activation_time = 12;
 
-    // Timestamp when this version first became current.
+    // Timestamp when this version last became current.
     // Can be used to determine whether a version has ever been Current.
-    google.protobuf.Timestamp first_current_time = 16;
+    google.protobuf.Timestamp last_current_time = 16;
 
     // Timestamp when this version last stopped being current or ramping.
     google.protobuf.Timestamp last_deactivation_time = 13;
@@ -201,9 +201,9 @@ message WorkerDeploymentVersionSummary {
     // Timestamp when this version first became current or ramping.
     google.protobuf.Timestamp first_activation_time = 8;
 
-    // Timestamp when this version first became current.
+    // Timestamp when this version last became current.
     // Can be used to determine whether a version has ever been Current.
-    google.protobuf.Timestamp first_current_time = 11;
+    google.protobuf.Timestamp last_current_time = 11;
 
     // Timestamp when this version last stopped being current or ramping.
     google.protobuf.Timestamp last_deactivation_time = 9;

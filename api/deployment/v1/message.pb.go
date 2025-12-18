@@ -288,9 +288,9 @@ type VersionLocalState struct {
 	RampPercentage float32 `protobuf:"fixed32,6,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
 	// Timestamp when this version first became current or ramping.
 	FirstActivationTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=first_activation_time,json=firstActivationTime,proto3" json:"first_activation_time,omitempty"`
-	// Timestamp when this version first became current.
+	// Timestamp when this version last became current.
 	// Can be used to determine whether a version has ever been Current.
-	FirstCurrentTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=first_current_time,json=firstCurrentTime,proto3" json:"first_current_time,omitempty"`
+	LastCurrentTime *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=last_current_time,json=lastCurrentTime,proto3" json:"last_current_time,omitempty"`
 	// Timestamp when this version last stopped being current or ramping.
 	LastDeactivationTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_deactivation_time,json=lastDeactivationTime,proto3" json:"last_deactivation_time,omitempty"`
 	// Helps user determine when it is safe to decommission the workers of this
@@ -402,9 +402,9 @@ func (x *VersionLocalState) GetFirstActivationTime() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *VersionLocalState) GetFirstCurrentTime() *timestamppb.Timestamp {
+func (x *VersionLocalState) GetLastCurrentTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FirstCurrentTime
+		return x.LastCurrentTime
 	}
 	return nil
 }
@@ -807,9 +807,9 @@ type WorkerDeploymentVersionSummary struct {
 	RampingSinceTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=ramping_since_time,json=rampingSinceTime,proto3" json:"ramping_since_time,omitempty"`
 	// Timestamp when this version first became current or ramping.
 	FirstActivationTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=first_activation_time,json=firstActivationTime,proto3" json:"first_activation_time,omitempty"`
-	// Timestamp when this version first became current.
+	// Timestamp when this version last became current.
 	// Can be used to determine whether a version has ever been Current.
-	FirstCurrentTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=first_current_time,json=firstCurrentTime,proto3" json:"first_current_time,omitempty"`
+	LastCurrentTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_current_time,json=lastCurrentTime,proto3" json:"last_current_time,omitempty"`
 	// Timestamp when this version last stopped being current or ramping.
 	LastDeactivationTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_deactivation_time,json=lastDeactivationTime,proto3" json:"last_deactivation_time,omitempty"`
 	// Status of the Worker Deployment Version.
@@ -905,9 +905,9 @@ func (x *WorkerDeploymentVersionSummary) GetFirstActivationTime() *timestamppb.T
 	return nil
 }
 
-func (x *WorkerDeploymentVersionSummary) GetFirstCurrentTime() *timestamppb.Timestamp {
+func (x *WorkerDeploymentVersionSummary) GetLastCurrentTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FirstCurrentTime
+		return x.LastCurrentTime
 	}
 	return nil
 }
@@ -3332,7 +3332,7 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\vupdate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\x12\x18\n" +
 	"\adeleted\x18\x03 \x01(\bR\adeleted\x12L\n" +
-	"\x06status\x18\x06 \x01(\x0e24.temporal.api.enums.v1.WorkerDeploymentVersionStatusR\x06status\"\xb2\f\n" +
+	"\x06status\x18\x06 \x01(\x0e24.temporal.api.enums.v1.WorkerDeploymentVersionStatusR\x06status\"\xb0\f\n" +
 	"\x11VersionLocalState\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -3341,8 +3341,8 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x12current_since_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
 	"\x12ramping_since_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12'\n" +
 	"\x0framp_percentage\x18\x06 \x01(\x02R\x0erampPercentage\x12N\n" +
-	"\x15first_activation_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x13firstActivationTime\x12H\n" +
-	"\x12first_current_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\x10firstCurrentTime\x12P\n" +
+	"\x15first_activation_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x13firstActivationTime\x12F\n" +
+	"\x11last_current_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastCurrentTime\x12P\n" +
 	"\x16last_deactivation_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x14lastDeactivationTime\x12T\n" +
 	"\rdrainage_info\x18\a \x01(\v2/.temporal.api.deployment.v1.VersionDrainageInfoR\fdrainageInfo\x12G\n" +
 	"\bmetadata\x18\b \x01(\v2+.temporal.api.deployment.v1.VersionMetadataR\bmetadata\x12>\n" +
@@ -3388,7 +3388,7 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12M\n" +
 	"\x05value\x18\x02 \x01(\v27.temporal.server.api.deployment.v1.PropagatingRevisionsR\x05value:\x028\x01\"A\n" +
 	"\x14PropagatingRevisions\x12)\n" +
-	"\x10revision_numbers\x18\x01 \x03(\x03R\x0frevisionNumbers\"\xc2\x06\n" +
+	"\x10revision_numbers\x18\x01 \x03(\x03R\x0frevisionNumbers\"\xc0\x06\n" +
 	"\x1eWorkerDeploymentVersionSummary\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -3398,8 +3398,8 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x13routing_update_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11routingUpdateTime\x12H\n" +
 	"\x12current_since_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x10currentSinceTime\x12H\n" +
 	"\x12ramping_since_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x10rampingSinceTime\x12N\n" +
-	"\x15first_activation_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x13firstActivationTime\x12H\n" +
-	"\x12first_current_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x10firstCurrentTime\x12P\n" +
+	"\x15first_activation_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x13firstActivationTime\x12F\n" +
+	"\x11last_current_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0flastCurrentTime\x12P\n" +
 	"\x16last_deactivation_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x14lastDeactivationTime\x12L\n" +
 	"\x06status\x18\n" +
 	" \x01(\x0e24.temporal.api.enums.v1.WorkerDeploymentVersionStatusR\x06status\"\xa7\x02\n" +
@@ -3674,7 +3674,7 @@ var file_temporal_server_api_deployment_v1_message_proto_depIdxs = []int32{
 	59, // 10: temporal.server.api.deployment.v1.VersionLocalState.current_since_time:type_name -> google.protobuf.Timestamp
 	59, // 11: temporal.server.api.deployment.v1.VersionLocalState.ramping_since_time:type_name -> google.protobuf.Timestamp
 	59, // 12: temporal.server.api.deployment.v1.VersionLocalState.first_activation_time:type_name -> google.protobuf.Timestamp
-	59, // 13: temporal.server.api.deployment.v1.VersionLocalState.first_current_time:type_name -> google.protobuf.Timestamp
+	59, // 13: temporal.server.api.deployment.v1.VersionLocalState.last_current_time:type_name -> google.protobuf.Timestamp
 	59, // 14: temporal.server.api.deployment.v1.VersionLocalState.last_deactivation_time:type_name -> google.protobuf.Timestamp
 	61, // 15: temporal.server.api.deployment.v1.VersionLocalState.drainage_info:type_name -> temporal.api.deployment.v1.VersionDrainageInfo
 	62, // 16: temporal.server.api.deployment.v1.VersionLocalState.metadata:type_name -> temporal.api.deployment.v1.VersionMetadata
@@ -3693,7 +3693,7 @@ var file_temporal_server_api_deployment_v1_message_proto_depIdxs = []int32{
 	59, // 29: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.current_since_time:type_name -> google.protobuf.Timestamp
 	59, // 30: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.ramping_since_time:type_name -> google.protobuf.Timestamp
 	59, // 31: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.first_activation_time:type_name -> google.protobuf.Timestamp
-	59, // 32: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.first_current_time:type_name -> google.protobuf.Timestamp
+	59, // 32: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.last_current_time:type_name -> google.protobuf.Timestamp
 	59, // 33: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.last_deactivation_time:type_name -> google.protobuf.Timestamp
 	60, // 34: temporal.server.api.deployment.v1.WorkerDeploymentVersionSummary.status:type_name -> temporal.api.enums.v1.WorkerDeploymentVersionStatus
 	65, // 35: temporal.server.api.deployment.v1.RegisterWorkerInVersionArgs.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
