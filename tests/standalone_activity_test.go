@@ -1165,7 +1165,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 		require.NotNil(t, describeResp.LongPollToken)
 		require.NotNil(t, respInfo)
 
-		expectedExpirationTime := timestamppb.New(respInfo.GetScheduleTime().AsTime().Add(
+		expectedExpirationTime := timestamppb.New(describeResp.GetInfo().GetScheduleTime().AsTime().Add(
 			startReq.GetScheduleToCloseTimeout().AsDuration()))
 
 		expected := &activitypb.ActivityExecutionInfo{
