@@ -247,6 +247,21 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) LongPollExpirationInterval(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LongPollExpirationInterval", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).LongPollExpirationInterval))
 }
 
+// MakePollerScalingDecision mocks base method.
+func (m *MocktaskQueuePartitionManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, physicalQueue physicalTaskQueueManager) (*taskqueue.PollerScalingDecision, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MakePollerScalingDecision", ctx, pollStartTime, physicalQueue)
+	ret0, _ := ret[0].(*taskqueue.PollerScalingDecision)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MakePollerScalingDecision indicates an expected call of MakePollerScalingDecision.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) MakePollerScalingDecision(ctx, pollStartTime, physicalQueue any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).MakePollerScalingDecision), ctx, pollStartTime, physicalQueue)
+}
+
 // MarkAlive mocks base method.
 func (m *MocktaskQueuePartitionManager) MarkAlive() {
 	m.ctrl.T.Helper()
