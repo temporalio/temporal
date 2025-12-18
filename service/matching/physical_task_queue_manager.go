@@ -449,8 +449,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.namespace = c.partitionMgr.ns.Name()
 		task.backlogCountHint = c.backlogCountHint
 
-		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
-			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
+		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
 			c.getOrCreateTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey())).incrementTaskCount()
 		}
 		return task, nil

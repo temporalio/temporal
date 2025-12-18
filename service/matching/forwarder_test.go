@@ -258,7 +258,9 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollWorkflowTaskQueueResponse{}
+	resp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
 
 	var request *matchingservice.PollWorkflowTaskQueueRequest
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
@@ -286,7 +288,9 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollActivityTaskQueueResponse{}
+	resp := &matchingservice.PollActivityTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
 
 	var request *matchingservice.PollActivityTaskQueueRequest
 	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
