@@ -258,7 +258,7 @@ func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVe
 // SDKDeploymentVersion returns SDK worker deployment version
 func (tv *TestVars) SDKDeploymentVersion() worker.WorkerDeploymentVersion {
 	return worker.WorkerDeploymentVersion{
-		BuildId:        tv.BuildID(),
+		BuildID:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
 	}
 }

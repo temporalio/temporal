@@ -114,7 +114,7 @@ func (c chasmInvocation) getHistoryRequest(
 			Completion: completion,
 		}
 	case *nexusrpc.OperationCompletionUnsuccessful:
-		apiFailure, err := commonnexus.NexusFailureToAPIFailure(op.Failure, true)
+		apiFailure, err := commonnexus.NexusFailureToAPIFailure(op.Failure)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert failure type: %v", err)
 		}

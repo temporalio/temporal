@@ -26,7 +26,7 @@ func main() {
 	build1 := "1.0"
 	v1 := worker.WorkerDeploymentVersion{
 		DeploymentName: deploymentName,
-		BuildId:        build1,
+		BuildID:        build1,
 	}
 	w1 := worker.New(c, "hello-world", worker.Options{
 		DeploymentOptions: worker.DeploymentOptions{
@@ -224,8 +224,8 @@ func verifyDeployment(dHandle client.WorkerDeploymentHandle,
 		log.Fatalln("Unable to describe deployment", err)
 	}
 	if cv := describeResponse.Info.RoutingConfig.CurrentVersion; cv != nil {
-		if cv.BuildId != expectedCurrentVersionBuildId {
-			log.Fatalln(fmt.Sprintf("Current version build id is %s not %s", cv.BuildId, expectedCurrentVersionBuildId))
+		if cv.BuildID != expectedCurrentVersionBuildId {
+			log.Fatalln(fmt.Sprintf("Current version build id is %s not %s", cv.BuildID, expectedCurrentVersionBuildId))
 		}
 	} else {
 		if expectedCurrentVersionBuildId != "" {
@@ -234,8 +234,8 @@ func verifyDeployment(dHandle client.WorkerDeploymentHandle,
 	}
 
 	if rv := describeResponse.Info.RoutingConfig.RampingVersion; rv != nil {
-		if rv.BuildId != expectedRampingVersionBuildId {
-			log.Fatalln(fmt.Sprintf("Ramping version build id is %s not %s", rv.BuildId, expectedRampingVersionBuildId))
+		if rv.BuildID != expectedRampingVersionBuildId {
+			log.Fatalln(fmt.Sprintf("Ramping version build id is %s not %s", rv.BuildID, expectedRampingVersionBuildId))
 		}
 	} else {
 		if expectedRampingVersionBuildId != "" {
