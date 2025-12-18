@@ -96,17 +96,17 @@ func (e *ChasmEngine) NewExecution(
 	executionRef chasm.ComponentRef,
 	newFn func(chasm.MutableContext) (chasm.Component, error),
 	opts ...chasm.TransitionOption,
-) (executionKey chasm.ExecutionKey, newExecutionRef []byte, retErr error) {
+) (executionKey chasm.ExecutionKey, newExecutionRef []byte, created bool, retErr error) {
 	options := e.constructTransitionOptions(opts...)
 
 	shardContext, err := e.getShardContext(executionRef)
 	if err != nil {
-		return chasm.ExecutionKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, false, err
 	}
 
 	archetypeID, err := executionRef.ArchetypeID(e.registry)
 	if err != nil {
-		return chasm.ExecutionKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, false, err
 	}
 
 	currentExecutionReleaseFn, err := e.lockCurrentExecution(
@@ -117,7 +117,7 @@ func (e *ChasmEngine) NewExecution(
 		archetypeID,
 	)
 	if err != nil {
-		return chasm.ExecutionKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, false, err
 	}
 	defer func() {
 		currentExecutionReleaseFn(retErr)
@@ -132,7 +132,7 @@ func (e *ChasmEngine) NewExecution(
 		options,
 	)
 	if err != nil {
-		return chasm.ExecutionKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, false, err
 	}
 
 	currentRunInfo, hasCurrentRun, err := e.persistAsBrandNew(
@@ -141,14 +141,14 @@ func (e *ChasmEngine) NewExecution(
 		newExecutionParams,
 	)
 	if err != nil {
-		return chasm.ExecutionKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, false, err
 	}
 	if !hasCurrentRun {
 		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 		if err != nil {
-			return chasm.ExecutionKey{}, nil, err
+			return chasm.ExecutionKey{}, nil, true, err
 		}
-		return newExecutionParams.executionRef.ExecutionKey, serializedRef, nil
+		return newExecutionParams.executionRef.ExecutionKey, serializedRef, true, nil
 	}
 
 	return e.handleExecutionConflict(
@@ -532,15 +532,15 @@ func (e *ChasmEngine) handleExecutionConflict(
 	newExecutionParams newExecutionParams,
 	currentRunInfo currentExecutionInfo,
 	options chasm.TransitionOptions,
-) (chasm.ExecutionKey, []byte, error) {
+) (chasm.ExecutionKey, []byte, bool, error) {
 	// Check if this a retired request using requestID.
 	if _, ok := currentRunInfo.RequestIDs[options.RequestID]; ok {
 		newExecutionParams.executionRef.RunID = currentRunInfo.RunID
 		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 		if err != nil {
-			return chasm.ExecutionKey{}, nil, err
+			return chasm.ExecutionKey{}, nil, false, err
 		}
-		return newExecutionParams.executionRef.ExecutionKey, serializedRef, nil
+		return newExecutionParams.executionRef.ExecutionKey, serializedRef, false, nil
 	}
 
 	// Verify failover version and make sure it won't go backwards even if the case of split brain.
@@ -552,7 +552,7 @@ func (e *ChasmEngine) handleExecutionConflict(
 			nsEntry.IsGlobalNamespace(),
 			currentRunInfo.LastWriteVersion,
 		)
-		return chasm.ExecutionKey{}, nil, serviceerror.NewNamespaceNotActive(
+		return chasm.ExecutionKey{}, nil, false, serviceerror.NewNamespaceNotActive(
 			nsEntry.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
 			clusterName,
@@ -561,11 +561,13 @@ func (e *ChasmEngine) handleExecutionConflict(
 
 	switch currentRunInfo.State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-		return e.handleConflictPolicy(ctx, shardContext, newExecutionParams, currentRunInfo, options.ConflictPolicy)
+		executionKey, serializedRef, err := e.handleConflictPolicy(
+			ctx, shardContext, newExecutionParams, currentRunInfo, options.ConflictPolicy)
+		return executionKey, serializedRef, false, err
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		return e.handleReusePolicy(ctx, shardContext, newExecutionParams, currentRunInfo, options.ReusePolicy)
 	default:
-		return chasm.ExecutionKey{}, nil, serviceerror.NewInternal(
+		return chasm.ExecutionKey{}, nil, false, serviceerror.NewInternal(
 			fmt.Sprintf("unexpected current run state when creating new execution: %v", currentRunInfo.State),
 		)
 	}
@@ -623,14 +625,14 @@ func (e *ChasmEngine) handleReusePolicy(
 	newExecutionParams newExecutionParams,
 	currentRunInfo currentExecutionInfo,
 	reusePolicy chasm.BusinessIDReusePolicy,
-) (chasm.ExecutionKey, []byte, error) {
+) (chasm.ExecutionKey, []byte, bool, error) {
 	switch reusePolicy {
 	case chasm.BusinessIDReusePolicyAllowDuplicate:
 		// No more check needed.
 		// Fallthrough to persist the new execution as current run.
 	case chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly:
 		if _, ok := consts.FailedWorkflowStatuses[currentRunInfo.Status]; !ok {
-			return chasm.ExecutionKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
+			return chasm.ExecutionKey{}, nil, false, chasm.NewExecutionAlreadyStartedErr(
 				fmt.Sprintf(
 					"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 					newExecutionParams.executionRef.BusinessID,
@@ -643,7 +645,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		}
 		// Fallthrough to persist the new execution as current run.
 	case chasm.BusinessIDReusePolicyRejectDuplicate:
-		return chasm.ExecutionKey{}, nil, chasm.NewExecutionAlreadyStartedErr(
+		return chasm.ExecutionKey{}, nil, false, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 				newExecutionParams.executionRef.BusinessID,
@@ -654,7 +656,7 @@ func (e *ChasmEngine) handleReusePolicy(
 			currentRunInfo.RunID,
 		)
 	default:
-		return chasm.ExecutionKey{}, nil, serviceerror.NewInternal(
+		return chasm.ExecutionKey{}, nil, false, serviceerror.NewInternal(
 			fmt.Sprintf("unknown business ID reuse policy for NewExecution: %v", reusePolicy),
 		)
 	}
@@ -670,14 +672,14 @@ func (e *ChasmEngine) handleReusePolicy(
 		newExecutionParams.events,
 	)
 	if err != nil {
-		return chasm.ExecutionKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, false, err
 	}
 
 	serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 	if err != nil {
-		return chasm.ExecutionKey{}, nil, err
+		return chasm.ExecutionKey{}, nil, true, err
 	}
-	return newExecutionParams.executionRef.ExecutionKey, serializedRef, nil
+	return newExecutionParams.executionRef.ExecutionKey, serializedRef, true, nil
 }
 
 func (e *ChasmEngine) getShardContext(
