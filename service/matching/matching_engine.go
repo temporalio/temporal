@@ -1438,7 +1438,6 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 
 	resp := &matchingservice.DescribeVersionedTaskQueuesResponse{}
 	for _, tq := range request.VersionTaskQueues {
-		fmt.Println("Version requested to being described:", request.Version.DeploymentName, request.Version.BuildId)
 		tqResp, err := e.matchingRawClient.DescribeTaskQueue(ctx,
 			&matchingservice.DescribeTaskQueueRequest{
 				NamespaceId: request.GetNamespaceId(),
