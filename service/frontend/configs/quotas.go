@@ -157,7 +157,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":          3,
 
 		// P4: Poll APIs and other low priority APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4, // TODO(dan): should it be 4 or 3?
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4, // TODO(saa-preview): should it be 4 or 3?
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        4,
