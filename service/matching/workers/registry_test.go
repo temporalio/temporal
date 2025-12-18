@@ -1,6 +1,7 @@
 package workers
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -499,6 +500,53 @@ func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
 		assert.Len(t, resp3.Workers, 1)
 		assert.Equal(t, "worker-e", resp3.Workers[0].WorkerInstanceKey)
 		assert.Nil(t, resp3.NextPageToken, "should not have next page token on last page")
+	})
+}
+
+func TestRegistryImpl_ListWorkersPaginationWithDeletedCursor(t *testing.T) {
+	// Test that pagination continues correctly even if the cursor item is deleted
+	// between pagination requests.
+
+	t.Run("cursor item deleted", func(t *testing.T) {
+		// Simulate: page 1 returned workers a, b with cursor "b"
+		// Before page 2, worker "b" is evicted
+		// Page 2 should continue from "c" (first key > "b")
+		workers := []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "worker-a"},
+			// worker-b was deleted
+			{WorkerInstanceKey: "worker-c"},
+			{WorkerInstanceKey: "worker-d"},
+		}
+
+		// Create a token pointing to the deleted "worker-b"
+		token, _ := json.Marshal(listWorkersPageToken{LastWorkerInstanceKey: "worker-b"})
+
+		resp, err := paginateWorkers(workers, 2, token)
+		require.NoError(t, err)
+		assert.Len(t, resp.Workers, 2)
+		// Should start from "worker-c" (first key > "worker-b")
+		assert.Equal(t, "worker-c", resp.Workers[0].WorkerInstanceKey)
+		assert.Equal(t, "worker-d", resp.Workers[1].WorkerInstanceKey)
+	})
+
+	t.Run("cursor at end deleted", func(t *testing.T) {
+		// Simulate: cursor points to "worker-d" which was the last item
+		// Before next request, "worker-d" is evicted
+		// Should return empty (no more results)
+		workers := []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "worker-a"},
+			{WorkerInstanceKey: "worker-b"},
+			{WorkerInstanceKey: "worker-c"},
+			// worker-d was deleted
+		}
+
+		// Create a token pointing to the deleted "worker-d"
+		token, _ := json.Marshal(listWorkersPageToken{LastWorkerInstanceKey: "worker-d"})
+
+		resp, err := paginateWorkers(workers, 2, token)
+		require.NoError(t, err)
+		assert.Empty(t, resp.Workers, "should return empty when cursor is past all remaining workers")
+		assert.Nil(t, resp.NextPageToken)
 	})
 }
 
