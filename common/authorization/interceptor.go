@@ -313,6 +313,8 @@ func (a *Interceptor) authorizeTargetNamespaces(
 				targetNamespace = attr.GetNamespace()
 				apiName = "RequestCancelWorkflowExecution"
 			}
+		default:
+			// Other command types don't target external namespaces
 		}
 
 		// Skip if empty, same as source, or already authorized
