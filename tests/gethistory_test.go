@@ -77,6 +77,7 @@ func TestGetHistoryFunctionalSuite(t *testing.T) {
 func (s *GetHistoryFunctionalSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.EnableTransitionHistory.Key(): s.EnableTransitionHistory,
+		dynamicconfig.ExternalPayloadsEnabled.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
