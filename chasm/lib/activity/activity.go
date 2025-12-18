@@ -635,7 +635,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
 
-	// TODO (saa-preview): debating if we should persist next attempt schedule time for stronger consistency
+	// TODO(saa-preview): debating if we should persist next attempt schedule time for stronger consistency
 	var nextAttemptScheduleTime *timestamppb.Timestamp
 	interval := attempt.GetCurrentRetryInterval()
 	completeTime := attempt.GetCompleteTime()
