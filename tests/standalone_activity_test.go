@@ -32,8 +32,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TODO(fred) add tests for retries when we implement search attributes
-
 const (
 	defaultStartToCloseTimeout = 1 * time.Minute
 	defaultIdentity            = "test-worker"
@@ -100,79 +98,77 @@ func (s *standaloneActivityTestSuite) SetupTest() {
 	s.tv = testvars.New(s.T())
 }
 
-func (s *standaloneActivityTestSuite) TestIDReusePolicy_RejectDuplicate() {
+func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue().String()
+	t.Run("RejectDuplicate", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
 
-	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	runID := startResp.RunId
-	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-	_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-		Namespace: s.Namespace().String(),
-		TaskToken: pollTaskResp.TaskToken,
-		Result:    defaultResult,
-		Identity:  "new-worker",
+		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  "new-worker",
+		})
+		require.NoError(t, err)
+
+		s.validateCompletion(ctx, t, activityID, runID, "new-worker")
+
+		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		})
+		require.Error(t, err)
 	})
-	require.NoError(t, err)
 
-	s.validateCompletion(ctx, t, activityID, runID, "new-worker")
+	t.Run("AllowDuplicateFailedOnly", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
 
-	_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
-		Identity:     s.tv.WorkerIdentity(),
-		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-		},
-		StartToCloseTimeout: durationpb.New(1 * time.Minute),
-		IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Failure:   defaultFailure,
+			Identity:  "new-worker",
+		})
+		require.NoError(t, err)
+
+		s.validateFailure(ctx, t, activityID, runID, nil, "new-worker")
+
+		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		})
+		require.NoError(t, err)
 	})
-	require.Error(t, err)
-}
-
-func (s *standaloneActivityTestSuite) TestIDReusePolicy_AllowDuplicateFailedOnly() {
-	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue().String()
-
-	startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-	runID := startResp.RunId
-
-	pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
-
-	_, err := s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
-		Namespace: s.Namespace().String(),
-		TaskToken: pollTaskResp.TaskToken,
-		Failure:   defaultFailure,
-		Identity:  "new-worker",
-	})
-	require.NoError(t, err)
-
-	s.validateFailure(ctx, t, activityID, runID, nil, "new-worker")
-
-	_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
-		Identity:     s.tv.WorkerIdentity(),
-		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-		},
-		StartToCloseTimeout: durationpb.New(1 * time.Minute),
-		IdReusePolicy:       enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-	})
-	require.NoError(t, err)
 }
 
 func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
@@ -1095,6 +1091,57 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 	protorequire.ProtoEqual(t, failure, describeResp.GetOutcome().GetFailure())
 	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected StartToCloseTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+}
+
+// TestScheduleToStartTimeout tests that a schedule-to-start timeout is recorded after the activity is
+// created but never started. It also verifies that DescribeActivityExecution can be used to long-poll for a TimedOut
+// state change caused by execution of a timer task.
+func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
+	t := s.T()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue()
+
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		ActivityType: &commonpb.ActivityType{
+			Name: "test-activity-type",
+		},
+		Input: payloads.EncodeString("test-activity-input"),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue.Name,
+		},
+		ScheduleToStartTimeout: durationpb.New(100 * time.Millisecond),
+		StartToCloseTimeout:    durationpb.New(30 * time.Second),
+		RequestId:              "test-request-id",
+	})
+	require.NoError(t, err)
+
+	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+
+	// Long poll to await activity timeout
+	describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:      s.Namespace().String(),
+		ActivityId:     activityID,
+		RunId:          startResp.RunId,
+		IncludeOutcome: true,
+		LongPollToken:  describeResp.LongPollToken,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, describeResp.GetInfo().GetStatus(),
+		"expected TimedOut but is %s", describeResp.GetInfo().GetStatus())
+	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		"expected ScheduleToStartTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
 func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
