@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -818,10 +819,7 @@ func (s *RawHistoryClientSuite) getHistoryReverse(namespace string, execution *c
 }
 
 func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayloadStats() {
-	workflowID := "functional-history-external-payload-stats-test"
-	workflowType := "functional-history-external-payload-stats-test-type"
-	taskQueue := "functional-history-external-payload-stats-test-taskqueue"
-	identity := "worker1"
+	tv := testvars.New(s.T())
 
 	workflowExternalPayloadSize := int64(1024)
 	workflowInputPayload := &commonpb.Payloads{
@@ -844,77 +842,43 @@ func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_ExternalPayl
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
-		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
 		Input:               workflowInputPayload,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
+		Identity:            tv.WorkerIdentity(),
 	})
 	s.NoError(err)
 
-	activityScheduled := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if !activityScheduled {
-			activityScheduled = true
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             "activity1",
-						ActivityType:           &commonpb.ActivityType{Name: "TestActivity"},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-						Input:                  activityInputPayload,
-						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
-						ScheduleToStartTimeout: durationpb.New(100 * time.Second),
-						StartToCloseTimeout:    durationpb.New(50 * time.Second),
-						HeartbeatTimeout:       durationpb.New(5 * time.Second),
-					},
-				},
-			}}, nil
-		}
-		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("Done"),
-				},
-			},
-		}}, nil
-	}
-
-	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString("Activity Result"), false, nil
-	}
-
-	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
-
 	// Process first workflow task (schedules activity)
-	_, err = poller.PollAndProcessWorkflowTask()
-	s.NoError(err)
-
-	// Process activity
-	err = poller.PollAndProcessActivityTask(false)
-	s.NoError(err)
-
-	// Process second workflow task (completes workflow)
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             "activity1",
+							ActivityType:           &commonpb.ActivityType{Name: "TestActivity"},
+							TaskQueue:              tv.TaskQueue(),
+							Input:                  activityInputPayload,
+							ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+							ScheduleToStartTimeout: durationpb.New(100 * time.Second),
+							StartToCloseTimeout:    durationpb.New(50 * time.Second),
+							HeartbeatTimeout:       durationpb.New(5 * time.Second),
+						},
+					},
+				}},
+			}, nil
+		})
 	s.NoError(err)
 
 	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
+			WorkflowId: tv.WorkflowID(),
 			RunId:      we.GetRunId(),
 		},
 	})
