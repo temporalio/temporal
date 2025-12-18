@@ -193,18 +193,6 @@ func (task *internalTask) isPollForwarder() bool {
 	return task.effectivePriority == pollForwarderPriority
 }
 
-// hasEmptyResponse is true if a task contains an empty response for the appropriate TaskInfo
-func (info *startedTaskInfo) hasEmptyResponse() bool {
-	if info.workflowTaskInfo != nil && len(info.workflowTaskInfo.TaskToken) != 0 {
-		return false
-	} else if info.activityTaskInfo != nil && len(info.activityTaskInfo.TaskToken) != 0 {
-		return false
-	} else if info.nexusTaskInfo != nil && info.nexusTaskInfo.Response != nil {
-		return false
-	}
-	return true
-}
-
 // isQuery returns true if the underlying task is a query task
 func (task *internalTask) isQuery() bool {
 	return task.query != nil
