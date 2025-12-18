@@ -309,7 +309,10 @@ func (e *ChasmEngine) PollComponent(
 			return ref, nil
 		}
 		// Predicate not satisfied; subscribe before releasing the lock.
-		ch, unsubscribe = e.notifier.Subscribe(requestRef.ExecutionKey)
+		ch, unsubscribe, err = e.notifier.Subscribe(requestRef.ExecutionKey)
+		if err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 

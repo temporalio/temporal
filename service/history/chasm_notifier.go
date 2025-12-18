@@ -3,6 +3,7 @@ package history
 import (
 	"sync"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 )
 
@@ -32,7 +33,10 @@ func NewChasmNotifier() *ChasmNotifier {
 // been reached and resubscribe if necessary, while holding a lock on the execution. The caller must
 // arrange for the unsubscribe function to be called when they have finished monitoring the channel
 // for notifications. It is safe to call the unsubscribe function multiple times and concurrently.
-func (n *ChasmNotifier) Subscribe(key chasm.ExecutionKey) (<-chan struct{}, func()) {
+func (n *ChasmNotifier) Subscribe(key chasm.ExecutionKey) (<-chan struct{}, func(), error) {
+	if key.RunID == "" {
+		return nil, nil, serviceerror.NewInvalidArgument("run id is required")
+	}
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	s, ok := n.executions[key]
@@ -50,7 +54,7 @@ func (n *ChasmNotifier) Subscribe(key chasm.ExecutionKey) (<-chan struct{}, func
 				delete(n.executions, key)
 			}
 		}
-	})
+	}), nil
 }
 
 // Notify notifies all subscribers subscribed to key by closing the channel.
