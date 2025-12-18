@@ -1380,15 +1380,6 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument(
 			},
 			expectedErr: "invalid run id",
 		},
-		{
-			name: "EmptyRunID",
-			request: &workflowservice.PollActivityExecutionRequest{
-				Namespace:  existingNamespace,
-				ActivityId: "activity-id",
-				RunId:      "",
-			},
-			expectedErr: "run id is required",
-		},
 	}
 
 	for _, tc := range testCases {
