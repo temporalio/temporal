@@ -87,7 +87,7 @@ func validateActivityRetryPolicy(
 	if retryPolicy == nil {
 		return nil
 	}
-	// TODO: this is a namespace setting, not a namespace id setting
+	// TODO(saa-preview): this is a namespace setting, not a namespace id setting
 	defaultActivityRetrySettings := getDefaultActivityRetrySettings(namespaceID.String())
 	retrypolicy.EnsureDefaults(retryPolicy, defaultActivityRetrySettings)
 	return retrypolicy.Validate(retryPolicy)

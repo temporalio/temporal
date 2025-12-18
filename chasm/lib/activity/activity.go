@@ -686,7 +686,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
 		StateTransitionCount:    a.Visibility.Get(ctx).Data.TransitionCount,
-		// StateSizeBytes: TODO do we still want this?
+		// TODO(saa-preview): StateSizeBytes?
 		SearchAttributes: sa,
 		Status:           status,
 		TaskQueue:        a.GetTaskQueue().GetName(),
