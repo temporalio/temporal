@@ -322,7 +322,7 @@ func downloadCLI() error {
 func downloadCLIForArch(arch string) error {
 	cliVersion := os.Getenv("CLI_VERSION")
 	if cliVersion == "" {
-		defaultCliVersion
+		cliVersion = defaultCliVersion
 	}
 
 	tarballName := fmt.Sprintf("temporal_cli_%s_linux_%s.tar.gz", cliVersion, arch)
