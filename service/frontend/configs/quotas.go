@@ -109,6 +109,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivity":                         2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivity":                       2,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivity":                         2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions":        2,
 		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":                  2, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeploymentVersion":           2, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion":     2,
