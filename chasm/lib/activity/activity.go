@@ -250,7 +250,7 @@ func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
 	event RespondCompletedEvent,
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -278,7 +278,7 @@ func (a *Activity) HandleFailed(
 	ctx chasm.MutableContext,
 	event RespondFailedEvent,
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
 	event RespondCancelledEvent,
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -578,7 +578,7 @@ func (a *Activity) RecordHeartbeat(
 	)
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		// TODO(dan): ActivityPaused, ActivityReset
+		// TODO(saa-preview): ActivityPaused, ActivityReset
 	}, nil
 }
 
@@ -627,7 +627,7 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.ActivityExecutionInfo, error) {
-	// TODO(dan): support pause states
+	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
 
