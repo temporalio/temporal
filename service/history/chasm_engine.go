@@ -309,7 +309,12 @@ func (e *ChasmEngine) PollComponent(
 			return ref, nil
 		}
 		// Predicate not satisfied; subscribe before releasing the lock.
-		ch, unsubscribe = e.notifier.Subscribe(requestRef.ExecutionKey)
+		workflowKey := executionLease.GetContext().GetWorkflowKey()
+		ch, unsubscribe = e.notifier.Subscribe(chasm.ExecutionKey{
+			NamespaceID: workflowKey.NamespaceID,
+			BusinessID:  workflowKey.WorkflowID,
+			RunID:       workflowKey.RunID,
+		})
 		return nil, nil
 	}
 
@@ -321,12 +326,9 @@ func (e *ChasmEngine) PollComponent(
 	for {
 		select {
 		case <-ch:
-			ref, err := checkPredicateOrSubscribe()
-			if err != nil {
-				return nil, err
-			}
-			if ref != nil {
-				return ref, nil
+			ref, err = checkPredicateOrSubscribe()
+			if err != nil || ref != nil {
+				return ref, err
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
