@@ -315,7 +315,7 @@ func (a *Interceptor) authorizeTargetNamespaces(
 		var targetNamespace string
 		var apiName string
 
-		switch cmd.GetCommandType() {
+		switch cmd.GetCommandType() { // nolint:exhaustive
 		case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
 			if attr := cmd.GetSignalExternalWorkflowExecutionCommandAttributes(); attr != nil {
 				targetNamespace = attr.GetNamespace()

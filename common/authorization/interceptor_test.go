@@ -268,7 +268,7 @@ func (m multiNamespaceChecker) Exists(name namespace.Name) error {
 
 // Helper to create a cross-namespace command
 func makeCrossNamespaceCommand(commandType enumspb.CommandType, targetNs string) *commandpb.Command {
-	switch commandType {
+	switch commandType { // nolint:exhaustive
 	case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
 		return &commandpb.Command{
 			CommandType: commandType,
