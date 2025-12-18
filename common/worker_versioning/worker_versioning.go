@@ -539,6 +539,7 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 	key := versionMembershipCacheKey{
 		namespaceID:    namespaceID,
 		taskQueue:      tq,
+		taskQueueType:  tqType,
 		deploymentName: pinnedVersion.DeploymentName,
 		buildID:        pinnedVersion.BuildId,
 	}
@@ -576,6 +577,7 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 type versionMembershipCacheKey struct {
 	namespaceID    string
 	taskQueue      string
+	taskQueueType  enumspb.TaskQueueType
 	deploymentName string
 	buildID        string
 }
