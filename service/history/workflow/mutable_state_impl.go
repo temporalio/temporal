@@ -7559,12 +7559,14 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		ms.executionInfo.LastFirstEventTxnId = historyNodeTxnIDs[index]
 
 		// Calculate and add the external payload size and count for this batch
-		externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch)
-		if err != nil {
-			return nil, nil, nil, false, err
+		if ms.config.ExternalPayloadsEnabled(ms.GetNamespaceEntry().Name().String()) {
+			externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			ms.AddExternalPayloadSize(externalPayloadSize)
+			ms.AddExternalPayloadCount(externalPayloadCount)
 		}
-		ms.AddExternalPayloadSize(externalPayloadSize)
-		ms.AddExternalPayloadCount(externalPayloadCount)
 	}
 
 	if err := ms.validateNoEventsAfterWorkflowFinish(

@@ -1117,12 +1117,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			isNewBranch = false
 
 			localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(historyBlob.rawHistory.Data))
-			externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
-			if err != nil {
-				return err
+			if r.shardContext.GetConfig().ExternalPayloadsEnabled(nsName.String()) {
+				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
+				if err != nil {
+					return err
+				}
+				localMutableState.AddExternalPayloadSize(externalPayloadSize)
+				localMutableState.AddExternalPayloadCount(externalPayloadCount)
 			}
-			localMutableState.GetExecutionInfo().ExecutionStats.ExternalPayloadSize += externalPayloadSize
-			localMutableState.GetExecutionInfo().ExecutionStats.ExternalPayloadCount += externalPayloadCount
 		}
 		return nil
 	}
@@ -1181,13 +1183,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		startEventID = events[len(events)-1].EventId
 		startEventVersion = events[len(events)-1].Version
 		localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(eventBlobs[i].Data))
-		externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
-		if err != nil {
-			return newBranchToken, err
+		if r.shardContext.GetConfig().ExternalPayloadsEnabled(localMutableState.GetNamespaceEntry().Name().String()) {
+			externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(events)
+			if err != nil {
+				return newBranchToken, err
+			}
+			localMutableState.AddExternalPayloadSize(externalPayloadSize)
+			localMutableState.AddExternalPayloadCount(externalPayloadCount)
 		}
-		localMutableState.GetExecutionInfo().ExecutionStats.ExternalPayloadSize += externalPayloadSize
-		localMutableState.GetExecutionInfo().ExecutionStats.ExternalPayloadCount += externalPayloadCount
-
 	}
 	// add more events if there is any
 	if startEventID < endEventID {
