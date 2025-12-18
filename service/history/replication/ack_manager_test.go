@@ -307,7 +307,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil)
+		State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("some random error"))
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil)
@@ -355,7 +355,7 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize())
+		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(s.replicationAckManager.pageSize())
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize())
 
@@ -403,7 +403,7 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(numTasks)
+		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(numTasks)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(numTasks)
 
@@ -486,7 +486,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize())
+		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(s.replicationAckManager.pageSize())
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize())
 
