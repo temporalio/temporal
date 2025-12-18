@@ -671,132 +671,75 @@ func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 	s.Equal(ref.BusinessID, newRef.BusinessID)
 }
 
-// TestPollComponent_EmptyRunID_Wait tests that PollComponent correctly resolves an empty RunID
-// before subscribing for notifications. This is a regression test: previously, PollComponent
-// would subscribe using the empty RunID from the request, but notifications are sent with the
-// resolved RunID, so the subscription would never receive any notification and the poll would
-// time out.
-func (s *chasmEngineSuite) TestPollComponent_EmptyRunID_Wait() {
-	tv := testvars.New(s.T())
-	actualRunID := tv.Any().RunID()
-	activityID := tv.ActivityID()
-
-	// The poll request uses empty RunID.
-	pollRef := chasm.NewComponentRef[*testComponent](
-		chasm.ExecutionKey{
-			NamespaceID: string(tests.NamespaceID),
-			BusinessID:  tv.WorkflowID(),
-			RunID:       "", // empty - must be resolved before subscribing
-		},
-	)
-
-	// The update request uses the actual RunID (as would happen in practice).
-	resolvedExecutionKey := chasm.ExecutionKey{
-		NamespaceID: string(tests.NamespaceID),
-		BusinessID:  tv.WorkflowID(),
-		RunID:       actualRunID,
-	}
-	updateRef := chasm.NewComponentRef[*testComponent](resolvedExecutionKey)
-
-	// GetCurrentExecution is called to resolve the empty RunID.
-	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetCurrentExecutionResponse{
-			RunID: actualRunID,
-		}, nil).AnyTimes()
-
-	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(resolvedExecutionKey, &persistencespb.ActivityInfo{}),
-		}, nil).Times(1)
-	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
-	// The notification is sent with the resolved RunID (not empty).
-	s.mockEngine.EXPECT().NotifyChasmExecution(resolvedExecutionKey, gomock.Any()).DoAndReturn(
-		func(key chasm.ExecutionKey, ref []byte) {
-			s.engine.notifier.Notify(key)
-		},
-	).Times(1)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	pollErr := make(chan error)
-	pollResult := make(chan []byte)
-	go func() {
-		newSerializedRef, err := s.engine.PollComponent(
-			ctx,
-			pollRef,
-			func(ctx chasm.Context, component chasm.Component) (bool, error) {
-				tc, ok := component.(*testComponent)
-				s.True(ok)
-				// Predicate satisfied when activityID is set.
-				return tc.ActivityInfo.ActivityId == activityID, nil
-			},
-		)
-		pollErr <- err
-		pollResult <- newSerializedRef
-	}()
-
-	// Give the poll goroutine time to start and subscribe.
-	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
-
-	// Update the component to satisfy the predicate. This triggers a notification
-	// with the resolved RunID. With the bug, PollComponent subscribed to an empty
-	// RunID key, so it won't receive this notification and will time out.
-	_, err := s.engine.UpdateComponent(
-		context.Background(),
-		updateRef,
-		func(ctx chasm.MutableContext, component chasm.Component) error {
-			tc, ok := component.(*testComponent)
-			s.True(ok)
-			tc.ActivityInfo.ActivityId = activityID
-			return nil
-		},
-	)
-	s.NoError(err)
-
-	// With the fix, the poll should complete quickly. With the bug, it times out.
-	err = <-pollErr
-	s.NoError(err, "PollComponent should not time out - if it did, the subscription key likely has empty RunID")
-
-	newSerializedRef := <-pollResult
-	s.NotNil(newSerializedRef)
-
-	newRef, err := chasm.DeserializeComponentRef(newSerializedRef)
-	s.NoError(err)
-	s.Equal(tv.WorkflowID(), newRef.BusinessID)
-	s.Equal(actualRunID, newRef.RunID)
-}
-
 // TestPollComponent_Success_Wait tests the waiting behavior of PollComponent.
 func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
+	testCases := []struct {
+		name          string
+		useEmptyRunID bool
+	}{
+		{"NonEmptyRunID", false},
+		{"EmptyRunID", true},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.testPollComponentWait(tc.useEmptyRunID)
+		})
+	}
+}
+
+func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 	// The predicate is not satisfied at the outset, so the call blocks waiting for notifications.
 	// UpdateComponent is used twice to update the execution in a way which does not satisfy the
 	// predicate, and a final third time in a way that does satisfy the predicate, causing the
 	// long-poll to return.
 	const numUpdatesTotal = 3
-	const updateAtWhichSatisfied = 2 // 0-indexed, so 3rd update
 
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
 	activityID := tv.ActivityID()
-	ref := chasm.NewComponentRef[*testComponent](
+
+	// The poll ref may have empty RunID
+	pollRunID := tv.RunID()
+	if useEmptyRunID {
+		pollRunID = ""
+	}
+	pollRef := chasm.NewComponentRef[*testComponent](
 		chasm.ExecutionKey{
 			NamespaceID: string(tests.NamespaceID),
 			BusinessID:  tv.WorkflowID(),
-			RunID:       tv.RunID(),
+			RunID:       pollRunID,
 		},
 	)
+
+	// The resolved execution key always has the actual RunID.
+	resolvedKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	}
+
+	// The update ref always uses the resolved key.
+	updateRef := chasm.NewComponentRef[*testComponent](resolvedKey)
+
+	// For empty RunID, GetCurrentExecution is called to resolve it.
+	if useEmptyRunID {
+		s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetCurrentExecutionResponse{
+				RunID: tv.RunID(),
+			}, nil).AnyTimes()
+	}
+
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{}),
+			State: s.buildPersistenceMutableState(resolvedKey, &persistencespb.ActivityInfo{}),
 		}, nil).
 		Times(1) // subsequent reads during UpdateComponent and PollComponent are from cache
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(tests.UpdateWorkflowExecutionResponse, nil).
 		Times(numUpdatesTotal)
-	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).DoAndReturn(
+	s.mockEngine.EXPECT().NotifyChasmExecution(resolvedKey, gomock.Any()).DoAndReturn(
 		func(key chasm.ExecutionKey, ref []byte) {
 			s.engine.notifier.Notify(key)
 		},
@@ -805,9 +748,11 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	pollErr := make(chan error)
 	pollResult := make(chan []byte)
 	pollComponent := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		newSerializedRef, err := s.engine.PollComponent(
-			context.Background(),
-			ref,
+			ctx,
+			pollRef,
 			func(ctx chasm.Context, component chasm.Component) (bool, error) {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
@@ -821,7 +766,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
 	updateComponent := func(satisfyPredicate bool) {
 		_, err := s.engine.UpdateComponent(
 			context.Background(),
-			ref,
+			updateRef,
 			func(ctx chasm.MutableContext, component chasm.Component) error {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
