@@ -221,7 +221,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
@@ -335,7 +335,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
@@ -462,7 +462,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		RunId:      runID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	_ = addWorkflowTaskScheduledEvent(ms)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 
