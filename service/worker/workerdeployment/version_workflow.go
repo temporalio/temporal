@@ -676,6 +676,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		state.LastDeactivationTime = nil
 	}
 
+	// Only needed for v0 workflow version. v1 and v2 are handled by updateStateFromRoutingConfig
 	if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT &&
 		(state.LastCurrentTime == nil || state.LastCurrentTime.AsTime().Before(args.RoutingUpdateTime.AsTime())) {
 		// Last time this version was set to current
