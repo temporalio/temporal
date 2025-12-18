@@ -1270,6 +1270,38 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 	}
 }
 
+func (s *standaloneActivityTestSuite) TestPollActivityExecution_EmptyRunID() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	activityID := s.tv.Any().String()
+	taskQueue := s.tv.TaskQueue().String()
+
+	startResp, err := s.startActivity(ctx, activityID, taskQueue)
+	require.NoError(t, err)
+
+	pollTaskResp, err := s.pollActivityTaskQueue(ctx, taskQueue)
+	require.NoError(t, err)
+
+	_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Result:    defaultResult,
+	})
+	require.NoError(t, err)
+
+	pollActivityResp, err := s.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      "", // resolves to current run ID
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pollActivityResp)
+	require.Equal(t, startResp.RunId, pollActivityResp.GetRunId())
+	protorequire.ProtoEqual(t, defaultResult, pollActivityResp.GetOutcome().GetResult())
+}
+
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 	t := s.T()
 	ctx := testcore.NewContext()
