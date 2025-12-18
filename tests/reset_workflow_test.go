@@ -23,9 +23,11 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api/resetworkflow"
 	"go.temporal.io/server/tests/testcore"
@@ -992,6 +994,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
+	s.OverrideDynamicConfig(dynamicconfig.ExternalPayloadsEnabled, true)
+
 	// This test verifies that ExternalPayloadSize and ExternalPayloadCount are correctly
 	// tracked when a workflow is reset. It resets to a point before the activity completes,
 	// so only the workflow input external payload should be counted.
@@ -1040,7 +1044,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	// Workflow handler - schedules activity on first task, completes on second task
 	isFirstTaskProcessed := false
 	workflowComplete := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+	wtHandler := func(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if !isFirstTaskProcessed {
 			isFirstTaskProcessed = true
 			// Schedule an activity
@@ -1072,33 +1076,29 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 		}}, nil
 	}
 
-	// activity handler
-	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		return payloads.EncodeString("Activity Result"), false, nil
-	}
-	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
+	tv := testvars.New(s.T()).WithTaskQueue(taskQueue)
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 
 	// Process first workflow task to schedule activities
-	_, err := poller.PollAndProcessWorkflowTask()
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandler(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process one activity task which also creates second workflow task
-	err = poller.PollAndProcessActivityTask(false)
+	_, err = poller.PollAndHandleActivityTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		return &workflowservice.RespondActivityTaskCompletedRequest{Result: payloads.EncodeString("Activity Result")}, nil
+	})
 	s.Logger.Info("Poll and process first activity", tag.Error(err))
 	s.NoError(err)
 
 	// Process second workflow task which checks activity completion
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandler(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
 	s.Logger.Info("Poll and process second workflow task", tag.Error(err))
 	s.NoError(err)
 
@@ -1123,7 +1123,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 			break
 		}
 	}
-	s.Greater(resetToEventID, int64(0), "Should have found first completed workflow task")
+	s.Positive(resetToEventID, "Should have found first completed workflow task")
 
 	resetResp, err := s.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
