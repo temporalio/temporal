@@ -658,12 +658,12 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 	return err
 }
 
-func (s *FunctionalTestBase) GetDatabaseMutableState(namespace string, workflowID string, runId string) *persistencespb.WorkflowMutableState {
+func (s *FunctionalTestBase) GetDatabaseMutableState(ns string, workflowID string, runID string) *persistencespb.WorkflowMutableState {
 	describeMSResp, err := s.AdminClient().DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
-		Namespace: namespace,
+		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
-			RunId:      runId,
+			RunId:      runID,
 		},
 	})
 	s.NoError(err)

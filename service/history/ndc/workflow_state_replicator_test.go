@@ -1744,8 +1744,8 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	mockMutableState.EXPECT().AddExternalPayloadCount(int64(2)).Times(1)
 
 	mockShard := historyi.NewMockShardContext(s.controller)
-	taskId := int64(100)
-	mockShard.EXPECT().GenerateTaskID().Return(taskId, nil).Times(1)
+	taskID := int64(100)
+	mockShard.EXPECT().GenerateTaskID().Return(taskID, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
