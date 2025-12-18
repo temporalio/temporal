@@ -2913,9 +2913,9 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 // convertPollWorkflowTaskQueueResponse converts a PollWorkflowTaskQueueResponse to
 // PollWorkflowTaskQueueResponseWithRawHistory. This is used when forwarding tasks
 // from remote matching nodes where the client has already deserialized the response.
-// When SendRawHistoryBetweenInternalServices is enabled, this function also processes
-// search attributes since the raw history from remote matching hasn't been processed yet
-// (remote matching passes through raw bytes without processing).
+// This function processes search attributes if the history came from raw bytes
+// (RawHistory field), since raw history hasn't been processed yet.
+// If history came from the History field, it's already been processed by history service.
 func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
 	resp *matchingservice.PollWorkflowTaskQueueResponse,
 	ns namespace.Name,
@@ -2929,13 +2929,10 @@ func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
 	history := resp.History
 	if history == nil && resp.RawHistory != nil { //nolint:staticcheck
 		history = resp.RawHistory //nolint:staticcheck
-	}
-	// Process search attributes on the history only when SendRawHistoryBetweenInternalServices is enabled.
-	// When disabled, history service already processes search attributes before sending.
-	// When enabled, remote matching passes through raw bytes without processing, so we do it here.
-	if history != nil && e.config.SendRawHistoryBetweenInternalServices() {
-		err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, history.Events, ns, e.visibilityManager)
-		if err != nil {
+		// Process search attributes only when using RawHistory.
+		// RawHistory contains auto-deserialized raw bytes that bypass history service's SA processing.
+		// History field means it was already processed by history service.
+		if err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, history.Events, ns, e.visibilityManager); err != nil {
 			return nil, err
 		}
 	}

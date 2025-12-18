@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -5097,6 +5098,228 @@ func (*testTaskManager) GetTaskQueuesByBuildId(context.Context, *persistence.Get
 func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
 	// This is only used to validate that the build ID to task queue mapping is enforced (at the time of writing), report 0.
 	return 0, nil
+}
+
+func TestConvertPollWorkflowTaskQueueResponse(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                            string
+		inputResp                       *matchingservice.PollWorkflowTaskQueueResponse
+		expectHistory                   bool
+		expectSearchAttributeProcessing bool
+	}{
+		{
+			name:      "nil response returns nil",
+			inputResp: nil,
+		},
+		{
+			name: "response with History field only",
+			// History field means it's already processed by history service
+			inputResp: &matchingservice.PollWorkflowTaskQueueResponse{
+				TaskToken: []byte("token"),
+				History: &historypb.History{
+					Events: []*historypb.HistoryEvent{
+						{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+								WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+									SearchAttributes: &commonpb.SearchAttributes{
+										IndexedFields: map[string]*commonpb.Payload{
+											"CustomKeywordField": {Data: []byte("test")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectHistory:                   true,
+			expectSearchAttributeProcessing: false, // History field = already processed
+		},
+		{
+			name: "response with RawHistory field only",
+			// RawHistory field means it came from raw bytes and needs processing
+			inputResp: &matchingservice.PollWorkflowTaskQueueResponse{
+				TaskToken: []byte("token"),
+				RawHistory: &historypb.History{
+					Events: []*historypb.HistoryEvent{
+						{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+								WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+									SearchAttributes: &commonpb.SearchAttributes{
+										IndexedFields: map[string]*commonpb.Payload{
+											"CustomKeywordField": {Data: []byte("test")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectHistory:                   true,
+			expectSearchAttributeProcessing: true, // RawHistory field = needs processing
+		},
+		{
+			name: "response with both History and RawHistory - History takes precedence",
+			// When both are present, History takes precedence and it's already processed
+			inputResp: &matchingservice.PollWorkflowTaskQueueResponse{
+				TaskToken: []byte("token"),
+				History: &historypb.History{
+					Events: []*historypb.HistoryEvent{
+						{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+								WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+									SearchAttributes: &commonpb.SearchAttributes{
+										IndexedFields: map[string]*commonpb.Payload{
+											"CustomKeywordField": {Data: []byte("test")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				RawHistory: &historypb.History{
+					Events: []*historypb.HistoryEvent{
+						{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+					},
+				},
+			},
+			expectHistory:                   true,
+			expectSearchAttributeProcessing: false, // History field takes precedence = already processed
+		},
+		{
+			name: "response with no history",
+			inputResp: &matchingservice.PollWorkflowTaskQueueResponse{
+				TaskToken: []byte("token"),
+			},
+			expectHistory:                   false,
+			expectSearchAttributeProcessing: false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockSAProvider := searchattribute.NewMockProvider(ctrl)
+			mockSAMapperProvider := searchattribute.NewMockMapperProvider(ctrl)
+			mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
+
+			engine := &matchingEngineImpl{
+				config:            defaultTestConfig(),
+				saProvider:        mockSAProvider,
+				saMapperProvider:  mockSAMapperProvider,
+				visibilityManager: mockVisibilityManager,
+			}
+
+			// Set up expectations for search attribute processing.
+			// Using Times(1) to verify ProcessOutgoingSearchAttributes is actually called.
+			if tc.expectSearchAttributeProcessing && tc.inputResp != nil {
+				mockVisibilityManager.EXPECT().GetIndexName().Return("test-index").Times(1)
+				mockSAProvider.EXPECT().GetSearchAttributes("test-index", false).Return(searchattribute.NameTypeMap{}, nil).Times(1)
+				mockSAMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).Times(1)
+			}
+
+			result, err := engine.convertPollWorkflowTaskQueueResponse(tc.inputResp, "test-namespace")
+			require.NoError(t, err)
+
+			if tc.inputResp == nil {
+				assert.Nil(t, result)
+				return
+			}
+
+			require.NotNil(t, result)
+			assert.Equal(t, tc.inputResp.TaskToken, result.TaskToken)
+
+			if tc.expectHistory {
+				assert.NotNil(t, result.History)
+				// When both History and RawHistory are present, History takes precedence
+				if tc.inputResp.History != nil {
+					assert.Equal(t, tc.inputResp.History.Events[0].EventId, result.History.Events[0].EventId)
+				} else if tc.inputResp.RawHistory != nil {
+					assert.Equal(t, tc.inputResp.RawHistory.Events[0].EventId, result.History.Events[0].EventId)
+				}
+			} else {
+				assert.Nil(t, result.History)
+			}
+		})
+	}
+}
+
+func TestConvertPollWorkflowTaskQueueResponse_FieldMapping(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSAProvider := searchattribute.NewMockProvider(ctrl)
+	mockSAMapperProvider := searchattribute.NewMockMapperProvider(ctrl)
+	mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
+
+	engine := &matchingEngineImpl{
+		config:            defaultTestConfig(),
+		saProvider:        mockSAProvider,
+		saMapperProvider:  mockSAMapperProvider,
+		visibilityManager: mockVisibilityManager,
+	}
+
+	inputResp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token"),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "wf-id",
+			RunId:      "run-id",
+		},
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "test-workflow",
+		},
+		PreviousStartedEventId: 5,
+		StartedEventId:         10,
+		Attempt:                2,
+		NextEventId:            15,
+		BacklogCountHint:       100,
+		StickyExecutionEnabled: true,
+		Query: &querypb.WorkflowQuery{
+			QueryType: "test-query",
+		},
+		BranchToken:   []byte("branch-token"),
+		NextPageToken: []byte("next-page-token"),
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{
+				{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+			},
+		},
+	}
+
+	result, err := engine.convertPollWorkflowTaskQueueResponse(inputResp, "test-namespace")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify all fields are correctly mapped
+	assert.Equal(t, inputResp.TaskToken, result.TaskToken)
+	assert.Equal(t, inputResp.WorkflowExecution.WorkflowId, result.WorkflowExecution.WorkflowId)
+	assert.Equal(t, inputResp.WorkflowExecution.RunId, result.WorkflowExecution.RunId)
+	assert.Equal(t, inputResp.WorkflowType.Name, result.WorkflowType.Name)
+	assert.Equal(t, inputResp.PreviousStartedEventId, result.PreviousStartedEventId)
+	assert.Equal(t, inputResp.StartedEventId, result.StartedEventId)
+	assert.Equal(t, inputResp.Attempt, result.Attempt)
+	assert.Equal(t, inputResp.NextEventId, result.NextEventId)
+	assert.Equal(t, inputResp.BacklogCountHint, result.BacklogCountHint)
+	assert.Equal(t, inputResp.StickyExecutionEnabled, result.StickyExecutionEnabled)
+	assert.Equal(t, inputResp.Query.QueryType, result.Query.QueryType)
+	assert.Equal(t, inputResp.BranchToken, result.BranchToken)
+	assert.Equal(t, inputResp.NextPageToken, result.NextPageToken)
+	assert.Equal(t, inputResp.History.Events[0].EventId, result.History.Events[0].EventId)
 }
 
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
