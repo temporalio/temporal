@@ -5,21 +5,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/testing/testvars"
 )
-
-func TestChasmNotifier_SubscribeRequiresRunID(t *testing.T) {
-	tv := testvars.New(t)
-	_, _, err := NewChasmNotifier().Subscribe(chasm.ExecutionKey{
-		NamespaceID: tv.NamespaceID().String(),
-		BusinessID:  tv.WorkflowID(),
-	})
-	var invalidArgErr *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalidArgErr)
-	require.Contains(t, invalidArgErr.Message, "run id is required")
-}
 
 func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	tv := testvars.New(t)
@@ -39,8 +27,7 @@ func TestChasmNotifier_SubscribeAndNotify(t *testing.T) {
 	}, subscriberCount)
 
 	for i := range subscriberCount {
-		ch, unsubscribe, err := notifier.Subscribe(executionKey)
-		require.NoError(t, err)
+		ch, unsubscribe := notifier.Subscribe(executionKey)
 		defer unsubscribe() //nolint:revive
 		subscribers[i].channel = ch
 	}
@@ -74,8 +61,7 @@ func TestChasmNotifier_KeyIsolation(t *testing.T) {
 		RunID:       "different-run-id",
 	}
 
-	channel, unsubscribe, err := notifier.Subscribe(executionKey1)
-	require.NoError(t, err)
+	channel, unsubscribe := notifier.Subscribe(executionKey1)
 	defer unsubscribe()
 	notifier.Notify(executionKey2)
 	select {
@@ -111,12 +97,10 @@ func TestChasmNotifier_Unsubscribe(t *testing.T) {
 
 	t.Run("StaleUnsubscribeIsSafe", func(t *testing.T) {
 		notifier := NewChasmNotifier()
-		_, u1, err := notifier.Subscribe(key)
-		require.NoError(t, err)
+		_, u1 := notifier.Subscribe(key)
 		notifier.Notify(key)
 		// The notify call closed and deleted the original channel.
-		ch2, u2, err := notifier.Subscribe(key)
-		require.NoError(t, err)
+		ch2, u2 := notifier.Subscribe(key)
 		defer u2()
 		// u1 should be a no-op.
 		u1()
@@ -135,10 +119,8 @@ func TestChasmNotifier_Unsubscribe(t *testing.T) {
 
 	t.Run("IsIdempotent", func(t *testing.T) {
 		notifier := NewChasmNotifier()
-		_, u1, err := notifier.Subscribe(key)
-		require.NoError(t, err)
-		ch2, u2, err := notifier.Subscribe(key)
-		require.NoError(t, err)
+		_, u1 := notifier.Subscribe(key)
+		ch2, u2 := notifier.Subscribe(key)
 		defer u2()
 
 		u1()
