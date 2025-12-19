@@ -55,7 +55,6 @@ type ActivityStore interface {
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
 // embedded within a workflow.
-// TODO implement VisibilitySearchAttributesProvider to support timeout status
 type Activity struct {
 	chasm.UnimplementedComponent
 
@@ -70,8 +69,8 @@ type Activity struct {
 	// Pointer to an implementation of the "store". For a workflow activity this would be a parent
 	// pointer back to the workflow. For a standalone activity this is nil (Activity itself
 	// implements the ActivityStore interface).
-	// TODO: revisit a standalone activity pointing to itself once we handle storing it more efficiently.
-	// TODO: figure out better naming.
+	// TODO(saa-preview): revisit a standalone activity pointing to itself once we handle storing it more efficiently.
+	// TODO(saa-preview): figure out better naming.
 	Store chasm.Field[ActivityStore]
 }
 
@@ -250,7 +249,7 @@ func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
 	event RespondCompletedEvent,
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -278,7 +277,7 @@ func (a *Activity) HandleFailed(
 	ctx chasm.MutableContext,
 	event RespondFailedEvent,
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -324,7 +323,7 @@ func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
 	event RespondCancelledEvent,
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -464,16 +463,16 @@ func (a *Activity) recordFailedAttempt(
 	ctx chasm.MutableContext,
 	retryInterval time.Duration,
 	failure *failurepb.Failure,
+	currentTime time.Time,
 	noRetriesLeft bool,
 ) error {
 	attempt := a.LastAttempt.Get(ctx)
-	currentTime := timestamppb.New(ctx.Now(a))
 
 	attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
 		Failure: failure,
-		Time:    currentTime,
+		Time:    timestamppb.New(currentTime),
 	}
-	attempt.CompleteTime = currentTime
+	attempt.CompleteTime = timestamppb.New(currentTime)
 
 	if noRetriesLeft {
 		attempt.CurrentRetryInterval = nil
@@ -578,7 +577,7 @@ func (a *Activity) RecordHeartbeat(
 	)
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		// TODO(dan): ActivityPaused, ActivityReset
+		// TODO(saa-preview): ActivityPaused, ActivityReset
 	}, nil
 }
 
@@ -627,7 +626,7 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.ActivityExecutionInfo, error) {
-	// TODO(dan): support pause states
+	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
 
@@ -636,24 +635,62 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
 
+	// TODO(saa-preview): debating if we should persist next attempt schedule time for stronger consistency
+	var nextAttemptScheduleTime *timestamppb.Timestamp
+	interval := attempt.GetCurrentRetryInterval()
+	completeTime := attempt.GetCompleteTime()
+	if interval != nil && interval.AsDuration() > 0 && completeTime != nil {
+		nextAttemptScheduleTime = timestamppb.New(completeTime.AsTime().Add(interval.AsDuration()))
+	}
+
+	var closeTime *timestamppb.Timestamp
+	var executionDuration = durationpb.New(0)
+	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning && attempt.GetCompleteTime() != nil {
+		closeTime = attempt.GetCompleteTime()
+		executionDuration = durationpb.New(closeTime.AsTime().Sub(a.GetScheduleTime().AsTime()))
+	}
+
+	var expirationTime *timestamppb.Timestamp
+	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		expirationTime = timestamppb.New(a.GetScheduleTime().AsTime().Add(timeout))
+	}
+
+	sa := &commonpb.SearchAttributes{
+		IndexedFields: a.Visibility.Get(ctx).GetSearchAttributes(ctx),
+	}
+
 	info := &activity.ActivityExecutionInfo{
 		ActivityId:              key.BusinessID,
 		ActivityType:            a.GetActivityType(),
 		Attempt:                 attempt.GetCount(),
 		CanceledReason:          a.CancelState.GetReason(),
+		CloseTime:               closeTime,
+		CurrentRetryInterval:    attempt.GetCurrentRetryInterval(),
+		ExecutionDuration:       executionDuration,
+		ExpirationTime:          expirationTime,
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
+		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
 		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetStartedTime(),
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
+		NextAttemptScheduleTime: nextAttemptScheduleTime,
 		Priority:                a.GetPriority(),
+		RetryPolicy:             a.GetRetryPolicy(),
 		RunId:                   key.RunID,
 		RunState:                runState,
 		ScheduleTime:            a.GetScheduleTime(),
-		Status:                  status,
-		// TODO(dan): populate remaining fields
+		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
+		StateTransitionCount:    a.Visibility.Get(ctx).Data.TransitionCount,
+		// TODO(saa-preview): StateSizeBytes?
+		SearchAttributes: sa,
+		Status:           status,
+		TaskQueue:        a.GetTaskQueue().GetName(),
+		UserMetadata:     requestData.GetUserMetadata(),
 	}
 
 	return info, nil

@@ -93,7 +93,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		currentTime := ctx.Now(a)
 		attempt.Count += 1
 
-		err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, false)
+		err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, currentTime, false)
 		if err != nil {
 			return err
 		}
@@ -220,7 +220,7 @@ var TransitionFailed = chasm.NewTransition(
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.LastWorkerIdentity = req.GetIdentity()
 
-			if err := a.recordFailedAttempt(ctx, 0, req.GetFailure(), true); err != nil {
+			if err := a.recordFailedAttempt(ctx, 0, req.GetFailure(), ctx.Now(a), true); err != nil {
 				return err
 			}
 
@@ -248,7 +248,7 @@ var TransitionTerminated = chasm.NewTransition(
 			}
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
-				// TODO if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
+				// TODO(saa-preview): if the reason isn't provided, perhaps set a default reason. Also see if we should prefix with "Activity terminated: "
 				Message:     req.GetReason(),
 				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
 			}
@@ -353,10 +353,10 @@ var TransitionTimedOut = chasm.NewTransition(
 				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
-				err = a.recordFailedAttempt(ctx, 0, failure, true)
+				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				failure := createHeartbeatTimeoutFailure()
-				err = a.recordFailedAttempt(ctx, 0, failure, true)
+				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
 			default:
 				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
 			}
