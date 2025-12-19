@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -388,18 +387,6 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
-
-	if pollMetadata.deploymentOptions != nil {
-		fmt.Println("DeploymentOptions in PollTask:", pollMetadata.deploymentOptions)
-		fmt.Println("Deployment in PollTask:", pollMetadata.deploymentOptions.DeploymentName)
-		fmt.Println("BuildID in PollTask:", pollMetadata.deploymentOptions.BuildId)
-	}
-
-	// TODO (Shivam): Right now, this only considers the backlog of the versioned queue for the poller scaling decision.
-	// The backlog of the unversioned queue should be considered for these decisions since current/ramping versions have their
-	// tasks sent to the unversioned queue.
-	// The right fix is to move MakePollerScalingDecision to the task queue partition manager and call the partitionManager.Describe method
-	// with the right buildID.
 	if task != nil {
 		task.pollerScalingDecision, err = pm.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, dbq)
 		if err != nil {
@@ -422,10 +409,6 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 	if deployment != nil {
 		buildID = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
 	}
-
-	fmt.Println("PhysicalQueue:", physicalQueue.QueueKey())
-	fmt.Println("Deployment:", deployment)
-	fmt.Println("Passing buildID to DescribePartition:", buildID)
 
 	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false)
 	if err != nil {
@@ -452,7 +435,6 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 		return nil, nil
 	}
 	stats := info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
-	fmt.Println("Stats for that buildID in the partition:", stats)
 	if stats.ApproximateBacklogCount > 0 &&
 		stats.ApproximateBacklogAge.AsDuration() > pm.config.PollerScalingBacklogAgeScaleUp() {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
@@ -864,9 +846,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			currentVersion, _, _, rampingVersion, isRamping, rampPercentage, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
 			unversionedAgg := aggregateStats(unversionedStatsByPriority)
 
-			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_NORMAL && pm.partition.TaskQueue().TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-				fmt.Println("Activity unversioned stats:", unversionedAgg.GetApproximateBacklogCount())
-			}
 			currentExists := currentVersion != nil
 			rampingExists := rampingVersion != nil && isRamping
 
@@ -879,8 +858,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 				currentShare = unversionedAgg
 			}
 
-			// fmt.Println("Deployment version for v:", v.Deployment())
-			// fmt.Println("BuildID for v:", v.BuildId())
 			deploymentVersion := worker_versioning.DeploymentVersionFromDeployment(v.Deployment())
 
 			isUnversionedDescribe := deploymentVersion == nil
