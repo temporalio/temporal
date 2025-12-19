@@ -654,34 +654,33 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		state.RampingSinceTime = args.RampingSinceTime
 		state.RampPercentage = args.RampPercentage
 
-		// Apply changes to the version state. Only needed for v0 workflow version. v1 and v2 are handled by updateStateFromRoutingConfig.
-
-		// stopped accepting new workflows --> start drainage tracking
-		if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING {
-			// Version deactivated from current/ramping
-			state.LastDeactivationTime = args.RoutingUpdateTime
-			d.startDrainage(ctx)
-		}
-
-		// started accepting new workflows
-		if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT || newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING {
-			if state.FirstActivationTime == nil {
-				// First time this version is activated to current/ramping
-				state.FirstActivationTime = args.RoutingUpdateTime
-			}
-
-			// Clear drainage information, if present, when a version gets activated.
-			// This handles the rollback scenario where a previously draining/drained version
-			// is reactivated and should have its drainage information cleared.
-			state.DrainageInfo = nil
-			state.LastDeactivationTime = nil
-		}
-
+		// Only needed for v0 workflow version. v1 and v2 are handled by updateStateFromRoutingConfig.
 		if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT &&
 			(state.LastCurrentTime == nil || state.LastCurrentTime.AsTime().Before(args.RoutingUpdateTime.AsTime())) {
 			// Last time this version was set to current
 			state.LastCurrentTime = args.RoutingUpdateTime
 		}
+	}
+
+	// stopped accepting new workflows --> start drainage tracking
+	if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING {
+		// Version deactivated from current/ramping
+		state.LastDeactivationTime = args.RoutingUpdateTime
+		d.startDrainage(ctx)
+	}
+
+	// started accepting new workflows
+	if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT || newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING {
+		if state.FirstActivationTime == nil {
+			// First time this version is activated to current/ramping
+			state.FirstActivationTime = args.RoutingUpdateTime
+		}
+
+		// Clear drainage information, if present, when a version gets activated.
+		// This handles the rollback scenario where a previously draining/drained version
+		// is reactivated and should have its drainage information cleared.
+		state.DrainageInfo = nil
+		state.LastDeactivationTime = nil
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
