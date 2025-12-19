@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -186,7 +185,8 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		if op.UpdateWorkflowOptionsOperation.GetUpdateMask() == nil {
 			return errors.New("must provide UpdateMask")
 		}
-		return worker_versioning.ValidateVersioningOverride(op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetVersioningOverride())
+		// Validation for Versioning Override, if present, happens in history.
+		return nil
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation,
 		*workflowservice.StartBatchOperationRequest_TerminationOperation,
 		*workflowservice.StartBatchOperationRequest_DeletionOperation:

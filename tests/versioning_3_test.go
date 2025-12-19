@@ -145,6 +145,16 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 			tv2 := tv.WithBuildIDNumber(2)
 			go s.idlePollWorkflow(context.Background(), tv2, true, ver3MinPollTime, "second deployment should not receive pinned task")
 
+			// Start a versioned poller for the first version so that it registers the version in the task queue.
+			pollerCtx, cancelPoller := context.WithCancel(context.Background())
+			go s.idlePollWorkflow(pollerCtx, tv, true, ver3MinPollTime, "first deployment should not receive any task. It is just creating a version in the task queue.")
+
+			// Wait for the version to be present in the task queue
+			s.validatePinnedVersionExistsInTaskQueue(tv)
+
+			// Cancel the poller after condition is met
+			cancelPoller()
+
 			s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
 			s.idlePollWorkflow(context.Background(), tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
 
@@ -272,6 +282,9 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 			s.NotNil(task)
 			return respondActivity(), nil
 		})
+
+	// Wait for the version to be present in the task queue. Version existence is required before it can be set as an override.
+	s.validatePinnedVersionExistsInTaskQueue(tv)
 
 	runID := s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
 
@@ -442,6 +455,19 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
 			s.NotNil(task)
 			return respondEmptyWft(tv, sticky, vbUnpinned), nil
 		})
+
+	// Wait for the version to be present in the task queue. Version existence is required before it can be set as an override.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv.Deployment()),
+		})
+		a.NoError(err)
+		a.True(resp.GetIsMember())
+	}, 10*time.Second, 100*time.Millisecond)
 
 	runID := s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
 
@@ -4976,6 +5002,23 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 		s.NoError(err)
 		return resp.GetIsMember()
 	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// validatePinnedVersionExistsInTaskQueue validates that the version, to be pinned, exists in the task queue.
+// TODO (future improvement): This can be further extended to validate the presence of any version instead of using the GetTaskQueueUserData RPC.
+func (s *Versioning3Suite) validatePinnedVersionExistsInTaskQueue(tv *testvars.TestVars) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(context.Background(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+			Version:       worker_versioning.DeploymentVersionFromDeployment(tv.Deployment()),
+		})
+		a.NoError(err)
+		a.True(resp.GetIsMember())
+	}, 10*time.Second, 100*time.Millisecond)
+
 }
 
 // TestMaxVersionsInTaskQueue tests that polling from a task queue with too many

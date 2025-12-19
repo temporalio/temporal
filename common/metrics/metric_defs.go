@@ -339,6 +339,8 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
+	// ActivityTerminatedScope tracks TerminateActivityExecution API calls received by service
+	ActivityTerminatedScope = "ActivityTerminated"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
@@ -861,7 +863,8 @@ var (
 	ActivitySuccess                                      = NewCounterDef("activity_success", WithDescription("Number of activities that succeeded (doesn't include retries)."))
 	ActivityFail                                         = NewCounterDef("activity_fail", WithDescription("Number of activities that failed and won't be retried anymore."))
 	ActivityTaskFail                                     = NewCounterDef("activity_task_fail", WithDescription("Number of activity task failures (includes retries)."))
-	ActivityCancel                                       = NewCounterDef("activity_cancel")
+	ActivityCancel                                       = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
+	ActivityTerminate                                    = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
 	ActivityTaskTimeout                                  = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityTimeout                                      = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                                  = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
@@ -1286,6 +1289,8 @@ var (
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
+	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
+	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
 
 	// Continue-as-new
 	WorkflowContinueAsNewCount        = NewCounterDef("workflow_continue_as_new_count")
