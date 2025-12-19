@@ -832,8 +832,6 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 	// Now, demote the current version (by promoting the ramping version) and verify that LastCurrentTime is unchanged.
 	setRampingAsCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, rampingVersionVars, true, "")
-	// sleep so that Current Version drains, to avoid flakiness
-	time.Sleep(testVersionDrainageVisibilityGracePeriod + testVersionDrainageRefreshInterval)
 	// fresh DescribeWorkerDeployment call
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -857,7 +855,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					Version:    currentVersionVars.DeploymentVersionString(),
 					CreateTime: versionCreateTime,
 					DrainageInfo: &deploymentpb.VersionDrainageInfo{
-						Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+						Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 					},
 					RoutingUpdateTime:    setRampingAsCurrentUpdateTime,
 					CurrentSinceTime:     nil,
@@ -865,7 +863,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					FirstActivationTime:  setCurrentUpdateTime,
 					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: setRampingAsCurrentUpdateTime,
-					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 				},
 				{
 					Version:              rampingVersionVars.DeploymentVersionString(),
@@ -887,8 +885,6 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 	// Now, re-promote the current version to Current and verify that LastCurrentTime is updated for that version (and unchanged for the originally-ramping version).
 	rePromoteCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, currentVersionVars, true, "")
-	// sleep so that Current Version drains, to avoid flakiness
-	time.Sleep(testVersionDrainageVisibilityGracePeriod + testVersionDrainageRefreshInterval)
 	// fresh DescribeWorkerDeployment call
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -924,7 +920,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					Version:    rampingVersionVars.DeploymentVersionString(),
 					CreateTime: versionCreateTime,
 					DrainageInfo: &deploymentpb.VersionDrainageInfo{
-						Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+						Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 					},
 					RoutingUpdateTime:    rePromoteCurrentUpdateTime,
 					CurrentSinceTime:     nil,
@@ -932,7 +928,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					FirstActivationTime:  setRampingUpdateTime,
 					LastCurrentTime:      setRampingAsCurrentUpdateTime,
 					LastDeactivationTime: rePromoteCurrentUpdateTime,
-					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 				},
 			},
 			LastModifierIdentity: tv.ClientIdentity(),
@@ -3143,14 +3139,14 @@ func (s *WorkerDeploymentSuite) tryDeleteVersion(
 // does this check by checking if the timestamp set is within respectable bounds or is equal to the
 // expected timestamp.
 func (s *WorkerDeploymentSuite) verifyTimestampWithinRange(a *require.Assertions, expected, actual *timestamppb.Timestamp, msg string) {
-	a.Truef((expected == nil) == (actual == nil),
-		fmt.Sprintf("expected %s to be: '%s', actual: %s", msg, expected.AsTime().String(), actual.AsTime().String()))
+	a.Equalf(expected == nil, actual == nil,
+		"expected %s to be: '%s', actual: %s", msg, expected.AsTime().String(), actual.AsTime().String())
 	if expected == nil {
 		return
 	}
 	acceptableDelayBetweenExpectedAndActual := 5 * time.Second
 	a.Truef(expected.AsTime().Equal(actual.AsTime()) || (actual.AsTime().After(expected.AsTime()) && actual.AsTime().Before(expected.AsTime().Add(acceptableDelayBetweenExpectedAndActual))),
-		fmt.Sprintf("expected %s to be: '%s', actual: %s", msg, expected.AsTime().String(), actual.AsTime().String()))
+		"expected %s to be: '%s', actual: %s", msg, expected.AsTime().String(), actual.AsTime().String())
 }
 
 func (s *WorkerDeploymentSuite) verifyVersionSummary(a *require.Assertions, expected, actual *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) {
