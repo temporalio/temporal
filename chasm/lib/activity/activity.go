@@ -249,7 +249,6 @@ func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
 	event RespondCompletedEvent,
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -277,7 +276,6 @@ func (a *Activity) HandleFailed(
 	ctx chasm.MutableContext,
 	event RespondFailedEvent,
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
-	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -323,7 +321,6 @@ func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
 	event RespondCancelledEvent,
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
-	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
