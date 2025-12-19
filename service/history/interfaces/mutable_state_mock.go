@@ -1600,18 +1600,18 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskScheduledEvent(arg0, ar
 }
 
 // ApplyWorkflowTaskStartedEvent mocks base method.
-func (m *MockMutableState) ApplyWorkflowTaskStartedEvent(arg0 *WorkflowTaskInfo, arg1, arg2, arg3 int64, arg4 string, arg5 time.Time, arg6 bool, arg7 int64, arg8 *common.WorkerVersionStamp, arg9 int64) (*WorkflowTaskInfo, error) {
+func (m *MockMutableState) ApplyWorkflowTaskStartedEvent(arg0 *WorkflowTaskInfo, arg1, arg2, arg3 int64, arg4 string, arg5 time.Time, arg6 bool, arg7 int64, arg8 *common.WorkerVersionStamp, arg9 int64, arg10 []enums.SuggestContinueAsNewReason) (*WorkflowTaskInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	ret := m.ctrl.Call(m, "ApplyWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
 	ret0, _ := ret[0].(*WorkflowTaskInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ApplyWorkflowTaskStartedEvent indicates an expected call of ApplyWorkflowTaskStartedEvent.
-func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
 }
 
 // ApplyWorkflowTaskTimedOutEvent mocks base method.
