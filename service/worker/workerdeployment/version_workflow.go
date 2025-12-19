@@ -1005,9 +1005,6 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 // starts async propagation of version data (and routing info if given) to all task queues.
 func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routingConfig *deploymentpb.RoutingConfig, versionDataChanged bool) {
 	startTime := workflow.Now(ctx)
-	defer func() {
-		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
-	}()
 
 	withRevisionNumber := d.hasMinVersion(VersionDataRevisionNumber)
 	if withRevisionNumber && versionDataChanged {
@@ -1037,6 +1034,7 @@ func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routin
 			d.signalPropagationComplete(gCtx, routingConfig.GetRevisionNumber())
 		}
 
+		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
 		// Decrement counter when propagation completes
 		d.asyncPropagationsInProgress--
 	})
@@ -1192,6 +1190,8 @@ func (d *VersionWorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion)
 // later because it's not possible normally and user has to pass IgnoreMissingTaskQueues or AllowNoPollers for it to
 // happen, or the task queue needs to be a task queue that is added in this version.
 func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) {
+	startTime := workflow.Now(ctx)
+
 	versionData := &deploymentspb.WorkerDeploymentVersionData{
 		Status:         d.VersionState.Status,
 		RevisionNumber: d.GetVersionState().GetRevisionNumber(),
@@ -1211,6 +1211,7 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Contex
 		// the task queue partition initiating the registration itself is responsible to block until it sees the version in user data.
 		d.executePropagationBatch(gCtx, batch, args.GetRoutingConfig(), versionData)
 
+		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
 		// Decrement counter when propagation completes
 		d.asyncPropagationsInProgress--
 	})
