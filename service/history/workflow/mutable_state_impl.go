@@ -6094,7 +6094,7 @@ func (ms *MutableStateImpl) RetryActivity(
 		retryMaxInterval,
 		ai.RetryExpirationTime,
 		ai.RetryBackoffCoefficient,
-		makeBackoffAlgorithm(delay),
+		backoff.MakeBackoffAlgorithm(delay),
 	)
 	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return retryState, nil

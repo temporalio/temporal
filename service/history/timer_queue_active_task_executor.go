@@ -296,7 +296,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	// Note: we don't need to check activity Stamps.
 	// This is because for the same attempts calls are idempotent.
 
-	failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
+	failureMsg := fmt.Sprintf(common.FailureReasonActivityTimeout, timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
 	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
 	if err != nil {
@@ -330,7 +330,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		// If retryState is Timeout then it means that expirationTime is expired.
 		// ExpirationTime is expired when ScheduleToClose timeout is expired.
 		const timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
-		var failureMsg = fmt.Sprintf("activity %v timeout", timeoutType.String())
+		var failureMsg = fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String())
 		timeoutFailure = failure.NewTimeoutFailure(failureMsg, timeoutType)
 	}
 	timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = ai.LastHeartbeatDetails
