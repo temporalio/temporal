@@ -3,7 +3,6 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -147,7 +146,6 @@ func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deplo
 }
 
 func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.DeleteVersionActivityArgs) error {
-	fmt.Printf("act Deleting version %s from deployment %s\n", args.Version, args.DeploymentName)
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(args.Version)
 	if err != nil {

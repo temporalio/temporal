@@ -91,7 +91,7 @@ const (
 	ErrManagerIdentityMismatch                = "ManagerIdentity '%s' is set and does not match user identity '%s'; to proceed, set your own identity as the ManagerIdentity, remove the ManagerIdentity, or wait for the other client to do so"
 	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name '%s'; does your Worker Deployment have pollers?"
 	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
-	ErrTooManyRequests                        = "too many requests issued to the same Worker Deployment. Please try again later"
+	ErrTooManyRequests                        = "too many requests issued to Worker Deployment '%s'. Please try again later"
 )
 
 var (
@@ -330,13 +330,13 @@ func convertUpdateFailure(updateRes *workflowservice.UpdateWorkflowExecutionResp
 
 	if failure := updateRes.GetOutcome().GetFailure(); failure != nil {
 		if failure.GetApplicationFailureInfo().GetType() == errLongHistory {
-			// Retriable
+			// Retryable
 			return errWorkflowHistoryTooLong
 		} else if failure.GetApplicationFailureInfo().GetType() == errVersionDeleted {
-			// Non-retriable
+			// Non-retryable
 			return serviceerror.NewNotFoundf("Worker Deployment Version not found")
 		} else if failure.GetApplicationFailureInfo().GetType() == errDeploymentDeleted {
-			// Non-retriable
+			// Non-retryable
 			return serviceerror.NewNotFoundf("Worker Deployment not found")
 		} else if failure.GetApplicationFailureInfo().GetType() == errFailedPrecondition {
 			return serviceerror.NewFailedPrecondition(failure.GetMessage())

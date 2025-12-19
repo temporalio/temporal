@@ -3677,14 +3677,14 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 		return nil, err
 	}
 
-	//nolint:staticcheck // SA1019: worker versioning v0.31
-	versionStr := request.GetVersion()
-	if request.GetDeploymentVersion() != nil {
-		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
+	version := request.GetDeploymentVersion()
+	if version == nil {
+		//nolint:staticcheck // SA1019: worker versioning v0.31
+		version = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(request.GetVersion())
 	}
 
 	identity := uuid.NewString()
-	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, versionStr, request.UpsertEntries, request.RemoveEntries, identity)
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, version, request.UpsertEntries, request.RemoveEntries, identity)
 	if err != nil {
 		return nil, err
 	}

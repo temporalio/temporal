@@ -108,7 +108,7 @@ type Client interface {
 	UpdateVersionMetadata(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		version string,
+		version *deploymentpb.WorkerDeploymentVersion,
 		upsertEntries map[string]*commonpb.Payload,
 		removeEntries []string,
 		identity string,
@@ -204,7 +204,7 @@ func (d *ClientImpl) SetManager(
 		newManagerID = request.GetManagerIdentity()
 	}
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("SetManager", &retErr, newManagerID, request.GetIdentity())()
+	defer d.convertAndRecordError("SetManager", request.GetDeploymentName(), &retErr, newManagerID, request.GetIdentity())()
 
 	// validating params
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, request.GetDeploymentName(), d.maxIDLengthLimit())
@@ -278,7 +278,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	identity string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
+	defer d.convertAndRecordError("RegisterTaskQueueWorker", deploymentName, &retErr, taskQueueName, taskQueueType, identity)()
 
 	// Creating request ID out of build ID + TQ name + TQ type. Many updates may come from multiple
 	// matching partitions, we do not want them to create new update requests.
@@ -357,7 +357,7 @@ func (d *ClientImpl) DescribeVersion(
 	buildID := v.GetBuildId()
 
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("DescribeVersion", &retErr, deploymentName, buildID)()
+	defer d.convertAndRecordError("DescribeVersion", deploymentName, &retErr, buildID)()
 
 	// validate deployment name
 	if err = validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit()); err != nil {
@@ -433,19 +433,14 @@ func (d *ClientImpl) queryWorkflowWithRetry(ctx context.Context, req *historyser
 func (d *ClientImpl) UpdateVersionMetadata(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	version string,
+	version *deploymentpb.WorkerDeploymentVersion,
 	upsertEntries map[string]*commonpb.Payload,
 	removeEntries []string,
 	identity string,
 ) (_ *deploymentpb.VersionMetadata, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("UpdateVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
+	defer d.convertAndRecordError("UpdateVersionMetadata", version.GetDeploymentName(), &retErr, namespaceEntry.Name(), version.GetBuildId(), upsertEntries, removeEntries, identity)()
 	requestID := uuid.NewString()
-
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
-	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateVersionMetadataArgs{
 		UpsertEntries: upsertEntries,
@@ -456,7 +451,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 		return nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(versionObj.GetDeploymentName(), versionObj.GetBuildId())
+	workflowID := GenerateVersionWorkflowID(version.GetDeploymentName(), version.GetBuildId())
 	outcome, err := updateWorkflow(ctx, d.historyClient, namespaceEntry, workflowID, &updatepb.Request{
 		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
@@ -483,7 +478,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	deploymentName string,
 ) (_ *deploymentpb.WorkerDeploymentInfo, conflictToken []byte, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("DescribeWorkerDeployment", &retErr, deploymentName)()
+	defer d.convertAndRecordError("DescribeWorkerDeployment", deploymentName, &retErr)()
 
 	// validating params
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
@@ -574,7 +569,7 @@ func (d *ClientImpl) ListWorkerDeployments(
 	nextPageToken []byte,
 ) (_ []*deploymentspb.WorkerDeploymentSummary, _ []byte, retError error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("ListWorkerDeployments", &retError)()
+	defer d.convertAndRecordError("ListWorkerDeployments", "", &retError)()
 
 	query := WorkerDeploymentVisibilityBaseListQuery
 
@@ -635,7 +630,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	allowNoPollers bool,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
+	defer d.convertAndRecordError("SetCurrentVersion", deploymentName, &retErr, namespaceEntry.Name(), version, identity)()
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
@@ -740,7 +735,7 @@ func (d *ClientImpl) SetRampingVersion(
 	allowNoPollers bool,
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
+	defer d.convertAndRecordError("SetRampingVersion", deploymentName, &retErr, namespaceEntry.Name(), version, percentage, identity)()
 
 	var err error
 	var versionObj *deploymentspb.WorkerDeploymentVersion
@@ -856,7 +851,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	buildId := v.GetBuildId()
 
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("DeleteWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, buildId)()
+	defer d.convertAndRecordError("DeleteWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), buildId)()
 	requestID := uuid.NewString()
 
 	if identity == "" {
@@ -916,7 +911,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	identity string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("DeleteWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+	defer d.convertAndRecordError("DeleteWorkerDeployment", deploymentName, &retErr, namespaceEntry.Name(), identity)()
 
 	// validating params
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
@@ -970,7 +965,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 	requestID string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+	defer d.convertAndRecordError("StartWorkerDeployment", deploymentName, &retErr, namespaceEntry.Name(), identity)()
 
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
@@ -1002,7 +997,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	requestID string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("StartWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+	defer d.convertAndRecordError("StartWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
 
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
@@ -1038,7 +1033,7 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	requestID string,
 ) (_ *deploymentspb.SyncVersionStateResponse, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.convertAndRecordError("SyncVersionWorkflowFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, args, identity)()
+	defer d.convertAndRecordError("SyncVersionWorkflowFromWorkerDeployment", deploymentName, &retErr, namespaceEntry.Name(), version, args, identity)()
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
@@ -1207,7 +1202,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	)
 }
 
-func (d *ClientImpl) convertAndRecordError(operation string, retErr *error, args ...any) func() {
+func (d *ClientImpl) convertAndRecordError(operation string, deploymentName string, retErr *error, args ...any) func() {
 	start := time.Now()
 	return func() {
 		elapsed := time.Since(start)
@@ -1219,14 +1214,16 @@ func (d *ClientImpl) convertAndRecordError(operation string, retErr *error, args
 				d.logger.Debug("deployment client failure due to a failed precondition or not found error",
 					tag.Error(*retErr),
 					tag.Operation(operation),
+					tag.Deployment(deploymentName),
 					tag.NewDurationTag("elapsed", elapsed),
 					tag.NewAnyTag("args", args),
 				)
 			} else {
 				if isRetryableUpdateError(*retErr) || isRetryableQueryError(*retErr) {
-					d.logger.Debug("deployment client throttling due to retriable error",
+					d.logger.Debug("deployment client throttling due to retryable error",
 						tag.Error(*retErr),
 						tag.Operation(operation),
+						tag.Deployment(deploymentName),
 						tag.NewDurationTag("elapsed", elapsed),
 						tag.NewAnyTag("args", args),
 					)
@@ -1234,7 +1231,7 @@ func (d *ClientImpl) convertAndRecordError(operation string, retErr *error, args
 					if !errors.As(*retErr, &errResourceExhausted) || errResourceExhausted.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS {
 						// if it's not a deployment limits error, we don't want to expose the underlying cause to the user
 						*retErr = &serviceerror.ResourceExhausted{
-							Message: ErrTooManyRequests,
+							Message: fmt.Sprintf(ErrTooManyRequests, deploymentName),
 							Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 							// These errors are caused by workflow throughput limits, so BUSY_WORKFLOW is the most appropriate cause.
 							// This cause is not sent back to the user.
@@ -1248,6 +1245,7 @@ func (d *ClientImpl) convertAndRecordError(operation string, retErr *error, args
 					d.logger.Debug("deployment client timeout or cancellation",
 						tag.Error(*retErr),
 						tag.Operation(operation),
+						tag.Deployment(deploymentName),
 						tag.NewDurationTag("elapsed", elapsed),
 						tag.NewAnyTag("args", args),
 					)
@@ -1255,6 +1253,7 @@ func (d *ClientImpl) convertAndRecordError(operation string, retErr *error, args
 					d.logger.Error("deployment client unexpected error",
 						tag.Error(*retErr),
 						tag.Operation(operation),
+						tag.Deployment(deploymentName),
 						tag.NewDurationTag("elapsed", elapsed),
 						tag.NewAnyTag("args", args),
 					)
@@ -1263,6 +1262,7 @@ func (d *ClientImpl) convertAndRecordError(operation string, retErr *error, args
 		} else {
 			d.logger.Debug("deployment client success",
 				tag.Operation(operation),
+				tag.Deployment(deploymentName),
 				tag.NewDurationTag("elapsed", elapsed),
 				tag.NewAnyTag("args", args),
 			)
