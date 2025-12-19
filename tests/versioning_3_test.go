@@ -2546,7 +2546,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
 				}, nil
 			})
 
-		// Start async poller for v2 to receive the ContinueAsNew new run
+		// Start async pouller for v2 to receive the ContinueAsNew new run
 		wftNewRunDone := make(chan struct{})
 		s.pollWftAndHandle(tv2, false, wftNewRunDone,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
