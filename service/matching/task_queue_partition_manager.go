@@ -800,8 +800,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 				currentShare = unversionedAgg
 			}
 
-			// fmt.Println("Deployment version for v:", v.Deployment())
-			// fmt.Println("BuildID for v:", v.BuildId())
 			deploymentVersion := worker_versioning.DeploymentVersionFromDeployment(v.Deployment())
 
 			isUnversionedDescribe := deploymentVersion == nil

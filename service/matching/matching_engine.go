@@ -1304,8 +1304,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		if request.Version != nil {
 			// A particular version was requested. This is only available internally; not user-facing.
-			// TODO (Shivam): Confirm with the crew: I think we should be passing in v32 here and then further having checks in the partition manager
-			// to handle both v31 and v32 versions.
 			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV32(request.Version)}
 		}
 
@@ -1382,7 +1380,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						if _, ok := taskQueueStatsByPriority[pri]; !ok {
 							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
 						}
-						// mergeStats(taskQueueStats, priorityStats)
 						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
 					}
 
