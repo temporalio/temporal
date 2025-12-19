@@ -27,7 +27,6 @@ var (
 		enumspb.ACTIVITY_ID_REUSE_POLICY_REJECT_DUPLICATE:            chasm.BusinessIDReusePolicyRejectDuplicate,
 	}
 
-	// TODO this will change once we rebase on main
 	businessIDConflictPolicyMap = map[enumspb.ActivityIdConflictPolicy]chasm.BusinessIDConflictPolicy{
 		enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL:         chasm.BusinessIDConflictPolicyFail,
 		enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING: chasm.BusinessIDConflictPolicyUseExisting,

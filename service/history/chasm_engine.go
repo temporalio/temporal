@@ -360,7 +360,7 @@ func (e *ChasmEngine) predicateSatisfied(
 	err := chasmTree.IsStale(ref)
 	if err != nil {
 		// ErrStaleState
-		// TODO(dan): this should be retryable if it is the failover version that is stale
+		// TODO(saa-yichao): this should be retryable if it is the failover version that is stale
 		return nil, err
 	}
 	// We know now that execution VT >= ref VT
@@ -701,7 +701,7 @@ func (e *ChasmEngine) getShardContext(
 // the state transition specified by the component reference is consistent with mutable state being
 // stale, then mutable state is reloaded from persistence before returning. It does not check that
 // mutable state is non-stale after reload.
-// TODO(dan): if mutable state is stale after reload, return an error (retryable iff the failover
+// TODO(saa-yichao): if mutable state is stale after reload, return an error (retryable iff the failover
 // version is stale since that is expected under some multi-cluster scenarios).
 func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,

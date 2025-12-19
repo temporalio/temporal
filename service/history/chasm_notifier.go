@@ -13,9 +13,9 @@ type subscriptionTracker struct {
 
 // ChasmNotifier allows subscribers to receive notifications relating to a CHASM execution.
 type ChasmNotifier struct {
-	// TODO(dan): use ShardedConcurrentTxMap
+	// TODO(saa-preview): use ShardedConcurrentTxMap
 	executions map[chasm.ExecutionKey]*subscriptionTracker
-	// TODO(dan): consider RWMutex
+	// TODO(saa-preview): consider RWMutex
 	lock sync.Mutex
 }
 
