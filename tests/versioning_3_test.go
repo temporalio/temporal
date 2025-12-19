@@ -2314,6 +2314,7 @@ func (s *Versioning3Suite) testPinnedCaN_UpgradeOnCaN(normalTask, speculativeTas
 
 		// Verify the new workflow run is on v2 (not v1) because of AUTO_UPGRADE initial behavior
 		s.verifyWorkflowVersioning(s.Assertions, tv2, vbPinned, tv2.Deployment(), nil, nil)
+		e
 	})
 }
 

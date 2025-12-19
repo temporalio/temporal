@@ -681,6 +681,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: tv.Any().String(),
@@ -697,6 +698,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
