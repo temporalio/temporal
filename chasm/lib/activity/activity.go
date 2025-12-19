@@ -69,8 +69,8 @@ type Activity struct {
 	// Pointer to an implementation of the "store". For a workflow activity this would be a parent
 	// pointer back to the workflow. For a standalone activity this is nil (Activity itself
 	// implements the ActivityStore interface).
-	// TODO: revisit a standalone activity pointing to itself once we handle storing it more efficiently.
-	// TODO: figure out better naming.
+	// TODO(saa-preview): revisit a standalone activity pointing to itself once we handle storing it more efficiently.
+	// TODO(saa-preview): figure out better naming.
 	Store chasm.Field[ActivityStore]
 }
 
@@ -249,7 +249,7 @@ func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
 	event RespondCompletedEvent,
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -277,7 +277,7 @@ func (a *Activity) HandleFailed(
 	ctx chasm.MutableContext,
 	event RespondFailedEvent,
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -323,7 +323,7 @@ func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
 	event RespondCancelledEvent,
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
-	// TODO(dan): add test coverage for this validation
+	// TODO(saa-preview): add test coverage for this validation
 	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
 		return nil, err
 	}
@@ -463,16 +463,16 @@ func (a *Activity) recordFailedAttempt(
 	ctx chasm.MutableContext,
 	retryInterval time.Duration,
 	failure *failurepb.Failure,
+	currentTime time.Time,
 	noRetriesLeft bool,
 ) error {
 	attempt := a.LastAttempt.Get(ctx)
-	currentTime := timestamppb.New(ctx.Now(a))
 
 	attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
 		Failure: failure,
-		Time:    currentTime,
+		Time:    timestamppb.New(currentTime),
 	}
-	attempt.CompleteTime = currentTime
+	attempt.CompleteTime = timestamppb.New(currentTime)
 
 	if noRetriesLeft {
 		attempt.CurrentRetryInterval = nil
@@ -577,7 +577,7 @@ func (a *Activity) RecordHeartbeat(
 	)
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		// TODO(dan): ActivityPaused, ActivityReset
+		// TODO(saa-preview): ActivityPaused, ActivityReset
 	}, nil
 }
 
@@ -626,7 +626,7 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 }
 
 func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb.ActivityExecutionInfo, error) {
-	// TODO(dan): support pause states
+	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
 
@@ -634,19 +634,20 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 	attempt := a.LastAttempt.Get(ctx)
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
-	currentTime := ctx.Now(a)
 
-	executionDuration := durationpb.New(currentTime.Sub(a.GetScheduleTime().AsTime()))
+	// TODO(saa-preview): debating if we should persist next attempt schedule time for stronger consistency
 	var nextAttemptScheduleTime *timestamppb.Timestamp
-	if interval := attempt.GetCurrentRetryInterval(); interval != nil && interval.AsDuration() > 0 {
-		nextAttemptScheduleTime = timestamppb.New(
-			attempt.GetCompleteTime().AsTime().Add(interval.AsDuration()),
-		)
+	interval := attempt.GetCurrentRetryInterval()
+	completeTime := attempt.GetCompleteTime()
+	if interval != nil && interval.AsDuration() > 0 && completeTime != nil {
+		nextAttemptScheduleTime = timestamppb.New(completeTime.AsTime().Add(interval.AsDuration()))
 	}
 
 	var closeTime *timestamppb.Timestamp
-	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
+	var executionDuration = durationpb.New(0)
+	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning && attempt.GetCompleteTime() != nil {
 		closeTime = attempt.GetCompleteTime()
+		executionDuration = durationpb.New(closeTime.AsTime().Sub(a.GetScheduleTime().AsTime()))
 	}
 
 	var expirationTime *timestamppb.Timestamp
@@ -685,7 +686,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
 		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
 		StateTransitionCount:    a.Visibility.Get(ctx).Data.TransitionCount,
-		// StateSizeBytes: TODO do we still want this?
+		// TODO(saa-preview): StateSizeBytes?
 		SearchAttributes: sa,
 		Status:           status,
 		TaskQueue:        a.GetTaskQueue().GetName(),
@@ -746,29 +747,23 @@ func (a *Activity) buildPollActivityExecutionResponse(
 // outcome retrieves the activity outcome (result or failure) if the activity has completed.
 // Returns nil if the activity has not completed.
 func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOutcome {
+	if !a.LifecycleState(ctx).IsClosed() {
+		return nil
+	}
 	activityOutcome := a.Outcome.Get(ctx)
-	// Check for successful outcome
 	if successful := activityOutcome.GetSuccessful(); successful != nil {
 		return &apiactivitypb.ActivityExecutionOutcome{
 			Value: &apiactivitypb.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
 		}
 	}
-	// Check for failure in outcome
 	if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
 		return &apiactivitypb.ActivityExecutionOutcome{
 			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
 		}
 	}
-	// Check for failure in last attempt details
-	shouldHaveFailure := (a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_FAILED ||
-		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT ||
-		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED ||
-		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED)
-	if shouldHaveFailure {
-		if details := a.LastAttempt.Get(ctx).GetLastFailureDetails(); details != nil {
-			return &apiactivitypb.ActivityExecutionOutcome{
-				Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
-			}
+	if details := a.LastAttempt.Get(ctx).GetLastFailureDetails(); details != nil {
+		return &apiactivitypb.ActivityExecutionOutcome{
+			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
 		}
 	}
 	return nil

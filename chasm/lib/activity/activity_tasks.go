@@ -35,7 +35,7 @@ func (e *activityDispatchTaskExecutor) Validate(
 	_ chasm.TaskAttributes,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	// TODO make sure we handle resets when we support them, as they will reset the attempt count
+	// TODO(saa-preview): make sure we handle resets when we support them, as they will reset the attempt count
 	return (TransitionStarted.Possible(activity) &&
 		task.Attempt == activity.LastAttempt.Get(ctx).GetCount()), nil
 }

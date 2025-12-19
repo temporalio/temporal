@@ -309,7 +309,12 @@ func (e *ChasmEngine) PollComponent(
 			return ref, nil
 		}
 		// Predicate not satisfied; subscribe before releasing the lock.
-		ch, unsubscribe = e.notifier.Subscribe(requestRef.ExecutionKey)
+		workflowKey := executionLease.GetContext().GetWorkflowKey()
+		ch, unsubscribe = e.notifier.Subscribe(chasm.ExecutionKey{
+			NamespaceID: workflowKey.NamespaceID,
+			BusinessID:  workflowKey.WorkflowID,
+			RunID:       workflowKey.RunID,
+		})
 		return nil, nil
 	}
 
@@ -321,12 +326,9 @@ func (e *ChasmEngine) PollComponent(
 	for {
 		select {
 		case <-ch:
-			ref, err := checkPredicateOrSubscribe()
-			if err != nil {
-				return nil, err
-			}
-			if ref != nil {
-				return ref, nil
+			ref, err = checkPredicateOrSubscribe()
+			if err != nil || ref != nil {
+				return ref, err
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -358,7 +360,7 @@ func (e *ChasmEngine) predicateSatisfied(
 	err := chasmTree.IsStale(ref)
 	if err != nil {
 		// ErrStaleState
-		// TODO(dan): this should be retryable if it is the failover version that is stale
+		// TODO(saa-yichao): this should be retryable if it is the failover version that is stale
 		return nil, err
 	}
 	// We know now that execution VT >= ref VT
@@ -699,7 +701,7 @@ func (e *ChasmEngine) getShardContext(
 // the state transition specified by the component reference is consistent with mutable state being
 // stale, then mutable state is reloaded from persistence before returning. It does not check that
 // mutable state is non-stale after reload.
-// TODO(dan): if mutable state is stale after reload, return an error (retryable iff the failover
+// TODO(saa-yichao): if mutable state is stale after reload, return an error (retryable iff the failover
 // version is stale since that is expected under some multi-cluster scenarios).
 func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,
