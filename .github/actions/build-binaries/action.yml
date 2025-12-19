@@ -34,14 +34,24 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
 
-    - name: Run GoReleaser (build)
-      if: inputs.release != 'true'
+    - name: Run GoReleaser (build - all architectures)
+      if: inputs.release != 'true' && inputs.single-arch == ''
       uses: goreleaser/goreleaser-action@v6
       with:
         distribution: goreleaser
         version: v2.13.1
-        args: build --snapshot ${{ inputs.single-arch != '' && '--single-target' || '' }}
+        args: build --snapshot
       env:
         GITHUB_TOKEN: ${{ github.token }}
-        GOOS: ${{ inputs.single-arch != '' && 'linux' || '' }}
+
+    - name: Run GoReleaser (build - single architecture)
+      if: inputs.release != 'true' && inputs.single-arch != ''
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        distribution: goreleaser
+        version: v2.13.1
+        args: build --snapshot --single-target
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GOOS: linux
         GOARCH: ${{ inputs.single-arch }}
