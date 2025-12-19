@@ -2240,9 +2240,6 @@ func (s *Versioning3Suite) testPinnedCaN_UpgradeOnCaN(normalTask, speculativeTas
 					s.verifyTransientTask(task)
 				}
 
-				fmt.Printf("TASK EVENTS: %+v \n\n\n", task.History.Events)
-				fmt.Printf("HISTORY EVENTS: %+v \n\n\n", s.GetHistory(s.Namespace().String(), execution))
-
 				// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
 				// Get events from server-side history instead of task.History.Events, because task.History.Events has an
 				// extra started event with the CaN suggestion in the transient task case
