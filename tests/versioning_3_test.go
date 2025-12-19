@@ -2234,17 +2234,18 @@ func (s *Versioning3Suite) testPinnedCaN_UpgradeOnCaN(normalTask, speculativeTas
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.NotNil(task)
 				// Mode-specific validations
+				historyEvents := task.History.GetEvents()
 				if speculativeTask {
 					s.verifySpeculativeTask(execution)
 				} else if transientTask {
 					s.verifyTransientTask(task)
+					// Get events from server-side history instead of task.History.Events, because task.History.Events has an
+					// extra started event with the CaN suggestion in the transient task case
+					historyEvents = s.GetHistory(s.Namespace().String(), execution)
 				}
 
 				// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
-				// Get events from server-side history instead of task.History.Events, because task.History.Events has an
-				// extra started event with the CaN suggestion in the transient task case
 				wfTaskStartedEvents := make([]*historypb.HistoryEvent, 0)
-				historyEvents := s.GetHistory(s.Namespace().String(), execution)
 				for _, event := range historyEvents { // get events
 					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
