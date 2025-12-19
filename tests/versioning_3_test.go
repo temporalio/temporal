@@ -82,32 +82,32 @@ type Versioning3Suite struct {
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
 	t.Parallel()
-	//t.Run("sync_old_deployment_data", func(t *testing.T) {
-	//	suite.Run(t, &Versioning3Suite{
-	//		deploymentWorkflowVersion: workerdeployment.InitialVersion,
-	//		useV32:                    true,
-	//		useNewDeploymentData:      false,
-	//		useRevisionNumbers:        false,
-	//	})
-	//})
-	//
-	//t.Run("async", func(t *testing.T) {
-	//	suite.Run(t, &Versioning3Suite{
-	//		deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-	//		useV32:                    true,
-	//		useRevisionNumbers:        true,
-	//		useNewDeploymentData:      true,
-	//	})
-	//})
-
-	//t.Run("async_version_rev_no", func(t *testing.T) {
-	suite.Run(t, &Versioning3Suite{
-		deploymentWorkflowVersion: workerdeployment.VersionDataRevisionNumber,
-		useV32:                    true,
-		useRevisionNumbers:        true,
-		useNewDeploymentData:      true,
+	t.Run("sync_old_deployment_data", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.InitialVersion,
+			useV32:                    true,
+			useNewDeploymentData:      false,
+			useRevisionNumbers:        false,
+		})
 	})
-	//})
+
+	t.Run("async", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+			useV32:                    true,
+			useRevisionNumbers:        true,
+			useNewDeploymentData:      true,
+		})
+	})
+
+	t.Run("async_version_rev_no", func(t *testing.T) {
+		suite.Run(t, &Versioning3Suite{
+			deploymentWorkflowVersion: workerdeployment.VersionDataRevisionNumber,
+			useV32:                    true,
+			useRevisionNumbers:        true,
+			useNewDeploymentData:      true,
+		})
+	})
 }
 
 func (s *Versioning3Suite) SetupSuite() {
@@ -2165,7 +2165,22 @@ func (s *Versioning3Suite) TestUnpinnedCaN_upgradeOnCaN() {
 	s.testCan(false, vbUnpinned, true, false)
 }
 
-// TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew of a Pinned workflow with InitialVersioningBehavior
+// TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT() {
+	s.testPinnedCaN_UpgradeOnCaN(true, false, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT tests ContinueAsNew with a speculative WFT triggered by update.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT() {
+	s.testPinnedCaN_UpgradeOnCaN(false, true, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_TransientWFT tests ContinueAsNew with a transient WFT (failed + retry).
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
+	s.testPinnedCaN_UpgradeOnCaN(false, false, true)
+}
+
+// testPinnedCaN_UpgradeOnCaN tests ContinueAsNew of a Pinned workflow with InitialVersioningBehavior
 // set to AUTO_UPGRADE using task polling directly (without SDK). This allows testing the feature
 // before it's exposed in the SDK.
 //
@@ -2173,12 +2188,10 @@ func (s *Versioning3Suite) TestUnpinnedCaN_upgradeOnCaN() {
 // 1. Set v1 as current, start workflow
 // 2. First WFT: task is sent to v1 worker, worker declares vbPinned -> workflow becomes pinned to v1
 // 3. Set v2 as current
-// 4. Signal workflow, then on WFT:
-//   - Confirm that ContinueAsNewSuggested=true and ContinueAsNewSuggestedReasons=[NewTargetVersion]
-//   - Issue ContinueAsNew with InitialVersioningBehavior AUTO_UPGRADE
-//
-// 5. The new run should start on v2 (current) because of AUTO_UPGRADE initial behavior, but after WFT completion, be pinned.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT() {
+// 4. Trigger WFT (mode-dependent: signal (normal task), update (speculative task), or fail+retry(transient task))
+// 5. On WFT: confirm ContinueAsNewSuggested=true, issue ContinueAsNew with AUTO_UPGRADE
+// 6. The new run should start on v2 (current) and be pinned after WFT completion.
+func (s *Versioning3Suite) testPinnedCaN_UpgradeOnCaN(normalTask, speculativeTask, transientTask bool) {
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -2187,17 +2200,8 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT() {
 		tv2 := tv1.WithBuildIDNumber(2)
 		execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv1)
 
-		// The workflow is currently unpinned (drainWorkflowTaskAfterSetCurrent uses vbUnpinned)
-		// We need another WFT where the worker declares behavior to make it pinned
-		// Signal to trigger a new WFT
-		_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
-			WorkflowExecution: execution,
-			SignalName:        tv1.SignalName(),
-			Input:             tv1.Any().Payloads(),
-			Identity:          tv1.WorkerIdentity(),
-		})
-		s.NoError(err)
+		// Trigger a normal WFT to make the workflow pinned
+		s.triggerNormalWFT(ctx, tv1, execution)
 
 		// Process the signal WFT and declare behavior to make the workflow versioned pinned on v1
 		s.pollWftAndHandle(tv1, false, nil,
@@ -2215,195 +2219,87 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT() {
 		// Set v2 as current
 		s.setCurrentDeployment(tv2)
 
-		// Signal the workflow again to trigger the WFT with ContinueAsNewSuggested=true and reasons=[NewTargetVersion]
-		_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
-			WorkflowExecution: execution,
-			SignalName:        tv1.SignalName(),
-			Input:             tv1.Any().Payloads(),
-			Identity:          tv1.WorkerIdentity(),
-		})
-		s.NoError(err)
+		// Mode-specific: trigger the WFT
+		var updateResultCh <-chan *workflowservice.UpdateWorkflowExecutionResponse
+		if normalTask {
+			s.triggerNormalWFT(ctx, tv1, execution)
+		} else if speculativeTask {
+			updateResultCh = s.sendUpdateNoError(tv1)
+		} else if transientTask {
+			s.triggerTransientWFT(ctx, tv1, execution)
+		}
 
-		// Process the signal WFT and issue ContinueAsNew with AUTO_UPGRADE initial behavior
+		// Process the WFT and issue ContinueAsNew with AUTO_UPGRADE
 		s.pollWftAndHandle(tv1, false, nil,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.NotNil(task)
+				// Mode-specific validations
+				if speculativeTask {
+					s.verifySpeculativeTask(execution)
+				} else if transientTask {
+					s.verifyTransientTask(task)
+				}
 
+				// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones)
 				wfTaskStartedEvents := make([]*historypb.HistoryEvent, 0)
 				for _, event := range task.History.Events {
 					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				s.Require().Len(wfTaskStartedEvents, 3) // make sure we are actually verifying non-zero # of events
-
+				s.True(len(wfTaskStartedEvents) > 2) // make sure there are at least 2 WFT started events
 				for i, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
-					// the last started event should have ContinueAsNewSuggested=true and reasons=[NewTargetVersion]
-					if i == len(wfTaskStartedEvents)-1 {
+					if i == len(wfTaskStartedEvents)-1 { // last event
 						s.True(attr.GetSuggestContinueAsNew())
 						s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
-					} else { // the other started events should not
+					} else { // earlier events
 						s.False(attr.GetSuggestContinueAsNew())
 						s.Require().Len(attr.GetSuggestContinueAsNewReasons(), 0)
 					}
 				}
 
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: []*commandpb.Command{
-						{
-							CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-							Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
-								ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-									WorkflowType:              tv1.WorkflowType(),
-									TaskQueue:                 tv1.TaskQueue(),
-									Input:                     tv1.Any().Payloads(),
-									InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-								},
+				commands := []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType:              tv1.WorkflowType(),
+								TaskQueue:                 tv1.TaskQueue(),
+								Input:                     tv1.Any().Payloads(),
+								InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 							},
 						},
 					},
-					ForceCreateNewWorkflowTask: false,
-					VersioningBehavior:         vbPinned,
-					DeploymentOptions:          tv1.WorkerDeploymentOptions(true),
-				}, nil
-			})
-
-		// Start async poller for v2 to receive the ContinueAsNew new run
-		wftNewRunDone := make(chan struct{})
-		s.pollWftAndHandle(tv2, false, wftNewRunDone,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				// The new run should be on v2 because InitialVersioningBehavior was AUTO_UPGRADE
-				return respondCompleteWorkflow(tv2, vbPinned), nil
-			})
-
-		// Wait for the new run's first workflow task on v2
-		s.WaitForChannel(ctx, wftNewRunDone)
-
-		// Verify the new workflow run is on v2 (not v1) because of AUTO_UPGRADE initial behavior
-		// The new workflow has the worker-sent Pinned behavior from the first WFT completion after CaN.
-		s.verifyWorkflowVersioning(tv2, vbPinned, tv2.Deployment(), nil, nil)
-	})
-}
-
-// TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT is similar to TestPinnedCaN_UpgradeOnCaN but uses a
-// speculative workflow task triggered by a workflow update instead of a signal.
-// Speculative WFTs are not persisted to history until the WFT completes successfully.
-//
-// Flow:
-// 1. Set v1 as current, start workflow
-// 2. First WFT: task is sent to v1 worker, worker declares vbPinned -> workflow becomes pinned to v1
-// 3. Set v2 as current
-// 4. Send workflow update (triggers speculative WFT), then on WFT:
-//   - Confirm that ContinueAsNewSuggested=true and ContinueAsNewSuggestedReasons=[NewTargetVersion]
-//   - Accept the update and issue ContinueAsNew with InitialVersioningBehavior AUTO_UPGRADE
-//
-// 5. The new run should start on v2 (current) because of AUTO_UPGRADE initial behavior, but after WFT completion, be pinned.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT() {
-	s.RunTestWithMatchingBehavior(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-
-		tv1 := testvars.New(s).WithBuildIDNumber(1)
-		tv2 := tv1.WithBuildIDNumber(2)
-		execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv1)
-
-		// Signal to trigger a WFT to make the workflow pinned
-		_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
-			WorkflowExecution: execution,
-			SignalName:        tv1.SignalName(),
-			Input:             tv1.Any().Payloads(),
-			Identity:          tv1.WorkerIdentity(),
-		})
-		s.NoError(err)
-
-		// Process the signal WFT and declare behavior to make the workflow versioned pinned on v1
-		s.pollWftAndHandle(tv1, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondEmptyWft(tv1, false, vbPinned), nil
-			})
-
-		// Verify workflow is now pinned and running on v1
-		s.verifyWorkflowVersioning(tv1, vbPinned, tv1.Deployment(), nil, nil)
-
-		// Register v2 poller before setting it as current
-		s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-
-		// Set v2 as current
-		s.setCurrentDeployment(tv2)
-
-		// Send update to trigger a speculative WFT (instead of signal)
-		// This creates a speculative workflow task that won't be written to history until completion
-		updateResultCh := s.sendUpdateNoError(tv1) // Use tv1 since workflow is still on v1
-
-		// Process the speculative WFT containing the update, issue ContinueAsNew with AUTO_UPGRADE
-		s.pollWftAndHandle(tv1, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-
-				// Verify this is a speculative task - events not yet in persisted history
-				events := s.GetHistory(s.Namespace().String(), execution)
-				s.EqualHistoryEvents(`
-					1 WorkflowExecutionStarted
-					2 WorkflowTaskScheduled
-					3 WorkflowTaskStarted
-					4 WorkflowTaskCompleted
-					5 WorkflowExecutionSignaled
-					6 WorkflowTaskScheduled
-					7 WorkflowTaskStarted
-					8 WorkflowTaskCompleted
-				`, events)
-
-				// Verify ContinueAsNewSuggested is set due to new target version
-				wfTaskStartedEvents := make([]*historypb.HistoryEvent, 0)
-				for _, event := range task.History.Events {
-					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
-					}
 				}
-				s.Require().GreaterOrEqual(len(wfTaskStartedEvents), 1)
-				lastStarted := wfTaskStartedEvents[len(wfTaskStartedEvents)-1]
-				attr := lastStarted.GetWorkflowTaskStartedEventAttributes()
-				s.True(attr.GetSuggestContinueAsNew())
-				s.Contains(attr.GetSuggestContinueAsNewReasons(), enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)
 
-				// Accept and complete the update, then issue ContinueAsNew
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: append(
-						s.UpdateAcceptCompleteCommands(tv1),
-						&commandpb.Command{
-							CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-							Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
-								ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-									WorkflowType:              tv1.WorkflowType(),
-									TaskQueue:                 tv1.TaskQueue(),
-									Input:                     tv1.Any().Payloads(),
-									InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-								},
-							},
-						},
-					),
-					Messages:                   s.UpdateAcceptCompleteMessages(tv1, task.Messages[0]),
+				resp := &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands:                   commands,
 					ForceCreateNewWorkflowTask: false,
 					VersioningBehavior:         vbPinned,
 					DeploymentOptions:          tv1.WorkerDeploymentOptions(true),
-				}, nil
+				}
+
+				// For speculative WFT, include update accept/complete in the commands
+				if speculativeTask {
+					resp.Commands = append(s.UpdateAcceptCompleteCommands(tv1), commands...)
+					resp.Messages = s.UpdateAcceptCompleteMessages(tv1, task.Messages[0])
+				}
+
+				return resp, nil
 			})
 
-		// Wait for and verify the update result
-		updateResult := <-updateResultCh
-		s.EqualValues("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+		// For speculative mode, wait for and verify the update result
+		if speculativeTask {
+			updateResult := <-updateResultCh
+			s.EqualValues("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+		}
 
 		// Start async poller for v2 to receive the ContinueAsNew new run
 		wftNewRunDone := make(chan struct{})
 		s.pollWftAndHandle(tv2, false, wftNewRunDone,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.NotNil(task)
-				// The new run should be on v2 because InitialVersioningBehavior was AUTO_UPGRADE
 				return respondCompleteWorkflow(tv2, vbPinned), nil
 			})
 
@@ -2415,152 +2311,69 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT() {
 	})
 }
 
-// TestPinnedCaN_UpgradeOnCaN_TransientWFT is similar to TestPinnedCaN_UpgradeOnCaN_NormalWFT but uses a
-// transient workflow task. Transient WFTs occur when a previous WFT failed or timed out (attempt > 1).
-// The scheduled/started events are not written to history until the WFT eventually succeeds.
-//
-// Flow:
-// 1. Set v1 as current, start workflow
-// 2. First WFT: task is sent to v1 worker, worker declares vbPinned -> workflow becomes pinned to v1
-// 3. Set v2 as current
-// 4. Signal workflow, poll WFT, and **fail it** to create a transient WFT situation
-// 5. Poll again for the transient WFT (attempt 2):
-//   - Confirm that ContinueAsNewSuggested=true and ContinueAsNewSuggestedReasons=[NewTargetVersion]
-//   - Issue ContinueAsNew with InitialVersioningBehavior AUTO_UPGRADE
-//
-// 6. The new run should start on v2 (current) because of AUTO_UPGRADE initial behavior, but after WFT completion, be pinned.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
-	s.RunTestWithMatchingBehavior(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-
-		tv1 := testvars.New(s).WithBuildIDNumber(1)
-		tv2 := tv1.WithBuildIDNumber(2)
-		execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv1)
-
-		// Signal to trigger a WFT to make the workflow pinned
-		_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
-			WorkflowExecution: execution,
-			SignalName:        tv1.SignalName(),
-			Input:             tv1.Any().Payloads(),
-			Identity:          tv1.WorkerIdentity(),
-		})
-		s.NoError(err)
-
-		// Process the signal WFT and declare behavior to make the workflow versioned pinned on v1
-		s.pollWftAndHandle(tv1, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondEmptyWft(tv1, false, vbPinned), nil
-			})
-
-		// Verify workflow is now pinned and running on v1
-		s.verifyWorkflowVersioning(tv1, vbPinned, tv1.Deployment(), nil, nil)
-
-		// Register v2 poller before setting it as current
-		s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
-
-		// Set v2 as current
-		s.setCurrentDeployment(tv2)
-
-		// Signal the workflow to trigger a new WFT
-		_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
-			WorkflowExecution: execution,
-			SignalName:        tv1.SignalName(),
-			Input:             tv1.Any().Payloads(),
-			Identity:          tv1.WorkerIdentity(),
-		})
-		s.NoError(err)
-
-		// Poll and FAIL the WFT to create a transient WFT situation
-		pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace:         s.Namespace().String(),
-			TaskQueue:         tv1.TaskQueue(),
-			Identity:          tv1.WorkerIdentity(),
-			DeploymentOptions: tv1.WorkerDeploymentOptions(true),
-		})
-		s.NoError(err)
-		s.NotNil(pollResp)
-		s.NotEmpty(pollResp.TaskToken)
-
-		// Fail the workflow task - this will cause a transient WFT to be scheduled
-		_, err = s.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
-			Namespace: s.Namespace().String(),
-			TaskToken: pollResp.TaskToken,
-			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
-			Identity:  tv1.WorkerIdentity(),
-		})
-		s.NoError(err)
-
-		// Now poll for the transient WFT (attempt 2) and issue ContinueAsNew with AUTO_UPGRADE
-		s.pollWftAndHandle(tv1, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-
-				// Find the last scheduled event to verify attempt count
-				var lastScheduledEvent *historypb.HistoryEvent
-				for _, event := range task.History.Events {
-					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-						lastScheduledEvent = event
-					}
-				}
-				s.Require().NotNil(lastScheduledEvent)
-				scheduledAttr := lastScheduledEvent.GetWorkflowTaskScheduledEventAttributes()
-
-				// Verify this is attempt 2 (transient)
-				s.Equal(int32(2), scheduledAttr.GetAttempt())
-
-				// Find the last started event to verify ContinueAsNewSuggested
-				var lastStartedEvent *historypb.HistoryEvent
-				for _, event := range task.History.Events {
-					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-						lastStartedEvent = event
-					}
-				}
-				s.Require().NotNil(lastStartedEvent)
-				startedAttr := lastStartedEvent.GetWorkflowTaskStartedEventAttributes()
-
-				// Verify ContinueAsNewSuggested is set due to new target version
-				s.True(startedAttr.GetSuggestContinueAsNew())
-				s.Contains(startedAttr.GetSuggestContinueAsNewReasons(), enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)
-
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: []*commandpb.Command{
-						{
-							CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-							Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
-								ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-									WorkflowType:              tv1.WorkflowType(),
-									TaskQueue:                 tv1.TaskQueue(),
-									Input:                     tv1.Any().Payloads(),
-									InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-								},
-							},
-						},
-					},
-					ForceCreateNewWorkflowTask: false,
-					VersioningBehavior:         vbPinned,
-					DeploymentOptions:          tv1.WorkerDeploymentOptions(true),
-				}, nil
-			})
-
-		// Start async pouller for v2 to receive the ContinueAsNew new run
-		wftNewRunDone := make(chan struct{})
-		s.pollWftAndHandle(tv2, false, wftNewRunDone,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				// The new run should be on v2 because InitialVersioningBehavior was AUTO_UPGRADE
-				return respondCompleteWorkflow(tv2, vbPinned), nil
-			})
-
-		// Wait for the new run's first workflow task on v2
-		s.WaitForChannel(ctx, wftNewRunDone)
-
-		// Verify the new workflow run is on v2 (not v1) because of AUTO_UPGRADE initial behavior
-		s.verifyWorkflowVersioning(tv2, vbPinned, tv2.Deployment(), nil, nil)
+// Signal to trigger a normal WFT
+func (s *Versioning3Suite) triggerNormalWFT(ctx context.Context, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
+	_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         s.Namespace().String(),
+		WorkflowExecution: execution,
+		SignalName:        tv.SignalName(),
+		Input:             tv.Any().Payloads(),
+		Identity:          tv.WorkerIdentity(),
 	})
+	s.NoError(err)
+}
+
+// Trigger a normal task and then fail the task twice to trigger a transient WFT
+func (s *Versioning3Suite) triggerTransientWFT(ctx context.Context, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
+	s.triggerNormalWFT(ctx, tv, execution)
+
+	// Poll and FAIL the WFT to create a transient WFT situation
+	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotNil(pollResp)
+	s.NotEmpty(pollResp.TaskToken)
+
+	// Fail the workflow task - this will cause a transient WFT to be scheduled
+	_, err = s.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: s.Namespace().String(),
+		TaskToken: pollResp.TaskToken,
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+}
+
+// Verify this is a speculative task - events not yet in persisted history
+func (s *Versioning3Suite) verifySpeculativeTask(execution *commonpb.WorkflowExecution) {
+	// use history events instead of task events because some of the task.History.Events aren't persisted yet
+	events := s.GetHistory(s.Namespace().String(), execution)
+	s.EqualHistoryEvents(`
+						1 WorkflowExecutionStarted
+						2 WorkflowTaskScheduled
+						3 WorkflowTaskStarted
+						4 WorkflowTaskCompleted
+						5 WorkflowExecutionSignaled
+						6 WorkflowTaskScheduled
+						7 WorkflowTaskStarted
+						8 WorkflowTaskCompleted
+					`, events)
+}
+
+func (s *Versioning3Suite) verifyTransientTask(task *workflowservice.PollWorkflowTaskQueueResponse) {
+	// Verify this is attempt 2 (transient)
+	var lastScheduledEvent *historypb.HistoryEvent
+	for _, event := range task.History.Events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+			lastScheduledEvent = event
+		}
+	}
+	s.Require().NotNil(lastScheduledEvent)
+	s.Equal(int32(2), lastScheduledEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 }
 
 // TestAutoUpgradeCaN_UpgradeOnCaN tests ContinueAsNew of an AutoUpgrade workflow with InitialVersioningBehavior
