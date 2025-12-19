@@ -212,6 +212,7 @@ func organizeBinaries() error {
 				}
 				fmt.Printf("Copied %s -> %s\n", distPath, buildPath)
 			} else {
+				printDirectoryContents("dist")
 				return fmt.Errorf("binary not found: %s for architecture %s (expected at %s)", binary, arch, distPath)
 			}
 		}
@@ -558,4 +559,22 @@ func downloadFile(url, fpath string) error {
 
 	_, err = io.Copy(out, resp.Body)
 	return err
+}
+
+func printDirectoryContents(dir string) {
+	fmt.Fprintf(os.Stderr, "\nContents of %s directory:\n", dir)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip errors
+		}
+		if info.IsDir() {
+			fmt.Fprintf(os.Stderr, "  %s/\n", path)
+		} else {
+			fmt.Fprintf(os.Stderr, "  %s\n", path)
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  (failed to list %s directory: %v)\n", dir, err)
+	}
 }
