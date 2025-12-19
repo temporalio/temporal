@@ -11,8 +11,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -23,6 +25,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -53,11 +56,13 @@ type Starter struct {
 	metricsHandler             metrics.Handler
 	shardContext               historyi.ShardContext
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
+	matchingClient             matchingservice.MatchingServiceClient
 	tokenSerializer            *tasktoken.Serializer
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
 	enableRequestIdRefLinks    dynamicconfig.BoolPropertyFn
+	versionMembershipCache     cache.Cache
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -85,6 +90,8 @@ func NewStarter(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	request *historyservice.StartWorkflowExecutionRequest,
+	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache cache.Cache,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
@@ -97,11 +104,13 @@ func NewStarter(
 		metricsHandler:             nil,
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
+		matchingClient:             matchingClient,
 		tokenSerializer:            tokenSerializer,
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
 		enableRequestIdRefLinks:    shardContext.GetConfig().EnableRequestIdRefLinks,
+		versionMembershipCache:     versionMembershipCache,
 	}, nil
 }
 
@@ -126,6 +135,12 @@ func (s *Starter) prepare(ctx context.Context) error {
 	)
 
 	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
+	if err != nil {
+		return err
+	}
+
+	// Validation for versioning override, if any.
+	err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), s.matchingClient, s.versionMembershipCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, s.namespace.ID().String())
 	if err != nil {
 		return err
 	}
