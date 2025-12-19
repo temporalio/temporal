@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
@@ -526,7 +527,68 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
-func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
+func validatePinnedVersionInTaskQueue(ctx context.Context,
+	pinnedVersion *deploymentpb.WorkerDeploymentVersion,
+	matchingClient resource.MatchingClient,
+	versionMembershipCache cache.Cache,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) error {
+
+	// Check if we have recently queried matching to validate if this version exists in the task queue.
+	key := versionMembershipCacheKey{
+		namespaceID:    namespaceID,
+		taskQueue:      tq,
+		taskQueueType:  tqType,
+		deploymentName: pinnedVersion.DeploymentName,
+		buildID:        pinnedVersion.BuildId,
+	}
+	if cached := versionMembershipCache.Get(key); cached != nil {
+		if isMember, ok := cached.(bool); ok {
+			if isMember {
+				return nil
+			}
+			return serviceerror.NewFailedPrecondition(
+				"Pinned version is not present in the task queue",
+			)
+		}
+	}
+
+	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		NamespaceId:   namespaceID,
+		TaskQueue:     tq,
+		TaskQueueType: tqType,
+		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(pinnedVersion)),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Add result to cache
+	versionMembershipCache.Put(key, resp.GetIsMember())
+	if !resp.GetIsMember() {
+		return serviceerror.NewFailedPrecondition(
+			"Pinned version is not present in the task queue",
+		)
+	}
+	return nil
+}
+
+type versionMembershipCacheKey struct {
+	namespaceID    string
+	taskQueue      string
+	taskQueueType  enumspb.TaskQueueType
+	deploymentName string
+	buildID        string
+}
+
+func ValidateVersioningOverride(ctx context.Context,
+	override *workflowpb.VersioningOverride,
+	matchingClient resource.MatchingClient,
+	versionMembershipCache cache.Cache,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) error {
 	if override == nil {
 		return nil
 	}
@@ -540,7 +602,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return nil
+		return validatePinnedVersionInTaskQueue(ctx, p.GetVersion(), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -550,7 +612,12 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 			return ValidateDeployment(override.GetDeployment())
 		} else if override.GetPinnedVersion() != "" {
 			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
-			return err
+			if err != nil {
+				return err
+			}
+
+			return validatePinnedVersionInTaskQueue(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
+
 		} else {
 			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
 		}

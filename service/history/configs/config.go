@@ -396,6 +396,8 @@ type Config struct {
 
 	// Worker-Versioning related settings
 	UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VersionMembershipCacheTTL            dynamicconfig.DurationPropertyFn
+	VersionMembershipCacheMaxSize        dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -752,6 +754,8 @@ func NewConfig(
 
 		// Worker-Versioning related
 		UseRevisionNumberForWorkerVersioning: dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
+		VersionMembershipCacheTTL:            dynamicconfig.VersionMembershipCacheTTL.Get(dc),
+		VersionMembershipCacheMaxSize:        dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
 	}
 
 	return cfg
