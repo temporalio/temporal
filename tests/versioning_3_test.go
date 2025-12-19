@@ -2277,7 +2277,7 @@ func (s *Versioning3Suite) testPinnedCaN_UpgradeOnCaN(normalTask, speculativeTas
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				s.True(len(wfTaskStartedEvents) > 2) // make sure there are at least 2 WFT started events
+				s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
 				for i, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
 					if i == len(wfTaskStartedEvents)-1 { // last event
@@ -2285,7 +2285,7 @@ func (s *Versioning3Suite) testPinnedCaN_UpgradeOnCaN(normalTask, speculativeTas
 						s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
 					} else { // earlier events
 						s.False(attr.GetSuggestContinueAsNew())
-						s.Require().Len(attr.GetSuggestContinueAsNewReasons(), 0)
+						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 					}
 				}
 
@@ -2322,7 +2322,7 @@ func (s *Versioning3Suite) testPinnedCaN_UpgradeOnCaN(normalTask, speculativeTas
 		// For speculative mode, wait for and verify the update result
 		if speculativeTask {
 			updateResult := <-updateResultCh
-			s.EqualValues("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+			s.Equal("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 		}
 
 		// Start async poller for v2 to receive the ContinueAsNew new run
@@ -2462,7 +2462,7 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 				for _, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
 					s.False(attr.GetSuggestContinueAsNew())
-					s.Require().Len(attr.GetSuggestContinueAsNewReasons(), 0)
+					s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 				}
 
 				// For AutoUpgrade, I want to test that once the workflow has transitioned to v2, it doesn't get the CaN suggestion anymore.
@@ -2488,12 +2488,12 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				s.True(len(wfTaskStartedEvents) > 0) // make sure we are actually verifying non-zero # of events
+				s.Greater(len(wfTaskStartedEvents), 0) // make sure we are actually verifying non-zero # of events
 
 				for _, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
 					s.False(attr.GetSuggestContinueAsNew())
-					s.Require().Len(attr.GetSuggestContinueAsNewReasons(), 0)
+					s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 				}
 
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -2558,9 +2558,9 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 				newCtx = workflow.WithWorkflowTaskQueue(newCtx, canxTq)
 			}
 			// TODO(carlydf): use this code path once CaN option to choose InitialVersioningBehavior is exposed in SDK
-			//if upgradeOnCaN {
-			//	newCtx = workflow.WithInitialVersioningBehavior(newCtx, temporal.ContinueAsNewVersioningBehaviorAutoUpgrade)
-			//}
+			//  if upgradeOnCaN {
+			//	  newCtx = workflow.WithInitialVersioningBehavior(newCtx, temporal.ContinueAsNewVersioningBehaviorAutoUpgrade)
+			//  }
 			s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
 			wfStarted <- struct{}{}
 			// wait for current version to change.
