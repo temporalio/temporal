@@ -105,7 +105,7 @@ func (c *mutationTestCase) Run(t *testing.T) {
 		addWorkflowExecutionSignaled(t, i, ms)
 	}
 
-	_, workflowEvents, err := ms.CloseTransactionAsMutation(c.transactionPolicy)
+	_, workflowEvents, err := ms.CloseTransactionAsMutation(context.Background(), c.transactionPolicy)
 	if err != nil {
 		t.Fatal(err)
 	}

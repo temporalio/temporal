@@ -31,6 +31,10 @@ func (c *MockContext) Ref(cmp Component) ([]byte, error) {
 	return nil, nil
 }
 
+func (c *MockContext) structuredRef(cmp Component) (ComponentRef, error) {
+	return ComponentRef{}, nil
+}
+
 func (c *MockContext) ExecutionKey() ExecutionKey {
 	if c.HandleExecutionKey != nil {
 		return c.HandleExecutionKey()

@@ -1319,6 +1319,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
 	)
+	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
+		"matching.maxVersionsInTaskQueue",
+		200,
+		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue. 
+ Should be larger than MatchingMaxVersionsInDeployment because a task queue can be in versions spanning across more than one deployments.`,
+	)
 	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeploymentVersion",
 		100,
@@ -2699,6 +2705,18 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 		false,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
+	)
+
+	VersionMembershipCacheTTL = NewGlobalDurationSetting(
+		"history.versionMembershipCacheTTL",
+		1*time.Second,
+		`TTL for caching RPC results that check whether a version is present in a task queue.`,
+	)
+
+	VersionMembershipCacheMaxSize = NewGlobalIntSetting(
+		"history.versionMembershipCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version membership cache.`,
 	)
 
 	// keys for worker
