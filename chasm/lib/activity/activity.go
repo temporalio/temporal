@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"go.temporal.io/api/activity/v1"
+	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -625,7 +625,7 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 	}
 }
 
-func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.ActivityExecutionInfo, error) {
+func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb.ActivityExecutionInfo, error) {
 	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
@@ -659,7 +659,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*activity.Acti
 		IndexedFields: a.Visibility.Get(ctx).GetSearchAttributes(ctx),
 	}
 
-	info := &activity.ActivityExecutionInfo{
+	info := &apiactivitypb.ActivityExecutionInfo{
 		ActivityId:              key.BusinessID,
 		ActivityType:            a.GetActivityType(),
 		Attempt:                 attempt.GetCount(),
@@ -746,24 +746,24 @@ func (a *Activity) buildPollActivityExecutionResponse(
 
 // outcome retrieves the activity outcome (result or failure) if the activity has completed.
 // Returns nil if the activity has not completed.
-func (a *Activity) outcome(ctx chasm.Context) *activity.ActivityExecutionOutcome {
+func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOutcome {
 	if !a.LifecycleState(ctx).IsClosed() {
 		return nil
 	}
 	activityOutcome := a.Outcome.Get(ctx)
 	if successful := activityOutcome.GetSuccessful(); successful != nil {
-		return &activity.ActivityExecutionOutcome{
-			Value: &activity.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
+		return &apiactivitypb.ActivityExecutionOutcome{
+			Value: &apiactivitypb.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
 		}
 	}
 	if failure := activityOutcome.GetFailed().GetFailure(); failure != nil {
-		return &activity.ActivityExecutionOutcome{
-			Value: &activity.ActivityExecutionOutcome_Failure{Failure: failure},
+		return &apiactivitypb.ActivityExecutionOutcome{
+			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
 		}
 	}
 	if details := a.LastAttempt.Get(ctx).GetLastFailureDetails(); details != nil {
-		return &activity.ActivityExecutionOutcome{
-			Value: &activity.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
+		return &apiactivitypb.ActivityExecutionOutcome{
+			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: details.GetFailure()},
 		}
 	}
 	return nil
