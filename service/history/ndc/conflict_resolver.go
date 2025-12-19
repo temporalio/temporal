@@ -138,6 +138,8 @@ func (r *ConflictResolverImpl) rebuild(
 		executionState.RunId,
 	)
 	historySize := r.mutableState.GetHistorySize()
+	externalPayloadSize := r.mutableState.GetExternalPayloadSize()
+	externalPayloadCount := r.mutableState.GetExternalPayloadCount()
 
 	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
@@ -173,6 +175,8 @@ func (r *ConflictResolverImpl) rebuild(
 	}
 	rebuildMutableState.GetExecutionInfo().VersionHistories = versionHistories
 	rebuildMutableState.AddHistorySize(historySize)
+	rebuildMutableState.AddExternalPayloadSize(externalPayloadSize)
+	rebuildMutableState.AddExternalPayloadCount(externalPayloadCount)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
 
