@@ -183,9 +183,10 @@ func organizeBinaries() error {
 	}
 
 	// Map GoReleaser dist structure to build structure
+	// GoReleaser adds version suffixes: amd64_v1 (GOAMD64=v1), arm64_v8.0 (GOARM64=v8.0)
 	archMap := map[string]string{
 		"amd64": "amd64_v1",
-		"arm64": "arm64",
+		"arm64": "arm64_v8.0",
 	}
 
 	// Copy binaries
