@@ -2,6 +2,7 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/persistence"
@@ -47,6 +48,7 @@ type (
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
+		ChasmEngine                     chasm.Engine
 		VersionMembershipCache          cache.Cache
 	}
 
@@ -83,5 +85,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.OutboundQueueCBPool,
 		f.PersistenceRateLimiter,
 		f.TestHooks,
+		f.ChasmEngine,
 	)
 }

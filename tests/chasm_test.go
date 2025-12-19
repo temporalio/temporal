@@ -418,6 +418,9 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 	for _, group := range countResp.Groups {
 		s.Len(group.Values, 1)
 		totalCount += group.Count
+		var groupValue string
+		s.NoError(payload.Decode(group.Values[0], &groupValue))
+		s.Contains([]string{"Running", "Completed"}, groupValue)
 	}
 	s.Equal(int64(5), totalCount)
 
