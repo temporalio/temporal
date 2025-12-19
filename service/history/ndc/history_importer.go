@@ -281,6 +281,7 @@ func (r *HistoryImporterImpl) persistHistoryAndSerializeMutableState(
 	mutableStateSpec MutableStateInitializationSpec,
 ) ([]byte, error) {
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {

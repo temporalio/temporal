@@ -142,17 +142,21 @@ func (c chasmInvocation) getHistoryRequest(
 			return nil, fmt.Errorf("failed to read payload: %v", err)
 		}
 
-		var payload commonpb.Payload
+		var payload *commonpb.Payload
 		if payloadBody != nil {
-			err := proto.Unmarshal(payloadBody, &payload)
+			content := &nexus.Content{
+				Header: op.Reader.Header,
+				Data:   payloadBody,
+			}
+			err := commonnexus.PayloadSerializer.Deserialize(content, &payload)
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal payload body: %v", err)
+				return nil, fmt.Errorf("failed to deserialize payload: %v", err)
 			}
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
-				Success: &payload,
+				Success: payload,
 			},
 			CloseTime:  timestamppb.New(op.CloseTime),
 			Completion: completion,

@@ -274,7 +274,7 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 	return redirectAllowed &&
 		c.redirectionInterceptor.RedirectionAllowed(ctx) &&
 		c.namespace.IsGlobalNamespace() &&
-		len(c.namespace.ClusterNames()) > 1 &&
+		len(c.namespace.ClusterNames(namespace.EmptyBusinessID)) > 1 &&
 		c.forwardingEnabledForNamespace(c.namespaceName)
 }
 

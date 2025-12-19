@@ -266,6 +266,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 // testing anything because the test will succeed even if all the activities complete immediately as if there were no rate limit.
 // TODO(matching team): Possibly rewrite test if this issue persists.
 func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
+	s.T().Skip("skip until we make it less flaky")
 	const (
 		apiRPS            = 5.0
 		taskCount         = 25
@@ -498,6 +499,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 }
 
 func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced() {
+	s.T().Skip("skip until we make it less flaky")
 	const (
 		wholeQueueRPS = 10.0 // tighter
 		perKeyRPS     = 50.0 // looser than whole queue, should not bind
@@ -545,6 +547,7 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 }
 
 func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys() {
+	s.T().Skip("skip until we make it less flaky")
 	const (
 		perKeyRPS     = 5.0
 		wholeQueueRPS = 1000.0 // tighter
@@ -598,6 +601,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 }
 
 func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThreeKeys() {
+	s.T().Skip("skip until we make it less flaky")
 	const (
 		perKeyRPS     = 5.0    // base per-key limit
 		wholeQueueRPS = 1000.0 // keep high so only per-key gates

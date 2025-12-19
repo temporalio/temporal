@@ -253,6 +253,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
+		} else if resp.TaskToken == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
@@ -273,6 +275,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
+		} else if resp.TaskToken == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_NEXUS:
@@ -293,6 +297,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
+		} else if resp.Response == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{nexusTaskInfo: resp}), nil
 	default:

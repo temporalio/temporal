@@ -459,7 +459,7 @@ func (e *ChasmEngine) createNewExecution(
 	}
 	chasmTree.SetRootComponent(rootComponent)
 
-	snapshot, events, err := mutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
+	snapshot, events, err := mutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
 	if err != nil {
 		return newExecutionParams{}, err
 	}
