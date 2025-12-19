@@ -1153,6 +1153,7 @@ type RecordWorkflowTaskStartedRequest struct {
 	TaskDispatchRevisionNumber int64 `protobuf:"varint,12,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3" json:"task_dispatch_revision_number,omitempty"`
 	// Target worker deployment version according to matching when starting the task.
 	// Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
+	// Sent only if the target version is different from the poller's version.
 	TargetDeploymentVersion *v16.WorkerDeploymentVersion `protobuf:"bytes,13,opt,name=target_deployment_version,json=targetDeploymentVersion,proto3" json:"target_deployment_version,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache

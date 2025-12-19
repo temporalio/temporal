@@ -486,6 +486,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
+	// checking whether targetDeploymentVersion == nil means that we won't send the CaN recommendation to workflows
+	// that are about to transition to the target version. This is good, because if their transition succeeds, they
+	// don't need to CaN to start using the new version.
 	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
 			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
