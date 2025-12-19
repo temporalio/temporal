@@ -39,6 +39,7 @@ type (
 		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		MaxVersionsInTaskQueue               dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
 
 		// task queue configuration
@@ -58,6 +59,11 @@ type (
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
+		WorkerRegistryNumBuckets                 dynamicconfig.IntPropertyFn
+		WorkerRegistryEntryTTL                   dynamicconfig.DurationPropertyFn
+		WorkerRegistryMinEvictAge                dynamicconfig.DurationPropertyFn
+		WorkerRegistryMaxEntries                 dynamicconfig.IntPropertyFn
+		WorkerRegistryEvictionInterval           dynamicconfig.DurationPropertyFn
 		ForwarderMaxOutstandingPolls             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingTasks             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxRatePerSecond                dynamicconfig.FloatPropertyFnWithTaskQueueFilter
@@ -184,6 +190,7 @@ type (
 
 		// TTL for cache holding TaskQueueInfoByBuildID
 		TaskQueueInfoByBuildIdTTL func() time.Duration
+		MaxVersionsInTaskQueue    func() int
 
 		// Rate limiting
 		RateLimiterRefreshInterval    time.Duration
@@ -253,6 +260,7 @@ func NewConfig(
 		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
 		UseRevisionNumberForWorkerVersioning:     dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
 		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		MaxVersionsInTaskQueue:                   dynamicconfig.MatchingMaxVersionsInTaskQueue.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
@@ -278,6 +286,11 @@ func NewConfig(
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
+		WorkerRegistryNumBuckets:                 dynamicconfig.MatchingWorkerRegistryNumBuckets.Get(dc),
+		WorkerRegistryEntryTTL:                   dynamicconfig.MatchingWorkerRegistryEntryTTL.Get(dc),
+		WorkerRegistryMinEvictAge:                dynamicconfig.MatchingWorkerRegistryMinEvictAge.Get(dc),
+		WorkerRegistryMaxEntries:                 dynamicconfig.MatchingWorkerRegistryMaxEntries.Get(dc),
+		WorkerRegistryEvictionInterval:           dynamicconfig.MatchingWorkerRegistryEvictionInterval.Get(dc),
 		ForwarderMaxOutstandingPolls:             dynamicconfig.MatchingForwarderMaxOutstandingPolls.Get(dc),
 		ForwarderMaxOutstandingTasks:             dynamicconfig.MatchingForwarderMaxOutstandingTasks.Get(dc),
 		ForwarderMaxRatePerSecond:                dynamicconfig.MatchingForwarderMaxRatePerSecond.Get(dc),
@@ -475,6 +488,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
 		},
+		MaxVersionsInTaskQueue: func() int { return config.MaxVersionsInTaskQueue(ns.String()) },
 	}
 }
 

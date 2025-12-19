@@ -930,7 +930,7 @@ func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
 		lastEventID, lastEventVersion,
 	))
 	s.NoError(err)
-	return workflow.TestCloneToProto(ms)
+	return workflow.TestCloneToProto(context.Background(), ms)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(

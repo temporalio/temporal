@@ -57,7 +57,7 @@ func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
 			continue
 		}
 		// Trigger the callback by transitioning to SCHEDULED state
-		if err := callback.TransitionScheduled.Apply(ctx, cb, callback.EventScheduled{}); err != nil {
+		if err := callback.TransitionScheduled.Apply(cb, ctx, callback.EventScheduled{}); err != nil {
 			return err
 		}
 	}

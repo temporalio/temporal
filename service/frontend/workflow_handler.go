@@ -36,6 +36,9 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -114,7 +117,9 @@ const (
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
-		workflowservice.UnimplementedWorkflowServiceServer
+		workflowservice.UnsafeWorkflowServiceServer
+		activity.FrontendHandler
+
 		status int32
 
 		tokenSerializer                 *tasktoken.Serializer
@@ -146,6 +151,7 @@ type (
 		scheduleSpecBuilder             *scheduler.SpecBuilder
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
+		registry                        *chasm.Registry
 	}
 )
 
@@ -176,8 +182,11 @@ func NewWorkflowHandler(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
+	activityHandler activity.FrontendHandler,
+	registry *chasm.Registry,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
+		FrontendHandler: activityHandler,
 		status:          common.DaemonStatusInitialized,
 		config:          config,
 		tokenSerializer: tasktoken.NewSerializer(),
@@ -229,6 +238,7 @@ func NewWorkflowHandler(
 		scheduleSpecBuilder: scheduleSpecBuilder,
 		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
 		httpEnabled:         httpEnabled,
+		registry:            registry,
 	}
 
 	return handler
@@ -492,11 +502,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	// Validate versioning override, if present.
-	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
-
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
@@ -617,7 +622,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 	errs := make([]error, len(request.Operations))
 
 	for i, op := range request.Operations {
-		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, op)
+		convertedOp, opWorkflowID, err := wh.convertToHistoryMultiOperationItem(namespaceID, namespace.Name(request.Namespace), op)
 		if err != nil {
 			hasError = true
 		} else {
@@ -649,12 +654,16 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationRequest(
 
 func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	op *workflowservice.ExecuteMultiOperationRequest_Operation,
 ) (*historyservice.ExecuteMultiOperationRequest_Operation, string, error) {
 	var workflowId string
 	var opReq *historyservice.ExecuteMultiOperationRequest_Operation
 
 	if startReq := op.GetStartWorkflow(); startReq != nil {
+		if startReq.Namespace != "" && startReq.Namespace != namespaceName.String() {
+			return nil, "", errMultiOpNamespaceMismatch
+		}
 		var err error
 		if startReq, err = wh.prepareStartWorkflowRequest(startReq); err != nil {
 			return nil, "", err
@@ -682,6 +691,9 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 			},
 		}
 	} else if updateReq := op.GetUpdateWorkflow(); updateReq != nil {
+		if updateReq.Namespace != "" && updateReq.Namespace != namespaceName.String() {
+			return nil, "", errMultiOpNamespaceMismatch
+		}
 		if err := wh.prepareUpdateWorkflowRequest(updateReq); err != nil {
 			return nil, "", err
 		}
@@ -1222,6 +1234,11 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
@@ -1289,11 +1306,28 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
+	var componentRef []byte
+	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+			NamespaceID: namespaceID.String(),
+			BusinessID:  activityID,
+			RunID:       runID,
+		})
+
+		componentRef, err = ref.Serialize(wh.registry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1307,6 +1341,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1392,13 +1427,18 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetResult().Size(),
@@ -1457,15 +1497,32 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
+	var componentRef []byte
+	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+			NamespaceID: namespaceID.String(),
+			BusinessID:  activityID,
+			RunID:       runID,
+		})
+
+		componentRef, err = ref.Serialize(wh.registry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1479,6 +1536,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1561,6 +1619,11 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
 		return nil, errFailureMustHaveApplicationFailureInfo
@@ -1570,8 +1633,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	response := workflowservice.RespondActivityTaskFailedResponse{}
 
@@ -1643,14 +1706,31 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
+	var componentRef []byte
+	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+			NamespaceID: namespaceID.String(),
+			BusinessID:  activityID,
+			RunID:       runID,
+		})
+
+		componentRef, err = ref.Serialize(wh.registry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1664,6 +1744,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1755,13 +1836,18 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
+	namespaceName := namespaceEntry.Name().String()
+
+	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetDetails().Size(),
@@ -1820,14 +1906,31 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	runID := request.GetRunId() // runID is optional so can be empty
 	activityID := request.GetActivityId()
 
-	if workflowID == "" {
-		return nil, errWorkflowIDNotSet
-	}
 	if activityID == "" {
 		return nil, errActivityIDNotSet
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	// If workflowID is empty, it means the activity is a standalone activity and we need to set the component ref.
+	// Else this should be a validation error.
+	var componentRef []byte
+	if workflowID == "" {
+		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
+			return nil, errWorkflowIDNotSet
+		}
+
+		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+			NamespaceID: namespaceID.String(),
+			BusinessID:  activityID,
+			RunID:       runID,
+		})
+
+		componentRef, err = ref.Serialize(wh.registry)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1841,6 +1944,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		nil,
 		common.EmptyVersion,
 		common.EmptyVersion,
+		componentRef,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -2090,10 +2194,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	// Validate versioning override, if present.
-	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
 
 	resp, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId:            namespaceID.String(),
@@ -2129,10 +2229,6 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if err := validatePostResetOperationInputs(request.GetPostResetOperations()); err != nil {
-		return nil, err
-	}
-
 	enums.SetDefaultResetReapplyType(&request.ResetReapplyType)
 	if _, validType := enumspb.ResetReapplyType_name[int32(request.GetResetReapplyType())]; !validType {
 		return nil, serviceerror.NewInternalf("unknown reset reapply type: %v", request.GetResetReapplyType())
@@ -2152,22 +2248,6 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	}
 
 	return &workflowservice.ResetWorkflowExecutionResponse{RunId: resp.GetRunId()}, nil
-}
-
-// validatePostResetOperationInputs validates the optional post reset operation inputs.
-func validatePostResetOperationInputs(postResetOperations []*workflowpb.PostResetOperation) error {
-	for _, operation := range postResetOperations {
-		switch op := operation.GetVariant().(type) {
-		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
-			if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
-				return err
-			}
-		default:
-			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
-		}
-	}
-	return nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
@@ -2746,7 +2826,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	}
 
 	// route heartbeat to the matching service
-	if request.WorkerHeartbeat != nil {
+	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
 		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
 		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 			NamespaceId: namespaceId.String(),
@@ -4886,6 +4966,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
+		// TODO (Shivam): Verify if this is the correct way to handle these errors.
+		input.NonRetryableErrors = append(input.NonRetryableErrors, "Pinned version is not present in the task queue")
 	case *workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
@@ -5227,7 +5309,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	// route heartbeat to the matching service
-	if len(request.WorkerHeartbeat) > 0 {
+	if len(request.WorkerHeartbeat) > 0 && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
 		workerHeartbeat := request.WorkerHeartbeat
 		request.WorkerHeartbeat = nil // Clear the field to avoid sending it to matching service.
 
@@ -6067,9 +6149,6 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err != nil {
 		return nil, err
 	}
-	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
 
 	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
 		NamespaceId:   namespaceID.String(),
@@ -6336,7 +6415,7 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 	ctx context.Context, request *workflowservice.RecordWorkerHeartbeatRequest,
 ) (*workflowservice.RecordWorkerHeartbeatResponse, error) {
 	if !wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method RecordWorkerHeartbeat not supported")
+		return &workflowservice.RecordWorkerHeartbeatResponse{}, nil
 	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
@@ -6489,6 +6568,10 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 	return &workflowservice.DescribeWorkerResponse{
 		WorkerInfo: resp.GetWorkerInfo(),
 	}, nil
+}
+
+func (wh *WorkflowHandler) TriggerWorkflowRule(context.Context, *workflowservice.TriggerWorkflowRuleRequest) (*workflowservice.TriggerWorkflowRuleResponse, error) {
+	return nil, serviceerror.NewUnimplemented("method TriggerWorkflowRule not supported")
 }
 
 // PauseWorkflowExecution pauses a workflow execution.

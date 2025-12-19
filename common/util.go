@@ -89,6 +89,8 @@ const (
 
 	contextExpireThreshold = 10 * time.Millisecond
 
+	// FailureReasonActivityTimeout is failureReason for when an activity times out, with %v as the timeout type.
+	FailureReasonActivityTimeout = "activity %v timeout"
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit

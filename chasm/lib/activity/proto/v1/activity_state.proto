@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.activity.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/api/sdk/v1/user_metadata.proto";
+import "temporal/api/taskqueue/v1/message.proto";
+
+enum ActivityExecutionStatus {
+    ACTIVITY_EXECUTION_STATUS_UNSPECIFIED = 0;
+    // The activity is not in a terminal status. This does not necessarily mean that there is a currently running
+    // attempt. The activity may be backing off between attempts or waiting for a worker to pick it up.
+    ACTIVITY_EXECUTION_STATUS_SCHEDULED = 1;
+    ACTIVITY_EXECUTION_STATUS_STARTED = 2;
+    ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED = 3;
+    // Left as placeholders for when we add pause.
+    // // PAUSED means activity is paused on the server, and is not running in the worker
+    // ACTIVITY_EXECUTION_STATUS_PAUSED = 4;
+    // // PAUSE_REQUESTED means activity is currently running on the worker, but paused on the server
+    // ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED = 5;
+    // The activity completed successfully.
+    ACTIVITY_EXECUTION_STATUS_COMPLETED = 4;
+    // The activity completed with failure.
+    ACTIVITY_EXECUTION_STATUS_FAILED = 5;
+    // The activity completed as canceled.
+    // Requesting to cancel an activity does not automatically transition the activity to canceled status. If the
+    // activity has a currently running attempt, the activity will only transition to canceled status if the current
+    // attempt is unsuccessful.
+    // TODO: Clarify what happens if there are no more allowed retries after the current attempt.
+    ACTIVITY_EXECUTION_STATUS_CANCELED = 6;
+    // The activity was terminated. Termination does not reach the worker and the activity code cannot react to it.
+    // A terminated activity may have a running attempt and will be requested to be canceled by the server when it
+    // heartbeats.
+    ACTIVITY_EXECUTION_STATUS_TERMINATED = 7;
+    // The activity has timed out by reaching the specified shedule-to-start or schedule-to-close timeouts.
+    // TODO: Clarify if there are other conditions where the activity can end up in timed out status.
+    ACTIVITY_EXECUTION_STATUS_TIMED_OUT = 8;
+}
+
+message ActivityState {
+    // === Should be covered by CHASM
+    // Unique identifier of this activity within its namespace along with run ID (below).
+    // string activity_id = 1;
+    // string run_id = 2;
+    // Incremented each time the activity's state is mutated in persistence.
+    // int64 state_transition_count = 22; TODO: we would need this if we had conflict resolution functionality.
+    // === END Should be covered by CHASM
+
+    // The type of the activity, a string that maps to a registered activity on a worker.
+    temporal.api.common.v1.ActivityType activity_type = 1;
+
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+
+    // Indicates how long the caller is willing to wait for an activity completion. Limits how long
+    // retries will be attempted. Either this or `start_to_close_timeout` must be specified.
+    //
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_close_timeout = 3;
+    // Limits time an activity task can stay in a task queue before a worker picks it up. This
+    // timeout is always non retryable, as all a retry would achieve is to put it back into the same
+    // queue. Defaults to `schedule_to_close_timeout` or workflow execution timeout if not
+    // specified.
+    //
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_start_timeout = 4;
+    // Maximum time an activity is allowed to execute after being picked up by a worker. This
+    // timeout is always retryable. Either this or `schedule_to_close_timeout` must be
+    // specified.
+    //
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration start_to_close_timeout = 5;
+    // Maximum permitted time between successful worker heartbeats.
+    google.protobuf.Duration heartbeat_timeout = 6;
+    // The retry policy for the activity. Will never exceed `schedule_to_close_timeout`.
+    temporal.api.common.v1.RetryPolicy retry_policy = 7;
+
+    // All of the possible activity statuses (covers both the public ActivityExecutionStatus and PendingActivityState).
+    // TODO: consider moving this into ActivityAttemptState and renaming that message. This could save mutating two
+    // components on each attempt transition.
+    ActivityExecutionStatus status = 8;
+
+    // Time the activity was originally scheduled via a StartActivityExecution request.
+    google.protobuf.Timestamp schedule_time = 9;
+
+    // Priority metadata.
+    temporal.api.common.v1.Priority priority = 10;
+
+    // Set if activity cancellation was requested.
+    ActivityCancelState cancel_state = 11;
+
+    // Set if the activity was terminated
+    ActivityTerminateState terminate_state = 12;
+}
+
+message ActivityCancelState {
+    string request_id = 1;
+    google.protobuf.Timestamp request_time = 2;
+    string identity = 3;
+    string reason = 4;
+}
+
+message ActivityTerminateState {
+  string request_id = 1;
+}
+
+message ActivityAttemptState {
+    // The attempt this activity is currently on.
+    // Incremented each time a new attempt is started.
+    // TODO: Confirm if this is on scheduled or started.
+    int32 count = 1;
+
+    // Time from the last attempt failure to the next activity retry.
+    // If the activity is currently running, this represents the next retry interval in case the attempt fails.
+    // If activity is currently backing off between attempt, this represents the current retry interval.
+    // If there is no next retry allowed, this field will be null.
+    // This interval is typically calculated from the specified retry policy, but may be modified if an activity fails
+    // with a retryable application failure specifying a retry delay.
+    google.protobuf.Duration current_retry_interval = 2;
+
+    // Time the last attempt was started.
+    google.protobuf.Timestamp started_time = 3;
+
+    // The time when the last activity attempt completed. If activity has not been completed yet, it will be null.
+    google.protobuf.Timestamp complete_time = 4;
+
+    message LastFailureDetails {
+      // The last time the activity attempt failed.
+      google.protobuf.Timestamp time = 1;
+
+      // Failure details from the last failed attempt.
+      temporal.api.failure.v1.Failure failure = 2;
+    }
+
+    // Details about the last failure. This will only be updated when an activity attempt fails,
+    // including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
+    // will not reset it.
+    LastFailureDetails last_failure_details = 5;
+
+    string last_worker_identity = 7;
+
+    // The Worker Deployment Version this activity was dispatched to most recently.
+    // If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 8;
+}
+
+message ActivityHeartbeatState {
+    // Details provided in the last recorded activity heartbeat.
+    temporal.api.common.v1.Payloads details = 1;
+    // Time the last heartbeat was recorded.
+    google.protobuf.Timestamp recorded_time = 2;
+}
+
+message ActivityRequestData {
+    // Serialized activity input, passed as arguments to the activity function.
+    temporal.api.common.v1.Payloads input = 1;
+    temporal.api.common.v1.Header header = 2;
+
+    // Metadata for use by user interfaces to display the fixed as-of-start summary and details of the activity.
+    temporal.api.sdk.v1.UserMetadata user_metadata = 3;
+}
+
+message ActivityOutcome {
+    message Successful {
+        temporal.api.common.v1.Payloads output = 1;
+    }
+
+    message Failed {
+        // Only filled on schedule-to-start timeouts, schedule-to-close timeouts or terminations. All other attempt
+        // failures will be recorded in ActivityAttemptState.last_failure_details.
+        temporal.api.failure.v1.Failure failure = 1;
+    }
+
+    oneof variant {
+        Successful successful = 1;
+        Failed failed = 2;
+    }
+}

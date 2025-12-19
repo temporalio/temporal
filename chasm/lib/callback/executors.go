@@ -179,7 +179,7 @@ func (e *BackoffTaskExecutor) Execute(
 	taskAttrs chasm.TaskAttributes,
 	task *callbackspb.BackoffTask,
 ) error {
-	return TransitionRescheduled.Apply(ctx, callback, EventRescheduled{})
+	return TransitionRescheduled.Apply(callback, ctx, EventRescheduled{})
 }
 
 func (e *BackoffTaskExecutor) Validate(
