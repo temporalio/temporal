@@ -1376,16 +1376,14 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
-					partitionStatsByPriority := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
-					for pri, priorityStats := range partitionStatsByPriority {
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
+					for pri, priorityStats := range partitionStats {
 						if _, ok := taskQueueStatsByPriority[pri]; !ok {
 							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
 						}
+						mergeStats(taskQueueStats, priorityStats)
 						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
 					}
-
-					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-					mergeStats(taskQueueStats, partitionStats)
 				}
 			}
 			pm.PutCache(cacheKey, &workflowservice.DescribeTaskQueueResponse{
