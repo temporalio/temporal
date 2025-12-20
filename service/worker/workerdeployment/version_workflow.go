@@ -654,6 +654,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		state.CurrentSinceTime = args.CurrentSinceTime
 		state.RampingSinceTime = args.RampingSinceTime
 		state.RampPercentage = args.RampPercentage
+
+		// Only needed for v0 workflow version. v1 and v2 are handled by updateStateFromRoutingConfig.
+		if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT &&
+			(state.LastCurrentTime == nil || state.LastCurrentTime.AsTime().Before(args.RoutingUpdateTime.AsTime())) {
+			// Last time this version was set to current
+			state.LastCurrentTime = args.RoutingUpdateTime
+		}
 	}
 
 	// stopped accepting new workflows --> start drainage tracking
@@ -704,6 +711,7 @@ func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
 		switch newStatus {
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT:
 			state.CurrentSinceTime = rg.GetCurrentVersionChangedTime()
+			state.LastCurrentTime = rg.GetCurrentVersionChangedTime()
 			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING:
 			state.RampingSinceTime = rg.GetRampingVersionChangedTime()
@@ -713,7 +721,10 @@ func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING:
 			// Version just became draining. So we need to update RoutingUpdateTime which is the max of the following:
 			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
-			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RampingSinceTime.AsTime()) {
+			if rg.GetRampingVersionChangedTime().AsTime().After(state.RoutingUpdateTime.AsTime()) {
+				state.RoutingUpdateTime = rg.GetRampingVersionChangedTime()
+			}
+			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RoutingUpdateTime.AsTime()) {
 				state.RoutingUpdateTime = rg.GetRampingVersionPercentageChangedTime()
 			}
 		default: // Shouldn't happen
@@ -762,6 +773,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		CurrentSinceTime:     s.CurrentSinceTime,
 		RampingSinceTime:     s.RampingSinceTime,
 		FirstActivationTime:  s.FirstActivationTime,
+		LastCurrentTime:      s.LastCurrentTime,
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 	}
