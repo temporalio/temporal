@@ -579,6 +579,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
+		ComponentRef:     addRequest.ComponentRef,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -2913,7 +2914,6 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
 	metricsHandler metrics.Handler,
 ) *matchingservice.PollActivityTaskQueueResponse {
-
 	scheduledEvent := historyResponse.ScheduledEvent
 	if scheduledEvent.GetActivityTaskScheduledEventAttributes() == nil {
 		panic("GetActivityTaskScheduledEventAttributes is not set")
@@ -2938,6 +2938,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		historyResponse.GetClock(),
 		historyResponse.GetVersion(),
 		historyResponse.GetStartVersion(),
+		task.event.GetData().GetComponentRef(),
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
@@ -3070,6 +3071,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		ComponentRef:               task.event.Data.GetComponentRef(),
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
