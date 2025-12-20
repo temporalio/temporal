@@ -579,6 +579,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
+		ComponentRef:     addRequest.ComponentRef,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -1304,8 +1305,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		if request.Version != nil {
 			// A particular version was requested. This is only available internally; not user-facing.
-			// TODO (Shivam): Confirm with the crew: I think we should be passing in v32 here and then further having checks in the partition manager
-			// to handle both v31 and v32 versions.
 			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV32(request.Version)}
 		}
 
@@ -1377,17 +1376,14 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					return nil, err
 				}
 				for _, vii := range partitionResp.VersionsInfoInternal {
-					partitionStatsByPriority := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
-					for pri, priorityStats := range partitionStatsByPriority {
+					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey
+					for pri, priorityStats := range partitionStats {
 						if _, ok := taskQueueStatsByPriority[pri]; !ok {
 							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
 						}
-						// mergeStats(taskQueueStats, priorityStats)
+						mergeStats(taskQueueStats, priorityStats)
 						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
 					}
-
-					partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-					mergeStats(taskQueueStats, partitionStats)
 				}
 			}
 			pm.PutCache(cacheKey, &workflowservice.DescribeTaskQueueResponse{
@@ -2916,7 +2912,6 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
 	metricsHandler metrics.Handler,
 ) *matchingservice.PollActivityTaskQueueResponse {
-
 	scheduledEvent := historyResponse.ScheduledEvent
 	if scheduledEvent.GetActivityTaskScheduledEventAttributes() == nil {
 		panic("GetActivityTaskScheduledEventAttributes is not set")
@@ -2941,6 +2936,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		historyResponse.GetClock(),
 		historyResponse.GetVersion(),
 		historyResponse.GetStartVersion(),
+		task.event.GetData().GetComponentRef(),
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
@@ -3073,6 +3069,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		ComponentRef:               task.event.Data.GetComponentRef(),
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)

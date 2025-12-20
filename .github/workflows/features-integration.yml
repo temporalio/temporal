@@ -14,13 +14,69 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
 
 jobs:
   build-docker-image:
+    runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: read
-    uses: temporalio/docker-builds/.github/workflows/docker-build-only.yml@main
-    with:
-      temporal-server-repo-path: ${{github.event.pull_request.head.repo.full_name}}
-      temporal-server-repo-ref: ${{github.event.pull_request.head.ref}}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Build binaries
+        uses: ./.github/actions/build-binaries
+        with:
+          snapshot: true
+          single-arch: amd64
+
+      - name: Build Docker images
+        uses: ./.github/actions/build-docker-images
+        with:
+          push: false
+          tag-latest: false
+          platform: linux/amd64
+          load: true
+
+      - name: Get Docker image tag
+        id: image-tag
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const ref = context.ref.replace('refs/heads/', '').replace('refs/tags/', '');
+            const branchName = `branch-${ref}`;
+            let safeTag = branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
+            safeTag = safeTag.toLowerCase();
+            safeTag = safeTag.replace(/^[^a-z0-9]+/, '');
+            safeTag = safeTag.substring(0, 128);
+            core.setOutput('tag', safeTag);
+
+      - name: Save Docker image as artifact
+        run: |
+          docker save temporaliotest/server:${{ steps.image-tag.outputs.tag }} -o /tmp/temporal-server.tar
+          docker save temporaliotest/admin-tools:${{ steps.image-tag.outputs.tag }} -o /tmp/temporal-admin-tools.tar
+          echo ${{ steps.image-tag.outputs.tag }} > /tmp/image_tag
+
+      - name: Prepare artifact
+        working-directory: ${{ github.workspace }}
+        run: |
+          # Upload-artifact has no good way to flatten paths, so we need to move the compose file
+          # to avoid some disgustingly long inner path inside the artifact zip.
+          cp ./develop/docker-compose/docker-compose.yml /tmp/docker-compose.yml
+          echo -n "${{env.IMAGE_SHA_TAG}}" > /tmp/image_sha_tag
+
+      - name: Upload Docker artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: temporal-server-docker
+          path: |
+            /tmp/temporal-server.tar
+            /tmp/temporal-admin-tools.tar
+            /tmp/image_tag
+            /tmp/docker-compose.yml 
+
+          retention-days: 7
 
   feature-tests-ts:
     needs: build-docker-image

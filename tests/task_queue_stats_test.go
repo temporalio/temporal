@@ -828,12 +828,10 @@ func (s *TaskQueueStatsSuite) pollWorkflowTasksAndScheduleActivitiesParallel(par
 
 	for _, p := range params {
 		p := p
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, err := s.pollWorkflowTasksAndScheduleActivities(p)
 			errCh <- err
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -1484,7 +1482,7 @@ func validateTaskQueueStats(
 		label, stats.TasksDispatchRate)
 }
 
-// TODO (Shivam): Remove this guy.
+// TODO: Remove this once older stats tests are refactored to use the createDeploymentOptions function.
 func (s *TaskQueueStatsSuite) deploymentOptions(tqName string) *deploymentpb.WorkerDeploymentOptions {
 	return &deploymentpb.WorkerDeploymentOptions{
 		DeploymentName:       tqName + "-deployment",
@@ -1493,10 +1491,10 @@ func (s *TaskQueueStatsSuite) deploymentOptions(tqName string) *deploymentpb.Wor
 	}
 }
 
-func (s *TaskQueueStatsSuite) createDeploymentOptions(deploymentName string, buildId string) *deploymentpb.WorkerDeploymentOptions {
+func (s *TaskQueueStatsSuite) createDeploymentOptions(deploymentName string, buildID string) *deploymentpb.WorkerDeploymentOptions {
 	return &deploymentpb.WorkerDeploymentOptions{
 		DeploymentName:       deploymentName,
-		BuildId:              buildId,
+		BuildId:              buildID,
 		WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 	}
 }
