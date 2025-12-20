@@ -59,15 +59,15 @@ var (
 
 func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
-	//t.Run("sync_workflows", func(t *testing.T) {
-	//	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion})
-	//})
-	//t.Run("async_workflows", func(t *testing.T) {
-	//	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
-	//})
-	//t.Run("v2", func(t *testing.T) {
-	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
-	//})
+	t.Run("sync_workflows", func(t *testing.T) {
+		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion})
+	})
+	t.Run("async_workflows", func(t *testing.T) {
+		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	})
+	t.Run("v2", func(t *testing.T) {
+		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
+	})
 }
 
 func (s *DeploymentVersionSuite) SetupSuite() {
@@ -1109,7 +1109,7 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 
 	// validating the metadata
 	entries := resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
-	s.Equal(2, len(entries))
+	s.Len(entries, 2)
 	s.Equal(testRandomMetadataValue, entries["key1"].Data)
 	s.Equal(testRandomMetadataValue, entries["key2"].Data)
 
