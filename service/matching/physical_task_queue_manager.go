@@ -792,6 +792,16 @@ func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	})
 }
 
+func (c *physicalTaskQueueManagerImpl) AllowPollerScalingDecision(now time.Time) bool {
+	// Avoid spiking pollers crazy fast by limiting how frequently change decisions are issued. Be more permissive when
+	// there are more recent pollers.
+	numPollers := c.pollerHistory.history.Size()
+	if numPollers == 0 {
+		numPollers = 1
+	}
+	return c.pollerScalingRateLimiter.AllowN(now, 1e6/numPollers)
+}
+
 func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeightOverrides {
 	return c.partitionMgr.GetRateLimitManager().GetFairnessWeightOverrides()
 }

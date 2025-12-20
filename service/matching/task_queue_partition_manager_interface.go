@@ -64,5 +64,6 @@ type (
 		GetCache(key any) any
 		GetRateLimitManager() *rateLimitManager
 		GetConfig() *taskQueueConfig
+		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, physicalQueue physicalTaskQueueManager) (*taskqueuepb.PollerScalingDecision, error)
 	}
 )

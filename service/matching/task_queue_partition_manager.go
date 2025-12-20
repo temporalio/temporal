@@ -389,17 +389,74 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
-
-	// TODO (Shivam): Right now, this only considers the backlog of the versioned queue for the poller scaling decision.
-	// The backlog of the unversioned queue should be considered for these decisions since current/ramping versions have their
-	// tasks sent to the unversioned queue.
-	// The right fix is to move MakePollerScalingDecision to the task queue partition manager and call the partitionManager.Describe method
-	// with the right buildID.
 	if task != nil {
-		task.pollerScalingDecision = dbq.MakePollerScalingDecision(pollMetadata.localPollStartTime)
+		task.pollerScalingDecision, err = pm.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, dbq)
+		if err != nil {
+			return nil, false, err
+		}
 	}
 
 	return task, versionSetUsed, err
+}
+
+func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.Context,
+	pollStartTime time.Time,
+	physicalQueue physicalTaskQueueManager,
+) (*taskqueuepb.PollerScalingDecision, error) {
+	// buildID would be empty for either the unversioned queue or when using v3 worker-versioning.
+	buildID := physicalQueue.QueueKey().Version().BuildId()
+
+	// Check if the queue is versioned queue using v3 worker-versioning
+	deployment := physicalQueue.QueueKey().Version().Deployment()
+	if deployment != nil {
+		buildID = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
+	}
+
+	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false)
+	if err != nil {
+		return nil, err
+	}
+
+	pollWaitTime := pm.engine.timeSource.Since(pollStartTime)
+	// If a poller has waited around a while, we can always suggest a decrease.
+	if pollWaitTime >= pm.config.PollerScalingWaitTime() {
+		// Decrease if any poll matched after sitting idle for some configured period
+		return &taskqueuepb.PollerScalingDecision{
+			PollRequestDeltaSuggestion: -1,
+		}, nil
+	}
+
+	delta := int32(0)
+	now := pm.engine.timeSource.Now()
+	if !physicalQueue.AllowPollerScalingDecision(now) {
+		return nil, nil
+	}
+
+	info, ok := partitionInfo.GetVersionsInfoInternal()[buildID]
+	if !ok || info.GetPhysicalTaskQueueInfo().GetTaskQueueStats() == nil {
+		return nil, nil
+	}
+	stats := info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+	if stats.ApproximateBacklogCount > 0 &&
+		stats.ApproximateBacklogAge.AsDuration() > pm.config.PollerScalingBacklogAgeScaleUp() {
+		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
+		// sticky queues.
+		delta = 1
+	} else if !physicalQueue.QueueKey().Partition().IsRoot() {
+		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
+		return nil, nil
+	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
+		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
+		// since those (currently) don't get backlogged.
+		delta = 1
+	}
+
+	if delta == 0 {
+		return nil, nil
+	}
+	return &taskqueuepb.PollerScalingDecision{
+		PollRequestDeltaSuggestion: delta,
+	}, nil
 }
 
 // TODO(pri): old matcher cleanup

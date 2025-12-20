@@ -55,6 +55,9 @@ type (
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
 		// of the task queue and the task about to be returned.
 		MakePollerScalingDecision(pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
+		// AllowPollerScalingDecision returns whether it is allowed to emit a new poller scaling decision at this time.
+		// This keeps rate limiting encapsulated within the physical queue.
+		AllowPollerScalingDecision(now time.Time) bool
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 	}
