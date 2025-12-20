@@ -2193,17 +2193,17 @@ func (s *Versioning3Suite) TestUnpinnedCaN_upgradeOnCaN() {
 
 // TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
 func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT() {
-	s.testPinnedCaN_UpgradeOnCaN(true, false, false)
+	s.testPinnedCaNUpgradeOnCaN(true, false, false)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT tests ContinueAsNew with a speculative WFT triggered by update.
 func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT() {
-	s.testPinnedCaN_UpgradeOnCaN(false, true, false)
+	s.testPinnedCaNUpgradeOnCaN(false, true, false)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_TransientWFT tests ContinueAsNew with a transient WFT (failed + retry).
 func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
-	s.testPinnedCaN_UpgradeOnCaN(false, false, true)
+	s.testPinnedCaNUpgradeOnCaN(false, false, true)
 }
 
 // testPinnedCaN_UpgradeOnCaN tests ContinueAsNew of a Pinned workflow with InitialVersioningBehavior
@@ -2217,7 +2217,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
 // 4. Trigger WFT (mode-dependent: signal (normal task), update (speculative task), or fail+retry(transient task))
 // 5. On WFT: confirm ContinueAsNewSuggested=true, issue ContinueAsNew with AUTO_UPGRADE
 // 6. The new run should start on v2 (current) and be pinned after WFT completion.
-func (s *Versioning3Suite) testPinnedCaN_UpgradeOnCaN(normalTask, speculativeTask, transientTask bool) {
+func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask bool) {
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
