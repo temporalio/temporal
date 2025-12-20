@@ -79,33 +79,33 @@ type Versioning3Suite struct {
 	useNewDeploymentData      bool
 }
 
-func TestVersioning3FunctionalSuite(t *testing.T) {
+func TestVersioning3FunctionalSuiteV0(t *testing.T) {
 	t.Parallel()
-	t.Run("sync_old_deployment_data", func(t *testing.T) {
-		suite.Run(t, &Versioning3Suite{
-			deploymentWorkflowVersion: workerdeployment.InitialVersion,
-			useV32:                    true,
-			useNewDeploymentData:      false,
-			useRevisionNumbers:        false,
-		})
+	suite.Run(t, &Versioning3Suite{
+		deploymentWorkflowVersion: workerdeployment.InitialVersion,
+		useV32:                    true,
+		useNewDeploymentData:      false,
+		useRevisionNumbers:        false,
 	})
+}
 
-	t.Run("async", func(t *testing.T) {
-		suite.Run(t, &Versioning3Suite{
-			deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-			useV32:                    true,
-			useRevisionNumbers:        true,
-			useNewDeploymentData:      true,
-		})
+func TestVersioning3FunctionalSuiteV1(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &Versioning3Suite{
+		deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
+		useV32:                    true,
+		useRevisionNumbers:        true,
+		useNewDeploymentData:      true,
 	})
+}
 
-	t.Run("async_version_rev_no", func(t *testing.T) {
-		suite.Run(t, &Versioning3Suite{
-			deploymentWorkflowVersion: workerdeployment.VersionDataRevisionNumber,
-			useV32:                    true,
-			useRevisionNumbers:        true,
-			useNewDeploymentData:      true,
-		})
+func TestVersioning3FunctionalSuiteV2(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &Versioning3Suite{
+		deploymentWorkflowVersion: workerdeployment.VersionDataRevisionNumber,
+		useV32:                    true,
+		useRevisionNumbers:        true,
+		useNewDeploymentData:      true,
 	})
 }
 
@@ -271,7 +271,7 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyVersioningSAs(tv, vbPinned)
+			s.verifyVersioningSAs(tv, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
 
@@ -289,7 +289,7 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 
 	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(s.Assertions, tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(s.useV32), nil)
-	s.verifyVersioningSAs(tv, vbPinned, tv)
+	s.verifyVersioningSAs(tv, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv.WithRunID(runID))
 	}
@@ -658,7 +658,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 
 	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(s.Assertions, tv, vbUnpinned, tv.Deployment(), nil, nil)
-	s.verifyVersioningSAs(tv, vbUnpinned, tv)
+	s.verifyVersioningSAs(tv, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv.WithRunID(runID))
 	}
@@ -1251,6 +1251,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool
 			return respondWftWithActivities(tv1, tv1, sticky, vbUnpinned, "5"), nil
 		})
 	s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
+	s.verifyVersioningSAs(tv1, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv1)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv1.WithRunID(runID))
 	}
@@ -1281,6 +1282,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool
 				return respondCompleteWorkflowUnversioned(tv1), nil
 			})
 		s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, nil, nil)
+		s.verifyVersioningSAs(tv1, vbUnspecified, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1)
 	} else {
 
 		// Set B as the current deployment
@@ -1305,6 +1307,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool
 				return respondCompleteWorkflow(tv2, vbUnpinned), nil
 			})
 		s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnpinned, tv2.Deployment(), nil, nil)
+		s.verifyVersioningSAs(tv1, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1, tv2)
 	}
 }
 
@@ -2200,6 +2203,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 1:
 			s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+			s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv1)
 			return "v1", nil
 		}
 		s.FailNow("workflow should not get to this point")
@@ -2210,8 +2214,10 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 		if behavior == vbUnpinned && s.deploymentWorkflowVersion >= workerdeployment.AsyncSetCurrentAndRamping {
 			// Unpinned CaN should inherit parent deployment version and behaviour
 			s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
+			s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv1)
 		} else {
 			s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnspecified, nil, nil, tv2.DeploymentVersionTransition())
+			s.verifyVersioningSAs(tv2, vbUnspecified, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv2)
 		}
 		return "v2", nil
 	}
@@ -3639,14 +3645,21 @@ func (s *Versioning3Suite) validateBacklogCount(
 func (s *Versioning3Suite) verifyVersioningSAs(
 	tv *testvars.TestVars,
 	behavior enumspb.VersioningBehavior,
+	executionStatus enumspb.WorkflowExecutionStatus,
 	usedBuilds ...*testvars.TestVars,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		query := fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s'",
-			tv.WorkflowID(), tv.DeploymentSeries(), tv.DeploymentVersionStringV32(), behavior.String())
+		var query string
+		if behavior != vbUnspecified {
+			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s' AND ExecutionStatus = '%s'",
+				tv.WorkflowID(), tv.DeploymentSeries(), tv.DeploymentVersionStringV32(), behavior.String(), executionStatus)
+		} else {
+			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeploymentVersion= '' AND TemporalWorkflowVersioningBehavior = '' AND ExecutionStatus = '%s'",
+				tv.WorkflowID(), executionStatus)
+		}
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
 			Query:     query,
@@ -3670,6 +3683,22 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			for _, b := range usedBuilds {
 				a.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(b.BuildID()))
 			}
+
+			if len(usedBuilds) > 0 {
+				// Validate TemporalUsedWorkerDeploymentVersions search attribute
+				versionPayload, ok := w.GetSearchAttributes().GetIndexedFields()["TemporalUsedWorkerDeploymentVersions"]
+				a.True(ok)
+				versionAttrAny, err := searchattribute.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				a.NoError(err)
+				var versionAttr []string
+				if versionAttrAny != nil {
+					versionAttr = versionAttrAny.([]string)
+				}
+				for _, b := range usedBuilds {
+					a.Contains(versionAttr, b.DeploymentVersionStringV32())
+				}
+			}
+
 			fmt.Println(resp.GetExecutions()[0])
 		}
 	}, 5*time.Second, 50*time.Millisecond)

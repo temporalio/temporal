@@ -66,10 +66,11 @@ var (
 	SearchAttributeTemporalSchedulePaused             = newSearchAttributeBoolByField(sadefs.TemporalSchedulePaused)
 	SearchAttributeTemporalNamespaceDivision          = newSearchAttributeKeywordByField(sadefs.TemporalNamespaceDivision)
 	SearchAttributeTemporalPauseInfo                  = newSearchAttributeKeywordListByField(sadefs.TemporalPauseInfo)
-	SearchAttributeTemporalReportedProblems           = newSearchAttributeKeywordListByField(sadefs.TemporalReportedProblems)
-	SearchAttributeTemporalWorkerDeploymentVersion    = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeploymentVersion)
-	SearchAttributeTemporalWorkflowVersioningBehavior = newSearchAttributeKeywordByField(sadefs.TemporalWorkflowVersioningBehavior)
-	SearchAttributeTemporalWorkerDeployment           = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeployment)
+	SearchAttributeTemporalReportedProblems              = newSearchAttributeKeywordListByField(sadefs.TemporalReportedProblems)
+	SearchAttributeTemporalWorkerDeploymentVersion       = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeploymentVersion)
+	SearchAttributeTemporalWorkflowVersioningBehavior    = newSearchAttributeKeywordByField(sadefs.TemporalWorkflowVersioningBehavior)
+	SearchAttributeTemporalWorkerDeployment              = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeployment)
+	SearchAttributeTemporalUsedWorkerDeploymentVersions  = newSearchAttributeKeywordListByField(sadefs.TemporalUsedWorkerDeploymentVersions)
 )
 
 var (

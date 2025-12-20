@@ -35,6 +35,7 @@ CREATE TABLE executions_visibility (
   TemporalWorkerDeploymentVersion VARCHAR(255)        GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkerDeploymentVersion")),
   TemporalWorkflowVersioningBehavior VARCHAR(255)     GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkflowVersioningBehavior")),
   TemporalWorkerDeployment        VARCHAR(255)        GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalWorkerDeployment")),
+  TemporalUsedWorkerDeploymentVersions TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalUsedWorkerDeploymentVersions"))              STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.Bool01")),
