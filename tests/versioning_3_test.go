@@ -2488,7 +2488,7 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				s.Greater(len(wfTaskStartedEvents), 0) // make sure we are actually verifying non-zero # of events
+				s.NotEmpty(wfTaskStartedEvents) // make sure we are actually verifying non-zero # of events
 
 				for _, event := range wfTaskStartedEvents {
 					attr := event.GetWorkflowTaskStartedEventAttributes()
