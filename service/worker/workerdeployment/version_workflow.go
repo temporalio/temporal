@@ -260,7 +260,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 			d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
 		}
 	}
-	
+
 	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
 		if key == metadataKeyController && d.VersionState.Metadata.Entries[key] == nil {
 			// adding the controller identifier key-value for the first time, counting as a controller-managed version
