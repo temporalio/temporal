@@ -884,6 +884,7 @@ func cloneStatsByPriority(in map[int32]*taskqueuepb.TaskQueueStats) map[int32]*t
 
 // splitTaskQueueStatsByRampPercentage splits a task queue stats record into "current" and "ramping" shares.
 // This split is applied independently per priority bucket (see splitStatsByPriorityByRampPercentage).
+// TODO (Shivam): Handle the special case of ramp to unversioned.
 func splitTaskQueueStatsByRampPercentage(
 	in *taskqueuepb.TaskQueueStats,
 	rampPct float32,
