@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -289,7 +288,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-%d", i),
 		})
-		s.NoError(err)
+		s.Require().NoError(err)
 	}
 
 	currentQ, err := s.partitionMgr.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
@@ -297,6 +296,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 		BuildId:    currentBuildID,
 	}, true)
 	s.NoError(err)
+
 	// Make this a pinned task so that it goes to the current versioned queue.
 	err = currentQ.SpoolTask(&persistencespb.TaskInfo{
 		NamespaceId: namespaceID,
@@ -311,7 +311,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 			RevisionNumber: 1,
 		},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	buildIds := map[string]bool{
 		worker_versioning.BuildIDToStringV32(deploymentName, currentBuildID): true,
@@ -392,7 +392,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OneUnversione
 		RunId:       "run",
 		WorkflowId:  "wf-single",
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	buildIds := map[string]bool{
 		worker_versioning.BuildIDToStringV32(deploymentName, currentBuildID): true,
@@ -460,7 +460,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyCurrentNo
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-only-current-%d", i),
 		})
-		s.NoError(err)
+		s.Require().NoError(err)
 	}
 
 	buildIds := map[string]bool{
@@ -527,7 +527,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyRampingNo
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-only-ramp-%d", i),
 		})
-		s.NoError(err)
+		s.Require().NoError(err)
 	}
 
 	buildIds := map[string]bool{
@@ -575,7 +575,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-uv-%d", i),
 		})
-		s.NoError(err)
+		s.Require().NoError(err)
 	}
 
 	s.describeStatsEventually(map[string]bool{"": true}, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
@@ -954,7 +954,7 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 	check func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool,
 ) {
 	// Backlog stats are sourced from async readers; wait until Describe reflects expected stable values.
-	require.Eventually(s.T(), func() bool {
+	s.Require().Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus)
