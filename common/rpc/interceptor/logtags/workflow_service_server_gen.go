@@ -9,6 +9,12 @@ import (
 
 func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []tag.Tag {
 	switch r := message.(type) {
+	case *workflowservice.AddToStreamRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.AddToStreamResponse:
+		return nil
 	case *workflowservice.CountActivityExecutionsRequest:
 		return nil
 	case *workflowservice.CountActivityExecutionsResponse:
@@ -256,6 +262,12 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.PollNexusTaskQueueResponse:
 		return wt.fromTaskToken(r.GetTaskToken())
+	case *workflowservice.PollStreamRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.PollStreamResponse:
+		return nil
 	case *workflowservice.PollWorkflowExecutionUpdateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetUpdateRef().GetWorkflowExecution().GetWorkflowId()),

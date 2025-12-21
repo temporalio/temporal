@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -117,6 +118,7 @@ type (
 	WorkflowHandler struct {
 		workflowservice.UnsafeWorkflowServiceServer
 		activity.FrontendHandler
+		chasmstream.StreamFrontendHandler
 
 		status int32
 
@@ -181,14 +183,16 @@ func NewWorkflowHandler(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
 	activityHandler activity.FrontendHandler,
+	streamHandler chasmstream.StreamFrontendHandler,
 	registry *chasm.Registry,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
-		FrontendHandler: activityHandler,
-		status:          common.DaemonStatusInitialized,
-		config:          config,
-		tokenSerializer: tasktoken.NewSerializer(),
-		versionChecker:  headers.NewDefaultVersionChecker(),
+		FrontendHandler:       activityHandler,
+		StreamFrontendHandler: streamHandler,
+		status:                common.DaemonStatusInitialized,
+		config:                config,
+		tokenSerializer:       tasktoken.NewSerializer(),
+		versionChecker:        headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
 			persistenceMetadataManager,

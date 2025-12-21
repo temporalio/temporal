@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+import "chasm/lib/stream/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+service StreamService {
+    rpc AddToStream(AddToStreamRequest) returns (AddToStreamResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    }
+
+    rpc PollStream(PollStreamRequest) returns (PollStreamResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    }
+}

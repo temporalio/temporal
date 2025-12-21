@@ -9,6 +9,20 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *metricClient) AddToStream(
+	ctx context.Context,
+	request *workflowservice.AddToStreamRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.AddToStreamResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientAddToStream")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.AddToStream(ctx, request, opts...)
+}
+
 func (c *metricClient) CountActivityExecutions(
 	ctx context.Context,
 	request *workflowservice.CountActivityExecutionsRequest,
@@ -763,6 +777,20 @@ func (c *metricClient) PollNexusTaskQueue(
 	}()
 
 	return c.client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
+func (c *metricClient) PollStream(
+	ctx context.Context,
+	request *workflowservice.PollStreamRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollStreamResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPollStream")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollStream(ctx, request, opts...)
 }
 
 func (c *metricClient) PollWorkflowExecutionUpdate(

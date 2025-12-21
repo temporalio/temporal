@@ -9,6 +9,16 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *clientImpl) AddToStream(
+	ctx context.Context,
+	request *workflowservice.AddToStreamRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.AddToStreamResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.AddToStream(ctx, request, opts...)
+}
+
 func (c *clientImpl) CountActivityExecutions(
 	ctx context.Context,
 	request *workflowservice.CountActivityExecutionsRequest,
@@ -547,6 +557,16 @@ func (c *clientImpl) PollNexusTaskQueue(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollStream(
+	ctx context.Context,
+	request *workflowservice.PollStreamRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollStreamResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PollStream(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollWorkflowExecutionUpdate(

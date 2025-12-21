@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+import "temporal/api/workflowservice/v1/request_response.proto";
+
+message AddToStreamRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.AddToStreamRequest frontend_request = 2;
+}
+
+message AddToStreamResponse {
+    temporal.api.workflowservice.v1.AddToStreamResponse frontend_response = 1;
+}
+
+message PollStreamRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.PollStreamRequest frontend_request = 2;
+}
+
+message PollStreamResponse {
+    temporal.api.workflowservice.v1.PollStreamResponse frontend_response = 1;
+}

@@ -11,6 +11,21 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
+func (c *retryableClient) AddToStream(
+	ctx context.Context,
+	request *workflowservice.AddToStreamRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.AddToStreamResponse, error) {
+	var resp *workflowservice.AddToStreamResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.AddToStream(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CountActivityExecutions(
 	ctx context.Context,
 	request *workflowservice.CountActivityExecutionsRequest,
@@ -815,6 +830,21 @@ func (c *retryableClient) PollNexusTaskQueue(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PollNexusTaskQueue(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PollStream(
+	ctx context.Context,
+	request *workflowservice.PollStreamRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollStreamResponse, error) {
+	var resp *workflowservice.PollStreamResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollStream(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
