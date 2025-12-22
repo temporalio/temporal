@@ -720,7 +720,9 @@ func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
 	s.NoError(err)
 
 	// Sanity test, list with V1 handler.
-	v1Entry := s.getScheduleEntryFomVisibility(sid, nil)
+	v1Entry := s.getScheduleEntryFomVisibility(sid, func(sle *schedulepb.ScheduleListEntry) bool {
+		return sle.GetInfo().Paused
+	})
 	s.NotNil(v1Entry.GetInfo())
 
 	// Flip on CHASM experiment and make sure we can still list.
