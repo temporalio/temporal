@@ -29,6 +29,12 @@ func getCommands(
 			Subcommands: newAdminWorkflowCommands(clientFactory, prompterFactory),
 		},
 		{
+			Name:        "chasm",
+			Aliases:     []string{"c"},
+			Usage:       "Run admin operation on CHASM trees",
+			Subcommands: newAdminChasmCommands(clientFactory, prompterFactory),
+		},
+		{
 			Name:        "shard",
 			Aliases:     []string{"s"},
 			Usage:       "Run admin operation on specific shard",
@@ -253,6 +259,35 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
+			},
+		},
+	}
+}
+
+func newAdminChasmCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:    "describe",
+			Aliases: []string{"d"},
+			Usage:   "Describe CHASM tree from database mutable state",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagBusinessID,
+					Usage: "The business ID of the CHASM tree",
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID (optional, uses latest if not specified)",
+				},
+				&cli.StringFlag{
+					Name:        FlagArchetype,
+					Usage:       "Fully qualified archetype name of the execution",
+					DefaultText: chasm.WorkflowArchetype,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminDescribeChasmTree(c, clientFactory)
 			},
 		},
 	}
