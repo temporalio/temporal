@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -12,12 +13,13 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -389,49 +391,73 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return serviceerror.NewInternalf("expected visibility component, but got %T", visComponent)
 	}
 
-	searchattributes, err := visComponent.GetSearchAttributes(visTaskContext)
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
+		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err != nil {
 		return err
 	}
-	if searchattributes == nil {
-		searchattributes = make(map[string]*commonpb.Payload)
-	}
-	memo, err := visComponent.GetMemo(visTaskContext)
+
+	customSaMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
+	customSaMapper, err := customSaMapperProvider.GetMapper(namespaceEntry.Name())
 	if err != nil {
 		return err
 	}
-	if memo == nil {
-		memo = make(map[string]*commonpb.Payload)
+
+	searchattributes := make(map[string]*commonpb.Payload)
+
+	aliasedCustomSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
+	for alias, value := range aliasedCustomSearchAttributes {
+		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
+		if err != nil {
+			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
+			// or there are delays in propagating search attribute mappings to History.
+			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
+			continue
+		}
+		searchattributes[fieldName] = value
 	}
 
 	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
 	if err != nil {
 		return err
 	}
-	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
-		for key, value := range saProvider.SearchAttributes(visTaskContext) {
-			searchattributes[key] = value.MustEncode()
-		}
-	}
-	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
-		for key, value := range memoProvider.Memo(visTaskContext) {
-			memo[key] = value.MustEncode()
+	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
+		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
+			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
 
-	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
-		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-	if err != nil {
-		return err
+	combinedMemo := make(map[string]*commonpb.Payload, 2)
+	userMemoMap := visComponent.GetMemo(visTaskContext)
+	if len(userMemoMap) > 0 {
+		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
+		userMemoPayload, err := payload.Encode(userMemoProto)
+		if err != nil {
+			return err
+		}
+		combinedMemo[chasm.UserMemoKey] = userMemoPayload
 	}
+	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
+		chasmMemo := memoProvider.Memo(visTaskContext)
+		if chasmMemo != nil {
+			chasmMemoPayload, err := payload.Encode(chasmMemo)
+			if err != nil {
+				return err
+			}
+			combinedMemo[chasm.ChasmMemoKey] = chasmMemoPayload
+		}
+	}
+
 	requestBase := t.getVisibilityRequestBase(
 		task,
 		namespaceEntry,
 		mutableState,
-		memo,
+		combinedMemo,
 		searchattributes,
 	)
-	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(tree.Archetype().String())
+
+	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
+	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)

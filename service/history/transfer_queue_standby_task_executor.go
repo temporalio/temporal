@@ -30,7 +30,6 @@ import (
 
 const (
 	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
-	firstWorkflowTaskVerificationFailedMsg     = "Failed to verify first workflow task scheduled"
 )
 
 type (
@@ -80,7 +79,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
+	taskType := queues.GetStandbyTransferTaskTypeTagValue(task, t.shardContext.ChasmRegistry())
 	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
@@ -145,8 +144,7 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 			task,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
-			// TODO - replace this with a method for CHASM components
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -162,8 +160,12 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
-		if activityInfo.Stamp != transferTask.Stamp || activityInfo.Paused {
-			return nil, nil // drop the task
+		if activityInfo.Paused {
+			return nil, nil
+		}
+
+		if activityInfo.Stamp != transferTask.Stamp {
+			return nil, consts.ErrStaleReference
 		}
 
 		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
@@ -200,6 +202,9 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		wtInfo := mutableState.GetWorkflowTaskByID(transferTask.ScheduledEventID)
 		if wtInfo == nil {
 			return nil, nil
+		}
+		if transferTask.Stamp != wtInfo.Stamp {
+			return nil, consts.ErrStaleReference
 		}
 
 		_, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
@@ -370,7 +375,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -403,7 +408,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -491,7 +496,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -521,9 +526,12 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	}
 	defer func() {
 		var verificationErr *verificationErr
-		if retError == consts.ErrTaskRetry || errors.As(retError, &verificationErr) {
+		switch {
+		case retError == consts.ErrTaskRetry,
+			errors.Is(retError, consts.ErrStaleReference),
+			errors.As(retError, &verificationErr):
 			release(nil)
-		} else {
+		default:
 			release(retError)
 		}
 	}()
@@ -558,10 +566,14 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
+	activityTask, ok := task.(*tasks.ActivityTask)
+	if !ok {
+		return serviceerror.NewInternal("task is not an ActivityTask")
+	}
 	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
-		task.(*tasks.ActivityTask),
+		activityTask,
 		pushActivityInfo.activityTaskScheduleToStartTimeout,
 		pushActivityInfo.versionDirective,
 		pushActivityInfo.priority,
@@ -606,7 +618,7 @@ func (e *verificationErr) Unwrap() error {
 	return e.err
 }
 
-func (t *transferQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBeforeDiscard(
+func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBeforeDiscard(
 	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
@@ -615,7 +627,16 @@ func (t *transferQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBefore
 	if postActionInfo == nil {
 		return nil
 	}
-	if !isWorkflowExistOnSource(ctx, taskWorkflowKey(taskInfo), logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+	if !executionExistsOnSource(
+		ctx,
+		taskWorkflowKey(taskInfo),
+		getTaskArchetypeID(taskInfo),
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
+		t.shardContext.ChasmRegistry(),
+	) {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
@@ -635,7 +656,16 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
 	}
 
-	if !isWorkflowExistOnSource(ctx, *pushActivityInfo.parentWorkflowKey, logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+	if !executionExistsOnSource(
+		ctx,
+		*pushActivityInfo.parentWorkflowKey,
+		getTaskArchetypeID(taskInfo),
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
+		t.shardContext.ChasmRegistry(),
+	) {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)

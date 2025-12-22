@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -258,9 +258,9 @@ func (a *activities) checkNamespaceID(namespaceID string) error {
 	return nil
 }
 
-// BatchActivity is an activity for processing batch operations using protobuf as the input type.
+// BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
 // nolint:revive,cognitive-complexity
-func (a *activities) BatchActivity(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
@@ -323,7 +323,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams *batchspb.Ba
 		metricsHandler metrics.Handler,
 		logger log.Logger,
 	) {
-		startTaskProcessor(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		startTaskProcessorProtobuf(ctx, batchParams, batchParams.Request.Namespace, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, sdkClient, metricsHandler, logger, hbd)
@@ -361,7 +361,7 @@ func (a *activities) getOperationConcurrency(concurrency int) int {
 }
 
 // nolint:revive,cognitive-complexity
-func startTaskProcessor(
+func startTaskProcessorProtobuf(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	namespace string,
@@ -450,7 +450,7 @@ func startTaskProcessor(
 							Namespace:                 namespace,
 							WorkflowExecution:         execution,
 							Reason:                    batchOperation.Request.Reason,
-							RequestId:                 uuid.New(),
+							RequestId:                 uuid.NewString(),
 							WorkflowTaskFinishEventId: eventId,
 							ResetReapplyType:          resetReapplyType,
 							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
@@ -495,6 +495,7 @@ func startTaskProcessor(
 							WorkflowExecution:        execution,
 							WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
 							UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
+							Identity:                 operation.UpdateWorkflowOptionsOperation.Identity,
 						})
 						return err
 					})

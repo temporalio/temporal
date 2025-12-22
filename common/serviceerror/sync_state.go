@@ -11,11 +11,13 @@ import (
 
 type (
 	// SyncState represents sync state error.
+	// nolint:staticcheck
 	SyncState struct {
 		Message             string
 		NamespaceId         string
 		WorkflowId          string
 		RunId               string
+		ArchetypeId         uint32
 		VersionedTransition *persistencespb.VersionedTransition
 		VersionHistories    *historyspb.VersionHistories
 		st                  *status.Status
@@ -23,11 +25,13 @@ type (
 )
 
 // NewSyncState returns new SyncState error.
+// nolint:staticcheck
 func NewSyncState(
 	message string,
 	namespaceId string,
 	workflowId string,
 	runId string,
+	archetypeId uint32,
 	versionedTransition *persistencespb.VersionedTransition,
 	versionHistories *historyspb.VersionHistories,
 ) error {
@@ -36,6 +40,7 @@ func NewSyncState(
 		NamespaceId:         namespaceId,
 		WorkflowId:          workflowId,
 		RunId:               runId,
+		ArchetypeId:         archetypeId,
 		VersionedTransition: versionedTransition,
 		VersionHistories:    versionHistories,
 	}
@@ -57,6 +62,7 @@ func (e *SyncState) Status() *status.Status {
 			NamespaceId:         e.NamespaceId,
 			WorkflowId:          e.WorkflowId,
 			RunId:               e.RunId,
+			ArchetypeId:         e.ArchetypeId,
 			VersionedTransition: e.VersionedTransition,
 			VersionHistories:    e.VersionHistories,
 		},
@@ -68,6 +74,7 @@ func (e *SyncState) Equal(err *SyncState) bool {
 	return e.NamespaceId == err.NamespaceId &&
 		e.WorkflowId == err.WorkflowId &&
 		e.RunId == err.RunId &&
+		e.ArchetypeId == err.ArchetypeId &&
 		proto.Equal(e.VersionedTransition, err.VersionedTransition) &&
 		proto.Equal(e.VersionHistories, err.VersionHistories)
 }
@@ -81,6 +88,7 @@ func newSyncState(
 		NamespaceId:         errDetails.GetNamespaceId(),
 		WorkflowId:          errDetails.GetWorkflowId(),
 		RunId:               errDetails.GetRunId(),
+		ArchetypeId:         errDetails.GetArchetypeId(),
 		VersionedTransition: errDetails.GetVersionedTransition(),
 		VersionHistories:    errDetails.GetVersionHistories(),
 		st:                  st,

@@ -46,6 +46,7 @@ type (
 			ctx context.Context,
 			namespaceID string,
 			execution *commonpb.WorkflowExecution,
+			archetypeID chasm.ArchetypeID,
 			targetVersionedTransition *persistencespb.VersionedTransition,
 			targetVersionHistories *historyspb.VersionHistories,
 		) (*SyncStateResult, error)
@@ -100,6 +101,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
+	archetypeID chasm.ArchetypeID,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories *historyspb.VersionHistories,
 ) (_ *SyncStateResult, retError error) {
@@ -117,7 +119,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			WorkflowID:  execution.WorkflowId,
 			RunID:       execution.RunId,
 		},
-		chasm.ArchetypeAny, // SyncWorkflowState API works on all archetypes
+		archetypeID,
 		locks.PriorityLow,
 	)
 	if err != nil {
@@ -245,15 +247,16 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	}
 	versionedTransitionArtifact.IsFirstSync = isNewWorkflow
 
-	newRunId := mutableState.GetExecutionInfo().SuccessorRunId
-	sourceVersionHistories := versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
-	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory)
+	executionInfo := mutableState.GetExecutionInfo()
+	newRunID := executionInfo.SuccessorRunId
+	sourceVersionHistories := versionhistory.CopyVersionHistories(executionInfo.VersionHistories)
+	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(executionInfo.TransitionHistory)
 	if cacheReleaseFunc != nil {
 		cacheReleaseFunc(nil)
 	}
 
-	if len(newRunId) > 0 {
-		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunId)
+	if len(newRunID) > 0 {
+		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunID)
 		if err != nil {
 			return nil, err
 		}

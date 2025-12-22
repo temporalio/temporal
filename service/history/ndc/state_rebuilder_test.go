@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -100,7 +100,7 @@ func (s *stateRebuilderSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	s.workflowID = "some random workflow ID"
-	s.runID = uuid.New()
+	s.runID = uuid.NewString()
 	s.now = time.Now().UTC()
 	s.nDCStateRebuilder = NewStateRebuilder(
 		s.mockShard, s.logger,
@@ -122,7 +122,7 @@ func (s *stateRebuilderSuite) TestInitializeBuilders() {
 
 func (s *stateRebuilderSuite) TestApplyEvents() {
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	events := []*historypb.HistoryEvent{
 		{
 			EventId:    1,
@@ -243,16 +243,16 @@ func (s *stateRebuilderSuite) TestPagination() {
 }
 
 func (s *stateRebuilderSuite) TestRebuild() {
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	version := int64(12)
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
 
-	targetNamespaceID := namespace.ID(uuid.New())
+	targetNamespaceID := namespace.ID(uuid.NewString())
 	targetNamespace := namespace.Name("other random namespace name")
 	targetWorkflowID := "other random workflow ID"
-	targetRunID := uuid.New()
+	targetRunID := uuid.NewString()
 
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
@@ -327,7 +327,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		},
 		1234,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.Rebuild(
 		context.Background(),
@@ -358,16 +358,16 @@ func (s *stateRebuilderSuite) TestRebuild() {
 }
 
 func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	version := int64(12)
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
 
-	targetNamespaceID := namespace.ID(uuid.New())
+	targetNamespaceID := namespace.ID(uuid.NewString())
 	targetNamespace := namespace.Name("other random namespace name")
 	targetWorkflowID := "other random workflow ID"
-	targetRunID := uuid.New()
+	targetRunID := uuid.NewString()
 
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
@@ -443,7 +443,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 		1234,
 	), nil).AnyTimes()
 
-	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	currentMutableState := &persistencespb.WorkflowMutableState{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			TransitionHistory: []*persistencespb.VersionedTransition{

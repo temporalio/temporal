@@ -24,9 +24,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
 
@@ -35,7 +36,7 @@ var ErrInvalidOperationToken = errors.New("invalid operation token")
 var errRequestTimedOut = errors.New("request timed out")
 
 // ClientProvider provides a nexus client for a given endpoint.
-type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error)
+type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error)
 
 type TaskExecutorOptions struct {
 	fx.In
@@ -179,7 +180,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		RequestId:   args.requestID,
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
+		return fmt.Errorf("%w: %w", queueserrors.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
 	header := nexus.Header(args.header)
@@ -229,7 +230,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	startTime := time.Now()
-	var rawResult *nexus.ClientStartOperationResult[*nexus.LazyValue]
+	var rawResult *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue]
 	var callErr error
 	if callTimeout < e.Config.MinRequestTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
@@ -253,15 +254,15 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
-	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
+	var result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
 	if callErr == nil {
 		if rawResult.Pending != nil {
 			tokenLimit := e.Config.MaxOperationTokenLength(ns.Name().String())
 			if len(rawResult.Pending.Token) > tokenLimit {
 				callErr = fmt.Errorf("%w: length exceeds allowed limit (%d/%d)", ErrInvalidOperationToken, len(rawResult.Pending.Token), tokenLimit)
 			} else {
-				result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
-					Pending: &nexus.OperationHandle[*commonpb.Payload]{
+				result = &nexusrpc.ClientStartOperationResponse[*commonpb.Payload]{
+					Pending: &nexusrpc.OperationHandle[*commonpb.Payload]{
 						Operation: rawResult.Pending.Operation,
 						Token:     rawResult.Pending.Token,
 					},
@@ -276,7 +277,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 			} else if payload.Size() > e.Config.PayloadSizeLimit(ns.Name().String()) {
 				callErr = ErrResponseBodyTooLarge
 			} else {
-				result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
+				result = &nexusrpc.ClientStartOperationResponse[*commonpb.Payload]{
 					Successful: payload,
 					Links:      rawResult.Links,
 				}
@@ -296,7 +297,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	err = e.saveResult(ctx, env, ref, result, callErr)
 
 	if callErr != nil && isDestinationDown(callErr) {
-		err = queues.NewDestinationDownError(callErr.Error(), err)
+		err = queueserrors.NewDestinationDownError(callErr.Error(), err)
 	}
 
 	return err
@@ -360,7 +361,8 @@ func (e taskExecutor) loadOperationArgs(
 	return
 }
 
-func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
+// nolint:revive // (cognitive complexity) This function is long but the complexity is justified.
+func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
@@ -451,8 +453,8 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		// operation if the response's operation token is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
 	case errors.Is(callErr, ErrOperationTimeoutBelowMin):
-		// Operation timeout is not retryable
-		return handleNonRetryableStartOperationError(node, operation, callErr)
+		// Not enough time to execute another request, resolve the operation with a timeout.
+		return e.recordOperationTimeout(node)
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		// If timed out, we don't leak internal info to the user
 		callErr = errRequestTimedOut
@@ -511,6 +513,10 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 }
 
 func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
+	return e.recordOperationTimeout(node)
+}
+
+func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {
@@ -586,7 +592,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if err != nil {
 		return fmt.Errorf("failed to get client: %w", err)
 	}
-	handle, err := client.NewHandle(args.operation, args.token)
+	handle, err := client.NewOperationHandle(args.operation, args.token)
 	if err != nil {
 		return fmt.Errorf("failed to get handle for operation: %w", err)
 	}
@@ -636,7 +642,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
 
 	if callErr != nil && isDestinationDown(callErr) {
-		err = queues.NewDestinationDownError(callErr.Error(), err)
+		err = queueserrors.NewDestinationDownError(callErr.Error(), err)
 	}
 
 	return err
@@ -791,7 +797,7 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 	}
 }
 
-func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOperationResult[*nexus.LazyValue], callErr error) string {
+func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue], callErr error) string {
 	var handlerError *nexus.HandlerError
 	var opFailedError *nexus.OperationError
 

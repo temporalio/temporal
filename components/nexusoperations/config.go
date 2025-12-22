@@ -67,7 +67,7 @@ use as the token.`,
 
 var MaxOperationHeaderSize = dynamicconfig.NewNamespaceIntSetting(
 	"component.nexusoperations.limit.header.size",
-	4096,
+	8192,
 	`The maximum allowed header size for a Nexus Operation.
 ScheduleNexusOperation commands with a "nexus_header" field that exceeds this limit will be rejected.
 Uses Go's len() function on header keys and values to determine the total size.`,

@@ -15,11 +15,13 @@ type SchedulerIdleTaskExecutorOptions struct {
 }
 
 type SchedulerIdleTaskExecutor struct {
-	SchedulerIdleTaskExecutorOptions
+	config *Config
 }
 
 func NewSchedulerIdleTaskExecutor(opts SchedulerIdleTaskExecutorOptions) *SchedulerIdleTaskExecutor {
-	return &SchedulerIdleTaskExecutor{opts}
+	return &SchedulerIdleTaskExecutor{
+		config: opts.Config,
+	}
 }
 
 func (r *SchedulerIdleTaskExecutor) Execute(
@@ -35,15 +37,15 @@ func (r *SchedulerIdleTaskExecutor) Execute(
 func (r *SchedulerIdleTaskExecutor) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
-	task chasm.TaskAttributes,
-	_ *schedulerpb.SchedulerIdleTask,
+	taskAttrs chasm.TaskAttributes,
+	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
-	idleTimeTotal := r.Config.Tweakables(scheduler.Namespace).IdleTime
+	idleTimeTotal := task.IdleTimeTotal.AsDuration()
 	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, time.Time{})
 
 	// If the scheduler has since woken up, or its idle expiration time changed, this
 	// task must be obsolete.
-	if !isIdle || idleExpiration.Compare(task.ScheduledTime) != 0 {
+	if !isIdle || idleExpiration.Compare(taskAttrs.ScheduledTime) != 0 {
 		return false, nil
 	}
 

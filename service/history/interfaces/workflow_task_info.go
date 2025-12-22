@@ -54,6 +54,11 @@ type WorkflowTaskInfo struct {
 	// and used to delete them when the workflow task completes.
 	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
+
+	// Incrementing Stamp will invalidate the existing transfer/matching workflow task.
+	// Incrementing Stamp will ensure that the standby clusters reschedule the transfer tasks properly.
+	// Stamp is NOT scoped within a single wft, and it should never be decremented in the lifetime of the whole execution.
+	Stamp int32
 }
 
 type WorkflowTaskCompletionLimits struct {

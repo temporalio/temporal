@@ -25,27 +25,33 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
 	WorkerDeploymentSuite struct {
 		testcore.FunctionalTestBase
+		workflowVersion workerdeployment.DeploymentWorkflowVersion
 	}
 )
 
 func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WorkerDeploymentSuite))
+	t.Run("sync", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
+	})
+	t.Run("async", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
+	})
+	t.Run("version_rev_no", func(t *testing.T) {
+		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
+	})
 }
 
 func (s *WorkerDeploymentSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-		dynamicconfig.EnableDeploymentVersions.Key():                   true,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true, // [wv-cleanup-pre-release]
-		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():        true,
+		dynamicconfig.MatchingDeploymentWorkflowVersion.Key(): int(s.workflowVersion),
 
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
@@ -189,7 +195,7 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 	s.NoError(err)
 
 	// ForceCAN
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	workflowID := workerdeployment.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 	}
@@ -512,27 +518,29 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s)
-	startTime := timestamppb.Now()
 
 	firstVersion := tv.WithBuildIDNumber(1)
 	secondVersion := tv.WithBuildIDNumber(2)
 
-	routingInfo := &deploymentpb.RoutingConfig{
-		CurrentVersion:            firstVersion.DeploymentVersionString(),
-		CurrentVersionChangedTime: timestamppb.Now(),
-	}
-
+	createVersion1Time := timestamppb.Now()
 	s.startVersionWorkflow(ctx, firstVersion)
 	s.ensureCreateVersionInDeployment(firstVersion)
 
+	createVersion2Time := timestamppb.Now()
 	s.startVersionWorkflow(ctx, secondVersion)
 	s.ensureCreateVersionInDeployment(secondVersion)
 
-	s.setCurrentVersion(ctx, firstVersion, worker_versioning.UnversionedVersionId, true, "")
+	setCurrentTime := timestamppb.Now()
+	s.setCurrentVersion(ctx, firstVersion, true, "")
+
+	routingInfo := &deploymentpb.RoutingConfig{
+		CurrentVersion:            firstVersion.DeploymentVersionString(),
+		CurrentVersionChangedTime: setCurrentTime,
+	}
 
 	latestVersionSummary := &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              secondVersion.DeploymentVersionString(),
-		CreateTime:           startTime,
+		CreateTime:           createVersion2Time,
 		DrainageInfo:         nil,
 		RampingSinceTime:     nil,
 		CurrentSinceTime:     nil,
@@ -543,19 +551,20 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	}
 	currentVersionSummary := &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              firstVersion.DeploymentVersionString(),
-		CreateTime:           startTime,
+		CreateTime:           createVersion1Time,
 		DrainageInfo:         nil,
 		RampingSinceTime:     nil,
-		CurrentSinceTime:     startTime,
-		RoutingUpdateTime:    startTime,
-		FirstActivationTime:  startTime,
+		CurrentSinceTime:     setCurrentTime,
+		RoutingUpdateTime:    setCurrentTime,
+		FirstActivationTime:  setCurrentTime,
+		LastCurrentTime:      setCurrentTime,
 		LastDeactivationTime: nil,
 		Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}
 
 	expectedDeploymentSummary := s.buildWorkerDeploymentSummary(
 		tv.DeploymentSeries(),
-		startTime,
+		createVersion1Time,
 		routingInfo,
 		latestVersionSummary,
 		currentVersionSummary,
@@ -577,54 +586,53 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	currentVersionVars := tv.WithBuildIDNumber(1)
 	rampingVersionVars := tv.WithBuildIDNumber(2)
 
-	routingInfo := &deploymentpb.RoutingConfig{
-		CurrentVersion:            currentVersionVars.DeploymentVersionString(),
-		CurrentVersionChangedTime: timestamppb.Now(),
-		RampingVersion:            rampingVersionVars.DeploymentVersionString(),
-		RampingVersionPercentage:  50,
-		RampingVersionChangedTime: timestamppb.Now(),
-	}
-
-	startTime := timestamppb.Now()
-
+	createVersion1Time := timestamppb.Now()
 	s.startVersionWorkflow(ctx, currentVersionVars)
 	s.ensureCreateVersionInDeployment(currentVersionVars)
 
+	createVersion2Time := timestamppb.Now()
 	s.startVersionWorkflow(ctx, rampingVersionVars)
 	s.ensureCreateVersionInDeployment(rampingVersionVars)
 
-	s.setCurrentVersion(ctx, currentVersionVars, worker_versioning.UnversionedVersionId, true, "") // starts first version's version workflow + set it to current
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    "",
-		PreviousPercentage: 0,
-	})
+	setCurrentTime := timestamppb.Now()
+	s.setCurrentVersion(ctx, currentVersionVars, true, "") // starts first version's version workflow + set it to current
+	setRampingTime := timestamppb.Now()
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "")
+	routingInfo := &deploymentpb.RoutingConfig{
+		CurrentVersion:            currentVersionVars.DeploymentVersionString(),
+		CurrentVersionChangedTime: setCurrentTime,
+		RampingVersion:            rampingVersionVars.DeploymentVersionString(),
+		RampingVersionPercentage:  50,
+		RampingVersionChangedTime: setRampingTime,
+	}
 
 	latestVersionSummary := &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              rampingVersionVars.DeploymentVersionString(),
-		CreateTime:           startTime,
+		CreateTime:           createVersion2Time,
 		DrainageInfo:         nil,
-		RampingSinceTime:     startTime,
+		RampingSinceTime:     setRampingTime,
 		CurrentSinceTime:     nil,
-		RoutingUpdateTime:    startTime,
-		FirstActivationTime:  startTime,
+		RoutingUpdateTime:    setRampingTime,
+		FirstActivationTime:  setRampingTime,
 		LastDeactivationTime: nil,
 		Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 	}
 	currentVersionSummary := &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              currentVersionVars.DeploymentVersionString(),
-		CreateTime:           startTime,
+		CreateTime:           createVersion1Time,
 		DrainageInfo:         nil,
 		RampingSinceTime:     nil,
-		CurrentSinceTime:     startTime,
-		RoutingUpdateTime:    startTime,
-		FirstActivationTime:  startTime,
+		CurrentSinceTime:     setCurrentTime,
+		RoutingUpdateTime:    setCurrentTime,
+		FirstActivationTime:  setCurrentTime,
+		LastCurrentTime:      setCurrentTime,
 		LastDeactivationTime: nil,
 		Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}
 
 	expectedDeploymentSummary := s.buildWorkerDeploymentSummary(
 		tv.DeploymentSeries(),
-		startTime,
+		createVersion1Time,
 		routingInfo,
 		latestVersionSummary,
 		currentVersionSummary,
@@ -644,40 +652,40 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_RampingVersionPercenta
 	tv := testvars.New(s)
 
 	startTime := timestamppb.Now()
-
 	s.startVersionWorkflow(ctx, tv)
-	s.setAndVerifyRampingVersion(ctx, tv, false, 50, true, "", nil) // set version as ramping
+	setRampTime := timestamppb.Now()
+	s.setAndVerifyRampingVersion(ctx, tv, false, 50, true, "") // set version as ramping
 
 	routingInfo := &deploymentpb.RoutingConfig{
-		CurrentVersion:            worker_versioning.UnversionedVersionId,
-		CurrentVersionChangedTime: nil,
-		RampingVersion:            tv.DeploymentVersionString(),
-		RampingVersionPercentage:  50,
-		RampingVersionChangedTime: startTime,
+		CurrentVersion:                      worker_versioning.UnversionedVersionId,
+		CurrentVersionChangedTime:           nil,
+		RampingVersion:                      tv.DeploymentVersionString(),
+		RampingVersionPercentage:            50,
+		RampingVersionChangedTime:           setRampTime,
+		RampingVersionPercentageChangedTime: setRampTime,
 	}
 
 	// to simulate time passing before the next ramping version update
 	//nolint:forbidigo
 	time.Sleep(2 * time.Second)
 
+	changeRampTime := timestamppb.Now()
 	// modify ramping version percentage
-	s.setAndVerifyRampingVersion(ctx, tv, false, 75, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    tv.DeploymentVersionString(),
-		PreviousPercentage: 50,
-	})
+	s.setAndVerifyRampingVersion(ctx, tv, false, 75, true, "")
 
 	// only the ramping version percentage should be updated, not the ramping version update time
 	// since we are not changing the ramping version
 	routingInfo.RampingVersionPercentage = 75
+	routingInfo.RampingVersionPercentageChangedTime = changeRampTime
 
 	rampingVersionSummary := &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 		Version:              tv.DeploymentVersionString(),
 		CreateTime:           startTime,
 		DrainageInfo:         nil,
-		RampingSinceTime:     startTime,
+		RampingSinceTime:     setRampTime,
 		CurrentSinceTime:     nil,
-		RoutingUpdateTime:    startTime, // since the ramp percentage changed, the routing update time is updated
-		FirstActivationTime:  startTime,
+		RoutingUpdateTime:    changeRampTime, // since the ramp percentage changed, the routing update time is updated
+		FirstActivationTime:  setRampTime,
 		LastDeactivationTime: nil,
 		Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 	}
@@ -726,6 +734,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_MultipleVersions_Multi
 }
 
 // Testing SetWorkerDeploymentRampingVersion
+// Also tests whether LastCurrentTime is successfully updated when a previously-current version is demoted and then promoted back to current.
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_With_Current() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -740,10 +749,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 
 	// set version as ramping
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    "",
-		PreviousPercentage: 0,
-	})
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "")
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
@@ -780,7 +786,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 
 	// set current version
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, currentVersionVars, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, currentVersionVars, true, "")
 
 	// fresh DescribeWorkerDeployment call
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -809,6 +815,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 					CurrentSinceTime:     setCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -827,6 +834,113 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 			LastModifierIdentity: tv.ClientIdentity(),
 		},
 	})
+
+	// Now, demote the current version (by promoting the ramping version) and verify that LastCurrentTime is unchanged.
+	setRampingAsCurrentUpdateTime := timestamppb.Now()
+	s.setCurrentVersion(ctx, rampingVersionVars, true, "")
+	// fresh DescribeWorkerDeployment call
+	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name:       tv.DeploymentSeries(),
+			CreateTime: versionCreateTime,
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				RampingVersion:                      "",
+				RampingVersionPercentage:            0,
+				RampingVersionChangedTime:           setRampingAsCurrentUpdateTime,
+				RampingVersionPercentageChangedTime: setRampingAsCurrentUpdateTime,
+				CurrentVersion:                      rampingVersionVars.DeploymentVersionString(),
+				CurrentVersionChangedTime:           setRampingAsCurrentUpdateTime,
+			},
+			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+				{
+					Version:    currentVersionVars.DeploymentVersionString(),
+					CreateTime: versionCreateTime,
+					DrainageInfo: &deploymentpb.VersionDrainageInfo{
+						Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+					},
+					RoutingUpdateTime:    setRampingAsCurrentUpdateTime,
+					CurrentSinceTime:     nil,
+					RampingSinceTime:     nil,
+					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
+					LastDeactivationTime: setRampingAsCurrentUpdateTime,
+					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+				},
+				{
+					Version:              rampingVersionVars.DeploymentVersionString(),
+					CreateTime:           versionCreateTime,
+					DrainageInfo:         nil,
+					RoutingUpdateTime:    setRampingAsCurrentUpdateTime,
+					CurrentSinceTime:     setRampingAsCurrentUpdateTime,
+					RampingSinceTime:     nil,
+					FirstActivationTime:  setRampingUpdateTime,
+					LastCurrentTime:      setRampingAsCurrentUpdateTime,
+					LastDeactivationTime: nil,
+					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+				},
+			},
+			LastModifierIdentity: tv.ClientIdentity(),
+		},
+	})
+
+	// Now, re-promote the current version to Current and verify that LastCurrentTime is updated for that version (and unchanged for the originally-ramping version).
+	rePromoteCurrentUpdateTime := timestamppb.Now()
+	s.setCurrentVersion(ctx, currentVersionVars, true, "")
+	// fresh DescribeWorkerDeployment call
+	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name:       tv.DeploymentSeries(),
+			CreateTime: versionCreateTime,
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				RampingVersion:                      "",
+				RampingVersionPercentage:            0,
+				RampingVersionChangedTime:           setRampingAsCurrentUpdateTime,
+				RampingVersionPercentageChangedTime: setRampingAsCurrentUpdateTime,
+				CurrentVersion:                      currentVersionVars.DeploymentVersionString(),
+				CurrentVersionChangedTime:           rePromoteCurrentUpdateTime,
+			},
+			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+				{
+					Version:              currentVersionVars.DeploymentVersionString(),
+					CreateTime:           versionCreateTime,
+					DrainageInfo:         nil,
+					RoutingUpdateTime:    rePromoteCurrentUpdateTime,
+					CurrentSinceTime:     rePromoteCurrentUpdateTime,
+					RampingSinceTime:     nil,
+					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      rePromoteCurrentUpdateTime, // updated
+					LastDeactivationTime: nil,
+					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+				},
+				{
+					Version:    rampingVersionVars.DeploymentVersionString(),
+					CreateTime: versionCreateTime,
+					DrainageInfo: &deploymentpb.VersionDrainageInfo{
+						Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+					},
+					RoutingUpdateTime:    rePromoteCurrentUpdateTime,
+					CurrentSinceTime:     nil,
+					RampingSinceTime:     nil,
+					FirstActivationTime:  setRampingUpdateTime,
+					LastCurrentTime:      setRampingAsCurrentUpdateTime,
+					LastDeactivationTime: rePromoteCurrentUpdateTime,
+					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+				},
+			},
+			LastModifierIdentity: tv.ClientIdentity(),
+		},
+	})
+
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_DuplicateRamp() {
@@ -839,10 +953,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_DuplicateR
 
 	// set version as ramping
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    "",
-		PreviousPercentage: 0,
-	})
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "")
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: rampingVersionVars.DeploymentSeries(),
@@ -878,10 +989,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_DuplicateR
 	})
 
 	// setting version as ramping again
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    rampingVersionVars.DeploymentVersionString(),
-		PreviousPercentage: 50,
-	})
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "")
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_SetCurrent_To_Ramping() {
@@ -893,7 +1001,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 	s.startVersionWorkflow(ctx, currentVersionVars)
 
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, currentVersionVars, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, currentVersionVars, true, "")
 
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -921,6 +1029,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 					CurrentSinceTime:     setCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -930,7 +1039,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 	})
 
 	expectedError := fmt.Errorf("ramping version %s is already current", currentVersionVars.DeploymentVersionString())
-	s.setAndVerifyRampingVersion(ctx, currentVersionVars, false, 50, true, expectedError.Error(), nil) // setting current version to ramping should fail
+	s.setAndVerifyRampingVersion(ctx, currentVersionVars, false, 50, true, expectedError.Error()) // setting current version to ramping should fail
 
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -958,6 +1067,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 					CurrentSinceTime:     setCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -975,19 +1085,13 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Valid_SetN
 	s.startVersionWorkflow(ctx, tv)
 
 	// set ramping version to unversioned will change the modifier identity, so it's not a no-op
-	s.setAndVerifyRampingVersion(ctx, tv, true, 0, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{})
+	s.setAndVerifyRampingVersion(ctx, tv, true, 0, false, "")
 
 	// set a non-nil ramping version so that we can unset it in the next step
-	s.setAndVerifyRampingVersion(ctx, tv, false, 5, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion: worker_versioning.UnversionedVersionId,
-	})
+	s.setAndVerifyRampingVersion(ctx, tv, false, 5, false, "")
 
 	// should be able to unset ramping version while current version is nil with no error
-	s.setAndVerifyRampingVersion(ctx, tv, true, 0, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:           tv.DeploymentVersionString(), //nolint:staticcheck // SA1019: worker versioning v0.31
-		PreviousDeploymentVersion: tv.ExternalDeploymentVersion(),
-		PreviousPercentage:        5,
-	})
+	s.setAndVerifyRampingVersion(ctx, tv, true, 0, true, "")
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExistingRampVersionPercentage() {
@@ -1001,10 +1105,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 
 	// set version as ramping
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    "",
-		PreviousPercentage: 0,
-	})
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "")
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
@@ -1041,10 +1142,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 
 	// modify ramping version percentage
 	modifyRampingPercentageTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 75, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    rampingVersionVars.DeploymentVersionString(),
-		PreviousPercentage: 50,
-	})
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 75, true, "")
 
 	// RampingVersionPercentage and RampingVersionPercentageChangedTime should be updated
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -1069,7 +1167,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExis
 					Version:              rampingVersionVars.DeploymentVersionString(),
 					CreateTime:           versionCreateTime,
 					DrainageInfo:         nil,
-					RoutingUpdateTime:    setRampingUpdateTime,
+					RoutingUpdateTime:    modifyRampingPercentageTime,
 					CurrentSinceTime:     nil,
 					RampingSinceTime:     setRampingUpdateTime,
 					FirstActivationTime:  setRampingUpdateTime,
@@ -1088,18 +1186,19 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 	defer cancel()
 	tv := testvars.New(s)
 
-	versionCreateTime := timestamppb.Now()
 	rampingVersionVars := tv.WithBuildIDNumber(1)
 	currentVersionVars := tv.WithBuildIDNumber(2)
 
+	version1CreateTime := timestamppb.Now()
 	s.startVersionWorkflow(ctx, rampingVersionVars)
+	version2CreateTime := timestamppb.Now()
 	s.startVersionWorkflow(ctx, currentVersionVars)
 
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", nil) // set version as ramping
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "") // set version as ramping
 
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, currentVersionVars, worker_versioning.UnversionedVersionId, true, "") // set version as curent
+	s.setCurrentVersion(ctx, currentVersionVars, true, "") // set version as curent
 
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -1109,7 +1208,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name:       tv.DeploymentSeries(),
-			CreateTime: versionCreateTime,
+			CreateTime: version1CreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				RampingVersion:                      rampingVersionVars.DeploymentVersionString(),
 				RampingVersionPercentage:            50,
@@ -1121,7 +1220,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
 					Version:              rampingVersionVars.DeploymentVersionString(),
-					CreateTime:           versionCreateTime,
+					CreateTime:           version1CreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    setRampingUpdateTime,
 					CurrentSinceTime:     nil,
@@ -1132,12 +1231,13 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 				},
 				{
 					Version:              currentVersionVars.DeploymentVersionString(),
-					CreateTime:           versionCreateTime,
+					CreateTime:           version2CreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    setCurrentUpdateTime,
 					CurrentSinceTime:     setCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -1148,10 +1248,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 
 	// unset ramping version
 	unsetRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, true, 0, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    rampingVersionVars.DeploymentVersionString(),
-		PreviousPercentage: 50,
-	})
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, true, 0, true, "")
 
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -1161,9 +1258,9 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name:       tv.DeploymentSeries(),
-			CreateTime: versionCreateTime,
+			CreateTime: version1CreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
-				RampingVersion:                      worker_versioning.UnversionedVersionId, //nolint:staticcheck // SA1019: worker versioning v0.31
+				RampingVersion:                      "",
 				RampingVersionPercentage:            0,
 				RampingVersionChangedTime:           unsetRampingUpdateTime,
 				RampingVersionPercentageChangedTime: unsetRampingUpdateTime,
@@ -1173,9 +1270,9 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
 					Version:              rampingVersionVars.DeploymentVersionString(),
-					CreateTime:           versionCreateTime,
+					CreateTime:           version1CreateTime,
 					DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING},
-					RoutingUpdateTime:    setRampingUpdateTime,
+					RoutingUpdateTime:    unsetRampingUpdateTime,
 					CurrentSinceTime:     nil,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setRampingUpdateTime,
@@ -1184,12 +1281,13 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 				},
 				{
 					Version:              currentVersionVars.DeploymentVersionString(),
-					CreateTime:           versionCreateTime,
+					CreateTime:           version2CreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    setCurrentUpdateTime,
 					CurrentSinceTime:     setCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -1209,11 +1307,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 	s.startVersionWorkflow(ctx, rampingVersionVars)
 
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", nil)
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "")
 
 	// set ramping version as current
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, rampingVersionVars, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, rampingVersionVars, true, "")
 
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -1241,6 +1339,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 					CurrentSinceTime:     setCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setRampingUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -1258,11 +1357,8 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoCurrent_
 	rampingVersionVars := tv.WithBuildIDNumber(1)
 	s.startVersionWorkflow(ctx, rampingVersionVars)
 
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "", nil)
-	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, true, 0, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousVersion:    rampingVersionVars.DeploymentVersionString(),
-		PreviousPercentage: 50,
-	})
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, true, "")
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, true, 0, true, "")
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching() {
@@ -1290,7 +1386,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 
 	// set ramping version to 50%
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, tv, false, 50, true, "", nil)
+	s.setAndVerifyRampingVersion(ctx, tv, false, 50, true, "")
 
 	// verify the task queues have new ramping version
 	for i := 0; i < taskQueues; i++ {
@@ -1358,11 +1454,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 
 	// make the current version versioned, so that we can set ramp to unversioned later
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, tv, true, "")
 
 	// set ramp to unversioned which should trigger a batch of SyncDeploymentVersionUserData requests.
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "")
 
 	// check that the current version's task queues have ramping version == __unversioned__
 	for i := 0; i < taskQueues; i++ {
@@ -1377,6 +1473,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	s.Nil(err)
 	// nolint:staticcheck // SA1019: old worker versioning
 	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
 
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
@@ -1399,6 +1496,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 					CurrentSinceTime:     setCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -1416,10 +1514,10 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	defer cancel()
 	tv := testvars.New(s)
 
-	versionsCreateTime := timestamppb.Now()
 	firstVersion := tv.WithBuildIDNumber(1)
 	secondVersion := tv.WithBuildIDNumber(2)
 
+	version1CreateTime := timestamppb.Now()
 	go s.pollFromDeployment(ctx, firstVersion)
 
 	// No current deployment version set.
@@ -1432,11 +1530,12 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 		})
 		a.NoError(err)
 		a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+		a.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
 	}, time.Second*10, time.Millisecond*1000)
 
 	// Set first version as current version
 	firstVersionCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, firstVersion, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, firstVersion, true, "")
 
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -1446,7 +1545,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name:       tv.DeploymentSeries(),
-			CreateTime: versionsCreateTime,
+			CreateTime: version1CreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				CurrentVersion:            firstVersion.DeploymentVersionString(),
 				CurrentVersionChangedTime: firstVersionCurrentUpdateTime,
@@ -1454,12 +1553,13 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
 					Version:              firstVersion.DeploymentVersionString(),
-					CreateTime:           versionsCreateTime,
+					CreateTime:           version1CreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    firstVersionCurrentUpdateTime,
 					CurrentSinceTime:     firstVersionCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  firstVersionCurrentUpdateTime,
+					LastCurrentTime:      firstVersionCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -1469,9 +1569,10 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	})
 
 	// Set a new second version and set it as the current version
+	version2CreateTime := timestamppb.Now()
 	go s.pollFromDeployment(ctx, secondVersion)
 	secondVersionCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, secondVersion, firstVersion.DeploymentVersionString(), true, "")
+	s.setCurrentVersion(ctx, secondVersion, true, "")
 
 	// Verify that the first version is draining, has an updated last deactivation time + second version is current, has an updated first activation time.
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -1482,7 +1583,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name:       tv.DeploymentSeries(),
-			CreateTime: versionsCreateTime,
+			CreateTime: version1CreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
 				CurrentVersion:            secondVersion.DeploymentVersionString(),
 				CurrentVersionChangedTime: secondVersionCurrentUpdateTime,
@@ -1490,23 +1591,25 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 			VersionSummaries: []*deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 				{
 					Version:              firstVersion.DeploymentVersionString(),
-					CreateTime:           versionsCreateTime,
+					CreateTime:           version1CreateTime,
 					DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING},
 					RoutingUpdateTime:    firstVersionCurrentUpdateTime,
 					CurrentSinceTime:     nil,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  firstVersionCurrentUpdateTime,
+					LastCurrentTime:      firstVersionCurrentUpdateTime,
 					LastDeactivationTime: secondVersionCurrentUpdateTime,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 				},
 				{
 					Version:              secondVersion.DeploymentVersionString(),
-					CreateTime:           versionsCreateTime,
+					CreateTime:           version2CreateTime,
 					DrainageInfo:         nil,
 					RoutingUpdateTime:    secondVersionCurrentUpdateTime,
 					CurrentSinceTime:     secondVersionCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  secondVersionCurrentUpdateTime,
+					LastCurrentTime:      secondVersionCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -1542,7 +1645,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 
 	// set current and check that the current version's task queues have new current version
 	setCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, tv, true, "")
 
 	// verify the current version has propogated to all the registered task-queues userData
 	for i := 0; i < taskQueues; i++ {
@@ -1577,6 +1680,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 					CurrentSinceTime:     setCurrentUpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentUpdateTime,
+					LastCurrentTime:      setCurrentUpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -1596,19 +1700,19 @@ func (s *WorkerDeploymentSuite) TestSetManagerIdentity_RW() {
 	s.ensureCreateVersionInDeployment(tv)
 
 	// set identity to self
-	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "", "")
+	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "")
 
 	// set identity to other
-	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", tv.ClientIdentity(), "")
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "")
 
-	// set identity to other again (should be idempotent except for previousManager)
-	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "other", "")
+	// set identity to other again (should be idempotent)
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "")
 
 	// unset identity
-	s.setAndValidateManagerIdentity(ctx, tv, false, false, "", "other", "")
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "", "")
 
 	// set identity with bad conflict token
-	s.setAndValidateManagerIdentity(ctx, tv, true, true, "", "", "conflict token mismatch")
+	s.setAndValidateManagerIdentity(ctx, tv, true, true, "", "conflict token mismatch")
 }
 
 func (s *WorkerDeploymentSuite) TestSetManagerIdentity_WithSetRampSetCurrent() {
@@ -1620,30 +1724,26 @@ func (s *WorkerDeploymentSuite) TestSetManagerIdentity_WithSetRampSetCurrent() {
 	s.ensureCreateVersionInDeployment(tv)
 
 	// set identity to self
-	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "", "")
+	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "")
 	// -> self can successfully set ramp
-	s.setAndVerifyRampingVersion(ctx, tv, false, 1, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{})
+	s.setAndVerifyRampingVersion(ctx, tv, false, 1, true, "")
 
 	// set identity to other
-	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", tv.ClientIdentity(), "")
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "")
 	// -> self cannot set ramp
-	s.setAndVerifyRampingVersion(ctx, tv, false, 2, true,
-		fmt.Sprintf(workerdeployment.ErrManagerIdentityMismatch, "other", tv.ClientIdentity()), nil)
+	s.setAndVerifyRampingVersion(ctx, tv, false, 2, true, fmt.Sprintf(workerdeployment.ErrManagerIdentityMismatch, "other", tv.ClientIdentity()))
 	// -> self cannot set current
-	s.setCurrentVersion(ctx, tv, "", true, fmt.Sprintf(workerdeployment.ErrManagerIdentityMismatch, "other", tv.ClientIdentity()))
+	s.setCurrentVersion(ctx, tv, true, fmt.Sprintf(workerdeployment.ErrManagerIdentityMismatch, "other", tv.ClientIdentity()))
 
 	// unset identity
-	s.setAndValidateManagerIdentity(ctx, tv, false, false, "", "other", "")
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "", "")
 	// -> self can now set ramp
-	s.setAndVerifyRampingVersion(ctx, tv, false, 2, true, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousDeploymentVersion: tv.ExternalDeploymentVersion(),
-		PreviousPercentage:        1,
-	})
+	s.setAndVerifyRampingVersion(ctx, tv, false, 2, true, "")
 
 	// set identity to self
-	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "", "")
+	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "")
 	// -> self can now set current
-	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, tv, true, "")
 }
 
 func (s *WorkerDeploymentSuite) TestSetManagerIdentity_WithDeleteVersion() {
@@ -1660,14 +1760,58 @@ func (s *WorkerDeploymentSuite) TestSetManagerIdentity_WithDeleteVersion() {
 	pollerCancel()
 
 	// set identity to other
-	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "", "")
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "")
 	// -> self cannot delete version
 	s.tryDeleteVersion(ctx, tv, fmt.Sprintf(workerdeployment.ErrManagerIdentityMismatch, "other", tv.ClientIdentity()))
 
 	// set identity to self
-	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "other", "")
+	s.setAndValidateManagerIdentity(ctx, tv, true, false, "", "")
 	// -> self can now delete version
 	s.tryDeleteVersion(ctx, tv, "")
+}
+
+// TestDeleteVersion_ServerDeleteMaxVersionsReached tests that when the internal limit for the number of versions
+// in a worker-deployment (defaultMaxVersions) is reached, the server deletes the oldest version to register the new version.
+// Additionally, the test verifies that the last modifier identity is not set to the identity of the worker-deployment workflow.
+func (s *WorkerDeploymentSuite) TestDeleteVersion_ServerDeleteMaxVersionsReached() {
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 1*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := testvars.New(s).WithBuildIDNumber(2)
+
+	// start and stop polling so that version is eligible for deletion
+	pollerCtx, pollerCancel := context.WithCancel(ctx)
+	go s.pollFromDeployment(pollerCtx, tv)
+	s.ensureCreateVersionInDeployment(tv)
+	pollerCancel()
+
+	// Set a different manager identity so that we can verify that the internal delete operation does not conduct the manager identity check
+	// while deleting the version
+	s.setAndValidateManagerIdentity(ctx, tv, false, false, "other", "")
+
+	// Start another poller which shall aim to create a new version. This should, in turn, delete the first version.
+	pollerCtx2, pollerCancel2 := context.WithCancel(ctx)
+	go s.pollFromDeployment(pollerCtx2, tv2)
+	s.ensureCreateVersionInDeployment(tv2)
+	pollerCancel2()
+
+	// Verify that the worker deployment only has one version in it's version summaries.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
+		a.Equal(tv2.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion().GetBuildId())
+
+		// Also verify that the last modifier identity is not set to the identity of the worker-deployment workflow.
+		a.NotEqual(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+	}, time.Second*5, time.Millisecond*200)
 }
 
 // Should see that the current version of the task queues becomes unversioned
@@ -1685,12 +1829,12 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 
 	// set current and check that the current version's task queues have new current version
 	firstCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, currentVars, true, "")
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
 
 	// set current unversioned and check that the current version's task queues have current version unversioned again
 	secondCurrentUpdateTime := timestamppb.Now()
-	s.setCurrentVersionUnversionedOption(ctx, currentVars, true, currentVars.DeploymentVersionString(), true, false, true, "")
+	s.setCurrentVersionUnversionedOption(ctx, currentVars, true, true, false, true, "")
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 
 	// check that deployment has current version == __unversioned__
@@ -1716,6 +1860,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 					CurrentSinceTime:     nil,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  firstCurrentUpdateTime,
+					LastCurrentTime:      firstCurrentUpdateTime,
 					LastDeactivationTime: secondCurrentUpdateTime,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 				},
@@ -1736,14 +1881,14 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversi
 	s.ensureCreateVersionInDeployment(currentVars)
 
 	// make the current version versioned, so that we can set ramp to unversioned
-	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, currentVars, true, "")
 	// set ramp to unversioned
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "")
 	// check that the current version's task queues have ramping version == __unversioned__
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
 
 	// set current to unversioned
-	s.setCurrentVersionUnversionedOption(ctx, tv, true, currentVars.DeploymentVersionString(), true, false, true, "")
+	s.setCurrentVersionUnversionedOption(ctx, tv, true, true, false, true, "")
 
 	// check that the current version's task queues have ramping version == "" and current version == "__unversioned__"
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
@@ -1863,7 +2008,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	}
 
 	// set this version as current version
-	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, false, "")
+	s.setCurrentVersion(ctx, tv, false, "")
 
 	// verify that the task queues, eventually, have this version as the current version in their versioning info
 	for i := 0; i < versions; i++ {
@@ -2064,7 +2209,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	tv := testvars.New(s)
 	rampingVars := tv.WithBuildIDNumber(1)
 	s.startVersionWorkflow(ctx, rampingVars)
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, rampingVars, true, false, 50, true, false, true, "ramping version __unversioned__ is already current", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, rampingVars, true, false, 50, true, false, true, "ramping version __unversioned__ is already current")
 }
 
 // Should see that the ramping version of the task queues in the current version is unversioned
@@ -2078,11 +2223,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	s.ensureCreateVersionInDeployment(currentVars)
 
 	// check that the current version's task queues have ramping version == ""
-	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, currentVars, true, "")
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
 
 	// set ramp to unversioned
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "", nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "")
 
 	// check that deployment has ramping version == __unversioned__
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -2104,25 +2249,26 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers(
 	// try to set current with allowNoPollers=false --> error
 	allowNoPollers := false
 	expectedErr := fmt.Sprintf(workerdeployment.ErrWorkerDeploymentNotFound, tv.DeploymentVersion().GetDeploymentName())
-	s.setCurrentVersionAllowNoPollersOption(ctx, tv, worker_versioning.UnversionedVersionId, true, allowNoPollers, false, expectedErr)
+	s.setCurrentVersionAllowNoPollersOption(ctx, tv, true, allowNoPollers, false, expectedErr)
 
 	// try to set current with allowNoPollers=true --> success
 	allowNoPollers = true
 	expectedErr = ""
 	versionCreateTime := timestamppb.Now()
-	s.setCurrentVersionAllowNoPollersOption(ctx, tv, worker_versioning.UnversionedVersionId, true, allowNoPollers, false, expectedErr)
+	s.setCurrentVersionAllowNoPollersOption(ctx, tv, true, allowNoPollers, false, expectedErr)
 
 	// let a poller arrive with that version --> triggers user data propagation
-	s.pollFromDeployment(ctx, tv)
+	go s.pollFromDeployment(ctx, tv)
 
-	// check describe worker deployment
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv.DeploymentSeries(),
-	})
-	s.NoError(err)
-	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
-		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// check describe worker deployment
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a := require.New(t)
+		a.NoError(err)
+		s.verifyWorkerDeploymentInfo(a, &deploymentpb.WorkerDeploymentInfo{
 			Name:       tv.DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
@@ -2138,18 +2284,17 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers(
 					CurrentSinceTime:     versionCreateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  versionCreateTime,
+					LastCurrentTime:      versionCreateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
 			},
 			LastModifierIdentity: tv.ClientIdentity(),
-		},
-	})
+		}, resp.GetWorkerDeploymentInfo())
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// that poller's task queue should have the current versioning info
-	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel2()
-	s.verifyTaskQueueVersioningInfo(ctx2, tv.TaskQueue(), tv.DeploymentVersionString(), "", 0)
+	s.verifyTaskQueueVersioningInfo(ctx, tv.TaskQueue(), tv.DeploymentVersionString(), "", 0)
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers() {
@@ -2160,25 +2305,26 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers(
 	// try to set ramping with allowNoPollers=false --> error
 	allowNoPollers := false
 	expectedErr := fmt.Sprintf(workerdeployment.ErrWorkerDeploymentNotFound, tv.DeploymentVersion().GetDeploymentName())
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, false, 5, true, allowNoPollers, false, expectedErr, nil)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, false, 5, true, allowNoPollers, false, expectedErr)
 
 	// try to set ramping with allowNoPollers=true --> success
 	allowNoPollers = true
 	expectedErr = ""
 	versionCreateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, false, 5, true, allowNoPollers, false, expectedErr, &workflowservice.SetWorkerDeploymentRampingVersionResponse{})
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, false, 5, true, allowNoPollers, false, expectedErr)
 
 	// let a poller arrive with that version --> triggers user data propagation
-	s.pollFromDeployment(ctx, tv)
+	go s.pollFromDeployment(ctx, tv)
 
-	// check describe worker deployment
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv.DeploymentSeries(),
-	})
-	s.NoError(err)
-	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
-		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// check describe worker deployment
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a := require.New(t)
+		a.NoError(err)
+		s.verifyWorkerDeploymentInfo(a, &deploymentpb.WorkerDeploymentInfo{
 			Name:       tv.DeploymentSeries(),
 			CreateTime: versionCreateTime,
 			RoutingConfig: &deploymentpb.RoutingConfig{
@@ -2203,13 +2349,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers(
 				},
 			},
 			LastModifierIdentity: tv.ClientIdentity(),
-		},
-	})
+		}, resp.GetWorkerDeploymentInfo())
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// that poller's task queue should have the ramping version info
-	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel2()
-	s.verifyTaskQueueVersioningInfo(ctx2, tv.TaskQueue(), worker_versioning.UnversionedVersionId, tv.DeploymentVersionString(), 5)
+	s.verifyTaskQueueVersioningInfo(ctx, tv.TaskQueue(), worker_versioning.UnversionedVersionId, tv.DeploymentVersionString(), 5)
 }
 
 func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
@@ -2235,6 +2379,8 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 		})
 		a := require.New(t)
 		a.Nil(err)
+		a.Equal(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedCurrentVersion), tqDesc.GetVersioningInfo().GetCurrentDeploymentVersion())
+		a.Equal(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedRampingVersion), tqDesc.GetVersioningInfo().GetRampingDeploymentVersion())
 		a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
 		a.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
 		a.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
@@ -2261,7 +2407,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 
 	// Set v1 as current version
 	setCurrentV1UpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, tv1, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, tv1, true, "")
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv1.DeploymentSeries(),
@@ -2284,6 +2430,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 					CurrentSinceTime:     setCurrentV1UpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentV1UpdateTime,
+					LastCurrentTime:      setCurrentV1UpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -2297,7 +2444,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 	s.startVersionWorkflow(ctx, tv2)
 
 	setCurrentV2UpdateTime := timestamppb.New(time.Now())
-	s.setCurrentVersion(ctx, tv2, tv1.DeploymentVersionString(), true, "")
+	s.setCurrentVersion(ctx, tv2, true, "")
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv2.DeploymentSeries(),
@@ -2321,10 +2468,11 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 					Version:              tv1.DeploymentVersionString(),
 					CreateTime:           v1CreateTime,
 					DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING},
-					RoutingUpdateTime:    setCurrentV1UpdateTime,
+					RoutingUpdateTime:    setCurrentV2UpdateTime,
 					CurrentSinceTime:     nil,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentV1UpdateTime,
+					LastCurrentTime:      setCurrentV1UpdateTime,
 					LastDeactivationTime: setCurrentV2UpdateTime,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 				},
@@ -2336,6 +2484,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 					CurrentSinceTime:     setCurrentV2UpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentV2UpdateTime,
+					LastCurrentTime:      setCurrentV2UpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -2379,10 +2528,11 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 						Version:              tv1.DeploymentVersionString(),
 						CreateTime:           v1CreateTime,
 						DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-						RoutingUpdateTime:    setCurrentV1UpdateTime,
+						RoutingUpdateTime:    setCurrentV2UpdateTime,
 						CurrentSinceTime:     nil,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV1UpdateTime,
+						LastCurrentTime:      setCurrentV1UpdateTime,
 						LastDeactivationTime: setCurrentV2UpdateTime,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
 					},
@@ -2394,6 +2544,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 						CurrentSinceTime:     setCurrentV2UpdateTime,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV2UpdateTime,
+						LastCurrentTime:      setCurrentV2UpdateTime,
 						LastDeactivationTime: nil,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 					},
@@ -2405,11 +2556,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 
 	// start ramping traffic back to v1
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, tv1, false, 10, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		ConflictToken:      nil,
-		PreviousVersion:    "",
-		PreviousPercentage: 0,
-	})
+	s.setAndVerifyRampingVersion(ctx, tv1, false, 10, false, "")
 
 	// verify if the right information is set in the DescribeWorkerDeployment response
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -2439,6 +2586,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 						CurrentSinceTime:     nil,
 						RampingSinceTime:     setRampingUpdateTime,
 						FirstActivationTime:  setCurrentV1UpdateTime, // note: this is setCurrentV1UpdateTime since the version was initially activated when it was current.
+						LastCurrentTime:      setCurrentV1UpdateTime,
 						LastDeactivationTime: nil,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 					},
@@ -2450,6 +2598,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 						CurrentSinceTime:     setCurrentV2UpdateTime,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV2UpdateTime,
+						LastCurrentTime:      setCurrentV2UpdateTime,
 						LastDeactivationTime: nil,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 					},
@@ -2461,7 +2610,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 
 	// Set version v1 as the current version; this shall drain out v2
 	newCurrentV1UpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, tv1, tv2.DeploymentVersionString(), true, "")
+	s.setCurrentVersion(ctx, tv1, true, "")
 
 	// Verify that v2 is drained
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -2502,6 +2651,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 						CurrentSinceTime:     newCurrentV1UpdateTime,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV1UpdateTime, // note: this is setCurrentV1UpdateTime since the version was initially activated when it was current.
+						LastCurrentTime:      newCurrentV1UpdateTime, // updated
 						LastDeactivationTime: nil,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 					},
@@ -2509,10 +2659,11 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 						Version:              tv2.DeploymentVersionString(),
 						CreateTime:           v2CreateTime,
 						DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-						RoutingUpdateTime:    setCurrentV2UpdateTime,
+						RoutingUpdateTime:    newCurrentV1UpdateTime,
 						CurrentSinceTime:     nil,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV2UpdateTime,
+						LastCurrentTime:      setCurrentV2UpdateTime,
 						LastDeactivationTime: newCurrentV1UpdateTime,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
 					},
@@ -2527,7 +2678,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 	s.startVersionWorkflow(ctx, tv3)
 
 	newCurrentV3UpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, tv3, tv1.DeploymentVersionString(), true, "")
+	s.setCurrentVersion(ctx, tv3, true, "")
 
 	// Verify that v1 is drained eventually
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -2564,11 +2715,12 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 					{
 						Version:              tv1.DeploymentVersionString(),
 						CreateTime:           v1CreateTime,
-						RoutingUpdateTime:    newCurrentV1UpdateTime,
+						RoutingUpdateTime:    newCurrentV3UpdateTime,
 						DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
 						CurrentSinceTime:     nil,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV1UpdateTime, // note: this is setCurrentV1UpdateTime since the version was initially activated when it was current.
+						LastCurrentTime:      newCurrentV1UpdateTime, // updated
 						LastDeactivationTime: newCurrentV3UpdateTime,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
 					},
@@ -2576,10 +2728,11 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 						Version:              tv2.DeploymentVersionString(),
 						CreateTime:           v2CreateTime,
 						DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-						RoutingUpdateTime:    setCurrentV2UpdateTime,
+						RoutingUpdateTime:    newCurrentV1UpdateTime,
 						CurrentSinceTime:     nil,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV2UpdateTime,
+						LastCurrentTime:      setCurrentV2UpdateTime,
 						LastDeactivationTime: newCurrentV1UpdateTime,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
 					},
@@ -2591,6 +2744,7 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 						CurrentSinceTime:     newCurrentV3UpdateTime,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  newCurrentV3UpdateTime,
+						LastCurrentTime:      newCurrentV3UpdateTime,
 						LastDeactivationTime: nil,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 					},
@@ -2616,7 +2770,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 
 	// Set v1 as current version
 	setCurrentV1UpdateTime := timestamppb.Now()
-	s.setCurrentVersion(ctx, tv1, worker_versioning.UnversionedVersionId, true, "")
+	s.setCurrentVersion(ctx, tv1, true, "")
 	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv1.DeploymentSeries(),
@@ -2639,6 +2793,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 					CurrentSinceTime:     setCurrentV1UpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentV1UpdateTime,
+					LastCurrentTime:      setCurrentV1UpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -2652,7 +2807,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 	s.startVersionWorkflow(ctx, tv2)
 
 	setCurrentV2UpdateTime := timestamppb.New(time.Now())
-	s.setCurrentVersion(ctx, tv2, tv1.DeploymentVersionString(), true, "")
+	s.setCurrentVersion(ctx, tv2, true, "")
 	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv2.DeploymentSeries(),
@@ -2676,10 +2831,11 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 					Version:              tv1.DeploymentVersionString(),
 					CreateTime:           v1CreateTime,
 					DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINING},
-					RoutingUpdateTime:    setCurrentV1UpdateTime,
+					RoutingUpdateTime:    setCurrentV2UpdateTime,
 					CurrentSinceTime:     nil,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentV1UpdateTime,
+					LastCurrentTime:      setCurrentV1UpdateTime,
 					LastDeactivationTime: setCurrentV2UpdateTime,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 				},
@@ -2691,6 +2847,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 					CurrentSinceTime:     setCurrentV2UpdateTime,
 					RampingSinceTime:     nil,
 					FirstActivationTime:  setCurrentV2UpdateTime,
+					LastCurrentTime:      setCurrentV2UpdateTime,
 					LastDeactivationTime: nil,
 					Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 				},
@@ -2734,10 +2891,11 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 						Version:              tv1.DeploymentVersionString(),
 						CreateTime:           v1CreateTime,
 						DrainageInfo:         &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
-						RoutingUpdateTime:    setCurrentV1UpdateTime,
+						RoutingUpdateTime:    setCurrentV2UpdateTime,
 						CurrentSinceTime:     nil,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV1UpdateTime,
+						LastCurrentTime:      setCurrentV1UpdateTime,
 						LastDeactivationTime: setCurrentV2UpdateTime,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
 					},
@@ -2749,6 +2907,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 						CurrentSinceTime:     setCurrentV2UpdateTime,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV2UpdateTime,
+						LastCurrentTime:      setCurrentV2UpdateTime,
 						LastDeactivationTime: nil,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 					},
@@ -2760,11 +2919,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 
 	// start ramping traffic back to v1
 	setRampingUpdateTime := timestamppb.Now()
-	s.setAndVerifyRampingVersion(ctx, tv1, false, 10, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		ConflictToken:      nil,
-		PreviousVersion:    "",
-		PreviousPercentage: 0,
-	})
+	s.setAndVerifyRampingVersion(ctx, tv1, false, 10, false, "")
 
 	// verify if the right information is set in the DescribeWorkerDeployment response
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -2794,6 +2949,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 						CurrentSinceTime:     nil,
 						RampingSinceTime:     setRampingUpdateTime,
 						FirstActivationTime:  setCurrentV1UpdateTime, // note: this is setCurrentV1UpdateTime since the version was initially activated when it was current.
+						LastCurrentTime:      setCurrentV1UpdateTime,
 						LastDeactivationTime: nil,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING,
 					},
@@ -2805,6 +2961,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 						CurrentSinceTime:     setCurrentV2UpdateTime,
 						RampingSinceTime:     nil,
 						FirstActivationTime:  setCurrentV2UpdateTime,
+						LastCurrentTime:      setCurrentV2UpdateTime,
 						LastDeactivationTime: nil,
 						Status:               enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 					},
@@ -2826,7 +2983,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	s.startVersionWorkflow(ctx, tv1)
 
 	// Signal the first version to be drained. Only do this in tests.
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}
@@ -2876,6 +3033,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
 			//nolint:staticcheck // SA1019 deprecated Version will clean up later
 			a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
+			s.False(proto.Equal(tv1.ExternalDeploymentVersion(), vs.GetDeploymentVersion()))
 		}
 	}, time.Second*5, time.Millisecond*200)
 
@@ -2929,7 +3087,6 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_Idempotent() {
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
-
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
@@ -2956,6 +3113,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 		a.NotEmpty(resp.GetWorkerDeploymentInfo().GetVersionSummaries())
 		//nolint:staticcheck // SA1019 deprecated Version will clean up later
 		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].Version)
+		s.ProtoEqual(tv1.ExternalDeploymentVersion(), resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion())
 	}, time.Second*5, time.Millisecond*200)
 
 	// Delete the worker deployment should fail since there are versions associated with it
@@ -2988,36 +3146,54 @@ func (s *WorkerDeploymentSuite) tryDeleteVersion(
 // verifyTimestampWithinRange asserts if the actual timestamp is set to an appropriate value. It
 // does this check by checking if the timestamp set is within respectable bounds or is equal to the
 // expected timestamp.
-func (s *WorkerDeploymentSuite) verifyTimestampWithinRange(a *require.Assertions, expected, actual *timestamppb.Timestamp) {
-	a.True((expected == nil) == (actual == nil))
+func (s *WorkerDeploymentSuite) verifyTimestampWithinRange(a *require.Assertions, expected, actual *timestamppb.Timestamp, msg string) {
+	a.Equalf(expected == nil, actual == nil,
+		"expected %s to be: '%s', actual: %s", msg, expected.AsTime().String(), actual.AsTime().String())
 	if expected == nil {
 		return
 	}
-
-	a.True(expected.AsTime().Equal(actual.AsTime()) || (actual.AsTime().After(expected.AsTime()) && actual.AsTime().Before(time.Now())))
+	acceptableDelayBetweenExpectedAndActual := 5 * time.Second // works locally with 2s, but setting to 5 to avoid flakes in CI
+	a.Truef(expected.AsTime().Equal(actual.AsTime()) || (actual.AsTime().After(expected.AsTime()) && actual.AsTime().Before(expected.AsTime().Add(acceptableDelayBetweenExpectedAndActual))),
+		"expected %s to be: '%s', actual: %s", msg, expected.AsTime().String(), actual.AsTime().String())
 }
 
 func (s *WorkerDeploymentSuite) verifyVersionSummary(a *require.Assertions, expected, actual *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) {
-	a.Equal(expected.GetVersion(), actual.GetVersion()) //nolint:staticcheck // SA1019: old worker versioning
-	a.Equal(expected.GetDrainageInfo().GetStatus(), actual.GetDrainageInfo().GetStatus())
-	a.Equal(expected.GetStatus(), actual.GetStatus())
+	a.Equal(expected.GetVersion(), actual.GetVersion())                                                                           //nolint:staticcheck // SA1019: old worker versioning
+	a.Equal(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expected.GetVersion()), actual.GetDeploymentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+	a.Equalf(expected.GetDrainageInfo().GetStatus().String(), actual.GetDrainageInfo().GetStatus().String(),
+		"Version %s:%s drainage status mismatch", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId())
+	a.Equalf(expected.GetStatus(), actual.GetStatus(),
+		"Version %s:%s status mismatch", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId())
 
-	s.verifyTimestampWithinRange(a, expected.GetCreateTime(), actual.GetCreateTime())
-	s.verifyTimestampWithinRange(a, expected.GetRoutingUpdateTime(), actual.GetRoutingUpdateTime())
-	s.verifyTimestampWithinRange(a, expected.GetCurrentSinceTime(), actual.GetCurrentSinceTime())
-	s.verifyTimestampWithinRange(a, expected.GetRampingSinceTime(), actual.GetRampingSinceTime())
-	s.verifyTimestampWithinRange(a, expected.GetFirstActivationTime(), actual.GetFirstActivationTime())
-	s.verifyTimestampWithinRange(a, expected.GetLastDeactivationTime(), actual.GetLastDeactivationTime())
+	s.verifyTimestampWithinRange(a, expected.GetCreateTime(), actual.GetCreateTime(),
+		fmt.Sprintf("Version %s:%s create time", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId()))
+	s.verifyTimestampWithinRange(a, expected.GetRoutingUpdateTime(), actual.GetRoutingUpdateTime(),
+		fmt.Sprintf("Version %s:%s routing update time", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId()))
+	s.verifyTimestampWithinRange(a, expected.GetCurrentSinceTime(), actual.GetCurrentSinceTime(),
+		fmt.Sprintf("Version %s:%s current since time", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId()))
+	s.verifyTimestampWithinRange(a, expected.GetRampingSinceTime(), actual.GetRampingSinceTime(),
+		fmt.Sprintf("Version %s:%s ramping since time", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId()))
+	s.verifyTimestampWithinRange(a, expected.GetFirstActivationTime(), actual.GetFirstActivationTime(),
+		fmt.Sprintf("Version %s:%s first activation time", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId()))
+	s.verifyTimestampWithinRange(a, expected.GetLastCurrentTime(), actual.GetLastCurrentTime(),
+		fmt.Sprintf("Version %s:%s last current time", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId()))
+	s.verifyTimestampWithinRange(a, expected.GetLastDeactivationTime(), actual.GetLastDeactivationTime(),
+		fmt.Sprintf("Version %s:%s last deactivation time", actual.GetDeploymentVersion().GetDeploymentName(), actual.GetDeploymentVersion().GetBuildId()))
 }
 
-func (s *WorkerDeploymentSuite) verifyRoutingConfig(a *require.Assertions, expected, actual *deploymentpb.RoutingConfig) {
-	a.Equal(expected.GetRampingVersion(), actual.GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
+func (s *WorkerDeploymentSuite) verifyRoutingConfig(a *require.Assertions, expected, actual *deploymentpb.RoutingConfig, deploymentName string) {
+	a.Equal(expected.GetRampingVersion(), actual.GetRampingVersion())                                                                                //nolint:staticcheck // SA1019: old worker versioning
+	s.ProtoEqual(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expected.GetRampingVersion()), actual.GetRampingDeploymentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	a.Equal(expected.GetRampingVersionPercentage(), actual.GetRampingVersionPercentage())
-	a.Equal(expected.GetCurrentVersion(), actual.GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+	a.Equal(expected.GetCurrentVersion(), actual.GetCurrentVersion())                                                                                //nolint:staticcheck // SA1019: old worker versioning
+	s.ProtoEqual(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expected.GetCurrentVersion()), actual.GetCurrentDeploymentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 
-	s.verifyTimestampWithinRange(a, expected.GetRampingVersionChangedTime(), actual.GetRampingVersionChangedTime())
-	s.verifyTimestampWithinRange(a, expected.GetCurrentVersionChangedTime(), actual.GetCurrentVersionChangedTime())
-	s.verifyTimestampWithinRange(a, expected.GetRampingVersionPercentageChangedTime(), actual.GetRampingVersionPercentageChangedTime())
+	s.verifyTimestampWithinRange(a, expected.GetRampingVersionChangedTime(), actual.GetRampingVersionChangedTime(),
+		fmt.Sprintf("Deployment %s ramping version changed time", deploymentName))
+	s.verifyTimestampWithinRange(a, expected.GetCurrentVersionChangedTime(), actual.GetCurrentVersionChangedTime(),
+		fmt.Sprintf("Deployment %s current version changed time", deploymentName))
+	s.verifyTimestampWithinRange(a, expected.GetRampingVersionPercentageChangedTime(), actual.GetRampingVersionPercentageChangedTime(),
+		fmt.Sprintf("Deployment %s ramping percentage changed time", deploymentName))
 }
 
 func (s *WorkerDeploymentSuite) verifyWorkerDeploymentInfo(a *require.Assertions, expected, actual *deploymentpb.WorkerDeploymentInfo) {
@@ -3026,8 +3202,9 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentInfo(a *require.Assertions
 	a.True((actual.GetRoutingConfig() == nil) == (expected.GetRoutingConfig() == nil))
 	a.Equal(expected.GetLastModifierIdentity(), actual.GetLastModifierIdentity())
 
-	s.verifyTimestampWithinRange(a, expected.GetCreateTime(), actual.GetCreateTime())
-	s.verifyRoutingConfig(a, expected.GetRoutingConfig(), actual.GetRoutingConfig())
+	s.verifyTimestampWithinRange(a, expected.GetCreateTime(), actual.GetCreateTime(),
+		fmt.Sprintf("Deployment %s create time", expected.GetName()))
+	s.verifyRoutingConfig(a, expected.GetRoutingConfig(), actual.GetRoutingConfig(), expected.GetName())
 
 	// Verify version summaries
 	for _, expectedSummary := range expected.GetVersionSummaries() {
@@ -3039,7 +3216,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentInfo(a *require.Assertions
 				break
 			}
 		}
-		s.True(found)
+		a.True(found)
 	}
 }
 
@@ -3058,27 +3235,24 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersion(
 	percentage int,
 	ignoreMissingTaskQueues bool,
 	expectedError string,
-	expectedResp *workflowservice.SetWorkerDeploymentRampingVersionResponse,
 ) {
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, unset, percentage, ignoreMissingTaskQueues, false, true, expectedError, expectedResp)
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, unset, percentage, ignoreMissingTaskQueues, false, true, expectedError)
 }
 
+//nolint:staticcheck // SA1019
 func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 	ctx context.Context,
 	tv *testvars.TestVars,
-	unversioned bool,
-	unset bool,
+	unversioned, unset bool,
 	percentage int,
 	ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool,
 	expectedError string,
-	expectedResp *workflowservice.SetWorkerDeploymentRampingVersionResponse,
 ) {
-	version := tv.DeploymentVersionString()
-	if unversioned {
-		version = worker_versioning.UnversionedVersionId
+	bld := tv.BuildID()
+	if unversioned || unset {
+		bld = ""
 	}
 	if unset {
-		version = worker_versioning.UnversionedVersionId
 		percentage = 0
 	}
 	if !allowNoPollers && ensureSystemWorkflowsExist {
@@ -3088,10 +3262,10 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 			s.ensureCreateDeployment(tv)
 		}
 	}
-	resp, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+	_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 		Namespace:               s.Namespace().String(),
 		DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
-		Version:                 version,
+		BuildId:                 bld,
 		Percentage:              float32(percentage),
 		Identity:                tv.ClientIdentity(),
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
@@ -3103,39 +3277,43 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 		return
 	}
 	s.NoError(err)
+}
 
-	if prevVersion := expectedResp.GetPreviousDeploymentVersion(); prevVersion != nil {
-		s.Equal(prevVersion.GetBuildId(), resp.GetPreviousDeploymentVersion().GetBuildId())
-		s.Equal(prevVersion.GetDeploymentName(), resp.GetPreviousDeploymentVersion().GetDeploymentName())
-	} else {
-		s.Equal(expectedResp.GetPreviousVersion(), resp.GetPreviousVersion()) // nolint:staticcheck // SA1019: version v0.31
+func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testvars.TestVars, ignoreMissingTaskQueues bool, expectedError string) {
+	s.setCurrentVersionUnversionedOption(ctx, tv, false, ignoreMissingTaskQueues, false, true, expectedError)
+}
+
+func (s *WorkerDeploymentSuite) setCurrentVersionAllowNoPollersOption(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool,
+	expectedError string,
+) {
+	s.setCurrentVersionUnversionedOption(ctx, tv, false, ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist, expectedError)
+}
+
+func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	unversioned, ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool,
+	expectedError string,
+) {
+	bld := tv.DeploymentVersion().GetBuildId()
+	if unversioned {
+		bld = ""
 	}
-	s.Equal(expectedResp.GetPreviousPercentage(), resp.GetPreviousPercentage())
-}
-
-func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testvars.TestVars, previousCurrent string, ignoreMissingTaskQueues bool, expectedError string) {
-	s.setCurrentVersionUnversionedOption(ctx, tv, false, previousCurrent, ignoreMissingTaskQueues, false, true, expectedError)
-}
-
-func (s *WorkerDeploymentSuite) setCurrentVersionAllowNoPollersOption(ctx context.Context, tv *testvars.TestVars, previousCurrent string, ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool, expectedError string) {
-	s.setCurrentVersionUnversionedOption(ctx, tv, false, previousCurrent, ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist, expectedError)
-}
-
-func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(ctx context.Context, tv *testvars.TestVars, unversioned bool, previousCurrent string, ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool, expectedError string) {
-	version := tv.DeploymentVersionString()
 	if !allowNoPollers && ensureSystemWorkflowsExist {
 		if unversioned {
-			version = worker_versioning.UnversionedVersionId
 			s.ensureCreateDeployment(tv)
 		} else {
 			s.ensureCreateVersionInDeployment(tv)
 		}
 	}
 
-	resp, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:               s.Namespace().String(),
 		DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
-		Version:                 version,
+		BuildId:                 bld,
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 		Identity:                tv.ClientIdentity(),
 		AllowNoPollers:          allowNoPollers,
@@ -3146,11 +3324,9 @@ func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(ctx context.C
 		return
 	}
 	s.NoError(err)
-	s.NotNil(resp.PreviousVersion)
-	s.Equal(previousCurrent, resp.PreviousVersion)
 }
 
-func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(ctx context.Context, tv *testvars.TestVars, self, useWrongConflictToken bool, newManager, prevManager, expectedError string) {
+func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(ctx context.Context, tv *testvars.TestVars, self, useWrongConflictToken bool, newManager, expectedError string) {
 	s.ensureCreateDeployment(tv)
 	s.ensureCreateVersionInDeployment(tv)
 
@@ -3184,15 +3360,19 @@ func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(ctx context.Contex
 			ManagerIdentity: newManager,
 		}
 		expectedManagerIdentity = newManager
+		if newManager == "" {
+			req.Identity = tv.ClientIdentity()
+		} else {
+			req.Identity = newManager
+		}
 	}
-	resp, err := s.FrontendClient().SetWorkerDeploymentManager(ctx, req)
+	_, err := s.FrontendClient().SetWorkerDeploymentManager(ctx, req)
 	if expectedError != "" {
 		s.Error(err)
 		s.Contains(err.Error(), expectedError)
 		return
 	}
 	s.NoError(err)
-	s.Equal(prevManager, resp.GetPreviousManagerIdentity())
 
 	desc, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -3204,21 +3384,23 @@ func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(ctx context.Contex
 
 func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context, tv *testvars.TestVars, n int) []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
 	var expectedDeploymentSummaries []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
-	startTime := timestamppb.Now()
 
 	for i := 0; i < n; i++ {
 		deployment := tv.WithDeploymentSeriesNumber(i)
 		version := deployment.WithBuildIDNumber(i)
 
+		startTime := timestamppb.Now()
 		s.startVersionWorkflow(ctx, version)
-		s.setCurrentVersion(ctx, version, worker_versioning.UnversionedVersionId, true, "")
+		setCurrentTime := timestamppb.Now()
+		s.setCurrentVersion(ctx, version, true, "")
 
 		currentVersionSummary := &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
 			Version:              version.DeploymentVersionString(),
 			CreateTime:           startTime,
-			CurrentSinceTime:     startTime,
-			FirstActivationTime:  startTime,
-			RoutingUpdateTime:    startTime,
+			CurrentSinceTime:     setCurrentTime,
+			FirstActivationTime:  setCurrentTime,
+			LastCurrentTime:      setCurrentTime,
+			RoutingUpdateTime:    setCurrentTime,
 			DrainageInfo:         nil,
 			RampingSinceTime:     nil,
 			LastDeactivationTime: nil,
@@ -3230,7 +3412,7 @@ func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context,
 			startTime,
 			&deploymentpb.RoutingConfig{
 				CurrentVersion:            version.DeploymentVersionString(),
-				CurrentVersionChangedTime: startTime,
+				CurrentVersionChangedTime: setCurrentTime,
 			},
 			currentVersionSummary, // latest version added is the current version
 			currentVersionSummary,
@@ -3248,17 +3430,22 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	actualSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 ) bool {
 
-	s.verifyTimestampWithinRange(a, expectedSummary.CreateTime, actualSummary.CreateTime)
+	s.verifyTimestampWithinRange(a, expectedSummary.CreateTime, actualSummary.CreateTime,
+		fmt.Sprintf("Deployment %s create time", expectedSummary.GetName()))
 
 	// Current version checks
-	a.Equal(expectedSummary.RoutingConfig.GetCurrentVersion(), actualSummary.RoutingConfig.GetCurrentVersion(), "Current version mismatch") //nolint:staticcheck // SA1019: old worker versioning
-	s.verifyTimestampWithinRange(a, expectedSummary.RoutingConfig.GetCurrentVersionChangedTime(), actualSummary.RoutingConfig.GetCurrentVersionChangedTime())
+	a.Equal(expectedSummary.RoutingConfig.GetCurrentVersion(), actualSummary.RoutingConfig.GetCurrentVersion(), "Current version mismatch")                                                    //nolint:staticcheck // SA1019: old worker versioning
+	s.ProtoEqual(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedSummary.RoutingConfig.GetCurrentVersion()), actualSummary.RoutingConfig.GetCurrentDeploymentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
+	s.verifyTimestampWithinRange(a, expectedSummary.RoutingConfig.GetCurrentVersionChangedTime(), actualSummary.RoutingConfig.GetCurrentVersionChangedTime(),
+		fmt.Sprintf("Deployment %s current version changed time", expectedSummary.GetName()))
 
 	// Ramping version checks
-	a.Equal(expectedSummary.RoutingConfig.GetRampingVersion(), actualSummary.RoutingConfig.GetRampingVersion(), "Ramping version mismatch") //nolint:staticcheck // SA1019: old worker versioning
+	a.Equal(expectedSummary.RoutingConfig.GetRampingVersion(), actualSummary.RoutingConfig.GetRampingVersion(), "Ramping version mismatch")                                                    //nolint:staticcheck // SA1019: old worker versioning
+	s.ProtoEqual(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedSummary.RoutingConfig.GetRampingVersion()), actualSummary.RoutingConfig.GetRampingDeploymentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 	a.Equal(expectedSummary.RoutingConfig.GetRampingVersionPercentage(), actualSummary.RoutingConfig.GetRampingVersionPercentage(), "Ramping version percentage mismatch")
 
-	s.verifyTimestampWithinRange(a, expectedSummary.RoutingConfig.GetRampingVersionChangedTime(), actualSummary.RoutingConfig.GetRampingVersionChangedTime())
+	s.verifyTimestampWithinRange(a, expectedSummary.RoutingConfig.GetRampingVersionChangedTime(), actualSummary.RoutingConfig.GetRampingVersionChangedTime(),
+		fmt.Sprintf("Deployment %s ramping version changed time", expectedSummary.GetName()))
 
 	// Latest version summary checks
 	s.verifyVersionSummary(a, expectedSummary.LatestVersionSummary, actualSummary.LatestVersionSummary)

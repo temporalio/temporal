@@ -33,7 +33,7 @@ func TestInvokerExecuteTaskSuite(t *testing.T) {
 }
 
 func (s *invokerExecuteTaskSuite) SetupTest() {
-	s.SetupSuite()
+	s.schedulerSuite.SetupTest()
 
 	s.mockFrontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
@@ -42,6 +42,7 @@ func (s *invokerExecuteTaskSuite) SetupTest() {
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     s.logger,
+		SpecProcessor:  s.specProcessor,
 		HistoryClient:  s.mockHistoryClient,
 		FrontendClient: s.mockFrontendClient,
 	})
@@ -322,8 +323,7 @@ func (s *invokerExecuteTaskSuite) TestExecuteTask_ExceedsMaxActionsPerExecution(
 
 func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 	ctx := s.newMutableContext()
-	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := s.scheduler.Invoker.Get(ctx)
 
 	// Set up initial state
 	invoker.BufferedStarts = c.InitialBufferedStarts
@@ -336,12 +336,12 @@ func (s *invokerExecuteTaskSuite) runExecuteTestCase(c *executeTestCase) {
 
 	// Set expectations. The read and update calls will also update the Scheduler
 	// component, within the same transition.
-	s.ExpectReadComponent(invoker)
-	s.ExpectUpdateComponent(invoker)
+	s.ExpectReadComponent(ctx, invoker)
+	s.ExpectUpdateComponent(ctx, invoker)
 
 	// Create engine context for side effect task execution
 	engineCtx := s.newEngineContext()
-	err = s.executor.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	err := s.executor.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)

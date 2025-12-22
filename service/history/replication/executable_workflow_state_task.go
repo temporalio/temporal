@@ -62,9 +62,11 @@ func NewExecutableWorkflowStateTask(
 			replicationTask,
 		),
 		req: &historyservice.ReplicateWorkflowStateRequest{
-			NamespaceId:   namespaceID,
-			WorkflowState: task.GetWorkflowState(),
-			RemoteCluster: sourceClusterName,
+			NamespaceId:              namespaceID,
+			WorkflowState:            task.GetWorkflowState(),
+			RemoteCluster:            sourceClusterName,
+			IsForceReplication:       task.GetIsForceReplication(),
+			IsCloseTransferTaskAcked: task.GetIsCloseTransferTaskAcked(),
 		},
 	}
 }
@@ -82,7 +84,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
-	), e.NamespaceID)
+	), e.NamespaceID, e.WorkflowID)
 	if err != nil {
 		return err
 	} else if !apply {
@@ -127,7 +129,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
@@ -158,7 +160,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}

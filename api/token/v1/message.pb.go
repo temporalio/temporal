@@ -257,8 +257,10 @@ type Task struct {
 	Version          int64                  `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`
 	StartedTime      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
 	StartVersion     int64                  `protobuf:"varint,13,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Reference to the associated Chasm component, if provided.
+	ComponentRef  []byte `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Task) Reset() {
@@ -380,6 +382,13 @@ func (x *Task) GetStartVersion() int64 {
 		return x.StartVersion
 	}
 	return 0
+}
+
+func (x *Task) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
 }
 
 type QueryTask struct {
@@ -560,18 +569,20 @@ func (x *HistoryEventRef) GetEventBatchId() int64 {
 // A completion token for a Nexus operation started from a workflow.
 type NexusOperationCompletion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Namespace UUID.
+	// Namespace UUID. (Deprecated)
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Workflow ID.
+	// Workflow ID. (Deprecated)
 	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Run ID at the time this token was generated.
+	// Run ID at the time this token was generated. (Deprecated)
 	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// Reference including the path to the backing Operation state machine and a version + transition count for
-	// staleness checks.
+	// staleness checks. (Deprecated)
 	Ref *v11.StateMachineRef `protobuf:"bytes,4,opt,name=ref,proto3" json:"ref,omitempty"`
 	// Request ID embedded in the NexusOperationScheduledEvent.
 	// Allows completing a started operation after a workflow has been reset.
-	RequestId     string `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	RequestId string `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Reference to the CHASM component to be informed of the completion.
+	ComponentRef  []byte `protobuf:"bytes,6,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -641,6 +652,13 @@ func (x *NexusOperationCompletion) GetRequestId() string {
 	return ""
 }
 
+func (x *NexusOperationCompletion) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
+}
+
 var File_temporal_server_api_token_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
@@ -670,7 +688,7 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"endEventId\x12*\n" +
 	"\x11end_event_version\x18\a \x01(\x03R\x0fendEventVersion\x12+\n" +
 	"\x11persistence_token\x18\b \x01(\fR\x10persistenceToken\x12]\n" +
-	"\x11version_histories\x18\t \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistoriesJ\x04\b\x01\x10\x02\"\xfd\x03\n" +
+	"\x11version_histories\x18\t \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistoriesJ\x04\b\x01\x10\x02\"\xa2\x04\n" +
 	"\x04Task\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -687,7 +705,8 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	" \x01(\x03R\x0estartedEventId\x12\x18\n" +
 	"\aversion\x18\v \x01(\x03R\aversion\x12=\n" +
 	"\fstarted_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12#\n" +
-	"\rstart_version\x18\r \x01(\x03R\fstartVersion\"f\n" +
+	"\rstart_version\x18\r \x01(\x03R\fstartVersion\x12#\n" +
+	"\rcomponent_ref\x18\x0e \x01(\fR\fcomponentRef\"f\n" +
 	"\tQueryTask\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
@@ -700,7 +719,7 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\atask_id\x18\x03 \x01(\tR\x06taskId\"R\n" +
 	"\x0fHistoryEventRef\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12$\n" +
-	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\xdb\x01\n" +
+	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\x80\x02\n" +
 	"\x18NexusOperationCompletion\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -708,7 +727,8 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12E\n" +
 	"\x03ref\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.StateMachineRefR\x03ref\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x05 \x01(\tR\trequestIdB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
+	"request_id\x18\x05 \x01(\tR\trequestId\x12#\n" +
+	"\rcomponent_ref\x18\x06 \x01(\fR\fcomponentRefB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
 
 var (
 	file_temporal_server_api_token_v1_message_proto_rawDescOnce sync.Once

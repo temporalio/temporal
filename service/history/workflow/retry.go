@@ -2,11 +2,10 @@ package workflow
 
 import (
 	"context"
-	"math"
 	"slices"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -27,12 +26,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
-
-func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
-	return time.Duration(int64(float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
-}
 
 // TODO treat 0 as 0, not infinite
 
@@ -55,9 +48,9 @@ func getBackoffInterval(
 	// Check if the remote worker sent an application failure indicating a custom backoff duration.
 	delayedRetryDuration := nextRetryDelayFrom(failure)
 	if delayedRetryDuration != nil {
-		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, makeBackoffAlgorithm(delayedRetryDuration))
+		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, backoff.MakeBackoffAlgorithm(delayedRetryDuration))
 	}
-	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
+	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, backoff.ExponentialBackoffAlgorithm)
 }
 
 func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
@@ -82,7 +75,7 @@ func nextBackoffInterval(
 	maxInterval *durationpb.Duration,
 	expirationTime *timestamppb.Timestamp,
 	backoffCoefficient float64,
-	intervalCalculator BackoffCalculatorAlgorithmFunc,
+	intervalCalculator backoff.BackoffCalculatorAlgorithmFunc,
 ) (time.Duration, enumspb.RetryState) {
 	// TODO remove below checks, most are already set with correct values
 	if currentAttempt < 1 {
@@ -237,7 +230,7 @@ func SetupNewWorkflowForRetryOrCron(
 
 	var completionCallbacks []*commonpb.Callback
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		completionCallbacks, err = getCompletionCallbacksAsProtoSlice(previousMutableState)
+		completionCallbacks, err = getCompletionCallbacksAsProtoSlice(ctx, previousMutableState)
 		if err != nil {
 			return err
 		}
@@ -255,15 +248,32 @@ func SetupNewWorkflowForRetryOrCron(
 	// of retry, and the retried run inherited a pinned version when it started (ie. it is a child of a pinned
 	// parent, or a CaN of a pinned run, and is running on a Task Queue in the inherited version).
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY &&
-		GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		startAttr.GetInheritedPinnedVersion() != nil {
-		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
+	// If the previous run had an AutoUpgrade behavior, we pass down the source deployment version and revision number to the new run.
+	// Note: We only pass down one of inheritedPinnedVersion or inheritedAutoUpgradeInfo, but not both!
+	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
+
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		// retries and crons always go to the same task queue, so no need to check if override version is in new task queue
+
+		if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+			startAttr.GetInheritedPinnedVersion() != nil {
+			inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(GetEffectiveDeployment(previousExecutionInfo.GetVersioningInfo()))
+		} else if GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+			sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(previousMutableState.GetEffectiveDeployment())
+			sourceDeploymentRevisionNumber := previousMutableState.GetVersioningRevisionNumber()
+
+			// Only set inherited auto upgrade info if source deployment version and revision number are not nil.
+			if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
+				inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
+					SourceDeploymentVersion:        sourceDeploymentVersion,
+					SourceDeploymentRevisionNumber: sourceDeploymentRevisionNumber,
+				}
+			}
+		}
 	}
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.New(),
+		RequestId:                uuid.NewString(),
 		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
 		WorkflowId:               newExecution.WorkflowId,
 		TaskQueue:                tq,
@@ -289,7 +299,7 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if previousExecutionInfo.AssignedBuildId == "" {
+	if previousExecutionInfo.AssignedBuildId == "" && GetEffectiveVersioningBehavior(previousExecutionInfo.GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		// TODO: only keeping this part for old versioning. The desired logic seem to be the same for both cron and
 		// retry: keep originally-inherited build ID. [cleanup-old-wv]
 		// For retry: propagate build-id version info to new workflow.
@@ -313,6 +323,7 @@ func SetupNewWorkflowForRetryOrCron(
 		RootExecutionInfo:        rootInfo,
 		InheritedBuildId:         startAttr.InheritedBuildId,
 		InheritedPinnedVersion:   inheritedPinnedVersion,
+		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

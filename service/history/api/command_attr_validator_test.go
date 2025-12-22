@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -142,34 +143,34 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 
 	var attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes
 
-	fc, err := s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err := s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalExternalWorkflowExecutionCommandAttributes is not set on SignalExternalWorkflowExecutionCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes = &commandpb.SignalExternalWorkflowExecutionCommandAttributes{}
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Execution is not set on SignalExternalWorkflowExecutionCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes.Execution = &commonpb.WorkflowExecution{}
 	attributes.Execution.WorkflowId = "workflow-id"
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalName is not set on SignalExternalWorkflowExecutionCommand. WorkflowId=workflow-id Namespace= RunId=")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes.Execution.RunId = "run-id"
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Invalid RunId set on SignalExternalWorkflowExecutionCommand. WorkflowId=workflow-id Namespace= RunId=run-id SignalName=")
 	attributes.Execution.RunId = tests.RunID
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes.SignalName = "my signal name"
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 
 	attributes.Input = payloads.EncodeString("test input")
-	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.ValidateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 }
@@ -195,7 +196,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	saPayload, err := searchattribute.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	s.NoError(err)
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
-		"CustomKeywordField": saPayload,
+		"Keyword01": saPayload,
 	}
 	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)
@@ -203,9 +204,9 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 
 	// Predefined Worker-Deployment related SA's should be rejected when they are attempted to be upserted
 	deploymentRestrictedAttributes := []string{
-		searchattribute.TemporalWorkerDeploymentVersion,
-		searchattribute.TemporalWorkerDeployment,
-		searchattribute.TemporalWorkflowVersioningBehavior,
+		sadefs.TemporalWorkerDeploymentVersion,
+		sadefs.TemporalWorkerDeployment,
+		sadefs.TemporalWorkflowVersioningBehavior,
 	}
 
 	for _, attr := range deploymentRestrictedAttributes {
@@ -256,9 +257,9 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
 
 	deploymentRestrictedAttributes := []string{
-		searchattribute.TemporalWorkerDeploymentVersion,
-		searchattribute.TemporalWorkerDeployment,
-		searchattribute.TemporalWorkflowVersioningBehavior,
+		sadefs.TemporalWorkerDeploymentVersion,
+		sadefs.TemporalWorkerDeployment,
+		sadefs.TemporalWorkflowVersioningBehavior,
 	}
 
 	for _, attr := range deploymentRestrictedAttributes {
@@ -314,7 +315,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal(
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.Nil(err)
 }
 
@@ -337,7 +338,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.Nil(err)
 }
 
@@ -360,7 +361,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -386,7 +387,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -409,7 +410,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.Nil(err)
 }
 
@@ -432,7 +433,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -459,7 +460,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.Nil(err)
 }
 
@@ -486,7 +487,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -518,7 +519,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -544,7 +545,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -576,7 +577,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffec
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
@@ -609,14 +610,14 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGloba
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil)
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, s.testTargetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", s.testTargetNamespaceID, "test-target-workflow-id")
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_SameNamespace() {
 	targetNamespaceID := s.testNamespaceID
 
-	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, targetNamespaceID)
+	err := s.validator.validateCrossNamespaceCall(s.testNamespaceID, "test-workflow-id", targetNamespaceID, "test-target-workflow-id")
 	s.Nil(err)
 }
 

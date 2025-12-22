@@ -27,7 +27,7 @@ func ConvertError(
 		return serviceerror.NewNotFoundf("operation %v encountered %v", operation, err.Error())
 	}
 
-	var cqlTimeoutErr gocql.RequestErrWriteTimeout
+	var cqlTimeoutErr *gocql.RequestErrWriteTimeout
 	if errors.As(err, &cqlTimeoutErr) {
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, cqlTimeoutErr.Error())}
 	}

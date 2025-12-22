@@ -23,6 +23,7 @@ type (
 		Refresh(
 			ctx context.Context,
 			mutableState historyi.MutableState,
+			shouldSkipGeneratingCloseTransferTask bool,
 		) error
 		// PartialRefresh refresh tasks for all sub state machines that have been updated
 		// since the given minVersionedTransition (inclusive).
@@ -38,6 +39,7 @@ type (
 			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
 			previousPendingChildIds map[int64]struct{},
+			shouldSkipGeneratingCloseTransferTask bool,
 		) error
 	}
 
@@ -64,13 +66,14 @@ func NewTaskRefresher(
 func (r *TaskRefresherImpl) Refresh(
 	ctx context.Context,
 	mutableState historyi.MutableState,
+	shouldSkipGeneratingCloseTransferTask bool,
 ) error {
 	if r.shard.GetConfig().EnableNexus() {
 		// Invalidate all tasks generated for this mutable state before the refresh.
 		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 	}
 
-	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil); err != nil {
+	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipGeneratingCloseTransferTask); err != nil {
 		return err
 	}
 
@@ -82,8 +85,11 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 	previousPendingChildIds map[int64]struct{},
+	shouldSkipGeneratingCloseTransferTask bool,
 ) error {
-	// TODO: handle task refresh for non workflow mutable states.
+	// CHASM tasks will be replicated as part of ApplyMutation/ApplySnapshot.
+	// Physical tasks will also be automatically generated upon CloseTransaction.
+	// So there's no need to do partial refresh for CHASM components.
 	if !mutableState.IsWorkflow() {
 		return nil
 	}
@@ -107,6 +113,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		mutableState,
 		taskGenerator,
 		minVersionedTransition,
+		shouldSkipGeneratingCloseTransferTask,
 	); err != nil {
 		return err
 	}
@@ -238,10 +245,12 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	skipCloseTransferTask bool,
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// Workflow close tasks don't apply when the workflow is in running or paused status.
+	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
@@ -261,6 +270,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	return taskGenerator.GenerateWorkflowCloseTasks(
 		closeEventTime,
 		false,
+		skipCloseTransferTask,
 	)
 }
 
@@ -272,7 +282,8 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// skip task generation if workflow is not running or paused.
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
@@ -302,6 +313,8 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
+
+	// skip task generation if the workflow is not running.
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return nil
 	}
@@ -350,6 +363,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
+	// skip task generation if workflow is not running since activities are only scheduled when the workflow is in running status
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return nil
 	}
@@ -385,10 +399,16 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			continue
 		}
 
-		if err := taskGenerator.GenerateActivityTasks(
-			activityInfo.ScheduledEventId,
-		); err != nil {
-			return err
+		if activityInfo.Attempt > 1 {
+			if err := taskGenerator.GenerateActivityRetryTasks(activityInfo); err != nil {
+				return err
+			}
+		} else {
+			if err := taskGenerator.GenerateActivityTasks(
+				activityInfo.ScheduledEventId,
+			); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -402,7 +422,8 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// skip task generation if workflow is not running or paused. For now timers continue to progress when the workflow is paused.
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
@@ -477,7 +498,8 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// skip task generation if workflow is not running or paused.
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
@@ -516,7 +538,8 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// skip task generation if workflow is not running or paused.
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 
@@ -553,7 +576,8 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	executionState := mutableState.GetExecutionState()
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// skip task generation if workflow is not running or paused. Search attributes should continue to be updated when the workflow is paused.
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
 	}
 

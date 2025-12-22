@@ -44,9 +44,15 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCr
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
 	}
 
+	// Creating workflow in State: CREATED and status: RUNNING  is allowed
 	s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+
+	// Cannot be created in State: COMPLETED and status: {RUNNING ,PAUSED}
+	s.Error(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Error(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED))
 
 	for _, status := range statuses {
 		s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
@@ -105,24 +111,26 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateZo
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCreated() {
-	statuses := []enumspb.WorkflowExecutionStatus{
+	disallowedStatuses := []enumspb.WorkflowExecutionStatus{
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
 	}
 
+	// Updating workflow to State: CREATED and status: RUNNING is allowed
 	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
-	for _, status := range statuses {
+	for _, status := range disallowedStatuses {
 		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateRunning() {
-	statuses := []enumspb.WorkflowExecutionStatus{
+	disallowedStatuses := []enumspb.WorkflowExecutionStatus{
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
@@ -131,15 +139,17 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateRu
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
+	// Updating workflow to State: RUNNING and status: {RUNNING, PAUSED} is allowed
 	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED))
 
-	for _, status := range statuses {
+	for _, status := range disallowedStatuses {
 		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCompleted() {
-	statuses := []enumspb.WorkflowExecutionStatus{
+	allowedStatuses := []enumspb.WorkflowExecutionStatus{
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
@@ -148,15 +158,17 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
+	// Updating workflow to State: COMPLETED and status: {RUNNING, PAUSED} is *not* allowed
 	s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED))
 
-	for _, status := range statuses {
+	for _, status := range allowedStatuses {
 		s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateZombie() {
-	statuses := []enumspb.WorkflowExecutionStatus{
+	disallowedStatuses := []enumspb.WorkflowExecutionStatus{
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
@@ -165,9 +177,11 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateZo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
+	// Updating workflow to State: ZOMBIE and status: {RUNNING, PAUSED} is allowed
 	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED))
 
-	for _, status := range statuses {
+	for _, status := range disallowedStatuses {
 		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }

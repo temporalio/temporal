@@ -10,20 +10,18 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/resource"
 )
 
 type (
 	Activities struct {
-		namespace        *namespace.Namespace
-		deploymentClient Client
-		matchingClient   resource.MatchingClient
+		activityDeps
+		namespace *namespace.Namespace
 	}
 )
 
 func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	res, err := a.deploymentClient.SyncVersionWorkflowFromWorkerDeployment(
+	res, err := a.WorkerDeploymentClient.SyncVersionWorkflowFromWorkerDeployment(
 		ctx,
 		a.namespace,
 		args.DeploymentName,
@@ -36,7 +34,9 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 		return nil, err
 	}
 	return &deploymentspb.SyncVersionStateActivityResult{
-		VersionState: res.VersionState,
+		//nolint:staticcheck // SA1019
+		VersionState: res.GetVersionState(),
+		Summary:      res.GetSummary(),
 	}, nil
 }
 
@@ -46,7 +46,7 @@ func (a *Activities) SyncUnversionedRamp(
 ) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
 	// Get all the task queues in the current version and put them into SyncUserData format
-	currVersionInfo, _, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, input.CurrentVersion, false)
+	currVersionInfo, _, err := a.WorkerDeploymentClient.DescribeVersion(ctx, a.namespace, input.CurrentVersion, false)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (a *Activities) SyncUnversionedRamp(
 			logger.Info("syncing unversioned ramp to task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types)
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
-			res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+			res, err = a.MatchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:    a.namespace.ID().String(),
 				TaskQueue:      syncData.Name,
 				TaskQueueTypes: syncData.Types,
@@ -105,7 +105,7 @@ func (a *Activities) CheckUnversionedRampUserDataPropagation(ctx context.Context
 	for n, v := range input.TaskQueueMaxVersions {
 		go func(name string, version int64) {
 			logger.Info("waiting for unversioned ramp userdata propagation", "taskQueue", name, "version", version)
-			_, err := a.matchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
+			_, err := a.MatchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
 				NamespaceId: a.namespace.ID().String(),
 				TaskQueue:   name,
 				Version:     version,
@@ -124,7 +124,7 @@ func (a *Activities) CheckUnversionedRampUserDataPropagation(ctx context.Context
 }
 
 func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deploymentspb.IsVersionMissingTaskQueuesArgs) (*deploymentspb.IsVersionMissingTaskQueuesResult, error) {
-	res, err := a.deploymentClient.IsVersionMissingTaskQueues(
+	res, err := a.WorkerDeploymentClient.IsVersionMissingTaskQueues(
 		ctx,
 		a.namespace,
 		args.PrevCurrentVersion,
@@ -140,7 +140,7 @@ func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deplo
 
 func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.DeleteVersionActivityArgs) error {
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	err := a.deploymentClient.DeleteVersionFromWorkerDeployment(
+	err := a.WorkerDeploymentClient.DeleteVersionFromWorkerDeployment(
 		ctx,
 		a.namespace,
 		args.DeploymentName,
@@ -148,6 +148,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		identity,
 		args.RequestId,
 		args.SkipDrainage,
+		args.AsyncPropagation,
 	)
 	if err != nil {
 		return err
@@ -157,7 +158,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 
 func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deploymentspb.RegisterWorkerInVersionArgs) error {
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	err := a.deploymentClient.RegisterWorkerInVersion(
+	err := a.WorkerDeploymentClient.RegisterWorkerInVersion(
 		ctx,
 		a.namespace,
 		args,
@@ -170,7 +171,7 @@ func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deployme
 }
 
 func (a *Activities) DescribeVersionFromWorkerDeployment(ctx context.Context, args *deploymentspb.DescribeVersionFromWorkerDeploymentActivityArgs) (*deploymentspb.DescribeVersionFromWorkerDeploymentActivityResult, error) {
-	res, _, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, args.Version, false)
+	res, _, err := a.WorkerDeploymentClient.DescribeVersion(ctx, a.namespace, args.Version, false)
 	if err != nil {
 		return nil, err
 	}
@@ -198,8 +199,9 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 			var err error
 
 			if input.ForgetVersion {
-				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+				res, err = a.MatchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 					NamespaceId:    a.namespace.ID().String(),
+					DeploymentName: input.GetDeploymentName(),
 					TaskQueue:      syncData.Name,
 					TaskQueueTypes: syncData.Types,
 					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
@@ -207,8 +209,9 @@ func (a *Activities) SyncDeploymentVersionUserDataFromWorkerDeployment(
 					},
 				})
 			} else {
-				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+				res, err = a.MatchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 					NamespaceId:    a.namespace.ID().String(),
+					DeploymentName: input.GetDeploymentName(),
 					TaskQueue:      syncData.Name,
 					TaskQueueTypes: syncData.Types,
 					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
@@ -245,5 +248,5 @@ func (a *Activities) StartWorkerDeploymentVersionWorkflow(
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting worker deployment version workflow", "deploymentName", input.DeploymentName, "buildID", input.BuildId)
 	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.deploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId)
+	return a.WorkerDeploymentClient.StartWorkerDeploymentVersion(ctx, a.namespace, input.DeploymentName, input.BuildId, identity, input.RequestId)
 }

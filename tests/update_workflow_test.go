@@ -18,6 +18,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -2953,6 +2954,7 @@ func (s *UpdateWorkflowSuite) TestStartedSpeculativeWorkflowTask_TerminateWorkfl
 	msResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: tv.WorkflowExecution(),
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.EqualValues(7, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WTFailed event")
@@ -3038,6 +3040,7 @@ func (s *UpdateWorkflowSuite) TestScheduledSpeculativeWorkflowTask_TerminateWork
 	msResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: tv.WorkflowExecution(),
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")

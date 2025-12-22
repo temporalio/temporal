@@ -2,14 +2,15 @@ package scheduler
 
 import (
 	"go.temporal.io/server/chasm"
-	"go.uber.org/fx"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"google.golang.org/grpc"
 )
 
 type (
 	Library struct {
-		fx.In
-
 		chasm.UnimplementedLibrary
+
+		handler *handler
 
 		SchedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
 		GeneratorTaskExecutor            *GeneratorTaskExecutor
@@ -20,6 +21,7 @@ type (
 )
 
 func NewLibrary(
+	handler *handler,
 	SchedulerIdleTaskExecutor *SchedulerIdleTaskExecutor,
 	GeneratorTaskExecutor *GeneratorTaskExecutor,
 	InvokerExecuteTaskExecutor *InvokerExecuteTaskExecutor,
@@ -27,6 +29,7 @@ func NewLibrary(
 	BackfillerTaskExecutor *BackfillerTaskExecutor,
 ) *Library {
 	return &Library{
+		handler:                          handler,
 		SchedulerIdleTaskExecutor:        SchedulerIdleTaskExecutor,
 		GeneratorTaskExecutor:            GeneratorTaskExecutor,
 		InvokerExecuteTaskExecutor:       InvokerExecuteTaskExecutor,
@@ -36,12 +39,12 @@ func NewLibrary(
 }
 
 func (l *Library) Name() string {
-	return "scheduler"
+	return chasm.SchedulerLibraryName
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Scheduler]("scheduler"),
+		chasm.NewRegistrableComponent[*Scheduler](chasm.SchedulerComponentName),
 		chasm.NewRegistrableComponent[*Generator]("generator"),
 		chasm.NewRegistrableComponent[*Invoker]("invoker"),
 		chasm.NewRegistrableComponent[*Backfiller]("backfiller"),
@@ -76,4 +79,8 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 			l.BackfillerTaskExecutor,
 		),
 	}
+}
+
+func (l *Library) RegisterServices(server *grpc.Server) {
+	server.RegisterService(&schedulerpb.SchedulerService_ServiceDesc, l.handler)
 }

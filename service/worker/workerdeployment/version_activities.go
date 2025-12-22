@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,20 +14,22 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const SlowPropagationDelay = 10 * time.Second
+
 type (
 	VersionActivities struct {
-		namespace        *namespace.Namespace
-		deploymentClient Client
-		matchingClient   resource.MatchingClient
+		activityDeps
+		namespace *namespace.Namespace
 	}
 )
 
@@ -37,7 +40,7 @@ func (a *VersionActivities) StartWorkerDeploymentWorkflow(
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting worker-deployment workflow", "deploymentName", input.DeploymentName)
 	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	err := a.deploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
+	err := a.WorkerDeploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
 	var precond *serviceerror.FailedPrecondition
 	if errors.As(err, &precond) {
 		return temporal.NewNonRetryableApplicationError("failed to create deployment", errTooManyDeployments, err)
@@ -50,6 +53,7 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	input *deploymentspb.SyncDeploymentVersionUserDataRequest,
 ) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
+	defer a.checkSlowPropagation(ctx, logger)
 
 	errs := make(chan error)
 
@@ -63,25 +67,32 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 
-			if input.ForgetVersion {
-				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-					NamespaceId:    a.namespace.ID().String(),
-					TaskQueue:      syncData.Name,
-					TaskQueueTypes: syncData.Types,
-					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
-						ForgetVersion: input.Version,
-					},
-				})
-			} else {
-				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-					NamespaceId:    a.namespace.ID().String(),
-					TaskQueue:      syncData.Name,
-					TaskQueueTypes: syncData.Types,
-					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-						UpdateVersionData: syncData.Data,
-					},
-				})
+			req := &matchingservice.SyncDeploymentUserDataRequest{
+				NamespaceId:         a.namespace.ID().String(),
+				DeploymentName:      input.GetVersion().GetDeploymentName(),
+				TaskQueue:           syncData.Name,
+				TaskQueueTypes:      syncData.Types,
+				UpdateRoutingConfig: input.GetUpdateRoutingConfig(),
 			}
+
+			if input.ForgetVersion {
+				// TODO: Remove the old format once async apis are fully enabled
+				req.Operation = &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+					ForgetVersion: input.Version,
+				}
+				req.ForgetVersions = []string{input.GetVersion().GetBuildId()}
+			} else if syncData.Data != nil {
+				req.Operation = &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+					UpdateVersionData: syncData.Data,
+				}
+			}
+
+			if vd := input.GetUpsertVersionData(); vd != nil {
+				req.UpsertVersionsData = make(map[string]*deploymentspb.WorkerDeploymentVersionData, 1)
+				req.UpsertVersionsData[input.GetVersion().GetBuildId()] = vd
+			}
+
+			res, err = a.MatchingClient.SyncDeploymentUserData(ctx, req)
 
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
@@ -104,15 +115,24 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
 }
 
+func (a *VersionActivities) checkSlowPropagation(ctx context.Context, logger log.Logger) {
+	firstAttemptScheduledTime := activity.GetInfo(ctx).ScheduledTime
+	if firstAttemptScheduledTime.Add(SlowPropagationDelay).Before(time.Now()) {
+		logger.Warn("Slow propagation detected", "duration", time.Since(firstAttemptScheduledTime))
+		a.MetricsHandler.Counter(metrics.SlowVersioningDataPropagationCounter.Name()).Record(1)
+	}
+}
+
 func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context.Context, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
 	logger := activity.GetLogger(ctx)
+	defer a.checkSlowPropagation(ctx, logger)
 
 	errs := make(chan error)
 
 	for n, v := range input.TaskQueueMaxVersions {
 		go func(name string, version int64) {
 			logger.Info("waiting for userdata propagation", "taskQueue", name, "version", version)
-			_, err := a.matchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
+			_, err := a.MatchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
 				NamespaceId: a.namespace.ID().String(),
 				TaskQueue:   name,
 				Version:     version,
@@ -135,7 +155,7 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHavePollersActivityArgs) (bool, error) {
 	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(args.WorkerDeploymentVersion))
 	for tqName, tqTypes := range args.TaskQueuesAndTypes {
-		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+		res, err := a.MatchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 			NamespaceId: a.namespace.ID().String(),
 			DescRequest: &workflowservice.DescribeTaskQueueRequest{
 				Namespace:      a.namespace.Name().String(),
@@ -164,21 +184,9 @@ func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, ar
 	return false, nil
 }
 
-func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, input *deploymentspb.AddVersionToWorkerDeploymentRequest) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("adding version to worker-deployment", "deploymentName", input.DeploymentName, "version", input.UpdateArgs.Version)
-	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	resp, err := a.deploymentClient.AddVersionToWorkerDeployment(ctx, a.namespace, input.DeploymentName, input.UpdateArgs, identity, input.RequestId)
-	var precond *serviceerror.FailedPrecondition
-	if errors.As(err, &precond) {
-		return nil, temporal.NewNonRetryableApplicationError("failed to add version to deployment", errTooManyVersions, err)
-	}
-	return resp, err
-}
-
 func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
 	logger := activity.GetLogger(ctx)
-	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, worker_versioning.WorkerDeploymentVersionToStringV31(version))
+	response, err := a.WorkerDeploymentClient.GetVersionDrainageStatus(ctx, a.namespace, worker_versioning.WorkerDeploymentVersionToStringV31(version))
 	if err != nil {
 		logger.Error("error counting workflows for drainage status", "error", err)
 		return nil, err

@@ -80,6 +80,7 @@ type (
 		GetNamespaceInfo(
 			ctx context.Context,
 			namespaceID string,
+			businessID string,
 		) (string, bool, error)
 		SyncState(
 			ctx context.Context,
@@ -307,8 +308,13 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	if processingLatency > 30*time.Second {
-		e.Logger.Warn("replication task processing latency is too long",
+	replicationLatency := now.Sub(e.taskCreationTime)
+	if replicationLatency > time.Minute {
+		e.Logger.Warn(fmt.Sprintf(
+			"replication task latency is too long: transmission=%.2fs processing=%.2fs",
+			e.taskReceivedTime.Sub(e.taskCreationTime).Seconds(),
+			processingLatency.Seconds(),
+		),
 			tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
 			tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
 			tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
@@ -317,7 +323,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	}
 
 	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
-		now.Sub(e.taskCreationTime),
+		replicationLatency,
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 		metrics.SourceClusterTag(e.sourceClusterName),
@@ -617,17 +623,33 @@ func (e *ExecutableTaskImpl) SyncState(
 	}
 
 	targetClusterInfo := e.ClusterMetadata.GetAllClusterInfo()[e.ClusterMetadata.GetCurrentClusterName()]
-	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
+
+	// Remove branch tokens from version histories to reduce request size
+	versionHistories := syncStateErr.VersionHistories
+	if versionHistories != nil {
+		versionHistories = versionhistory.CopyVersionHistories(versionHistories)
+		for _, history := range versionHistories.Histories {
+			history.BranchToken = nil
+		}
+	}
+
+	req := &adminservice.SyncWorkflowStateRequest{
 		NamespaceId: syncStateErr.NamespaceId,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: syncStateErr.WorkflowId,
 			RunId:      syncStateErr.RunId,
 		},
+		ArchetypeId:         syncStateErr.ArchetypeId,
 		VersionedTransition: syncStateErr.VersionedTransition,
-		VersionHistories:    syncStateErr.VersionHistories,
+		VersionHistories:    versionHistories,
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
-	})
+	}
+	resp, err := remoteAdminClient.SyncWorkflowState(ctx, req)
 	if err != nil {
+		var resourceExhaustedError *serviceerror.ResourceExhausted
+		if errors.As(err, &resourceExhaustedError) {
+			return false, serviceerror.NewInvalidArgumentf("sync workflow state failed due to resource exhausted: %v, request payload size: %v", err, req.Size())
+		}
 		logger := log.With(e.Logger,
 			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
 			tag.WorkflowID(syncStateErr.WorkflowId),
@@ -685,7 +707,7 @@ func (e *ExecutableTaskImpl) SyncState(
 	if err != nil {
 		return false, err
 	}
-	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, e.SourceClusterName())
+	err = engine.ReplicateVersionedTransition(ctx, syncStateErr.ArchetypeId, resp.VersionedTransitionArtifact, e.SourceClusterName())
 	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
 	}
@@ -721,6 +743,7 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	ctx context.Context,
 	namespaceID string,
+	businessID string,
 ) (string, bool, error) {
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
@@ -755,7 +778,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 	shouldProcessTask := false
 FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames() {
+	for _, targetCluster := range namespaceEntry.ClusterNames(businessID) {
 		if e.ClusterMetadata.GetCurrentClusterName() == targetCluster {
 			shouldProcessTask = true
 			break FilterLoop

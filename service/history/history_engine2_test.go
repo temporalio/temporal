@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -27,6 +27,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -246,7 +247,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"Keyword01":             payload.EncodeString("random-keyword"),
 							"TemporalChangeVersion": payload.EncodeString("random-data"),
 						},
 					},
@@ -264,7 +265,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
@@ -286,7 +287,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
@@ -352,7 +353,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"Keyword01":             payload.EncodeString("random-keyword"),
 							"TemporalChangeVersion": payload.EncodeString("random-data"),
 						},
 					},
@@ -396,7 +397,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
@@ -564,7 +565,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 	tl := "testTaskQueue"
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, true)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -599,7 +600,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, true)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, int64(2), int64(3), identity)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
@@ -633,7 +634,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 	identity := "testIdentity"
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
@@ -670,7 +671,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"Keyword01":             payload.EncodeString("random-keyword"),
 							"TemporalChangeVersion": payload.EncodeString("random-data"),
 						},
 					},
@@ -688,7 +689,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
@@ -702,7 +703,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 	identity := "testIdentity"
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
@@ -767,7 +768,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistor
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"Keyword01":             payload.EncodeString("random-keyword"),
 								"TemporalChangeVersion": payload.EncodeString("random-data"),
 							},
 						},
@@ -804,7 +805,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistor
 	identity := "testIdentity"
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
@@ -907,7 +908,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, int64(2), int64(3), identity)
 	scheduledEvent, _ := addActivityTaskScheduledEvent(ms, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
 
-	ms1 := workflow.TestCloneToProto(ms)
+	ms1 := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
@@ -954,7 +955,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 	tl := "testTaskQueue"
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
-	ms1 := workflow.TestCloneToProto(ms)
+	ms1 := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
@@ -988,7 +989,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, false)
 	ms.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	ms1 := workflow.TestCloneToProto(ms)
+	ms1 := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
@@ -1050,7 +1051,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_ParentMismatch() {
 	tl := "testTaskQueue"
 
 	ms := s.createExecutionStartedStateWithParent(workflowExecution, tl, parentInfo, identity, true, false)
-	ms1 := workflow.TestCloneToProto(ms)
+	ms1 := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
@@ -1094,7 +1095,7 @@ func (s *engine2Suite) TestTerminateWorkflowExecution_ParentMismatch() {
 	tl := "testTaskQueue"
 
 	ms := s.createExecutionStartedStateWithParent(workflowExecution, tl, parentInfo, identity, true, false)
-	ms1 := workflow.TestCloneToProto(ms)
+	ms1 := workflow.TestCloneToProto(context.Background(), ms)
 	currentExecutionResp := &persistence.GetCurrentExecutionResponse{
 		RunID: tests.RunID,
 	}
@@ -1183,7 +1184,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 		}},
 	}}
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
@@ -1236,12 +1237,12 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 			WorkflowType: &commonpb.WorkflowType{Name: "wType"},
 			TaskQueue:    &taskqueuepb.TaskQueue{Name: tl},
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"AliasForCustomTextField": payload.EncodeString("search attribute value")},
+				"AliasForText01": payload.EncodeString("search attribute value")},
 			},
 		}},
 	}}
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
@@ -1256,7 +1257,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		// Search attribute name was mapped and saved under field name.
 		s.ProtoEqual(
 			payload.EncodeString("search attribute value"),
-			startChildEventAttributes.GetSearchAttributes().GetIndexedFields()["CustomTextField"])
+			startChildEventAttributes.GetSearchAttributes().GetIndexedFields()["Text01"])
 		return tests.UpdateWorkflowExecutionResponse, nil
 	})
 
@@ -1341,7 +1342,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 		ScheduledEventId: 2,
 	}
 	taskTokenBytes, _ := taskToken.Marshal()
-	response := &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}
+	response := &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(response, nil).AnyTimes()
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().
 		GetMapper(tests.Namespace).
@@ -1376,7 +1377,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
 		NamespaceId: namespaceID.String(),
@@ -1394,6 +1395,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 	})
 	s.Nil(err)
 	s.NotNil(resp.RunId)
+	s.True(resp.Started)
+	s.Nil(resp.EagerWorkflowTask)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
@@ -1411,11 +1414,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 		// Search attribute name was mapped and saved under field name.
 		s.ProtoEqual(
 			payload.EncodeString("test"),
-			startEventAttributes.GetSearchAttributes().GetIndexedFields()["CustomKeywordField"])
+			startEventAttributes.GetSearchAttributes().GetIndexedFields()["Keyword01"])
 		return tests.CreateWorkflowExecutionResponse, nil
 	})
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
 		NamespaceId: namespaceID.String(),
@@ -1430,11 +1433,13 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 			Identity:                 identity,
 			RequestId:                requestID,
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"CustomKeywordField": payload.EncodeString("test"),
+				"Keyword01": payload.EncodeString("test"),
 			}}},
 	})
 	s.Nil(err)
 	s.NotNil(resp.RunId)
+	s.True(resp.Started)
+	s.Nil(resp.EagerWorkflowTask)
 }
 
 func makeMockStartRequest(
@@ -1535,7 +1540,7 @@ func (s *engine2Suite) setupStartWorkflowExecutionForTerminate() {
 	}, nil).AnyTimes()
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}, nil)
+		Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_CalledTooSoon() {
@@ -1641,7 +1646,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
-	prevRunID := uuid.New()
+	prevRunID := uuid.NewString()
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
@@ -1853,19 +1858,23 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
-	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
+	workflowID := "wId"
+	workflowType := "workflowType"
+	runID := tests.RunID
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			WorkflowId: workflowID,
+		},
+	}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
 	namespaceID := tests.NamespaceID
-	workflowID := "wId"
-	workflowType := "workflowType"
-	runID := tests.RunID
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1887,7 +1896,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		RunId:      runID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	_ = addWorkflowTaskScheduledEvent(ms)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 
@@ -1901,18 +1910,23 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
-	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
+	workflowID := "wId"
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			WorkflowId: workflowID,
+		},
+	}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
 	namespaceID := tests.NamespaceID
-	workflowID := "wId"
+
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
@@ -1949,7 +1963,11 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	}
 	tl := "testTaskQueue"
 
-	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			WorkflowId: we.GetWorkflowId(),
+		},
+	}
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
@@ -1961,7 +1979,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1989,7 +2007,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		workflowID, runID, log.NewTestLogger())
 	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
@@ -2048,7 +2066,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		workflowID, runID, log.NewTestLogger())
 	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
@@ -2123,7 +2141,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		workflowID, runID, log.NewTestLogger())
 	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
@@ -2153,7 +2171,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2183,7 +2201,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	// reload mutable state due to potential stale mutable state (initiated event not found)
@@ -2193,7 +2211,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 
 	// add child init event
 	wt := addWorkflowTaskScheduledEvent(ms)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2206,7 +2224,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	// add child started event
 	addChildWorkflowExecutionStartedEvent(ms, initiatedEvent.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
 
-	wfMs = workflow.TestCloneToProto(ms)
+	wfMs = workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
@@ -2216,7 +2234,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2268,7 +2286,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 				WorkflowId: tests.WorkflowID,
 				RunId:      tests.RunID,
 			}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-			wfMs := workflow.TestCloneToProto(ms)
+			wfMs := workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 			// reload mutable state due to potential stale mutable state (initiated event not found)
@@ -2278,7 +2296,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 
 			// add child init event
 			wt := addWorkflowTaskScheduledEvent(ms)
-			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
 			wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 			workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2291,7 +2309,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 			// add child started event
 			addChildWorkflowExecutionStartedEvent(ms, initiatedEvent.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
 
-			wfMs = workflow.TestCloneToProto(ms)
+			wfMs = workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 			if tc.expectedError == nil {
@@ -2309,7 +2327,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_ChildFirstRunId() {
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEvent() {
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2339,12 +2357,12 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	// add child init event
 	wt := addWorkflowTaskScheduledEvent(ms)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2355,7 +2373,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 	request.ChildFirstExecutionRunId = childRunID
 
 	// started event not found, should automatically be added
-	wfMs = workflow.TestCloneToProto(ms)
+	wfMs = workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(initiatedEvent, nil)
@@ -2366,7 +2384,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 
 func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEvent_ChildFirstRunId() {
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2416,12 +2434,12 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 				WorkflowId: tests.WorkflowID,
 				RunId:      tests.RunID,
 			}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-			wfMs := workflow.TestCloneToProto(ms)
+			wfMs := workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 			// add child init event
 			wt := addWorkflowTaskScheduledEvent(ms)
-			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+			workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
 			wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 			workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
@@ -2432,7 +2450,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 			request.ChildFirstExecutionRunId = tc.childFirstRunID
 
 			// started event not found, should automatically be added
-			wfMs = workflow.TestCloneToProto(ms)
+			wfMs = workflow.TestCloneToProto(context.Background(), ms)
 			gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 			s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(initiatedEvent, nil)
@@ -2501,6 +2519,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 		VersionedTransition: nil,
 		VersionHistories:    nil,
 		TargetClusterId:     int32(cluster.TestAlternativeClusterInitialFailoverVersion),
+		ArchetypeId:         chasm.WorkflowArchetypeID,
 	}
 	resp := &adminservice.SyncWorkflowStateResponse{
 		VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{
@@ -2519,7 +2538,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 		gomock.Any(),
 		req,
 	).Return(resp, nil)
-	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(gomock.Any(), resp.VersionedTransitionArtifact, cluster.TestCurrentClusterName).Return(nil)
+	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(gomock.Any(), chasm.WorkflowArchetypeID, resp.VersionedTransitionArtifact, cluster.TestCurrentClusterName).Return(nil)
 
 	// prepare closed workflow
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
@@ -2530,7 +2549,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	_, err := ms.AddTimeoutWorkflowEvent(
 		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.New(),
+		uuid.NewString(),
 	)
 	s.NoError(err)
 	ms.GetExecutionInfo().VersionHistories = &historyspb.VersionHistories{
@@ -2545,7 +2564,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 		},
 	}
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -2577,11 +2596,11 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed
 	_, err := ms.AddTimeoutWorkflowEvent(
 		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.New(),
+		uuid.NewString(),
 	)
 	s.NoError(err)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -2610,7 +2629,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
@@ -2660,7 +2679,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 		},
 	}
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
@@ -2674,7 +2693,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	taskQueueName := "testTaskQueue"
 
 	childWorkflowID := "some random child workflow ID"
-	childRunID := uuid.New()
+	childRunID := uuid.NewString()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
 
@@ -2684,7 +2703,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 		RunId:      tests.RunID,
 	}, "wType", taskQueueName, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	wt := addWorkflowTaskScheduledEvent(ms)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskQueueName, uuid.New())
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskQueueName, uuid.NewString())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
@@ -2705,7 +2724,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	}
 
 	// child workflow not started in mutable state
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -2715,7 +2734,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	// child workflow started but not completed
 	addChildWorkflowExecutionStartedEvent(ms, initiatedEvent.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
 
-	wfMs = workflow.TestCloneToProto(ms)
+	wfMs = workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -2736,7 +2755,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 		},
 	)
 
-	wfMs = workflow.TestCloneToProto(ms)
+	wfMs = workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
@@ -2756,11 +2775,11 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	timeoutEvent, err := ms.AddTimeoutWorkflowEvent(
 		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.New(),
+		uuid.NewString(),
 	)
 	s.NoError(err)
 
-	wfMs := workflow.TestCloneToProto(ms)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
@@ -2791,7 +2810,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 		gomock.Any(),
 	).Return(startEvent, nil).AnyTimes()
 
-	err = s.historyEngine.RefreshWorkflowTasks(metrics.AddMetricsContext(context.Background()), tests.NamespaceID, execution)
+	err = s.historyEngine.RefreshWorkflowTasks(metrics.AddMetricsContext(context.Background()), tests.NamespaceID, execution, chasm.WorkflowArchetypeID)
 	s.NoError(err)
 }
 

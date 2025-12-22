@@ -128,10 +128,7 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 endif
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
-# Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
 PINNED_DEPENDENCIES := \
-	modernc.org/sqlite@v1.34.1 \
-	modernc.org/libc@v1.55.3 \
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
@@ -234,6 +231,11 @@ $(STAMPDIR)/gomajor-$(GOMAJOR_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOMAJOR),github.com/icholy/gomajor,$(GOMAJOR_VER))
 	@touch $@
 $(GOMAJOR): $(STAMPDIR)/gomajor-$(GOMAJOR_VER)
+
+ERRORTYPE_VER := v0.0.7
+ERRORTYPE := $(LOCALBIN)/errortype
+$(ERRORTYPE): | $(LOCALBIN)
+	$(call go-install-tool,$(ERRORTYPE),fillmore-labs.com/errortype,$(ERRORTYPE_VER))
 
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
 MOCKGEN_VER := v0.6.0
@@ -374,9 +376,10 @@ lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
-lint-code: $(GOLANGCI_LINT)
+lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
 	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml
+	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false ./...
 
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 	@printf $(COLOR) "Formatting imports..."
@@ -592,44 +595,44 @@ stop-dependencies-cdc:
 start: start-sqlite
 
 start-cass-es: temporal-server
-	./temporal-server --env development-cass-es --allow-no-auth start
+	./temporal-server --config-file config/development-cass-es.yaml --allow-no-auth start
 
 start-cass-es-dual: temporal-server
-	./temporal-server --env development-cass-es-dual --allow-no-auth start
+	./temporal-server --config-file config/development-cass-es-dual.yaml --allow-no-auth start
 
 start-cass-es-custom: temporal-server
-	./temporal-server --env development-cass-es-custom --allow-no-auth start
+	./temporal-server --config-file config/development-cass-es-custom.yaml --allow-no-auth start
 
 start-es-fi: temporal-server
-	./temporal-server --env development-cass-es-fi --allow-no-auth start
+	./temporal-server --config-file config/development-cass-es-fi.yaml --allow-no-auth start
 
 start-mysql: start-mysql8
 
 start-mysql8: temporal-server
-	./temporal-server --env development-mysql8 --allow-no-auth start
+	./temporal-server --config-file config/development-mysql8.yaml --allow-no-auth start
 
 start-mysql-es: temporal-server
-	./temporal-server --env development-mysql-es --allow-no-auth start
+	./temporal-server --config-file config/development-mysql-es.yaml --allow-no-auth start
 
 start-postgres: start-postgres12
 
 start-postgres12: temporal-server
-	./temporal-server --env development-postgres12 --allow-no-auth start
+	./temporal-server --config-file config/development-postgres12.yaml --allow-no-auth start
 
 start-sqlite: temporal-server
-	./temporal-server --env development-sqlite --allow-no-auth start
+	./temporal-server --config-file config/development-sqlite.yaml --allow-no-auth start
 
 start-sqlite-file: temporal-server
-	./temporal-server --env development-sqlite-file --allow-no-auth start
+	./temporal-server --config-file config/development-sqlite-file.yaml --allow-no-auth start
 
 start-xdc-cluster-a: temporal-server
-	./temporal-server --env development-cluster-a --allow-no-auth start
+	./temporal-server --config-file config/development-cluster-a.yaml --allow-no-auth start
 
 start-xdc-cluster-b: temporal-server
-	./temporal-server --env development-cluster-b --allow-no-auth start
+	./temporal-server --config-file config/development-cluster-b.yaml --allow-no-auth start
 
 start-xdc-cluster-c: temporal-server
-	./temporal-server --env development-cluster-c --allow-no-auth start
+	./temporal-server --config-file config/development-cluster-c.yaml --allow-no-auth start
 
 ##### Grafana #####
 update-dashboards:

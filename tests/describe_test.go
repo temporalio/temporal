@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,7 +39,7 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	identity := "worker1"
 
 	// Start workflow execution
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           requestID,
 		Namespace:           s.Namespace().String(),
@@ -198,7 +198,7 @@ func (s *DescribeTestSuite) TestDescribeTaskQueue() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},

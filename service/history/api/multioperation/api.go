@@ -11,10 +11,10 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
@@ -54,11 +54,11 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
-	visibilityManager manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache cache.Cache,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +93,9 @@ func Invoke(
 			shardContext,
 			workflowConsistencyChecker,
 			tokenSerializer,
-			visibilityManager,
 			startReq,
+			matchingClient,
+			versionMembershipCache,
 			uws.workflowLeaseCallback(ctx),
 		)
 		if err != nil {
