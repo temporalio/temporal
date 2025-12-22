@@ -24,6 +24,8 @@ const (
 
 type StreamState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Head          int64                  `protobuf:"varint,1,opt,name=head,proto3" json:"head,omitempty"`
+	Tail          int64                  `protobuf:"varint,2,opt,name=tail,proto3" json:"tail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -58,12 +60,28 @@ func (*StreamState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{0}
 }
 
+func (x *StreamState) GetHead() int64 {
+	if x != nil {
+		return x.Head
+	}
+	return 0
+}
+
+func (x *StreamState) GetTail() int64 {
+	if x != nil {
+		return x.Tail
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\"\r\n" +
-	"\vStreamStateB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\"5\n" +
+	"\vStreamState\x12\x12\n" +
+	"\x04head\x18\x01 \x01(\x03R\x04head\x12\x12\n" +
+	"\x04tail\x18\x02 \x01(\x03R\x04tailB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescOnce sync.Once

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -47,11 +48,26 @@ func (s *streamSuite) TestHappyPath() {
 
 	_, err := s.FrontendClient().AddToStream(ctx, &workflowservice.AddToStreamRequest{
 		Namespace: s.Namespace().String(),
+		StreamId:  "my-stream-id",
+		Messages: []*commonpb.Payload{
+			{
+				Data: []byte("hello"),
+			},
+			{
+				Data: []byte("world"),
+			},
+		},
 	})
 	s.NoError(err)
 
-	_, err = s.FrontendClient().PollStream(ctx, &workflowservice.PollStreamRequest{
+	resp, err := s.FrontendClient().PollStream(ctx, &workflowservice.PollStreamRequest{
 		Namespace: s.Namespace().String(),
+		StreamId:  "my-stream-id",
 	})
 	s.NoError(err)
+	messages := resp.GetMessages()
+	s.Equal(2, len(messages))
+	s.Equal([]byte("hello"), messages[0].GetData())
+	s.Equal([]byte("world"), messages[1].GetData())
+
 }

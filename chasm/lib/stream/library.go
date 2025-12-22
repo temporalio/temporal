@@ -21,6 +21,12 @@ func (l *library) Name() string {
 	return "stream"
 }
 
+func (l *library) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Stream]("stream"),
+	}
+}
+
 func (l *library) RegisterServices(server *grpc.Server) {
 	server.RegisterService(&streampb.StreamService_ServiceDesc, l.handler)
 }
