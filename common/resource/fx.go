@@ -32,6 +32,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
@@ -101,6 +103,7 @@ var Module = fx.Options(
 	fx.Provide(FrontendHTTPClientCacheProvider),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
+	fx.Provide(namespace.NewDefaultReplicationResolverFactory),
 	deadlock.Module,
 	config.Module,
 	testhooks.Module,
@@ -184,12 +187,37 @@ func SearchAttributeManagerProvider(
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection))
 }
 
+// SearchAttributeValidatorProvider creates a new search attribute validator with the given dependencies. It configures
+// the validator with dynamic config values for key limits, value size limits, total size limits, visibility allowlist,
+// and system search attribute error suppression.
+func SearchAttributeValidatorProvider(
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
+	visibilityMgr manager.VisibilityManager,
+	dynamicCollection *dynamicconfig.Collection,
+) *searchattribute.Validator {
+	return searchattribute.NewValidator(
+		saProvider,
+		saMapperProvider,
+		dynamicconfig.SearchAttributesNumberOfKeysLimit.Get(dynamicCollection),
+		dynamicconfig.SearchAttributesSizeOfValueLimit.Get(dynamicCollection),
+		dynamicconfig.SearchAttributesTotalSizeLimit.Get(dynamicCollection),
+		visibilityMgr,
+		visibility.AllowListForValidation(
+			visibilityMgr.GetStoreNames(),
+			dynamicconfig.VisibilityAllowList.Get(dynamicCollection),
+		),
+		dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dynamicCollection),
+	)
+}
+
 func NamespaceRegistryProvider(
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 ) namespace.Registry {
 	return nsregistry.NewRegistry(
 		metadataManager,
@@ -198,6 +226,7 @@ func NamespaceRegistryProvider(
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
 		metricsHandler,
 		logger,
+		replicationResolverFactory,
 	)
 }
 

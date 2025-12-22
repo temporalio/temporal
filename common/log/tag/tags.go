@@ -85,6 +85,11 @@ func Archetype(archetype string) ZapTag {
 	return NewStringTag("archetype", archetype)
 }
 
+// ArchetypeID returns tag for Archetype
+func ArchetypeID(archetype uint32) ZapTag {
+	return NewUInt32("archetype-id", archetype)
+}
+
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
 func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) ZapTag {
 	return NewStringerTag("wf-timeout-type", timeoutType)
@@ -914,7 +919,17 @@ func ActivityInfo(activityInfo interface{}) ZapTag {
 	return NewAnyTag("activity-info", activityInfo)
 }
 
-// WorkflowTaskRequestId returns tag for workflow task RequestId
+// ActivityID returns tag for a standalone activity ID
+func ActivityID(id string) ZapTag {
+	return NewStringTag("activity-id", id)
+}
+
+// ActivitySize returns a tag for a standalone activity size
+func ActivitySize(activitySize int64) ZapTag {
+	return NewInt64("activity-size", activitySize)
+}
+
+// WorkflowTaskRequestId returns a tag for workflow task RequestId
 func WorkflowTaskRequestId(s string) ZapTag {
 	return NewStringTag("workflow-task-request-id", s)
 }

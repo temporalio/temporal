@@ -89,6 +89,17 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.dynamicConfigOverrides[dynamicconfig.EnableTransitionHistory.Key()] = s.enableTransitionHistory
 	// TODO (prathyush): remove this after setting it to true by default.
 	s.dynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
+	// Override checkpoint intervals to 3 seconds for faster testing
+	s.dynamicConfigOverrides[dynamicconfig.TransferProcessorUpdateAckInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.TimerProcessorUpdateAckInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorUpdateAckInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorUpdateAckInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.ArchivalProcessorUpdateAckInterval.Key()] = time.Second * 3
+	// Override max poll intervals to 3 seconds for faster task discovery in tests
+	s.dynamicConfigOverrides[dynamicconfig.TransferProcessorMaxPollInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.TimerProcessorMaxPollInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorMaxPollInterval.Key()] = time.Second * 3
+	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
 	clusterConfigs := []*testcore.TestClusterConfig{
 		{
@@ -147,6 +158,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 						FrontendAddress:               remoteC.Host().RemoteFrontendGRPCAddress(),
 						FrontendHttpAddress:           remoteC.Host().FrontendHTTPAddress(),
 						EnableRemoteClusterConnection: true,
+						EnableReplication:             true,
 					})
 				s.Require().NoError(err)
 			}
@@ -268,7 +280,7 @@ func (s *xdcBaseSuite) createNamespace(
 					require.NoError(t, err)
 					require.NotNil(t, resp)
 					require.Equal(t, isGlobal, resp.IsGlobalNamespace())
-					require.Equal(t, clusterNames, resp.ClusterNames())
+					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -365,7 +377,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, clusterNames, resp.ClusterNames())
+			require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 			isGlobalNamespace = resp.IsGlobalNamespace()
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
@@ -382,7 +394,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 					resp, err := r.GetNamespace(namespace.Name(ns))
 					require.NoError(t, err)
 					require.NotNil(t, resp)
-					require.Equal(t, clusterNames, resp.ClusterNames())
+					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -437,7 +449,7 @@ func (s *xdcBaseSuite) failover(
 				resp, err := r.GetNamespace(namespace.Name(ns))
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				require.Equal(t, targetCluster, resp.ActiveClusterName())
+				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.EmptyBusinessID))
 			}
 		}
 	}, replicationWaitTime, replicationCheckInterval)

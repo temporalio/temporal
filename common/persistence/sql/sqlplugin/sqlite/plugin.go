@@ -37,14 +37,19 @@ var queryParameters = map[string]struct{}{
 }
 
 type plugin struct {
-	connPool *connPool
+	queryConverter sqlplugin.VisibilityQueryConverter
+	connPool       *connPool
 }
 
-var sqlitePlugin = &plugin{}
-
 func init() {
-	sqlitePlugin.connPool = newConnPool()
-	sql.RegisterPlugin(PluginName, sqlitePlugin)
+	sql.RegisterPlugin(PluginName, &plugin{
+		queryConverter: &queryConverter{},
+		connPool:       newConnPool(),
+	})
+}
+
+func (p *plugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {
+	return p.queryConverter
 }
 
 // CreateDB initialize the db object
@@ -77,7 +82,7 @@ func (p *plugin) createDBConnection(
 		return nil, fmt.Errorf("error building DSN: %w", err)
 	}
 
-	db, err := sqlx.Connect(goSqlDriverName, dsn)
+	db, err := sqlx.Connect(goSQLDriverName, dsn)
 	if err != nil {
 		return nil, err
 	}

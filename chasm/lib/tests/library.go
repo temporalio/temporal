@@ -16,7 +16,14 @@ func (l *library) Name() string {
 
 func (l *library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*PayloadStore]("payloadStore"),
+		chasm.NewRegistrableComponent[*PayloadStore]("payloadStore",
+			chasm.WithSearchAttributes(
+				PayloadTotalCountSearchAttribute,
+				PayloadTotalSizeSearchAttribute,
+				PayloadExecutionStatusSearchAttribute,
+				chasm.SearchAttributeTemporalScheduledByID,
+			),
+		),
 	}
 }
 

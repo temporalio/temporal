@@ -90,7 +90,7 @@ func (v *taskValidatorImpl) preValidate(
 		// if cannot find the namespace entry, treat task as active
 		return v.preValidateActive(task)
 	}
-	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName() {
+	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName(task.Data.WorkflowId) {
 		return v.preValidateActive(task)
 	}
 	return v.preValidatePassive(task)
@@ -174,6 +174,7 @@ func (v *taskValidatorImpl) isTaskValid(
 			},
 			Clock:            task.Data.Clock,
 			ScheduledEventId: task.Data.ScheduledEventId,
+			Stamp:            task.Data.GetStamp(),
 		})
 		switch err.(type) {
 		case nil:
@@ -192,6 +193,7 @@ func (v *taskValidatorImpl) isTaskValid(
 			},
 			Clock:            task.Data.Clock,
 			ScheduledEventId: task.Data.ScheduledEventId,
+			Stamp:            task.Data.GetStamp(),
 		})
 		switch err.(type) {
 		case nil:

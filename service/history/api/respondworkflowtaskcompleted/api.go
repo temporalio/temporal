@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -109,15 +110,15 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// then the lease is released without an error, i.e. workflow context and mutable state are NOT cleared.
 	releaseLeaseWithError := true
 
-	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
+	}
+
+	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	if err != nil {
+		return nil, err
 	}
 
 	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -194,6 +195,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
+	// We don't accept the request to create a new workflow task if the workflow is paused.
+	if ms.IsWorkflowExecutionStatusPaused() && request.GetForceCreateNewWorkflowTask() {
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
+		return nil, serviceerror.NewFailedPrecondition("Workflow is paused and force create new workflow task is not allowed.")
+	}
+
 	behavior := request.GetVersioningBehavior()
 	deployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()))
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
@@ -225,7 +233,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if retError != nil {
 			cancelled := effects.Cancel(ctx)
 			if cancelled {
-				handler.logger.Info("Canceled effects due to error.",
+				handler.logger.Info("Canceled effects due to error",
 					tag.Error(retError),
 					tag.WorkflowID(token.GetWorkflowId()),
 					tag.WorkflowRunID(token.GetRunId()),
@@ -451,7 +459,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),
 			tag.WorkflowRunID(token.GetRunId()),
-			tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
+			tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
+			tag.Attempt(currentWorkflowTask.Attempt),
+			tag.Cause(wtFailedCause.failedCause.String()),
+		)
 		if currentWorkflowTask.Attempt > 1 && wtFailedCause.failedCause != enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
@@ -594,6 +605,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 					newWorkflowExecutionInfo.WorkflowId,
 					newWorkflowExecutionState.RunId,
 				),
+				chasm.WorkflowArchetypeID,
 				handler.logger,
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),

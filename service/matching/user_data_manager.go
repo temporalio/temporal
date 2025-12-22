@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -98,11 +99,12 @@ type (
 var _ userDataManager = (*userDataManagerImpl)(nil)
 
 var (
-	errUserDataNoMutateNonRoot  = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
-	errRequestedVersionTooLarge = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
-	errTaskQueueClosed          = serviceerror.NewUnavailable("task queue closed")
-	errUserDataUnmodified       = errors.New("sentinel error for unchanged user data")
-	errUserDataVersionMismatch  = errors.New("user data version mismatch")
+	errUserDataNoMutateNonRoot         = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
+	errRequestedVersionTooLarge        = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
+	errTaskQueueClosed                 = serviceerror.NewUnavailable("task queue closed")
+	errFairnessOverridesUpdateRejected = serviceerror.NewInvalidArgument("fairness weight overrides update rejected: exceeding maximum key size")
+	errUserDataUnmodified              = errors.New("sentinel error for unchanged user data")
+	errUserDataVersionMismatch         = errors.New("user data version mismatch")
 )
 
 func newUserDataManager(
@@ -248,7 +250,11 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 		}
 		// sticky queue can only be of workflow type as of now. but to be future-proof, we make sure
 		// change to workflow task queue here
-		return normalQ.Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), nil
+		wfTQ := normalQ.Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		// use hash of the sticky queue name to pick a consistent "parent"
+		partitions := m.config.NumReadPartitions()
+		partition := int(farm.Fingerprint32([]byte(m.partition.RpcName()))) % partitions
+		return wfTQ.NormalPartition(partition), nil
 	}
 
 }
@@ -489,7 +495,7 @@ func (m *userDataManagerImpl) updateUserData(
 		return nil, false, serviceerror.NewFailedPreconditionf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion)
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
-	if err == errUserDataUnmodified {
+	if err == errUserDataUnmodified || err == errFairnessOverridesUpdateRejected {
 		return userData, false, err
 	}
 	if err != nil {

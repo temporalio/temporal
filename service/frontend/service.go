@@ -45,6 +45,7 @@ type Config struct {
 	VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
 	VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableUnifiedQueryConverter   dynamicconfig.BoolPropertyFn
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -78,6 +79,8 @@ type Config struct {
 	ShutdownDrainDuration                                             dynamicconfig.DurationPropertyFn
 	ShutdownFailHealthCheckDuration                                   dynamicconfig.DurationPropertyFn
 
+	MaxFairnessWeightOverrideConfigLimit dynamicconfig.IntPropertyFnWithTaskQueueFilter
+
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// security protection settings
@@ -86,6 +89,7 @@ type Config struct {
 	// size limit system protection
 	BlobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	ThrottledLogRPS dynamicconfig.IntPropertyFn
 
@@ -156,6 +160,9 @@ type Config struct {
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable creation of new schedules on CHASM (V2) engine
+	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -212,8 +219,23 @@ type Config struct {
 	WorkerHeartbeatsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowPauseEnabled    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HTTPAllowedHosts dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+}
+
+// IsExperimentAllowed checks if an experiment is enabled for a given namespace in the dynamic config.
+// Returns true if the experiment is explicitly listed or if "*" (wildcard)
+// is present in the allowed experiments list.
+func (c *Config) IsExperimentAllowed(experiment string, namespace string) bool {
+	allowedExperiments := c.AllowedExperiments(namespace)
+	for _, allowed := range allowedExperiments {
+		if allowed == "*" || allowed == experiment {
+			return true
+		}
+	}
+	return false
 }
 
 // NewConfig returns new service config with default values
@@ -239,6 +261,7 @@ func NewConfig(
 		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+		VisibilityEnableUnifiedQueryConverter:   dynamicconfig.VisibilityEnableUnifiedQueryConverter.Get(dc),
 		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
 		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
@@ -275,6 +298,7 @@ func NewConfig(
 		DisableListVisibilityByFilter:            dynamicconfig.DisableListVisibilityByFilter.Get(dc),
 		BlobSizeLimitError:                       dynamicconfig.BlobSizeLimitError.Get(dc),
 		BlobSizeLimitWarn:                        dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MemoSizeLimitError:                       dynamicconfig.MemoSizeLimitError.Get(dc),
 		ThrottledLogRPS:                          dynamicconfig.FrontendThrottledLogRPS.Get(dc),
 		ShutdownDrainDuration:                    dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
 		ShutdownFailHealthCheckDuration:          dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
@@ -304,7 +328,10 @@ func NewConfig(
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities.Get(dc),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.DeleteNamespaceNamespaceDeleteDelay.Get(dc),
 
-		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
+		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
+
+		EnableSchedules:              dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableCHASMSchedulerCreation: dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
@@ -350,8 +377,10 @@ func NewConfig(
 		WorkerHeartbeatsEnabled:        dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
 		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
+		WorkflowPauseEnabled:           dynamicconfig.WorkflowPauseEnabled.Get(dc),
 
-		HTTPAllowedHosts: dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
+		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
+		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
 	}
 }
 

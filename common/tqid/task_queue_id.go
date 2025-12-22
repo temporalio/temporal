@@ -45,6 +45,7 @@ type (
 		// IsRoot always returns false for Sticky partitions
 		IsRoot() bool
 		Kind() enumspb.TaskQueueKind
+		IsChild() bool
 
 		// RpcName returns the mangled name of the task queue partition, to be used in RPCs.
 		//
@@ -263,6 +264,10 @@ func (s *StickyPartition) IsRoot() bool {
 	return false
 }
 
+func (s *StickyPartition) IsChild() bool {
+	return false
+}
+
 func (s *StickyPartition) RpcName() string {
 	return s.stickyName
 }
@@ -285,6 +290,10 @@ func (p *NormalPartition) TaskQueue() *TaskQueue {
 
 func (p *NormalPartition) IsRoot() bool {
 	return p.partitionId == 0
+}
+
+func (p *NormalPartition) IsChild() bool {
+	return !p.IsRoot()
 }
 
 func (p *NormalPartition) Kind() enumspb.TaskQueueKind {

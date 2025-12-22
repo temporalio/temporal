@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
@@ -42,6 +43,9 @@ func NewExecutableSyncVersionedTransitionTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableSyncVersionedTransitionTask {
 	task := replicationTask.GetSyncVersionedTransitionTaskAttributes()
+	if task.ArchetypeId == chasm.UnspecifiedArchetypeID {
+		task.ArchetypeId = chasm.WorkflowArchetypeID
+	}
 	return &ExecutableSyncVersionedTransitionTask{
 		ProcessToolBox: processToolBox,
 
@@ -73,7 +77,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
-	), e.NamespaceID)
+	), e.NamespaceID, e.WorkflowID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
@@ -104,7 +108,12 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.ReplicateVersionedTransition(ctx, e.taskAttr.VersionedTransitionArtifact, e.SourceClusterName())
+	return engine.ReplicateVersionedTransition(
+		ctx,
+		e.taskAttr.GetArchetypeId(),
+		e.taskAttr.VersionedTransitionArtifact,
+		e.SourceClusterName(),
+	)
 }
 
 func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
@@ -125,7 +134,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
@@ -154,7 +163,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}

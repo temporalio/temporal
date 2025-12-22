@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -99,7 +99,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-	resetCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
+	resetCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, resetCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -124,7 +124,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.NoError(err)
@@ -157,7 +157,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.NoError(err)
@@ -227,7 +227,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-	resetCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
+	resetCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, resetCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -252,7 +252,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.NoError(err)
@@ -285,7 +285,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.NoError(err)
@@ -355,7 +355,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-	resetCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
+	resetCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, resetCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -381,7 +381,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.NoError(err)
@@ -412,7 +412,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.NoError(err)
@@ -433,7 +433,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Failed() {
 			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.Error(err)
@@ -449,7 +449,7 @@ func (s *ActivityApiBatchResetClientTestSuite) TestActivityBatchReset_Failed() {
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.Error(err)

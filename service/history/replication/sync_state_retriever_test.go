@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -77,10 +77,10 @@ func (s *syncWorkflowStateSuite) SetupSuite() {
 	s.logger = s.mockShard.GetLogger()
 	s.namespaceID = tests.NamespaceID.String()
 	s.execution = &commonpb.WorkflowExecution{
-		WorkflowId: uuid.New(),
-		RunId:      uuid.New(),
+		WorkflowId: uuid.NewString(),
+		RunId:      uuid.NewString(),
 	}
-	s.newRunId = uuid.New()
+	s.newRunId = uuid.NewString()
 	s.workflowKey = definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -112,7 +112,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
 		RunID:       s.execution.RunId,
-	}, chasm.ArchetypeAny, locks.PriorityLow).Return(
+	}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
@@ -124,6 +124,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 		context.Background(),
 		s.namespaceID,
 		s.execution,
+		chasm.WorkflowArchetypeID,
 		nil,
 		nil,
 	)
@@ -138,7 +139,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
 		RunID:       s.execution.RunId,
-	}, chasm.ArchetypeAny, locks.PriorityLow).Return(
+	}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 
 	mu.EXPECT().HasBufferedEvents().Return(true)
@@ -146,6 +147,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 		context.Background(),
 		s.namespaceID,
 		s.execution,
+		chasm.WorkflowArchetypeID,
 		nil,
 		nil,
 	)
@@ -160,7 +162,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
 		RunID:       s.execution.RunId,
-	}, chasm.ArchetypeAny, locks.PriorityLow).Return(
+	}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -228,6 +230,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		context.Background(),
 		s.namespaceID,
 		s.execution,
+		chasm.WorkflowArchetypeID,
 		&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          12,
@@ -513,7 +516,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 				NamespaceID: s.namespaceID,
 				WorkflowID:  s.execution.WorkflowId,
 				RunID:       s.execution.RunId,
-			}, chasm.ArchetypeAny, locks.PriorityLow).Return(
+			}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 				api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 			versionHistories, transitions, tombstoneBatches, breakPoint := tc.infoFn()
 			executionInfo := &persistencespb.WorkflowExecutionInfo{
@@ -531,6 +534,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 				context.Background(),
 				s.namespaceID,
 				s.execution,
+				chasm.WorkflowArchetypeID,
 				&persistencespb.VersionedTransition{
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          13,
@@ -551,7 +555,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
 		RunID:       s.execution.RunId,
-	}, chasm.ArchetypeAny, locks.PriorityLow).Return(
+	}, chasm.WorkflowArchetypeID, locks.PriorityLow).Return(
 		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
@@ -586,6 +590,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 		context.Background(),
 		s.namespaceID,
 		s.execution,
+		chasm.WorkflowArchetypeID,
 		nil,
 		versionHistories)
 	s.NoError(err)

@@ -18,6 +18,7 @@ type (
 		TaskQueue           string
 		ScheduledEventID    int64
 		Version             int64
+		Stamp               int32
 	}
 )
 

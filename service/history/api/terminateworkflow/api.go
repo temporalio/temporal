@@ -18,7 +18,7 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.TerminateWorkflowExecutionResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.TerminateRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}

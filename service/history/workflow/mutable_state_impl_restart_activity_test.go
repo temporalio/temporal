@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
@@ -16,6 +16,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	commonclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -283,7 +284,7 @@ func (nbis *nextBackoffIntervalStub) nextBackoffInterval(
 	maxInterval *durationpb.Duration,
 	expirationTime *timestamppb.Timestamp,
 	backoffCoefficient float64,
-	_ BackoffCalculatorAlgorithmFunc,
+	_ backoff.BackoffCalculatorAlgorithmFunc,
 ) (time.Duration, enumspb.RetryState) {
 	nbis.recorded = fmt.Sprintf(
 		nextBackoffIntervalParametersFormat,
@@ -365,7 +366,7 @@ func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencesp
 	_, err = s.mutableState.AddActivityTaskStartedEvent(
 		activityInfo,
 		activityInfo.ScheduledEventId,
-		uuid.New(),
+		uuid.NewString(),
 		"worker-identity",
 		nil,
 		nil,

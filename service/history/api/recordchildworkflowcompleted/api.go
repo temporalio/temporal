@@ -31,7 +31,7 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordChildExecutionCompletedResponse, retError error) {
-	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.GetParentExecution().WorkflowId)
 	if err != nil {
 		return nil, err
 	}

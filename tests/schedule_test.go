@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -23,12 +24,14 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -48,22 +51,55 @@ worker restart/long-poll activity failure:
 */
 
 type (
-	ScheduleFunctionalSuite struct {
+	scheduleFunctionalSuiteBase struct {
 		testcore.FunctionalTestBase
 
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
 		taskQueue     string
 		dataConverter converter.DataConverter
+		newContext    func() context.Context
+	}
+
+	ScheduleCHASMFunctionalSuite struct {
+		scheduleFunctionalSuiteBase
+	}
+
+	ScheduleV1FunctionalSuite struct {
+		scheduleFunctionalSuiteBase
 	}
 )
 
 func TestScheduleFunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(ScheduleFunctionalSuite))
+
+	// CHASM tests must run as a separate suite, with a separate cluster/functional environment, because the tests
+	// assume a fully clean state. For example, TestBasics has assertions on visibility entries for workflow runs
+	// started by the scheduler, which would not be cleaned up even when the associated scheduler has been deleted.
+	suite.Run(t, new(ScheduleCHASMFunctionalSuite))
+	suite.Run(t, new(ScheduleV1FunctionalSuite))
 }
 
-func (s *ScheduleFunctionalSuite) SetupTest() {
+func (s *ScheduleCHASMFunctionalSuite) SetupTest() {
+	s.newContext = func() context.Context {
+		baseCtx := testcore.NewContext()
+		return metadata.NewOutgoingContext(baseCtx, metadata.Pairs(
+			headers.ExperimentHeaderName, "chasm-scheduler",
+		))
+	}
+	s.scheduleFunctionalSuiteBase.SetupTest()
+}
+
+func (s *ScheduleV1FunctionalSuite) SetupTest() {
+	s.newContext = func() context.Context {
+		return testcore.NewContext()
+	}
+	s.scheduleFunctionalSuiteBase.SetupTest()
+}
+
+func (s *scheduleFunctionalSuiteBase) SetupTest() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	s.OverrideDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"})
 	s.FunctionalTestBase.SetupTest()
 	s.dataConverter = testcore.NewTestDataConverter()
 
@@ -81,7 +117,7 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.NoError(err)
 }
 
-func (s *ScheduleFunctionalSuite) TearDownTest() {
+func (s *scheduleFunctionalSuiteBase) TearDownTest() {
 	if s.worker != nil {
 		s.worker.Stop()
 	}
@@ -91,12 +127,11 @@ func (s *ScheduleFunctionalSuite) TearDownTest() {
 	s.FunctionalTestBase.TearDownTest()
 }
 
-func (s *ScheduleFunctionalSuite) TestBasics() {
+func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	sid := "sched-test-basics"
 	wid := "sched-test-basics-wf"
 	wt := "sched-test-basics-wt"
 	wt2 := "sched-test-basics-wt2"
-
 	// switch this to test with search attribute mapper:
 	// csaKeyword := "AliasForCustomKeywordField"
 	csaKeyword := "CustomKeywordField"
@@ -141,7 +176,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 		Memo: &commonpb.Memo{
 			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
 		},
@@ -174,8 +209,9 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// create
 
+	ctx := s.newContext()
 	createTime := time.Now()
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 	s.cleanup(sid)
 
@@ -191,7 +227,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 		return len(recentActions) >= 2 && recentActions[1].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	})
 
-	describeResp, err := s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
+	describeResp, err := s.FrontendClient().DescribeSchedule(s.newContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
@@ -232,9 +268,9 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
 	s.Equal(schSABoolValue.Data, describeResp.SearchAttributes.IndexedFields[csaBool].Data)
-	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
-	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BuildIds])
-	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[sadefs.BinaryChecksums])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[sadefs.BuildIds])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision])
 	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
@@ -257,9 +293,9 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
 	s.Equal(schSABoolValue.Data, describeResp.SearchAttributes.IndexedFields[csaBool].Data)
-	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
-	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.BuildIds])
-	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
+	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[sadefs.BinaryChecksums])
+	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[sadefs.BuildIds])
+	s.Nil(visibilityResponse.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision])
 	s.Equal(schMemo.Data, visibilityResponse.Memo.Fields["schedmemo1"].Data)
 	checkSpec(visibilityResponse.Info.Spec)
 	s.Equal(wt, visibilityResponse.Info.WorkflowType.Name)
@@ -268,7 +304,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// list workflows
 
-	wfResp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+	wfResp, err := s.FrontendClient().ListWorkflowExecutions(s.newContext(), &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
 		PageSize:  5,
 		Query:     "",
@@ -292,43 +328,15 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Nil(ex0.ParentExecution) // not a child workflow
 	s.Equal(wfMemo.Data, ex0.Memo.Fields["wfmemo1"].Data)
 	s.Equal(wfSAValue.Data, ex0.SearchAttributes.IndexedFields[csaKeyword].Data)
-	s.Equal(payload.EncodeString(sid).Data, ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById].Data)
+	s.Equal(payload.EncodeString(sid).Data, ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById].Data)
 	var ex0StartTime time.Time
-	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime], &ex0StartTime))
+	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime], &ex0StartTime))
 	s.WithinRange(ex0StartTime, createTime, time.Now())
 	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
 
-	// list with QueryWithAnyNamespaceDivision, we should see the scheduler workflow
-
-	wfResp, err = s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  5,
-		Query:     searchattribute.QueryWithAnyNamespaceDivision(`ExecutionStatus = "Running"`),
-	})
-	s.NoError(err)
-	count := 0
-	for _, ex := range wfResp.Executions {
-		if ex.Type.Name == scheduler.WorkflowType {
-			count++
-		}
-	}
-	s.EqualValues(1, count, "should see scheduler workflow")
-
-	// list workflows with an exact match on namespace division (implementation details here, not public api)
-
-	wfResp, err = s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  5,
-		Query:     fmt.Sprintf("%s = '%s'", searchattribute.TemporalNamespaceDivision, scheduler.NamespaceDivision),
-	})
-	s.NoError(err)
-	s.EqualValues(1, len(wfResp.Executions), "should see scheduler workflow")
-	ex0 = wfResp.Executions[0]
-	s.Equal(scheduler.WorkflowType, ex0.Type.Name)
-
 	// list schedules with search attribute filter
 
-	listResp, err := s.FrontendClient().ListSchedules(testcore.NewContext(), &workflowservice.ListSchedulesRequest{
+	listResp, err := s.FrontendClient().ListSchedules(s.newContext(), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 5,
 		Query:           "CustomKeywordField = 'schedule sa value' AND TemporalSchedulePaused = false",
@@ -340,7 +348,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// list schedules with invalid search attribute filter
 
-	_, err = s.FrontendClient().ListSchedules(testcore.NewContext(), &workflowservice.ListSchedulesRequest{
+	_, err = s.FrontendClient().ListSchedules(s.newContext(), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 5,
 		Query:           "ExecutionDuration > '1s'",
@@ -353,12 +361,12 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
 
 	updateTime := time.Now()
-	_, err = s.FrontendClient().UpdateSchedule(testcore.NewContext(), &workflowservice.UpdateScheduleRequest{
+	_, err = s.FrontendClient().UpdateSchedule(s.newContext(), &workflowservice.UpdateScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
 
@@ -371,7 +379,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// describe again
 	describeResp, err = s.FrontendClient().DescribeSchedule(
-		testcore.NewContext(),
+		s.newContext(),
 		&workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
@@ -399,12 +407,12 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	csaDouble := "CustomDoubleField"
 	schSADoubleValue, _ := payload.Encode(3.14)
 	schSAIntValue, _ = payload.Encode(321)
-	_, err = s.FrontendClient().UpdateSchedule(testcore.NewContext(), &workflowservice.UpdateScheduleRequest{
+	_, err = s.FrontendClient().UpdateSchedule(s.newContext(), &workflowservice.UpdateScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 		SearchAttributes: &commonpb.SearchAttributes{
 			IndexedFields: map[string]*commonpb.Payload{
 				csaKeyword: schSAValue,       // same key, same value
@@ -420,7 +428,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.EventuallyWithT(
 		func(c *assert.CollectT) {
 			describeResp, err = s.FrontendClient().DescribeSchedule(
-				testcore.NewContext(),
+				s.newContext(),
 				&workflowservice.DescribeScheduleRequest{
 					Namespace:  s.Namespace().String(),
 					ScheduleId: sid,
@@ -442,12 +450,12 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
 	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
 
-	_, err = s.FrontendClient().UpdateSchedule(testcore.NewContext(), &workflowservice.UpdateScheduleRequest{
+	_, err = s.FrontendClient().UpdateSchedule(s.newContext(), &workflowservice.UpdateScheduleRequest{
 		Namespace:        s.Namespace().String(),
 		ScheduleId:       sid,
 		Schedule:         schedule,
 		Identity:         "test",
-		RequestId:        uuid.New(),
+		RequestId:        uuid.NewString(),
 		SearchAttributes: &commonpb.SearchAttributes{},
 	})
 	s.NoError(err)
@@ -456,7 +464,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.EventuallyWithT(
 		func(c *assert.CollectT) {
 			describeResp, err = s.FrontendClient().DescribeSchedule(
-				testcore.NewContext(),
+				s.newContext(),
 				&workflowservice.DescribeScheduleRequest{
 					Namespace:  s.Namespace().String(),
 					ScheduleId: sid,
@@ -471,21 +479,21 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// pause
 
-	_, err = s.FrontendClient().PatchSchedule(testcore.NewContext(), &workflowservice.PatchScheduleRequest{
+	_, err = s.FrontendClient().PatchSchedule(s.newContext(), &workflowservice.PatchScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 		Patch: &schedulepb.SchedulePatch{
 			Pause: "because I said so",
 		},
 		Identity:  "test",
-		RequestId: uuid.New(),
+		RequestId: uuid.NewString(),
 	})
 	s.NoError(err)
 
 	time.Sleep(7 * time.Second) //nolint:forbidigo
 	s.EqualValues(1, atomic.LoadInt32(&runs2), "has not run again")
 
-	describeResp, err = s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
+	describeResp, err = s.FrontendClient().DescribeSchedule(s.newContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
@@ -495,7 +503,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal("because I said so", describeResp.Schedule.State.Notes)
 
 	// don't loop to wait for visibility, we already waited 7s from the patch
-	listResp, err = s.FrontendClient().ListSchedules(testcore.NewContext(), &workflowservice.ListSchedulesRequest{
+	listResp, err = s.FrontendClient().ListSchedules(s.newContext(), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 5,
 	})
@@ -508,21 +516,21 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// finally delete
 
-	_, err = s.FrontendClient().DeleteSchedule(testcore.NewContext(), &workflowservice.DeleteScheduleRequest{
+	_, err = s.FrontendClient().DeleteSchedule(s.newContext(), &workflowservice.DeleteScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 		Identity:   "test",
 	})
 	s.NoError(err)
 
-	describeResp, err = s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
+	describeResp, err = s.FrontendClient().DescribeSchedule(s.newContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
 	s.Error(err)
 
 	s.Eventually(func() bool { // wait for visibility
-		listResp, err := s.FrontendClient().ListSchedules(testcore.NewContext(), &workflowservice.ListSchedulesRequest{
+		listResp, err := s.FrontendClient().ListSchedules(s.newContext(), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 5,
 		})
@@ -531,7 +539,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	}, 10*time.Second, 1*time.Second)
 }
 
-func (s *ScheduleFunctionalSuite) TestInput() {
+func (s *scheduleFunctionalSuiteBase) TestInput() {
 	sid := "sched-test-input"
 	wid := "sched-test-input-wf"
 	wt := "sched-test-input-wt"
@@ -571,7 +579,7 @@ func (s *ScheduleFunctionalSuite) TestInput() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	var runs int32
@@ -586,14 +594,15 @@ func (s *ScheduleFunctionalSuite) TestInput() {
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
-	_, err = s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	ctx := s.newContext()
+	_, err = s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 	s.cleanup(sid)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 8*time.Second, 200*time.Millisecond)
 }
 
-func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
+func (s *scheduleFunctionalSuiteBase) TestLastCompletionAndError() {
 	sid := "sched-test-last"
 	wid := "sched-test-last-wf"
 	wt := "sched-test-last-wt"
@@ -619,7 +628,7 @@ func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	runs := make(map[string]struct{})
@@ -659,14 +668,62 @@ func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 	s.cleanup(sid)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
 }
 
-func (s *ScheduleFunctionalSuite) TestRefresh() {
+// Tests that a schedule created in the V1 stack will also be visible in the V2 stack.
+func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
+	sid := "schedule-created-on-v1"
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-",
+					WorkflowType: &commonpb.WorkflowType{Name: "action"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	// Create on V1 stack.
+	_, err := s.FrontendClient().CreateSchedule(s.newContext(), req)
+	s.NoError(err)
+
+	// Sanity test, list with V1 handler.
+	v1Entry := s.getScheduleEntryFomVisibility(sid, nil)
+	s.NotNil(v1Entry.GetInfo())
+
+	// Flip on CHASM experiment and make sure we can still list.
+	s.newContext = func() context.Context {
+		return metadata.NewOutgoingContext(testcore.NewContext(), metadata.Pairs(
+			headers.ExperimentHeaderName, "chasm-scheduler",
+		))
+	}
+	chasmEntry := s.getScheduleEntryFomVisibility(sid, nil)
+	s.NotNil(chasmEntry.GetInfo())
+	s.ProtoEqual(chasmEntry.GetInfo(), v1Entry.GetInfo())
+}
+
+// TestRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
+func (s *ScheduleV1FunctionalSuite) TestRefresh() {
 	sid := "sched-test-refresh"
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
@@ -697,7 +754,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	var runs int32
@@ -711,7 +768,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	_, err := s.FrontendClient().CreateSchedule(s.newContext(), req)
 	s.NoError(err)
 	s.cleanup(sid)
 
@@ -719,7 +776,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 
 	// workflow has started but is now sleeping. it will timeout in 2 seconds.
 
-	describeResp, err := s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
+	describeResp, err := s.FrontendClient().DescribeSchedule(s.newContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
@@ -755,7 +812,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	s.EqualHistoryEvents(expectedHistory, events2)
 
 	// when we describe we'll force a refresh and see it timed out
-	describeResp, err = s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
+	describeResp, err = s.FrontendClient().DescribeSchedule(s.newContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
@@ -769,7 +826,9 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
+// TestListBeforeRun only applies to V1, as V2 scheduler does not involve the
+// per-NS worker or workflow.
+func (s *ScheduleV1FunctionalSuite) TestListBeforeRun() {
 	sid := "sched-test-list-before-run"
 	wid := "sched-test-list-before-run-wf"
 	wt := "sched-test-list-before-run-wt"
@@ -798,12 +857,12 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	startTime := time.Now()
 
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	_, err := s.FrontendClient().CreateSchedule(s.newContext(), req)
 	s.NoError(err)
 	s.cleanup(sid)
 
@@ -816,7 +875,9 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	s.True(entry.Info.FutureActionTimes[0].AsTime().After(startTime))
 }
 
-func (s *ScheduleFunctionalSuite) TestRateLimit() {
+// TestRateLimit applies only to V1, as V2 scheduler does not impose its own
+// rate limiting.
+func (s *ScheduleV1FunctionalSuite) TestRateLimit() {
 	sid := "sched-test-rate-limit-%d"
 	wid := "sched-test-rate-limit-wf-%d"
 	wt := "sched-test-rate-limit-wt"
@@ -852,12 +913,12 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 				},
 			},
 		}
-		_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), &workflowservice.CreateScheduleRequest{
+		_, err := s.FrontendClient().CreateSchedule(s.newContext(), &workflowservice.CreateScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: fmt.Sprintf(sid, i),
 			Schedule:   schedule,
 			Identity:   "test",
-			RequestId:  uuid.New(),
+			RequestId:  uuid.NewString(),
 		})
 		s.NoError(err)
 		s.cleanup(fmt.Sprintf(sid, i))
@@ -870,7 +931,7 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	s.Less(atomic.LoadInt32(&runs), int32(10))
 }
 
-func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
+func (s *scheduleFunctionalSuiteBase) TestListSchedulesReturnsWorkflowStatus() {
 	sid := "sched-test-list-running"
 	wid := "sched-test-list-running-wf"
 	wt := "sched-test-list-running-wt"
@@ -913,9 +974,10 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 		ScheduleId:   sid,
 		Schedule:     schedule,
 		InitialPatch: patch,
-		RequestId:    uuid.New(),
+		RequestId:    uuid.NewString(),
 	}
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 	s.cleanup(sid)
 
@@ -930,7 +992,7 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a1.StartWorkflowStatus)
 
 	// let the started workflow complete
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(s.newContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: a1.StartWorkflowResult.WorkflowId,
@@ -951,7 +1013,7 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a2.StartWorkflowStatus)
 
 	// Also verify that DescribeSchedule's output matches
-	descResp, err := s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
+	descResp, err := s.FrontendClient().DescribeSchedule(s.newContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
@@ -960,12 +1022,7 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 }
 
 // A schedule's memo should have an upper bound on the number of spec items stored.
-func (s *ScheduleFunctionalSuite) TestLimitMemoSpecSize() {
-	// TODO - remove when MemoSpecFieldLimit becomes the default.
-	prevTweakables := scheduler.CurrentTweakablePolicies
-	scheduler.CurrentTweakablePolicies.Version = scheduler.LimitMemoSpecSize
-	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
-
+func (s *scheduleFunctionalSuiteBase) TestLimitMemoSpecSize() {
 	expectedLimit := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit
 
 	sid := "sched-test-limit-memo-size"
@@ -1015,13 +1072,14 @@ func (s *ScheduleFunctionalSuite) TestLimitMemoSpecSize() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 	s.worker.RegisterWorkflowWithOptions(
 		func(ctx workflow.Context) error { return nil },
 		workflow.RegisterOptions{Name: wt},
 	)
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 	s.cleanup(sid)
 
@@ -1034,7 +1092,8 @@ func (s *ScheduleFunctionalSuite) TestLimitMemoSpecSize() {
 	s.Require().Equal(expectedLimit, len(spec.GetExcludeStructuredCalendar()))
 }
 
-func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
+// TestNextTimeCache only applies to V1.
+func (s *ScheduleV1FunctionalSuite) TestNextTimeCache() {
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"
@@ -1060,7 +1119,7 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 		ScheduleId: sid,
 		Schedule:   schedule,
 		Identity:   "test",
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 	}
 
 	var runs atomic.Int32
@@ -1073,7 +1132,7 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	_, err := s.FrontendClient().CreateSchedule(s.newContext(), req)
 	s.NoError(err)
 	s.cleanup(sid)
 
@@ -1114,10 +1173,10 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 
 // getScheduleEntryFomVisibility polls visibility using ListSchedules until it finds a schedule
 // with the given id and for which the optional predicate function returns true.
-func (s *ScheduleFunctionalSuite) getScheduleEntryFomVisibility(sid string, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
+func (s *scheduleFunctionalSuiteBase) getScheduleEntryFomVisibility(sid string, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
 	var slEntry *schedulepb.ScheduleListEntry
 	s.Require().Eventually(func() bool { // wait for visibility
-		listResp, err := s.FrontendClient().ListSchedules(testcore.NewContext(), &workflowservice.ListSchedulesRequest{
+		listResp, err := s.FrontendClient().ListSchedules(s.newContext(), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 5,
 		})
@@ -1138,7 +1197,7 @@ func (s *ScheduleFunctionalSuite) getScheduleEntryFomVisibility(sid string, pred
 	return slEntry
 }
 
-func (s *ScheduleFunctionalSuite) assertSameRecentActions(
+func (s *scheduleFunctionalSuiteBase) assertSameRecentActions(
 	expected *workflowservice.DescribeScheduleResponse, actual *schedulepb.ScheduleListEntry,
 ) {
 	s.T().Helper()
@@ -1160,9 +1219,9 @@ func (s *ScheduleFunctionalSuite) assertSameRecentActions(
 	}
 }
 
-func (s *ScheduleFunctionalSuite) cleanup(sid string) {
+func (s *scheduleFunctionalSuiteBase) cleanup(sid string) {
 	s.T().Cleanup(func() {
-		_, _ = s.FrontendClient().DeleteSchedule(testcore.NewContext(), &workflowservice.DeleteScheduleRequest{
+		_, _ = s.FrontendClient().DeleteSchedule(s.newContext(), &workflowservice.DeleteScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 			Identity:   "test",

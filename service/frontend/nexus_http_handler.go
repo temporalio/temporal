@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -76,7 +77,7 @@ func NewNexusHTTPHandler(
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		enabled:                              serviceConfig.EnableNexusAPIs,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
-		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
+		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:                        logger,
 				metricsHandler:                metricsHandler,
@@ -260,9 +261,10 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
 		if err != nil {
 			h.logger.Error("failed to get namespace name by ID", tag.Error(err))
-			var notFoundErr *serviceerror.NotFound
+			var notFoundErr *serviceerror.NamespaceNotFound
 			if errors.As(err, &notFoundErr) {
-				h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid endpoint target"})
+				w.Header().Set("nexus-request-retryable", "true")
+				h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "invalid endpoint target"})
 			} else {
 				h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
 			}

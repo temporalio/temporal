@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/ringpop-go/discovery/statichosts"
 	"github.com/temporalio/ringpop-go/swim"
@@ -64,7 +64,7 @@ type monitor struct {
 	logger                    log.Logger
 	metadataManager           persistence.ClusterMetadataManager
 	broadcastHostPortResolver func() (string, error)
-	hostID                    uuid.UUID
+	hostID                    []byte
 	initialized               *future.FutureImpl[struct{}]
 }
 
@@ -87,6 +87,8 @@ func newMonitor(
 		lifecycleCtx,
 		headers.SystemBackgroundHighCallerInfo,
 	)
+	hostID, _ := uuid.New().MarshalBinary()
+	// MarshalBinary should never error.
 
 	rpo := &monitor{
 		status: common.DaemonStatusInitialized,
@@ -101,7 +103,7 @@ func newMonitor(
 		logger:                    logger,
 		metadataManager:           metadataManager,
 		broadcastHostPortResolver: broadcastHostPortResolver,
-		hostID:                    uuid.NewUUID(),
+		hostID:                    hostID,
 		initialized:               future.NewFuture[struct{}](),
 		maxJoinDuration:           maxJoinDuration,
 		propagationTime:           propagationTime,
@@ -251,10 +253,14 @@ func (rpo *monitor) upsertMyMembership(
 	err := rpo.metadataManager.UpsertClusterMembership(ctx, request)
 
 	if err == nil {
+		hostID, err := uuid.FromBytes(request.HostID)
+		if err != nil {
+			return err
+		}
 		rpo.logger.Debug("Membership heartbeat upserted successfully",
 			tag.Address(request.RPCAddress.String()),
 			tag.Port(int(request.RPCPort)),
-			tag.HostID(request.HostID.String()))
+			tag.HostID(hostID.String()))
 	}
 
 	return err
@@ -313,10 +319,14 @@ func (rpo *monitor) startHeartbeat(broadcastHostport string) error {
 	// read side by filtering on the last time a heartbeat was seen.
 	err = rpo.upsertMyMembership(rpo.lifecycleCtx, req)
 	if err == nil {
+		hostID, err := uuid.FromBytes(rpo.hostID)
+		if err != nil {
+			return err
+		}
 		rpo.logger.Info("Membership heartbeat upserted successfully",
 			tag.Address(broadcastAddress.String()),
 			tag.Port(int(broadcastPort)),
-			tag.HostID(rpo.hostID.String()))
+			tag.HostID(hostID.String()))
 
 		rpo.startHeartbeatUpsertLoop(req)
 	}
@@ -347,9 +357,10 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 		for _, host := range resp.ActiveMembers {
 			set[net.JoinHostPort(host.RPCAddress.String(), convert.Uint16ToString(host.RPCPort))] = struct{}{}
 		}
+		nextPageToken = resp.NextPageToken
 
 		// Stop iterating once we have either 500 unique ip:port combos or there is no more results.
-		if nextPageToken == nil || len(set) >= 500 {
+		if len(nextPageToken) == 0 || len(set) >= 500 {
 			bootstrapHostPorts := make([]string, 0, len(set))
 			for k := range set {
 				bootstrapHostPorts = append(bootstrapHostPorts, k)

@@ -94,6 +94,8 @@ type (
 		ClusterID  string            `yaml:"-"`
 		ShardCount int32             `yaml:"-"` // Ignore this field when loading config.
 		Tags       map[string]string `yaml:"-"` // Ignore this field. Use cluster.Config.Tags for customized tags.
+		// ReplicationEnabled controls whether replication streams are active.
+		ReplicationEnabled bool `yaml:"-"`
 		// private field to track cluster information updates
 		version int64
 	}
@@ -428,6 +430,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 			newEntries[clusterName] = ShallowCopyClusterInformation(newClusterInfo)
 		} else if newClusterInfo.version > oldClusterInfo.version {
 			if newClusterInfo.Enabled == oldClusterInfo.Enabled &&
+				newClusterInfo.ReplicationEnabled == oldClusterInfo.ReplicationEnabled &&
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
 				newClusterInfo.HTTPAddress == oldClusterInfo.HTTPAddress &&
 				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
@@ -556,6 +559,7 @@ func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResp
 		ClusterID:              getClusterResp.GetClusterId(),
 		ShardCount:             getClusterResp.GetHistoryShardCount(),
 		Tags:                   getClusterResp.GetTags(),
+		ReplicationEnabled:     getClusterResp.GetIsReplicationEnabled(),
 		version:                getClusterResp.Version,
 	}
 }
@@ -565,4 +569,16 @@ func ClusterInformationFromDB(getClusterResp *persistence.GetClusterMetadataResp
 func ShallowCopyClusterInformation(information *ClusterInformation) *ClusterInformation {
 	tmp := *information
 	return &tmp
+}
+
+// IsReplicationEnabledForCluster checks if replication is enabled for a cluster, considering the feature flag.
+// When enableSeparateReplicationFlag is false, it falls back to only checking the Enabled flag.
+// This is a shared helper function used across history service components.
+func IsReplicationEnabledForCluster(clusterInfo ClusterInformation, enableSeparateReplicationFlag bool) bool {
+	if enableSeparateReplicationFlag {
+		// New behavior: check both Enabled (for connectivity) and ReplicationEnabled (for replication streams)
+		return clusterInfo.Enabled && clusterInfo.ReplicationEnabled
+	}
+	// Old behavior: only check Enabled flag
+	return clusterInfo.Enabled
 }

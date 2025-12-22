@@ -19,7 +19,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -28,12 +30,12 @@ var retryable4xxErrorTypes = []int{
 }
 
 type CanGetNexusCompletion interface {
-	GetNexusCompletion(ctx context.Context, requestID string) (nexus.OperationCompletion, error)
+	GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
 }
 
 type nexusInvocation struct {
 	nexus             *persistencespb.Callback_Nexus
-	completion        nexus.OperationCompletion
+	completion        nexusrpc.OperationCompletion
 	workflowID, runID string
 	attempt           int32
 }
@@ -54,7 +56,7 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 
 func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 	if failure, ok := result.(invocationResultRetry); ok {
-		return queues.NewDestinationDownError(failure.err.Error(), err)
+		return queueserrors.NewDestinationDownError(failure.err.Error(), err)
 	}
 	return err
 }
@@ -75,9 +77,9 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		}
 	}
 
-	request, err := nexus.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
+	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
-		return invocationResultFail{queues.NewUnprocessableTaskError(
+		return invocationResultFail{queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
 		)}
 	}
@@ -88,7 +90,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		request.Header.Set(k, v)
 	}
 
-	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
+	caller := e.HTTPCallerProvider(queuescommon.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
 		Destination: task.Destination(),
 	})

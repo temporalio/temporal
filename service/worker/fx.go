@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -25,7 +26,6 @@ import (
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -39,7 +39,6 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	scheduler.Module,
 	batcher.Module,
-	deployment.Module, // [cleanup-wv-pre-release]
 	workerdeployment.Module,
 	dlq.Module,
 	fx.Provide(
@@ -142,6 +141,7 @@ func VisibilityManagerProvider(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -151,6 +151,7 @@ func VisibilityManagerProvider(
 		saProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -160,6 +161,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // worker visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
+		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 	)

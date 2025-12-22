@@ -50,7 +50,7 @@ func Invoke(
 	}
 
 	if len(request.Request.Execution.RunId) == 0 {
-		request.Request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentRunID(
+		request.Request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentWorkflowRunID(
 			ctx,
 			request.NamespaceId,
 			request.Request.Execution.WorkflowId,
@@ -95,6 +95,16 @@ func Invoke(
 				},
 			}, nil
 		}
+	}
+	// If workflow is paused, return query rejected with PAUSED status.
+	if mutableStateStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		return &historyservice.QueryWorkflowResponse{
+			Response: &workflowservice.QueryWorkflowResponse{
+				QueryRejected: &querypb.QueryRejected{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+				},
+			},
+		}, nil
 	}
 
 	mutableState := workflowLease.GetMutableState()
@@ -327,6 +337,7 @@ func queryDirectlyThroughMatching(
 		msResp.GetPreviousStartedEventId() != common.EmptyEventID,
 		workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo()),
 		workflow.GetEffectiveDeployment(msResp.GetVersioningInfo()),
+		msResp.GetVersioningInfo().GetRevisionNumber(),
 	)
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&

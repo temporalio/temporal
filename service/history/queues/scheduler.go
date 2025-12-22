@@ -3,6 +3,7 @@
 package queues
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -198,6 +199,7 @@ func NewRateLimitedScheduler(
 	namespaceRegistry namespace.Registry,
 	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
+	chasmRegistry *chasm.Registry,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) Scheduler {
@@ -224,7 +226,10 @@ func NewRateLimitedScheduler(
 		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
-		return append(estimateTaskMetricTag(e.GetTask(), namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
+		return append(
+			estimateTaskMetricTags(e.GetTask(), namespaceRegistry, currentClusterName, chasmRegistry, GetTaskTypeTagValue),
+			metrics.TaskPriorityTag(e.GetPriority().String()),
+		)
 	}
 
 	rateLimitedScheduler := tasks.NewRateLimitedScheduler[Executable](
