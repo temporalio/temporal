@@ -25,8 +25,8 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 > Note: it is possible to run Temporal server without a `docker`. If for some reason (for example, performance on macOS)
 > you want to run dependencies on the host OS, please follow the [doc](./docs/development/run-dependencies-host.md).
 
-- Runtime dependencies are optional support services that can be helpful during development and testing, providing
-databases, UI, and metrics services via `docker compose`. By default, the server utilizes SQLite as an in-memory 
+- Runtime dependencies are optional support services that can be helpful during development and testing, providing: 1) UI, 2) 
+databases, and 3) metrics services via `docker compose`. By default, the server utilizes SQLite as an in-memory 
 database, so the runtime dependencies are optional. To start dependencies, open new terminal window and run:
 
 ```bash
@@ -158,13 +158,13 @@ make install-schema-mysql
 make start-mysql
 ```
 
-Now you can create default namespace with Temporal CLI:
+Now you can create a namespace with the Temporal CLI (While you can select any name for a namespace, we reccomend using `default` while learning, because a number of samples assume there is a namespace named `default`):
 
 ```bash
-temporal operator namespace create default
+temporal operator namespace create -n default
 ```
 
-and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8080`.
+and run samples from the samples repos ([Go](https://github.com/temporalio/samples-go) | [Java](https://github.com/temporalio/samples-java) | [TypeScript](https://github.com/temporalio/samples-typescript) | [.NET](https://github.com/temporalio/samples-dotnet) | [Python](https://github.com/temporalio/samples-python) | [Ruby](https://github.com/temporalio/samples-ruby)). If you are new to Temporal, helloworld ([Go](https://github.com/temporalio/samples-go/tree/main/helloworld) | [Java](https://github.com/temporalio/samples-java/tree/main/core/src/main/java/io/temporal/samples/hello) | [TypeScript](https://github.com/temporalio/samples-typescript/tree/main/hello-world) | [.NET](https://github.com/temporalio/sdk-dotnet?tab=readme-ov-file#implementing-a-workflow-and-activity) | [Python](https://github.com/temporalio/samples-python/tree/main/hello) | [Ruby](https://github.com/temporalio/sdk-ruby?tab=readme-ov-file#implementing-a-workflow-and-activity)) is a very good sample to start with.  Also, if you have started the runtime dependencies, you can access the web UI at `localhost:8080` which is a good way to visualize work done by the server and deepen your knowledge of Temporal.
 
 When you are done, press `Ctrl+C` to stop the server. 
 
