@@ -1035,7 +1035,7 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 
 	// validating the metadata
 	entries := resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
-	s.Equal(2, len(entries))
+	s.Len(entries, 2)
 	s.Equal(testRandomMetadataValue, entries["key1"].Data)
 	s.Equal(testRandomMetadataValue, entries["key2"].Data)
 
@@ -1047,6 +1047,19 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 	s.NoError(err)
 	entries = resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
 	s.Equal(0, len(entries))
+
+	// update metadata for the second time
+	_, err = s.updateMetadata(tv1, metadata, nil)
+	s.NoError(err)
+
+	resp, err = s.describeVersion(tv1)
+	s.NoError(err)
+
+	// validating the metadata
+	entries = resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
+	s.Len(entries, 2)
+	s.Equal(testRandomMetadataValue, entries["key1"].Data)
+	s.Equal(testRandomMetadataValue, entries["key2"].Data)
 }
 
 func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(

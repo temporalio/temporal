@@ -228,9 +228,13 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 }
 
 func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
-	if d.VersionState.Metadata == nil && args.UpsertEntries != nil {
-		d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
-		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
+	if args.UpsertEntries != nil {
+		if d.VersionState.Metadata == nil {
+			d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
+		}
+		if d.VersionState.Metadata.Entries == nil {
+			d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
+		}
 	}
 
 	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
@@ -245,7 +249,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}
 
 	for _, key := range args.RemoveEntries {
-		delete(d.VersionState.Metadata.Entries, key)
+		delete(d.VersionState.Metadata.GetEntries(), key) // if m is nil, delete is a no-op
 	}
 
 	// although the handler might have not changed the metadata at all, still
