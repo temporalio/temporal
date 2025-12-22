@@ -202,6 +202,72 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 	}
 }
 
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	sharedTaskQueue := s.tv.TaskQueue().Name
+
+	// Create 5 workers with predictable keys for pagination testing
+	workerKeys := make([]string, 5)
+	heartbeats := make([]*workerpb.WorkerHeartbeat, 5)
+	for i := 0; i < 5; i++ {
+		workerKeys[i] = fmt.Sprintf("%s_worker_%02d", s.tv.WorkerIdentity(), i)
+		heartbeats[i] = &workerpb.WorkerHeartbeat{
+			WorkerInstanceKey:   workerKeys[i],
+			TaskQueue:           sharedTaskQueue,
+			TotalStickyCacheHit: int32(i),
+		}
+	}
+
+	// Record all worker heartbeats
+	hbResp, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace:       s.Namespace().String(),
+		WorkerHeartbeat: heartbeats,
+	})
+	s.NoError(err)
+	s.NotNil(hbResp)
+
+	query := fmt.Sprintf("TaskQueue='%s'", sharedTaskQueue)
+
+	// Page 1: Request first 2 workers
+	resp1, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace: s.Namespace().String(),
+		Query:     query,
+		PageSize:  2,
+	})
+	s.NoError(err)
+	s.Len(resp1.GetWorkersInfo(), 2)
+	s.NotEmpty(resp1.GetNextPageToken(), "should have next page token")
+	s.Equal(workerKeys[0], resp1.GetWorkersInfo()[0].GetWorkerHeartbeat().GetWorkerInstanceKey())
+	s.Equal(workerKeys[1], resp1.GetWorkersInfo()[1].GetWorkerHeartbeat().GetWorkerInstanceKey())
+
+	// Page 2: Request next 2 workers using token from page 1
+	resp2, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace:     s.Namespace().String(),
+		Query:         query,
+		PageSize:      2,
+		NextPageToken: resp1.GetNextPageToken(),
+	})
+	s.NoError(err)
+	s.Len(resp2.GetWorkersInfo(), 2)
+	s.NotEmpty(resp2.GetNextPageToken(), "should have next page token")
+	s.Equal(workerKeys[2], resp2.GetWorkersInfo()[0].GetWorkerHeartbeat().GetWorkerInstanceKey())
+	s.Equal(workerKeys[3], resp2.GetWorkersInfo()[1].GetWorkerHeartbeat().GetWorkerInstanceKey())
+
+	// Page 3: Request remaining workers using token from page 2
+	resp3, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace:     s.Namespace().String(),
+		Query:         query,
+		PageSize:      2,
+		NextPageToken: resp2.GetNextPageToken(),
+	})
+	s.NoError(err)
+	s.Len(resp3.GetWorkersInfo(), 1, "last page should have 1 worker")
+	s.Empty(resp3.GetNextPageToken(), "should not have next page token on last page")
+	s.Equal(workerKeys[4], resp3.GetWorkersInfo()[0].GetWorkerHeartbeat().GetWorkerInstanceKey())
+}
+
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_SendHeartbeatViaPollNexusTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

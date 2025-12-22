@@ -47,7 +47,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 
 	forkBranch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.ForkBranchToken)
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
 	newAncestors := make([]*persistencespb.HistoryBranchRange, 0, len(forkBranch.Ancestors)+1)
@@ -134,7 +134,7 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
-		return err
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
 	// We need to delete the target branch and its ancestors if they are not referenced by any other branches.
@@ -326,7 +326,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 ) (*InternalAppendHistoryNodesRequest, error) {
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
 	if len(request.Events) == 0 {
@@ -415,7 +415,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 ) (*InternalAppendHistoryNodesRequest, error) {
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
 	if len(request.History.Data) == 0 {
@@ -736,7 +736,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(branchToken)
 	if err != nil {
-		return nil, nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 	branchID := branch.BranchId
 	branchAncestors := branch.Ancestors
@@ -827,7 +827,7 @@ func (m *executionManagerImpl) readRawHistoryBranchReverseAndFilter(
 
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(branchToken)
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, 0, serviceerror.NewInvalidArgumentf("unable to parse branch token: %v", err)
 	}
 	treeID := branch.TreeId
 	branchID := branch.BranchId

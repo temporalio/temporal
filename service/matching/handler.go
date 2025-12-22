@@ -568,19 +568,24 @@ func (h *Handler) ListWorkers(
 	_ context.Context, request *matchingservice.ListWorkersRequest,
 ) (*matchingservice.ListWorkersResponse, error) {
 	nsID := namespace.ID(request.GetNamespaceId())
-	workersHeartbeats, err := h.workersRegistry.ListWorkers(
-		nsID, request.GetListRequest().GetQuery(), request.GetListRequest().GetNextPageToken())
+	listRequest := request.GetListRequest()
+	resp, err := h.workersRegistry.ListWorkers(nsID, workers.ListWorkersParams{
+		Query:         listRequest.GetQuery(),
+		PageSize:      int(listRequest.GetPageSize()),
+		NextPageToken: listRequest.GetNextPageToken(),
+	})
 	if err != nil {
 		return nil, err
 	}
 	var workersInfo []*workerpb.WorkerInfo
-	for _, heartbeat := range workersHeartbeats {
+	for _, heartbeat := range resp.Workers {
 		workersInfo = append(workersInfo, &workerpb.WorkerInfo{
 			WorkerHeartbeat: heartbeat,
 		})
 	}
 	return &matchingservice.ListWorkersResponse{
-		WorkersInfo: workersInfo,
+		WorkersInfo:   workersInfo,
+		NextPageToken: resp.NextPageToken,
 	}, nil
 }
 
