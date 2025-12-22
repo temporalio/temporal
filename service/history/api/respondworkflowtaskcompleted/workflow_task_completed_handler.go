@@ -497,10 +497,17 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
 		(!versioningUsed || attr.UseWorkflowBuildId)
 
+	// if the workflow is paused, we bypass activity task generation and also prevent eager activity execution.
+	bypassActivityTaskGeneration := eagerStartActivity
+	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		bypassActivityTaskGeneration = true
+		eagerStartActivity = false
+	}
+
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
 		attr,
-		eagerStartActivity,
+		bypassActivityTaskGeneration,
 	)
 	if err != nil {
 		return nil, nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
@@ -573,6 +580,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		shardClock,
 		ai.Version,
 		ai.StartVersion,
+		nil,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -873,6 +881,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
+				executionInfo.WorkflowId,
 				targetNamespaceID,
 				handler.initiatedChildExecutionsInBatch,
 				attr,
@@ -1157,6 +1166,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateSignalExternalWorkflowExecutionAttributes(
 				namespaceID,
+				executionInfo.WorkflowId,
 				targetNamespaceID,
 				attr,
 			)

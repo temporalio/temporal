@@ -819,7 +819,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.True(toProcess)
@@ -846,7 +846,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.False(toProcess)
@@ -875,7 +875,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.False(toProcess)
@@ -885,7 +885,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 	namespaceID := uuid.NewString()
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, errors.New("OwO")).AnyTimes()
 
-	_, _, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	_, _, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.Error(err)
 }
 
@@ -916,7 +916,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntry, nil)
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.True(toProcess)
@@ -991,7 +991,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntryNew, nil)
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.True(toProcess)
@@ -1049,7 +1049,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntryOld, nil)
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.Empty(name)
 	s.Error(err)
 	s.False(toProcess)
@@ -1062,7 +1062,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		nil, errors.New("some error"))
 
-	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.Nil(err)
 	s.False(toProcess)
 }

@@ -84,7 +84,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
-	), e.NamespaceID)
+	), e.NamespaceID, e.WorkflowID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
@@ -268,7 +268,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
