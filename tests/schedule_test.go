@@ -707,8 +707,22 @@ func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
 	_, err := s.FrontendClient().CreateSchedule(s.newContext(), req)
 	s.NoError(err)
 
+	// Pause so that `FutureActionTimes` doesn't change between calls.
+	_, err = s.FrontendClient().PatchSchedule(s.newContext(), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			Pause: "halt",
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
 	// Sanity test, list with V1 handler.
-	v1Entry := s.getScheduleEntryFomVisibility(sid, nil)
+	v1Entry := s.getScheduleEntryFomVisibility(sid, func(sle *schedulepb.ScheduleListEntry) bool {
+		return sle.GetInfo().Paused
+	})
 	s.NotNil(v1Entry.GetInfo())
 
 	// Flip on CHASM experiment and make sure we can still list.
