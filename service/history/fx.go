@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
@@ -364,7 +365,8 @@ func ReplicationProgressCacheProvider(
 func VersionMembershipCacheProvider(
 	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
-) commoncache.Cache {
+	metricsHandler metrics.Handler,
+) worker_versioning.VersionMembershipCache {
 	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
 		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
 	})
@@ -374,5 +376,5 @@ func VersionMembershipCacheProvider(
 			return nil
 		},
 	})
-	return c
+	return newVersionMembershipCache(c, metricsHandler)
 }
