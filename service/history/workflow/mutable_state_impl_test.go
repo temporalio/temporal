@@ -2298,7 +2298,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
-	failoverVersion := s.namespaceEntry.FailoverVersion()
+	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
 
 	startTime := timestamppb.New(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	info := &persistencespb.WorkflowExecutionInfo{
@@ -2468,7 +2468,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		123,
 	)
 	s.NoError(err)
-	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 	s.NoError(err)
 
 	// 1st accepted update (without acceptedRequest)
@@ -2532,7 +2532,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
 		namespaceEntry.IsGlobalNamespace(),
-		namespaceEntry.FailoverVersion(),
+		namespaceEntry.FailoverVersion(tests.WorkflowID),
 	).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -2777,7 +2777,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 			namespaceEntry := tests.GlobalNamespaceEntry
 			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
 			s.NoError(err)
-			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
 
 			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = s.mutableState.GetNextEventID()
@@ -2785,7 +2785,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 
 			s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
 				namespaceEntry.IsGlobalNamespace(),
-				namespaceEntry.FailoverVersion(),
+				namespaceEntry.FailoverVersion(tests.WorkflowID),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -3316,12 +3316,12 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			var err error
 			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
 			s.NoError(err)
-			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
 
 			s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
 				namespaceEntry.IsGlobalNamespace(),
-				namespaceEntry.FailoverVersion(),
+				namespaceEntry.FailoverVersion(tests.WorkflowID),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 			var expectedTransitionHistory []*persistencespb.VersionedTransition
@@ -3332,7 +3332,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			}
 
 			if tc.versionedTransitionUpdated {
-				expectedTransitionHistory = UpdatedTransitionHistory(expectedTransitionHistory, namespaceEntry.FailoverVersion())
+				expectedTransitionHistory = UpdatedTransitionHistory(expectedTransitionHistory, namespaceEntry.FailoverVersion(tests.WorkflowID))
 			}
 
 			execInfo, err := tc.txFunc(s.mutableState)
@@ -3661,12 +3661,12 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 			var err error
 			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
 			s.NoError(err)
-			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
 
 			s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
 				namespaceEntry.IsGlobalNamespace(),
-				namespaceEntry.FailoverVersion(),
+				namespaceEntry.FailoverVersion(tests.WorkflowID),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -3817,13 +3817,13 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			var err error
 			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
 			s.NoError(err)
-			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
+			err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
 			s.NoError(err)
 			s.mutableState.transitionHistoryEnabled = false
 
 			s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
 				namespaceEntry.IsGlobalNamespace(),
-				namespaceEntry.FailoverVersion(),
+				namespaceEntry.FailoverVersion(tests.WorkflowID),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -4055,7 +4055,7 @@ func (s *mutableStateSuite) TestGetCloseVersion() {
 
 	namespaceEntry, err := s.mockShard.GetNamespaceRegistry().GetNamespaceByID(tests.NamespaceID)
 	s.NoError(err)
-	expectedVersion := namespaceEntry.FailoverVersion()
+	expectedVersion := namespaceEntry.FailoverVersion(tests.WorkflowID)
 
 	_, err = s.mutableState.AddCompletedWorkflowEvent(
 		5,
@@ -4451,7 +4451,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 
 func (s *mutableStateSuite) setDisablingTransitionHistory(ms *MutableStateImpl) {
 	ms.versionedTransitionInDB = &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 		TransitionCount:          1025,
 	}
 	ms.executionInfo.TransitionHistory = nil
@@ -4536,7 +4536,7 @@ func (s *mutableStateSuite) TestVersionedTransitionInDB() {
 
 	s.Nil(ms.versionedTransitionInDB)
 
-	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(ms.executionInfo.TransitionHistory, s.namespaceEntry.FailoverVersion())
+	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(ms.executionInfo.TransitionHistory, s.namespaceEntry.FailoverVersion(tests.WorkflowID))
 	s.NoError(ms.cleanupTransaction())
 	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
 }
@@ -4733,7 +4733,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanL
 	mutableState.executionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{
 		{
 			VersionedTransition: &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+				NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 				TransitionCount:          1,
 			},
 		},
@@ -4746,7 +4746,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanL
 	for i := 0; i < s.mockConfig.MutableStateTombstoneCountLimit(); i++ {
 		signalMap[int64(76+i)] = &persistencespb.SignalInfo{
 
-			Version:               s.namespaceEntry.FailoverVersion(),
+			Version:               s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 			InitiatedEventId:      int64(76 + i),
 			InitiatedEventBatchId: 17,
 			RequestId:             uuid.NewString(),
@@ -4784,7 +4784,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 	mutableState.executionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{
 		{
 			VersionedTransition: &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+				NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 				TransitionCount:          1,
 			},
 		},
