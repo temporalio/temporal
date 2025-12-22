@@ -272,8 +272,9 @@ func newAdminChasmCommands(clientFactory ClientFactory, prompterFactory Prompter
 			Usage:   "Describe CHASM tree from database mutable state",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  FlagBusinessID,
-					Usage: "The business ID of the CHASM tree",
+					Name:    FlagBusinessID,
+					Aliases: FlagBusinessIDAlias,
+					Usage:   "The business ID of the CHASM tree",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,

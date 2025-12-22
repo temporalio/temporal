@@ -13,6 +13,7 @@ var (
 	FlagRunID                      = "run-id"
 	FlagRunIDAlias                 = []string{"rid"}
 	FlagBusinessID                 = "business-id"
+	FlagBusinessIDAlias            = []string{"bid"}
 	FlagArchetype                  = "archetype"
 	FlagNumberOfShards             = "number-of-shards"
 	FlagMinEventID                 = "min-event-id"
