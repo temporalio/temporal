@@ -641,10 +641,10 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 	}
 
 	var closeTime *timestamppb.Timestamp
-	var executionDuration = durationpb.New(0)
-	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning && attempt.GetCompleteTime() != nil {
-		closeTime = attempt.GetCompleteTime()
-		executionDuration = durationpb.New(closeTime.AsTime().Sub(a.GetScheduleTime().AsTime()))
+	var executionDuration *durationpb.Duration
+	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
+		executionDuration = durationpb.New(ctx.ExecutionCloseTime().Sub(a.GetScheduleTime().AsTime()))
+		closeTime = timestamppb.New(ctx.ExecutionCloseTime())
 	}
 
 	var expirationTime *timestamppb.Timestamp
