@@ -23,6 +23,10 @@ type Context interface {
 
 	structuredRef(Component) (ComponentRef, error)
 	getContext() context.Context
+
+	// CloseTime returns the time when the root component was closed. A component is closed when it reaches a terminal
+	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
+	CloseTime() time.Time
 }
 
 type MutableContext interface {
@@ -109,6 +113,14 @@ func (c *immutableCtx) ExecutionKey() ExecutionKey {
 
 func (c *immutableCtx) getContext() context.Context {
 	return c.ctx
+}
+
+func (c *immutableCtx) CloseTime() time.Time {
+	closeTime := c.root.backend.GetExecutionInfo().GetCloseTime()
+	if closeTime == nil {
+		return time.Time{}
+	}
+	return closeTime.AsTime()
 }
 
 // NewMutableContext creates a new MutableContext from an existing Context and root Node.
