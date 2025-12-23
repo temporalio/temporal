@@ -694,8 +694,8 @@ func (e *ChasmEngine) getShardContext(
 ) (historyi.ShardContext, error) {
 	return e.shardController.GetShardByID(
 		common.WorkflowIDToHistoryShard(
-			ref.ExecutionKey.NamespaceID,
-			ref.ExecutionKey.BusinessID,
+			ref.NamespaceID,
+			ref.BusinessID,
 			e.config.NumberOfShards,
 		),
 	)
