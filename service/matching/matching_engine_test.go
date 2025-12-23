@@ -4480,7 +4480,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_CleanupOldDeletedVersio
 	deploymentName := "foo"
 
 	// First, insert versions with recent update times
-	recentTime := timestamppb.New(time.Now().Add(-29 * 24 * time.Hour)) // 29 days old (should remain)
+	recentTime := timestamppb.New(time.Now().Add(-6 * 24 * time.Hour)) // 6 days old (should remain)
 
 	versionsData := map[string]*deploymentspb.WorkerDeploymentVersionData{
 		"to-be-old-build": {
@@ -4524,8 +4524,8 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_CleanupOldDeletedVersio
 	s.Contains(versions, "recent-build")
 	s.Contains(versions, "active-build")
 
-	// Now update "to-be-old-build" to have an old timestamp (31 days)
-	oldTime := timestamppb.New(time.Now().Add(-31 * 24 * time.Hour))
+	// Now update "to-be-old-build" to have an old timestamp (8 days)
+	oldTime := timestamppb.New(time.Now().Add(-8 * 24 * time.Hour))
 	_, err = s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
 		NamespaceId:    namespaceID,
 		TaskQueue:      tq,

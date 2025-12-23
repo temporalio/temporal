@@ -221,6 +221,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	requestID string,
 ) (string, bool, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {

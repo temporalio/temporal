@@ -1688,8 +1688,12 @@ type RecordActivityTaskStartedRequest struct {
 	// Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
 	// that may arise due to stale routing configs in task queue partitions.
 	TaskDispatchRevisionNumber int64 `protobuf:"varint,13,opt,name=task_dispatch_revision_number,json=taskDispatchRevisionNumber,proto3" json:"task_dispatch_revision_number,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Reference to the Chasm component for activity execution (if applicable). For standalone activities, all necessary
+	// start information is carried within this component, obviating the need to use the fields that apply to embedded
+	// activities with the exception of version_directive.
+	ComponentRef  []byte `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskStartedRequest) Reset() {
@@ -1797,6 +1801,13 @@ func (x *RecordActivityTaskStartedRequest) GetTaskDispatchRevisionNumber() int64
 		return x.TaskDispatchRevisionNumber
 	}
 	return 0
+}
+
+func (x *RecordActivityTaskStartedRequest) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
 }
 
 type RecordActivityTaskStartedResponse struct {
@@ -10293,7 +10304,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\n" +
-	"\x10\v\"\xc6\x06\n" +
+	"\x10\v\"\xcd\x06\n" +
 	" RecordActivityTaskStartedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12X\n" +
 	"\x12workflow_execution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\x12,\n" +
@@ -10307,7 +10318,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x14scheduled_deployment\x18\n" +
 	" \x01(\v2&.temporal.api.deployment.v1.DeploymentR\x13scheduledDeployment\x12c\n" +
 	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12A\n" +
-	"\x1dtask_dispatch_revision_number\x18\r \x01(\x03R\x1ataskDispatchRevisionNumber:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xfc\x05\n" +
+	"\x1dtask_dispatch_revision_number\x18\r \x01(\x03R\x1ataskDispatchRevisionNumber\x12#\n" +
+	"\rcomponent_ref\x18\x0e \x01(\fR\fcomponentRef:\x06\x92\xc4\x03\x02\b\x01J\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xfc\x05\n" +
 	"!RecordActivityTaskStartedResponse\x12N\n" +
 	"\x0fscheduled_event\x18\x01 \x01(\v2%.temporal.api.history.v1.HistoryEventR\x0escheduledEvent\x12=\n" +
 	"\fstarted_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12\x18\n" +

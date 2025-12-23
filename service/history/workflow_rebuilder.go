@@ -190,6 +190,7 @@ func (r *workflowRebuilderImpl) overwriteToDB(
 	mutableState historyi.MutableState,
 ) error {
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {

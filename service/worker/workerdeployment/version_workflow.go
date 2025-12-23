@@ -252,9 +252,13 @@ func (d *VersionWorkflowRunner) validateUpdateVersionMetadata(args *deploymentsp
 }
 
 func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
-	if d.VersionState.Metadata == nil && args.UpsertEntries != nil {
-		d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
-		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
+	if args.UpsertEntries != nil {
+		if d.VersionState.Metadata == nil {
+			d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
+		}
+		if d.VersionState.Metadata.Entries == nil {
+			d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
+		}
 	}
 
 	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
@@ -269,7 +273,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}
 
 	for _, key := range args.RemoveEntries {
-		delete(d.VersionState.Metadata.Entries, key)
+		delete(d.VersionState.Metadata.GetEntries(), key) // if m is nil, delete is a no-op
 	}
 
 	// although the handler might have not changed the metadata at all, still
@@ -389,6 +393,7 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 }
 
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueues(ctx workflow.Context, activityCtx workflow.Context) error {
+
 	state := d.GetVersionState()
 
 	// sync version removal to task queues
@@ -653,6 +658,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		state.CurrentSinceTime = args.CurrentSinceTime
 		state.RampingSinceTime = args.RampingSinceTime
 		state.RampPercentage = args.RampPercentage
+
+		// Only needed for v0 workflow version. v1 and v2 are handled by updateStateFromRoutingConfig.
+		if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT &&
+			(state.LastCurrentTime == nil || state.LastCurrentTime.AsTime().Before(args.RoutingUpdateTime.AsTime())) {
+			// Last time this version was set to current
+			state.LastCurrentTime = args.RoutingUpdateTime
+		}
 	}
 
 	// stopped accepting new workflows --> start drainage tracking
@@ -703,6 +715,7 @@ func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
 		switch newStatus {
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT:
 			state.CurrentSinceTime = rg.GetCurrentVersionChangedTime()
+			state.LastCurrentTime = rg.GetCurrentVersionChangedTime()
 			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING:
 			state.RampingSinceTime = rg.GetRampingVersionChangedTime()
@@ -712,7 +725,10 @@ func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING:
 			// Version just became draining. So we need to update RoutingUpdateTime which is the max of the following:
 			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
-			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RampingSinceTime.AsTime()) {
+			if rg.GetRampingVersionChangedTime().AsTime().After(state.RoutingUpdateTime.AsTime()) {
+				state.RoutingUpdateTime = rg.GetRampingVersionChangedTime()
+			}
+			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RoutingUpdateTime.AsTime()) {
 				state.RoutingUpdateTime = rg.GetRampingVersionPercentageChangedTime()
 			}
 		default: // Shouldn't happen
@@ -761,6 +777,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		CurrentSinceTime:     s.CurrentSinceTime,
 		RampingSinceTime:     s.RampingSinceTime,
 		FirstActivationTime:  s.FirstActivationTime,
+		LastCurrentTime:      s.LastCurrentTime,
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 	}
@@ -1003,6 +1020,8 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 // syncTaskQueuesAsync must be called within the lock. It first increments the version revision number and then
 // starts async propagation of version data (and routing info if given) to all task queues.
 func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routingConfig *deploymentpb.RoutingConfig, versionDataChanged bool) {
+	startTime := workflow.Now(ctx)
+
 	withRevisionNumber := d.hasMinVersion(VersionDataRevisionNumber)
 	if withRevisionNumber && versionDataChanged {
 		d.GetVersionState().RevisionNumber++
@@ -1031,6 +1050,7 @@ func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routin
 			d.signalPropagationComplete(gCtx, routingConfig.GetRevisionNumber())
 		}
 
+		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
 		// Decrement counter when propagation completes
 		d.asyncPropagationsInProgress--
 	})
@@ -1186,6 +1206,8 @@ func (d *VersionWorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion)
 // later because it's not possible normally and user has to pass IgnoreMissingTaskQueues or AllowNoPollers for it to
 // happen, or the task queue needs to be a task queue that is added in this version.
 func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) {
+	startTime := workflow.Now(ctx)
+
 	versionData := &deploymentspb.WorkerDeploymentVersionData{
 		Status:         d.VersionState.Status,
 		RevisionNumber: d.GetVersionState().GetRevisionNumber(),
@@ -1205,6 +1227,7 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Contex
 		// the task queue partition initiating the registration itself is responsible to block until it sees the version in user data.
 		d.executePropagationBatch(gCtx, batch, args.GetRoutingConfig(), versionData)
 
+		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
 		// Decrement counter when propagation completes
 		d.asyncPropagationsInProgress--
 	})
