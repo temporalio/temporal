@@ -1,3 +1,27 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package s3store
 
 import (
@@ -7,19 +31,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/s3store/mocks"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -27,14 +51,12 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
-	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type visibilityArchiverSuite struct {
 	*require.Assertions
 	suite.Suite
-	s3cli *mocks.MockS3API
+	s3cli *Mocks3Client
 
 	logger            log.Logger
 	metricsHandler    metrics.Handler
@@ -75,10 +97,10 @@ func (s *visibilityArchiverSuite) TestValidateURI() {
 		},
 	}
 
-	s.s3cli.EXPECT().HeadBucketWithContext(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx aws.Context, input *s3.HeadBucketInput, options ...request.Option) (*s3.HeadBucketOutput, error) {
+	s.s3cli.EXPECT().HeadBucket(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, input *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error) {
 			if *input.Bucket != s.testArchivalURI.Hostname() {
-				return nil, awserr.New("NotFound", "", nil)
+				return nil, &types.NoSuchBucket{}
 			}
 
 			return &s3.HeadBucketOutput{}, nil
@@ -121,7 +143,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.s3cli = mocks.NewMockS3API(s.controller)
+	s.s3cli = NewMocks3Client(s.controller)
 	setupFsEmulation(s.s3cli)
 	s.setupVisibilityDirectory()
 }
