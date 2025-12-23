@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
@@ -96,6 +97,7 @@ func (s *syncWorkflowStateSuite) SetupTest() {
 	s.eventBlobCache = persistence.NewEventsBlobCache(
 		1024*1024,
 		20*time.Second,
+		metrics.NoopMetricsHandler,
 		s.logger,
 	)
 	s.syncStateRetriever = NewSyncStateRetriever(s.mockShard, s.workflowCache, s.workflowConsistencyChecker, s.eventBlobCache, s.logger)
