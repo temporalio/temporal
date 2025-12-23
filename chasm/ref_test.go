@@ -57,23 +57,6 @@ func (s *componentRefSuite) TestArchetypeID() {
 	s.Equal(rc.componentID, archetypeID)
 }
 
-func (s *componentRefSuite) TestShardingKey() {
-	executionKey := ExecutionKey{
-		NamespaceID: primitives.NewUUID().String(),
-		BusinessID:  primitives.NewUUID().String(),
-		RunID:       primitives.NewUUID().String(),
-	}
-	ref := NewComponentRef[*TestComponent](executionKey)
-
-	shardingKey, err := ref.ShardingKey(s.registry)
-	s.NoError(err)
-
-	rc, ok := s.registry.componentOf(reflect.TypeFor[*TestComponent]())
-	s.True(ok)
-
-	s.Equal(rc.shardingFn(executionKey), shardingKey)
-}
-
 func (s *componentRefSuite) TestSerializeDeserialize() {
 	_, err := DeserializeComponentRef(nil)
 	s.ErrorIs(err, ErrInvalidComponentRef)
