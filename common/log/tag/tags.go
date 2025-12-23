@@ -106,7 +106,7 @@ func WorkflowHandlerName(handlerName string) ZapTag {
 }
 
 // WorkflowID returns tag for WorkflowID
-// TODO: Rename to WorkflowID.
+// TODO: Rename to BusinessID.
 func WorkflowID(workflowID string) ZapTag {
 	return NewStringTag(WorkflowIDKey, workflowID)
 }
