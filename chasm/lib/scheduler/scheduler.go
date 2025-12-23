@@ -156,8 +156,8 @@ func CreateScheduler(
 
 	// Update visibility with custom attributes.
 	visibility := sched.Visibility.Get(ctx)
-	visibility.SetSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
-	visibility.SetMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
+	visibility.UpsertCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	visibility.UpsertCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, &schedulerpb.CreateScheduleResponse{
 		FrontendResponse: &workflowservice.CreateScheduleResponse{
@@ -542,7 +542,7 @@ func (s *Scheduler) Describe(
 	}
 
 	visibility := s.Visibility.Get(ctx)
-	memo := visibility.GetMemo(ctx)
+	memo := visibility.CustomMemo(ctx)
 	delete(memo, visibilityMemoFieldInfo) // We don't need to return a redundant info block.
 
 	if s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
@@ -562,7 +562,7 @@ func (s *Scheduler) Describe(
 			Info:             common.CloneProto(s.Info),
 			ConflictToken:    s.generateConflictToken(),
 			Memo:             &commonpb.Memo{Fields: memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.GetSearchAttributes(ctx)},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: visibility.CustomSearchAttributes(ctx)},
 		},
 	}, nil
 }
@@ -629,7 +629,7 @@ func (s *Scheduler) Update(
 
 		// Preserve the old custom memo in the new Visibility component.
 		oldVisibility := s.Visibility.Get(ctx)
-		oldMemo := oldVisibility.GetMemo(ctx)
+		oldMemo := oldVisibility.CustomMemo(ctx)
 
 		visibility := chasm.NewVisibilityWithData(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields(), oldMemo)
 		s.Visibility = chasm.NewComponentField(ctx, visibility)

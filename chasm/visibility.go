@@ -131,6 +131,8 @@ type Visibility struct {
 
 	Data *persistencespb.ChasmVisibilityData
 
+	// Do NOT access those fields directly.
+	// Use the provided getters and setters instead.
 	SA   Field[*commonpb.SearchAttributes]
 	Memo Field[*commonpb.Memo]
 }
@@ -175,7 +177,7 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
 }
 
-func (v *Visibility) GetSearchAttributes(
+func (v *Visibility) CustomSearchAttributes(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
 	sa, _ := v.SA.TryGet(chasmContext)
@@ -183,12 +185,15 @@ func (v *Visibility) GetSearchAttributes(
 	return sa.GetIndexedFields()
 }
 
-func (v *Visibility) SetSearchAttributes(
+func (v *Visibility) UpsertCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 ) {
-	currentSA, ok := v.SA.TryGet(mutableContext)
+	if len(customSearchAttributes) == 0 {
+		return
+	}
 
+	currentSA, ok := v.SA.TryGet(mutableContext)
 	if !ok {
 		currentSA = &commonpb.SearchAttributes{}
 		v.SA = NewDataField(mutableContext, currentSA)
@@ -198,10 +203,36 @@ func (v *Visibility) SetSearchAttributes(
 		currentSA.GetIndexedFields(),
 		customSearchAttributes,
 	)
+	if len(currentSA.IndexedFields) == 0 {
+		v.SA = NewEmptyField[*commonpb.SearchAttributes]()
+	}
+
 	v.generateTask(mutableContext)
 }
 
-func (v *Visibility) GetMemo(
+func (v *Visibility) SetCustomSearchAttributes(
+	mutableContext MutableContext,
+	customSearchAttributes map[string]*commonpb.Payload,
+) {
+	if len(customSearchAttributes) == 0 {
+		_, ok := v.SA.TryGet(mutableContext)
+		if !ok {
+			// Already empty, no-op
+			return
+		}
+
+		v.SA = NewEmptyField[*commonpb.SearchAttributes]()
+	} else {
+		v.SA = NewDataField(
+			mutableContext,
+			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
+		)
+	}
+
+	v.generateTask(mutableContext)
+}
+
+func (v *Visibility) CustomMemo(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
 	memo, _ := v.Memo.TryGet(chasmContext)
@@ -209,12 +240,15 @@ func (v *Visibility) GetMemo(
 	return memo.GetFields()
 }
 
-func (v *Visibility) SetMemo(
+func (v *Visibility) UpsertCustomMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
 ) {
-	currentMemo, ok := v.Memo.TryGet(mutableContext)
+	if len(customMemo) == 0 {
+		return
+	}
 
+	currentMemo, ok := v.Memo.TryGet(mutableContext)
 	if !ok {
 		currentMemo = &commonpb.Memo{}
 		v.Memo = NewDataField(mutableContext, currentMemo)
@@ -224,6 +258,31 @@ func (v *Visibility) SetMemo(
 		currentMemo.GetFields(),
 		customMemo,
 	)
+	if len(currentMemo.Fields) == 0 {
+		v.Memo = NewEmptyField[*commonpb.Memo]()
+	}
+	v.generateTask(mutableContext)
+}
+
+func (v *Visibility) SetMemo(
+	mutableContext MutableContext,
+	customMemo map[string]*commonpb.Payload,
+) {
+	if len(customMemo) == 0 {
+		_, ok := v.Memo.TryGet(mutableContext)
+		if !ok {
+			// Already empty, no-op
+			return
+		}
+
+		v.Memo = NewEmptyField[*commonpb.Memo]()
+	} else {
+		v.Memo = NewDataField(
+			mutableContext,
+			&commonpb.Memo{Fields: customMemo},
+		)
+	}
+
 	v.generateTask(mutableContext)
 }
 
