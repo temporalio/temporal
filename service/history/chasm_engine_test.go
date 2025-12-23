@@ -630,7 +630,7 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 			s.True(ok)
 			s.Equal(expectedActivityID, tc.ActivityInfo.ActivityId)
 
-			closeTime := ctx.CloseTime()
+			closeTime := ctx.ExecutionCloseTime()
 			s.True(closeTime.IsZero(), "CloseTime should be zero when component is still running")
 			return nil
 		},
@@ -923,7 +923,7 @@ func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
 			component chasm.Component,
 		) error {
 			// Verify CloseTime returns non-zero time when component is completed
-			closeTime := ctx.CloseTime()
+			closeTime := ctx.ExecutionCloseTime()
 			s.False(closeTime.IsZero(), "CloseTime should be non-zero when component is completed")
 			s.Equal(expectedCloseTime.Unix(), closeTime.Unix(), "CloseTime should match the expected close time")
 			return nil

@@ -17,16 +17,14 @@ type Context interface {
 	Now(Component) time.Time
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
-
+	// ExecutionCloseTime returns the time when the execution was closed. An execution is closed when its root component reaches a terminal
+	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
+	ExecutionCloseTime() time.Time
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
 
 	structuredRef(Component) (ComponentRef, error)
 	getContext() context.Context
-
-	// CloseTime returns the time when the execution was closed. An execution is closed when its root component reaches a terminal
-	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
-	CloseTime() time.Time
 }
 
 type MutableContext interface {
@@ -115,7 +113,7 @@ func (c *immutableCtx) getContext() context.Context {
 	return c.ctx
 }
 
-func (c *immutableCtx) CloseTime() time.Time {
+func (c *immutableCtx) ExecutionCloseTime() time.Time {
 	closeTime := c.root.backend.GetExecutionInfo().GetCloseTime()
 	if closeTime == nil {
 		return time.Time{}
