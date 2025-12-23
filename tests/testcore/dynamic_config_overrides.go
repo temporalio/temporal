@@ -51,9 +51,9 @@ var (
 		// TODO (prathyush): remove this after setting it to true by default.
 		dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
 
-		dynamicconfig.RetentionTimerJitterDuration.Key():        time.Second,
-		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
-		dynamicconfig.EnableTransitionHistory.Key():             true,
+		dynamicconfig.RetentionTimerJitterDuration.Key(): time.Second,
+
+		dynamicconfig.EnableTransitionHistory.Key(): true,
 
 		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             ClientSuiteLimit,
 		dynamicconfig.NumPendingActivitiesLimitError.Key():                  ClientSuiteLimit,

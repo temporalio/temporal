@@ -121,7 +121,7 @@ func (s *taskExecutorSuite) TestFilterTask_Apply() {
 			}},
 			0,
 		), nil)
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.NoError(err)
 	s.True(ok)
 }
@@ -136,7 +136,7 @@ func (s *taskExecutorSuite) TestFilterTask_NotApply() {
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},
 			0,
 		), nil)
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.NoError(err)
 	s.False(ok)
 }
@@ -146,14 +146,14 @@ func (s *taskExecutorSuite) TestFilterTask_Error() {
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, fmt.Errorf("random error"))
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.Error(err)
 	s.False(ok)
 }
 
 func (s *taskExecutorSuite) TestFilterTask_EnforceApply() {
 	namespaceID := namespace.ID(uuid.NewString())
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, true)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", true)
 	s.NoError(err)
 	s.True(ok)
 }
@@ -163,7 +163,7 @@ func (s *taskExecutorSuite) TestFilterTask_NamespaceNotFound() {
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, &serviceerror.NamespaceNotFound{})
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
 	s.NoError(err)
 	s.False(ok)
 }

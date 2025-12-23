@@ -109,7 +109,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 ) error {
 
 	attr := task.GetSyncActivityTaskAttributes()
-	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
+	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.WorkflowId, forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -211,7 +211,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 ) error {
 
 	attr := task.GetHistoryTaskAttributes()
-	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
+	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.WorkflowId, forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -308,7 +308,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	executionInfo := attr.GetWorkflowState().GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 
-	doContinue, err := e.filterTask(namespaceID, forceApply)
+	doContinue, err := e.filterTask(namespaceID, executionInfo.GetWorkflowId(), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -361,6 +361,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 
 func (e *taskExecutorImpl) filterTask(
 	namespaceID namespace.ID,
+	workflowID string,
 	forceApply bool,
 ) (bool, error) {
 
@@ -379,7 +380,7 @@ func (e *taskExecutorImpl) filterTask(
 
 	shouldProcessTask := false
 FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames() {
+	for _, targetCluster := range namespaceEntry.ClusterNames(workflowID) {
 		if e.currentCluster == targetCluster {
 			shouldProcessTask = true
 			break FilterLoop

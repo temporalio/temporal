@@ -580,8 +580,17 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 			},
 			ArchetypeId:         syncStateErr.ArchetypeId,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories:    syncStateErr.VersionHistories,
-			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						// BranchToken is removed in the actual implementation
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
 		},
 	).Return(nil, consts.ErrTransitionHistoryDisabled).Times(1)
 
@@ -636,8 +645,17 @@ func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBuffer
 			},
 			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories:    syncStateErr.VersionHistories,
-			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						// BranchToken is removed in the actual implementation
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
 		},
 	).Return(nil, serviceerror.NewWorkflowNotReady("workflow not ready")).Times(1)
 
@@ -801,7 +819,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.True(toProcess)
@@ -828,7 +846,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.False(toProcess)
@@ -857,7 +875,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.False(toProcess)
@@ -867,7 +885,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 	namespaceID := uuid.NewString()
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, errors.New("OwO")).AnyTimes()
 
-	_, _, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	_, _, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.Error(err)
 }
 
@@ -898,7 +916,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntry, nil)
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.True(toProcess)
@@ -973,7 +991,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntryNew, nil)
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.True(toProcess)
@@ -1031,7 +1049,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntryOld, nil)
 
-	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.Empty(name)
 	s.Error(err)
 	s.False(toProcess)
@@ -1044,7 +1062,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		nil, errors.New("some error"))
 
-	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.Nil(err)
 	s.False(toProcess)
 }
@@ -1134,8 +1152,17 @@ func (s *executableTaskSuite) TestSyncState() {
 			},
 			ArchetypeId:         chasm.WorkflowArchetypeID,
 			VersionedTransition: syncStateErr.VersionedTransition,
-			VersionHistories:    syncStateErr.VersionHistories,
-			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						// BranchToken is removed in the actual implementation
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
 		},
 	).Return(&adminservice.SyncWorkflowStateResponse{
 		VersionedTransitionArtifact: versionedTransitionArtifact,
@@ -1153,4 +1180,73 @@ func (s *executableTaskSuite) TestSyncState() {
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
 	s.NoError(err)
 	s.True(doContinue)
+}
+
+func (s *executableTaskSuite) TestSyncState_NotFound() {
+	syncStateErr := &serviceerrors.SyncState{
+		NamespaceId: uuid.NewString(),
+		WorkflowId:  uuid.NewString(),
+		RunId:       uuid.NewString(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 102, Version: 1234},
+					},
+				},
+			},
+		},
+	}
+
+	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+	s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).AnyTimes()
+	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
+		gomock.Any(),
+		&adminservice.SyncWorkflowStateRequest{
+			NamespaceId: syncStateErr.NamespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: syncStateErr.WorkflowId,
+				RunId:      syncStateErr.RunId,
+			},
+			ArchetypeId:         chasm.WorkflowArchetypeID,
+			VersionedTransition: syncStateErr.VersionedTransition,
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						// BranchToken is removed in the actual implementation
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+		},
+	).Return(nil, serviceerror.NewNotFound("workflow not found")).Times(1)
+
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(syncStateErr.NamespaceId),
+		syncStateErr.WorkflowId,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
+	engine.EXPECT().DeleteWorkflowExecution(gomock.Any(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: syncStateErr.NamespaceId,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: syncStateErr.WorkflowId,
+			RunId:      syncStateErr.RunId,
+		},
+		ClosedWorkflowOnly: false,
+	}).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+
+	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
+	s.NoError(err)
+	s.False(doContinue)
 }
