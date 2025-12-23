@@ -3,6 +3,8 @@ package tests
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,9 +19,91 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
+// =============================================================================
+// Benchmark Configuration - Adjust these constants to change test parameters
+// =============================================================================
 const (
+	// Test timeout
 	benchmarkTestTimeout = 5 * time.Minute * debug.TimeoutMultiplier
+
+	// Worker configuration
+	numWorkers        = 1000              // Number of workers in each test
+	heartbeatInterval = 20 * time.Second  // How often each worker sends a heartbeat
+	testDuration      = 120 * time.Second // How long each test runs
+
+	// Activity configuration
+	numActivitiesPerWorker = 100 // Number of concurrent activities per worker
+
+	// Churn configuration
+	churnInterval = 10 * time.Second // How often to trigger worker restarts
 )
+
+// =============================================================================
+// Metrics collection
+// =============================================================================
+
+// benchMetrics collects latency and throughput metrics for benchmarks.
+type benchMetrics struct {
+	mu         sync.Mutex
+	latencies  []time.Duration
+	errors     atomic.Int64
+	heartbeats atomic.Int64
+}
+
+func (m *benchMetrics) recordLatency(d time.Duration) {
+	m.mu.Lock()
+	m.latencies = append(m.latencies, d)
+	m.mu.Unlock()
+	m.heartbeats.Add(1)
+}
+
+func (m *benchMetrics) recordError() {
+	m.errors.Add(1)
+}
+
+func (m *benchMetrics) percentile(p float64) time.Duration {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.latencies) == 0 {
+		return 0
+	}
+	sorted := make([]time.Duration, len(m.latencies))
+	copy(sorted, m.latencies)
+	slices.Sort(sorted)
+	idx := int(float64(len(sorted)-1) * p)
+	return sorted[idx]
+}
+
+func (m *benchMetrics) avg() time.Duration {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.latencies) == 0 {
+		return 0
+	}
+	var total time.Duration
+	for _, l := range m.latencies {
+		total += l
+	}
+	return total / time.Duration(len(m.latencies))
+}
+
+// =============================================================================
+// Churn test configuration
+// =============================================================================
+
+// churnConfig defines parameters for churn tests.
+type churnConfig struct {
+	NumWorkers        int
+	ChurnPercent      int           // Percentage of workers to restart each cycle
+	ChurnInterval     time.Duration // How often to trigger restarts
+	HeartbeatInterval time.Duration
+	TestDuration      time.Duration
+	NumActivities     int // Number of activities per worker
+}
+
+// =============================================================================
+// Test Suite
+// =============================================================================
 
 type CHASMWorkerBenchmarkSuite struct {
 	testcore.FunctionalTestBase
@@ -39,222 +123,188 @@ func (s *CHASMWorkerBenchmarkSuite) SetupSuite() {
 	)
 }
 
-// startWorker creates a new worker and sends heartbeats until deadline.
-// Returns true if context was cancelled (caller should exit).
-func (s *CHASMWorkerBenchmarkSuite) startWorker(
-	ctx context.Context,
-	identity string,
-	heartbeatInterval time.Duration,
-	deadline time.Time,
-	workersCreated *atomic.Int64,
-	heartbeatsSent *atomic.Int64,
-	errors *atomic.Int64,
-) bool {
-	workerID := fmt.Sprintf("%s-%s", identity, uuid.New().String())
-	workersCreated.Add(1)
+// createWorkerHeartbeat creates a WorkerHeartbeat with the given parameters.
+func (s *CHASMWorkerBenchmarkSuite) createWorkerHeartbeat(workerID, identity string, numActivities int) *workerpb.WorkerHeartbeat {
+	// Generate mock activity IDs
+	activityIDs := make([][]byte, numActivities)
+	for i := range activityIDs {
+		activityIDs[i] = []byte(fmt.Sprintf("activity-%d", i))
+	}
 
-	// Register worker
-	_, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
-		Namespace: s.Namespace().String(),
-		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
-			{
-				WorkerInstanceKey: workerID,
-				WorkerIdentity:    identity,
-			},
+	return &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: workerID,
+		WorkerIdentity:    identity,
+		ActivityTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+			CurrentUsedSlots:      int32(numActivities),
+			CurrentAvailableSlots: 200, // Assume max capacity
 		},
-	})
-	if err != nil {
-		errors.Add(1)
-		return ctx.Err() != nil
+		ActivityInfo: &workerpb.ActivityInfo{
+			RunningActivityIds: activityIDs,
+		},
 	}
-	heartbeatsSent.Add(1)
-
-	// Heartbeat until deadline
-	ticker := time.NewTicker(heartbeatInterval)
-	defer ticker.Stop()
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return true
-		case <-ticker.C:
-			_, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
-				Namespace: s.Namespace().String(),
-				WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
-					{
-						WorkerInstanceKey: workerID,
-						WorkerIdentity:    identity,
-					},
-				},
-			})
-			if err != nil {
-				errors.Add(1)
-			} else {
-				heartbeatsSent.Add(1)
-			}
-		}
-	}
-	return false
 }
 
-// TestSteadyState tests steady-state worker heartbeating without churn.
-func (s *CHASMWorkerBenchmarkSuite) TestSteadyState() {
+// runChurnTest runs a churn simulation with the given configuration.
+// It starts numWorkers workers, then every churnInterval restarts churnPercent% of them.
+func (s *CHASMWorkerBenchmarkSuite) runChurnTest(cfg churnConfig) (metrics *benchMetrics, workersCreated int64, duration time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), benchmarkTestTimeout)
 	defer cancel()
 
-	const (
-		numWorkers        = 100
-		heartbeatInterval = 20 * time.Second
-		testDuration      = 60 * time.Second
-	)
+	metrics = &benchMetrics{}
+	var created atomic.Int64
 
-	var (
-		workersCreated atomic.Int64
-		heartbeatsSent atomic.Int64
-		errors         atomic.Int64
-	)
-
-	var wg sync.WaitGroup
 	testStart := time.Now()
-	testDeadline := testStart.Add(testDuration)
+	testDeadline := testStart.Add(cfg.TestDuration)
 
-	// Start all workers (they run for the entire test duration)
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func(workerNum int) {
-			defer wg.Done()
-			identity := fmt.Sprintf("steady-worker-%d", workerNum)
-			s.startWorker(ctx, identity, heartbeatInterval, testDeadline, &workersCreated, &heartbeatsSent, &errors)
-		}(i)
+	// Each worker has a channel to receive restart signals
+	type workerSlot struct {
+		restartCh chan struct{}
+	}
+	slots := make([]*workerSlot, cfg.NumWorkers)
+	for i := range slots {
+		slots[i] = &workerSlot{restartCh: make(chan struct{}, 1)}
 	}
 
-	time.Sleep(testDuration)
-	cancel()
-	wg.Wait()
-
-	// Results
-	duration := time.Since(testStart)
-	s.T().Logf("Steady State Results:")
-	s.T().Logf("  Workers: %d", numWorkers)
-	s.T().Logf("  Duration: %v", duration)
-	s.T().Logf("  Heartbeats sent: %d (%.2f/sec)", heartbeatsSent.Load(), float64(heartbeatsSent.Load())/duration.Seconds())
-	s.T().Logf("  Errors: %d", errors.Load())
-
-	// Pause to allow manual inspection of database state
-	s.T().Logf("Pausing for 2 minutes for database inspection...")
-	time.Sleep(2 * time.Minute)
-
-	s.Zero(errors.Load(), "Should have no errors in steady state")
-}
-
-// TestWorkerChurn tests worker registration under churn (periodic restarts).
-func (s *CHASMWorkerBenchmarkSuite) TestWorkerChurn() {
-	ctx, cancel := context.WithTimeout(context.Background(), benchmarkTestTimeout)
-	defer cancel()
-
-	const (
-		numWorkerSlots    = 50
-		restartInterval   = 10 * time.Second
-		heartbeatInterval = 20 * time.Second
-		testDuration      = 120 * time.Second
-	)
-
-	var (
-		workersCreated atomic.Int64
-		heartbeatsSent atomic.Int64
-		errors         atomic.Int64
-	)
-
 	var wg sync.WaitGroup
-	testStart := time.Now()
-	testDeadline := testStart.Add(testDuration)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	// Each slot repeatedly starts workers that "crash" after restartInterval
-	for slot := 0; slot < numWorkerSlots; slot++ {
+	// Start all workers
+	for i := 0; i < cfg.NumWorkers; i++ {
 		wg.Add(1)
 		go func(slotNum int) {
 			defer wg.Done()
-			identity := fmt.Sprintf("churn-worker-slot-%d", slotNum)
+			slot := slots[slotNum]
+			identity := fmt.Sprintf("churn-worker-%d", slotNum)
 
-			for time.Now().Before(testDeadline) {
-				crashTime := time.Now().Add(restartInterval)
-				if s.startWorker(ctx, identity, heartbeatInterval, crashTime, &workersCreated, &heartbeatsSent, &errors) {
-					return // context cancelled
+			for {
+				created.Add(1)
+				workerID := fmt.Sprintf("%s-%s", identity, uuid.New().String())
+
+				// Heartbeat loop until restart signal or test ends
+				ticker := time.NewTicker(cfg.HeartbeatInterval)
+			heartbeatLoop:
+				for {
+					// Send heartbeat
+					start := time.Now()
+					_, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
+						Namespace:       s.Namespace().String(),
+						WorkerHeartbeat: []*workerpb.WorkerHeartbeat{s.createWorkerHeartbeat(workerID, identity, cfg.NumActivities)},
+					})
+					if err != nil {
+						// Ignore context canceled errors (expected during shutdown)
+						if ctx.Err() == nil {
+							metrics.recordError()
+							if metrics.errors.Load() <= 5 {
+								s.T().Logf("Heartbeat error: %v", err)
+							}
+						}
+					} else {
+						metrics.recordLatency(time.Since(start))
+					}
+
+					select {
+					case <-ctx.Done():
+						ticker.Stop()
+						return
+					case <-slot.restartCh:
+						ticker.Stop()
+						break heartbeatLoop // Restart with new worker
+					case <-ticker.C:
+						// Continue heartbeat loop
+					}
 				}
-				// Worker "crashed" - loop continues with new worker
-			}
-		}(slot)
-	}
 
-	time.Sleep(testDuration)
-	cancel()
-	wg.Wait()
-
-	// Results
-	duration := time.Since(testStart)
-	s.T().Logf("Worker Churn Results:")
-	s.T().Logf("  Worker slots: %d", numWorkerSlots)
-	s.T().Logf("  Restart interval: %v", restartInterval)
-	s.T().Logf("  Duration: %v", duration)
-	s.T().Logf("  Workers created: %d (%.2f/sec)", workersCreated.Load(), float64(workersCreated.Load())/duration.Seconds())
-	s.T().Logf("  Heartbeats sent: %d (%.2f/sec)", heartbeatsSent.Load(), float64(heartbeatsSent.Load())/duration.Seconds())
-	s.T().Logf("  Errors: %d", errors.Load())
-}
-
-// TestHighActivityChurn tests worker churn with high activity count simulation.
-func (s *CHASMWorkerBenchmarkSuite) TestHighActivityChurn() {
-	ctx, cancel := context.WithTimeout(context.Background(), benchmarkTestTimeout)
-	defer cancel()
-
-	const (
-		numWorkerSlots      = 100
-		restartInterval     = 10 * time.Second
-		heartbeatInterval   = 20 * time.Second
-		testDuration        = 120 * time.Second
-		activitiesPerWorker = 100 // For projection only
-	)
-
-	var (
-		workersCreated atomic.Int64
-		heartbeatsSent atomic.Int64
-		errors         atomic.Int64
-	)
-
-	var wg sync.WaitGroup
-	testStart := time.Now()
-	testDeadline := testStart.Add(testDuration)
-
-	for slot := 0; slot < numWorkerSlots; slot++ {
-		wg.Add(1)
-		go func(slotNum int) {
-			defer wg.Done()
-			identity := fmt.Sprintf("high-activity-worker-slot-%d", slotNum)
-
-			for time.Now().Before(testDeadline) {
-				crashTime := time.Now().Add(restartInterval)
-				if s.startWorker(ctx, identity, heartbeatInterval, crashTime, &workersCreated, &heartbeatsSent, &errors) {
+				if time.Now().After(testDeadline) {
 					return
 				}
 			}
-		}(slot)
+		}(i)
 	}
 
-	time.Sleep(testDuration)
+	// Churn coordinator: every churnInterval, restart churnPercent% of workers
+	go func() {
+		ticker := time.NewTicker(cfg.ChurnInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Select random workers to restart (without replacement)
+				numToRestart := cfg.NumWorkers * cfg.ChurnPercent / 100
+				indices := rng.Perm(cfg.NumWorkers)[:numToRestart]
+				for _, idx := range indices {
+					select {
+					case slots[idx].restartCh <- struct{}{}:
+					default: // Already pending restart
+					}
+				}
+			}
+		}
+	}()
+
+	time.Sleep(cfg.TestDuration)
 	cancel()
 	wg.Wait()
 
-	// Results
-	duration := time.Since(testStart)
-	createsPerSec := float64(workersCreated.Load()) / duration.Seconds()
+	return metrics, created.Load(), time.Since(testStart)
+}
 
-	s.T().Logf("High Activity Churn Results:")
-	s.T().Logf("  Worker slots: %d", numWorkerSlots)
-	s.T().Logf("  Activities per worker: %d", activitiesPerWorker)
-	s.T().Logf("  Restart interval: %v", restartInterval)
-	s.T().Logf("  Duration: %v", duration)
-	s.T().Logf("  Workers created: %d (%.2f/sec)", workersCreated.Load(), createsPerSec)
-	s.T().Logf("  Heartbeats sent: %d (%.2f/sec)", heartbeatsSent.Load(), float64(heartbeatsSent.Load())/duration.Seconds())
-	s.T().Logf("  Errors: %d", errors.Load())
-	s.T().Logf("  ---")
-	s.T().Logf("  Projected activity reschedules: %d (%.2f/sec)", workersCreated.Load()*activitiesPerWorker, createsPerSec*activitiesPerWorker)
+// logChurnResults logs the results of a churn test.
+func (s *CHASMWorkerBenchmarkSuite) logChurnResults(name string, cfg churnConfig, metrics *benchMetrics, workersCreated int64, duration time.Duration) {
+	s.T().Logf("%s (workers=%d, activities=%d, churn=%d%% every %v):", name, cfg.NumWorkers, cfg.NumActivities, cfg.ChurnPercent, cfg.ChurnInterval)
+	s.T().Logf("  Workers created: %.2f/sec", float64(workersCreated)/duration.Seconds())
+	s.T().Logf("  Throughput: %.2f heartbeats/sec", float64(metrics.heartbeats.Load())/duration.Seconds())
+	s.T().Logf("  Latency: avg=%v p50=%v p95=%v p99=%v", metrics.avg(), metrics.percentile(0.50), metrics.percentile(0.95), metrics.percentile(0.99))
+	s.T().Logf("  Errors: %d", metrics.errors.Load())
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+// TestSteadyState tests steady-state worker heartbeating without churn (0% churn).
+func (s *CHASMWorkerBenchmarkSuite) TestSteadyState() {
+	cfg := churnConfig{
+		NumWorkers:        numWorkers,
+		ChurnPercent:      0, // No churn - steady state
+		ChurnInterval:     churnInterval,
+		HeartbeatInterval: heartbeatInterval,
+		TestDuration:      testDuration,
+		NumActivities:     numActivitiesPerWorker,
+	}
+	metrics, workersCreated, duration := s.runChurnTest(cfg)
+	s.logChurnResults("Steady State", cfg, metrics, workersCreated, duration)
+
+	s.Equal(int64(numWorkers), workersCreated, "Steady state should create workers only once")
+	s.Zero(metrics.errors.Load(), "Should have no errors in steady state")
+}
+
+// TestChurn20Percent tests 20% of workers restarting every churn interval (typical rollout).
+func (s *CHASMWorkerBenchmarkSuite) TestChurn20Percent() {
+	cfg := churnConfig{
+		NumWorkers:        numWorkers,
+		ChurnPercent:      20,
+		ChurnInterval:     churnInterval,
+		HeartbeatInterval: heartbeatInterval,
+		TestDuration:      testDuration,
+		NumActivities:     numActivitiesPerWorker,
+	}
+	metrics, workersCreated, duration := s.runChurnTest(cfg)
+	s.logChurnResults("Churn 20%", cfg, metrics, workersCreated, duration)
+}
+
+// TestChurn50Percent tests 50% of workers restarting every churn interval (aggressive rollout).
+func (s *CHASMWorkerBenchmarkSuite) TestChurn50Percent() {
+	cfg := churnConfig{
+		NumWorkers:        numWorkers,
+		ChurnPercent:      50,
+		ChurnInterval:     churnInterval,
+		HeartbeatInterval: heartbeatInterval,
+		TestDuration:      testDuration,
+		NumActivities:     numActivitiesPerWorker,
+	}
+	metrics, workersCreated, duration := s.runChurnTest(cfg)
+	s.logChurnResults("Churn 50%", cfg, metrics, workersCreated, duration)
 }
