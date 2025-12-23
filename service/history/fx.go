@@ -376,5 +376,5 @@ func VersionMembershipCacheProvider(
 			return nil
 		},
 	})
-	return newVersionMembershipCache(c, metricsHandler)
+	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
 }
