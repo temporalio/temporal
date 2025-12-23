@@ -1,4 +1,4 @@
-//nolint:staticheck
+//nolint:staticcheck
 package worker_versioning
 
 import enumspb "go.temporal.io/api/enums/v1"

@@ -64,7 +64,7 @@ func (c *testVersionMembershipCache) Get(
 	taskQueueType enumspb.TaskQueueType,
 	deploymentName string,
 	buildID string,
-) (bool, bool) {
+) (isMember bool, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	v, ok := c.m[testVersionMembershipCacheKey{
