@@ -66,14 +66,13 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 		Namespace: s.Namespace().String(),
 		JobId:     uuid.NewString(),
 		Reason:    "test refresh workflow tasks",
+		Identity:  "test-identity",
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()},
 			{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()},
 		},
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-				Identity: "test-identity",
-			},
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
 	})
 	s.NoError(err)
@@ -113,10 +112,9 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 		VisibilityQuery: "WorkflowType='simpleWorkflow'",
 		JobId:           uuid.NewString(),
 		Reason:          "test refresh workflow tasks with query",
+		Identity:        "test-identity",
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-				Identity: "test-identity",
-			},
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
 	})
 	s.NoError(err)
@@ -146,15 +144,14 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 
 	// Request without namespace should fail
 	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		JobId:  uuid.NewString(),
-		Reason: "test",
+		JobId:    uuid.NewString(),
+		Reason:   "test",
+		Identity: "test-identity",
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: "test-wf-id", RunId: "test-run-id"},
 		},
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-				Identity: "test-identity",
-			},
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
 	})
 	s.Error(err)
@@ -169,13 +166,12 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace: s.Namespace().String(),
 		Reason:    "test",
+		Identity:  "test-identity",
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: "test-wf-id", RunId: "test-run-id"},
 		},
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-				Identity: "test-identity",
-			},
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
 	})
 	s.Error(err)
@@ -191,10 +187,9 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 		Namespace: s.Namespace().String(),
 		JobId:     uuid.NewString(),
 		Reason:    "test",
+		Identity:  "test-identity",
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-				Identity: "test-identity",
-			},
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
 	})
 	s.Error(err)

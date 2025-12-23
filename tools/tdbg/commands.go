@@ -635,6 +635,13 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 	return nil
 }
 
+func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
+	if c.IsSet(FlagVisibilityQuery) {
+		return AdminBatchRefreshWorkflowTasks(c, clientFactory)
+	}
+	return AdminRefreshWorkflowTasks(c, clientFactory)
+}
+
 // AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
 func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
 	adminClient := clientFactory.AdminClient(c)
@@ -707,10 +714,9 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory)
 		VisibilityQuery: query,
 		JobId:           jobID,
 		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-				Identity: getCurrentUserFromEnv(),
-			},
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
 	})
 	if err != nil {

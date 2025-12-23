@@ -180,22 +180,6 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminRefreshWorkflowTasks(c, clientFactory)
-			},
-		},
-		{
-			Name:    "batch-refresh-tasks",
-			Aliases: []string{"brt"},
-			Usage:   "Start a batch job to refresh workflow tasks for multiple workflows",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:     FlagNamespace,
-					Aliases:  FlagNamespaceAlias,
-					Usage:    "Namespace",
-					Required: true,
-				},
 				&cli.StringFlag{
 					Name:     FlagVisibilityQuery,
 					Usage:    "Visibility query to select workflows",
@@ -212,7 +196,7 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminBatchRefreshWorkflowTasks(c, clientFactory)
+				return adminRefreshWorkflowTasks(c, clientFactory)
 			},
 		},
 		{

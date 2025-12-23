@@ -371,10 +371,9 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 	s.Run("RefreshWorkflowTasks returns query unchanged", func() {
 		adminReq := &adminservice.StartAdminBatchOperationRequest{
 			VisibilityQuery: "WorkflowType='MyWorkflow'",
+			Identity:        "test",
 			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-					Identity: "test",
-				},
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 			},
 		}
 		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
@@ -421,10 +420,9 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 		NamespaceId: namespaceID,
 		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
 			Namespace: "test-namespace",
+			Identity:  "test-identity",
 			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-					Identity: "test-identity",
-				},
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 			},
 		},
 	}
@@ -468,10 +466,9 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 		NamespaceId: "test-namespace-id",
 		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
 			Namespace: "test-namespace",
+			Identity:  "test-identity",
 			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{
-					Identity: "test-identity",
-				},
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 			},
 		},
 	}

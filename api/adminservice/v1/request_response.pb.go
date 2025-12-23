@@ -5263,6 +5263,8 @@ type StartAdminBatchOperationRequest struct {
 	// List of workflow executions to apply the batch operation to.
 	// This field and `visibility_query` are mutually exclusive.
 	Executions []*v1.WorkflowExecution `protobuf:"bytes,5,rep,name=executions,proto3" json:"executions,omitempty"`
+	// The identity of the worker/client.
+	Identity string `protobuf:"bytes,6,opt,name=identity,proto3" json:"identity,omitempty"`
 	// The admin batch operation to perform.
 	//
 	// Types that are valid to be assigned to Operation:
@@ -5338,6 +5340,13 @@ func (x *StartAdminBatchOperationRequest) GetExecutions() []*v1.WorkflowExecutio
 	return nil
 }
 
+func (x *StartAdminBatchOperationRequest) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
+}
+
 func (x *StartAdminBatchOperationRequest) GetOperation() isStartAdminBatchOperationRequest_Operation {
 	if x != nil {
 		return x.Operation
@@ -5404,9 +5413,7 @@ func (*StartAdminBatchOperationResponse) Descriptor() ([]byte, []int) {
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.
 type BatchOperationRefreshTasks struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The identity of the worker/client.
-	Identity      string `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5439,13 +5446,6 @@ func (x *BatchOperationRefreshTasks) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BatchOperationRefreshTasks.ProtoReflect.Descriptor instead.
 func (*BatchOperationRefreshTasks) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{90}
-}
-
-func (x *BatchOperationRefreshTasks) GetIdentity() string {
-	if x != nil {
-		return x.Identity
-	}
-	return ""
 }
 
 type AddTasksRequest_Task struct {
@@ -5953,7 +5953,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x14task_queue_partition\x18\x02 \x01(\v24.temporal.server.api.taskqueue.v1.TaskQueuePartitionR\x12taskQueuePartition\"F\n" +
 	"%ForceUnloadTaskQueuePartitionResponse\x12\x1d\n" +
 	"\n" +
-	"was_loaded\x18\x01 \x01(\bR\twasLoaded\"\xec\x02\n" +
+	"was_loaded\x18\x01 \x01(\bR\twasLoaded\"\x88\x03\n" +
 	"\x1fStartAdminBatchOperationRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12)\n" +
 	"\x10visibility_query\x18\x02 \x01(\tR\x0fvisibilityQuery\x12\x15\n" +
@@ -5961,13 +5961,13 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12I\n" +
 	"\n" +
 	"executions\x18\x05 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\n" +
-	"executions\x12y\n" +
+	"executions\x12\x1a\n" +
+	"\bidentity\x18\x06 \x01(\tR\bidentity\x12y\n" +
 	"\x17refresh_tasks_operation\x18\n" +
 	" \x01(\v2?.temporal.server.api.adminservice.v1.BatchOperationRefreshTasksH\x00R\x15refreshTasksOperationB\v\n" +
 	"\toperation\"\"\n" +
-	" StartAdminBatchOperationResponse\"8\n" +
-	"\x1aBatchOperationRefreshTasks\x12\x1a\n" +
-	"\bidentity\x18\x01 \x01(\tR\bidentityB8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
+	" StartAdminBatchOperationResponse\"\x1c\n" +
+	"\x1aBatchOperationRefreshTasksB8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
 
 var (
 	file_temporal_server_api_adminservice_v1_request_response_proto_rawDescOnce sync.Once

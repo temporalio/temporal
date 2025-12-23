@@ -1618,12 +1618,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		NamespaceId:  namespaceID.String(),
 	}
 
-	var identity string
+	identity := request.GetIdentity()
 	var batchTypeMemo string
 	switch op := request.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		batchTypeMemo = "refresh_tasks"
-		identity = op.RefreshTasksOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
