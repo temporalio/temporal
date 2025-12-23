@@ -42,6 +42,10 @@ func (c *MockContext) ExecutionKey() ExecutionKey {
 	return ExecutionKey{}
 }
 
+func (c *MockContext) CloseTime() time.Time {
+	return time.Time{}
+}
+
 // MockMutableContext is a mock implementation of [MutableContext] that records added tasks for inspection in
 // tests.
 type MockMutableContext struct {
