@@ -17,7 +17,7 @@ type Engine interface {
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
-	) (ExecutionKey, []byte, bool, error)
+	) (NewExecutionResult, error)
 	UpdateWithNewExecution(
 		context.Context,
 		ComponentRef,
@@ -74,6 +74,29 @@ type TransitionOptions struct {
 }
 
 type TransitionOption func(*TransitionOptions)
+
+// NewExecutionResult contains the outcome of creating a new execution via [NewExecution]
+// or [UpdateWithNewExecution].
+//
+// This struct provides information about whether a new execution was actually created,
+// along with identifiers needed to reference the execution in subsequent operations.
+//
+// Fields:
+//   - ExecutionKey: The unique identifier for the execution. This key can be used to
+//     look up or reference the execution in future operations.
+//   - NewExecutionRef: A serialized reference to the newly created root component.
+//     This can be passed to [UpdateComponent], [ReadComponent], or [PollComponent]
+//     to interact with the component. Use [DeserializeComponentRef] to convert this
+//     back to a [ComponentRef] if needed.
+//   - Created: Indicates whether a new execution was actually created. When false,
+//     the execution already existed (based on the [BusinessIDReusePolicy] and
+//     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
+//     existing execution was returned instead.
+type NewExecutionResult struct {
+	ExecutionKey    ExecutionKey
+	NewExecutionRef []byte
+	Created         bool
+}
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -141,10 +164,7 @@ func WithRequestID(
 //
 // Returns:
 //   - O: The output value produced by newFn
-//   - [ExecutionKey]: The key identifying the created (or existing) execution
-//   - []byte: Serialized component reference for subsequent operations (e.g., [UpdateComponent], [ReadComponent])
-//   - bool: True if a new execution was created; false if an existing execution was returned
-//     (based on [BusinessIDReusePolicy] and [BusinessIDConflictPolicy])
+//   - [NewExecutionResult]: Contains the execution key, serialized ref, and whether a new execution was created
 //   - error: Non-nil if creation failed or policy constraints were violated
 func NewExecution[C Component, I any, O any](
 	ctx context.Context,
@@ -152,9 +172,9 @@ func NewExecution[C Component, I any, O any](
 	newFn func(MutableContext, I) (C, O, error),
 	input I,
 	opts ...TransitionOption,
-) (O, ExecutionKey, []byte, bool, error) {
+) (O, NewExecutionResult, error) {
 	var output O
-	executionKey, serializedRef, created, err := engineFromContext(ctx).NewExecution(
+	result, err := engineFromContext(ctx).NewExecution(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
@@ -166,9 +186,9 @@ func NewExecution[C Component, I any, O any](
 		opts...,
 	)
 	if err != nil {
-		return output, ExecutionKey{}, nil, false, err
+		return output, NewExecutionResult{}, err
 	}
-	return output, executionKey, serializedRef, created, err
+	return output, result, nil
 }
 
 func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](

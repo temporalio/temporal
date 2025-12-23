@@ -41,18 +41,16 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 }
 
 // NewExecution mocks base method.
-func (m *MockEngine) NewExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (ExecutionKey, []byte, bool, error) {
+func (m *MockEngine) NewExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (NewExecutionResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "NewExecution", varargs...)
-	ret0, _ := ret[0].(ExecutionKey)
-	ret1, _ := ret[1].([]byte)
-	ret2, _ := ret[2].(bool)
-	ret3, _ := ret[3].(error)
-	return ret0, ret1, ret2, ret3
+	ret0, _ := ret[0].(NewExecutionResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // NewExecution indicates an expected call of NewExecution.
