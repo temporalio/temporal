@@ -656,7 +656,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 	}
 
 	sa := &commonpb.SearchAttributes{
-		IndexedFields: a.Visibility.Get(ctx).GetSearchAttributes(ctx),
+		IndexedFields: a.Visibility.Get(ctx).CustomSearchAttributes(ctx),
 	}
 
 	info := &apiactivitypb.ActivityExecutionInfo{

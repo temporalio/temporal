@@ -405,7 +405,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 
 	searchattributes := make(map[string]*commonpb.Payload)
 
-	aliasedCustomSearchAttributes := visComponent.GetSearchAttributes(visTaskContext)
+	aliasedCustomSearchAttributes := visComponent.CustomSearchAttributes(visTaskContext)
 	for alias, value := range aliasedCustomSearchAttributes {
 		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
@@ -428,7 +428,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 
 	combinedMemo := make(map[string]*commonpb.Payload, 2)
-	userMemoMap := visComponent.GetMemo(visTaskContext)
+	userMemoMap := visComponent.CustomMemo(visTaskContext)
 	if len(userMemoMap) > 0 {
 		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
 		userMemoPayload, err := payload.Encode(userMemoProto)
