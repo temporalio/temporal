@@ -39,21 +39,13 @@ var (
 	}
 )
 
-type testVersionMembershipCacheKey struct {
-	namespaceID    string
-	taskQueue      string
-	taskQueueType  enumspb.TaskQueueType
-	deploymentName string
-	buildID        string
-}
-
 type testVersionMembershipCache struct {
 	mu sync.Mutex
-	m  map[testVersionMembershipCacheKey]bool
+	m  map[versionMembershipCacheKey]bool
 }
 
 func newTestVersionMembershipCache() *testVersionMembershipCache {
-	return &testVersionMembershipCache{m: make(map[testVersionMembershipCacheKey]bool)}
+	return &testVersionMembershipCache{m: make(map[versionMembershipCacheKey]bool)}
 }
 
 var _ VersionMembershipCache = (*testVersionMembershipCache)(nil)
@@ -67,7 +59,7 @@ func (c *testVersionMembershipCache) Get(
 ) (isMember bool, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	v, ok := c.m[testVersionMembershipCacheKey{
+	v, ok := c.m[versionMembershipCacheKey{
 		namespaceID:    namespaceID,
 		taskQueue:      taskQueue,
 		taskQueueType:  taskQueueType,
@@ -87,7 +79,7 @@ func (c *testVersionMembershipCache) Put(
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.m[testVersionMembershipCacheKey{
+	c.m[versionMembershipCacheKey{
 		namespaceID:    namespaceID,
 		taskQueue:      taskQueue,
 		taskQueueType:  taskQueueType,
