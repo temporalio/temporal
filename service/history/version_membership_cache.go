@@ -37,7 +37,7 @@ func (c *versionMembershipCache) Get(
 	taskQueueType enumspb.TaskQueueType,
 	deploymentName string,
 	buildID string,
-) (bool, bool) {
+) (isMember bool, ok bool) {
 	metrics.CacheRequests.With(c.metrics).Record(1, metrics.OperationTag("VersionMembershipCacheGet"))
 	key := versionMembershipCacheKey{
 		namespaceID:    namespaceID,
@@ -51,7 +51,7 @@ func (c *versionMembershipCache) Get(
 		metrics.CacheMissCounter.With(c.metrics).Record(1, metrics.OperationTag("VersionMembershipCacheGet"))
 		return false, false
 	}
-	isMember, ok := v.(bool)
+	isMember, ok = v.(bool)
 	if !ok {
 		// Unexpected type: treat as miss to avoid false positives.
 		metrics.CacheMissCounter.With(c.metrics).Record(1, metrics.OperationTag("VersionMembershipCacheGet"))

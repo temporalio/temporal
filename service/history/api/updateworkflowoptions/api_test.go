@@ -39,7 +39,7 @@ func (noopVersionMembershipCache) Get(
 	_ enumspb.TaskQueueType,
 	_ string,
 	_ string,
-) (bool, bool) {
+) (isMember bool, ok bool) {
 	return false, false
 }
 
