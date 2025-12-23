@@ -296,6 +296,88 @@ func (s *TaskQueueStatsSuite) TestRampingAndCurrentAbsorbUnversionedBacklog_Mult
 	})
 }
 
+func (s *TaskQueueStatsSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned_SinglePartition() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned(1)
+}
+
+func (s *TaskQueueStatsSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned_MultiplePartitions() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+
+	s.RunTestWithMatchingBehavior(func() {
+		s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned(4)
+	})
+}
+
+func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnversioned(numPartitions int) {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tqName := testcore.RandomizeStr("tq-current-absorbs-unversioned-when-ramping-to-unversioned")
+	deploymentName := tqName + "-deployment"
+	currentBuildID := "current-build-id"
+
+	pollCtx, cancelPoll := context.WithCancel(ctx)
+	s.createVersionsInTaskQueue(pollCtx, tqName, deploymentName, currentBuildID)
+	cancelPoll() // cancel the pollers so that we can verify the backlog expectations
+
+	// Set current version.
+	s.setCurrentVersion(deploymentName, currentBuildID)
+
+	rampPercentage := 20
+	s.setRampingVersion(deploymentName, "", rampPercentage)
+
+	// Enqueue unversioned backlog.
+	unversionedWorkflowCount := 10 * numPartitions
+	s.startUnversionedWorkflows(unversionedWorkflowCount, tqName)
+
+	currentExpectation := TaskQueueExpectations{
+		BacklogCount:     unversionedWorkflowCount * (100 - rampPercentage) / 100,
+		MaxExtraTasks:    0,
+		ExpectedAddRate:  true,
+		ExpectedDispatch: false,
+	}
+	legacyExpectation := TaskQueueExpectations{
+		BacklogCount:     unversionedWorkflowCount,
+		MaxExtraTasks:    0,
+		ExpectedAddRate:  true,
+		ExpectedDispatch: false,
+	}
+
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		a := require.New(c)
+
+		// There is no way right now for a user to query stats of the "unversioned" version. All we can do in this case
+		// is to query the current version's stats and see that it is attributed 80% of the unversioned backlog.
+		s.requireWDVTaskQueueStatsStrict(
+			ctx,
+			a,
+			"DescribeWorkerDeploymentVersion[current][workflow][ramping-to-unversioned]",
+			tqName,
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			deploymentName,
+			currentBuildID,
+			currentExpectation,
+		)
+
+		// Since the task queue is part of both the current and ramping versions, the legacy mode should report the total backlog count.
+		s.requireLegacyTaskQueueStatsStrict(
+			ctx,
+			a,
+			"DescribeTaskQueue[legacy][workflow][ramping-to-unversioned]",
+			tqName,
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			legacyExpectation,
+		)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPartitions int) {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL

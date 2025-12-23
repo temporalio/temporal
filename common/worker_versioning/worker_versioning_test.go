@@ -317,6 +317,29 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
+		{name: "new format: versioned current with unversioned ramping in same deployment -> current is versioned and ramping is unversioned", wantCurrent: v1, wantRamping: nil,
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{},
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+								DeploymentName: v1.GetDeploymentName(),
+								BuildId:        v1.GetBuildId(),
+							},
+							CurrentVersionChangedTime: t2,
+							RampingDeploymentVersion:  nil, // unversioned ramp target
+							RampingVersionPercentage:  20,
+							// Use a newer timestamp so the unversioned ramping is picked from the new format.
+							RampingVersionPercentageChangedTime: t3,
+						},
+						// Membership contains v1 so HasDeploymentVersion() passes for current.
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v1.GetBuildId(): {},
+						},
+					},
+				},
+			}},
 		// Tests with deleted versions
 		{name: "new format: current version marked as deleted should be ignored", wantCurrent: nil,
 			data: &persistencespb.DeploymentData{
