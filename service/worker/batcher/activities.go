@@ -302,6 +302,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	var executions []*commonpb.WorkflowExecution
 
 	if batchParams.AdminRequest != nil {
+		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
 		ns = adminReq.Namespace
 		visibilityQuery = adminReq.GetVisibilityQuery()
@@ -636,7 +637,6 @@ func (a *activities) processAdminTask(
 				if err != nil {
 					return fmt.Errorf("archetypeID extraction error: %w", err)
 				}
-				ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 				_, err = a.HistoryClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
 					NamespaceId: batchOperation.NamespaceId,
 					ArchetypeId: uint32(archetypeID),

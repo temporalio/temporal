@@ -60,9 +60,11 @@ var (
 		int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 	)
 
-	OpenAdminBatchOperationQuery = fmt.Sprintf("%s = '%s'",
+	OpenAdminBatchOperationQuery = fmt.Sprintf("%s = '%s' AND %s = %d",
 		sadefs.TemporalNamespaceDivision,
 		AdminNamespaceDivision,
+		sadefs.ExecutionStatus,
+		int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 	)
 )
 

@@ -1594,7 +1594,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	}
 
 	// Validate concurrent batch operation
-	maxConcurrentBatchOperation := adh.config.MaxConcurrentBatchOperation(request.GetNamespace())
+	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(request.GetNamespace())
 	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace.Name(request.GetNamespace()),
@@ -1622,7 +1622,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	var batchTypeMemo string
 	switch op := request.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
-		batchTypeMemo = "refresh_workflow_tasks"
+		batchTypeMemo = "refresh_tasks"
 		identity = op.RefreshTasksOperation.GetIdentity()
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)

@@ -608,6 +608,9 @@ message ForceUnloadTaskQueuePartitionResponse {
 // StartAdminBatchOperationRequest starts an admin batch operation.
 // WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 message StartAdminBatchOperationRequest {
+  // The identity of the worker/client.
+  string identity = 1;
+  
   // Namespace that contains the batch operation.
   string namespace = 1;
 
@@ -637,6 +640,4 @@ message StartAdminBatchOperationResponse {
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.
 message BatchOperationRefreshTasks {
-  // The identity of the worker/client.
-  string identity = 1;
 }
