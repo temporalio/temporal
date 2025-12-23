@@ -761,6 +761,13 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 
 		currentVersion, _, _, rampingVersion, isRamping, rampPercentage, _, _ =
 			worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+
+		// Technically, one could have a current version of "unversioned" which shall make currentExists false according
+		// to the current logic. However, as of now, the user cannot query the stats of the "unversioned" version so this
+		// logic is fine. In other words, this logic is used to only attribute the unversioned backlog to the current version
+		// when current version is NOT "unversioned".
+		//
+		// When the ramping version is "unversioned", isRamping is true which shall make the attribution logic work as expected.
 		currentExists = currentVersion != nil
 		rampingExists = isRamping
 
