@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -32,8 +33,10 @@ type (
 		shardContext   historyi.ShardContext
 		cache          wcache.Cache
 		logger         log.Logger
-		metricProvider metrics.Handler
+		metricsHandler metrics.Handler
 		visibilityMgr  manager.VisibilityManager
+
+		inflightTasks atomic.Int32
 
 		ensureCloseBeforeDelete       dynamicconfig.BoolPropertyFn
 		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -48,7 +51,7 @@ func newVisibilityQueueTaskExecutor(
 	workflowCache wcache.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	metricProvider metrics.Handler,
+	metricsHandler metrics.Handler,
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -57,7 +60,7 @@ func newVisibilityQueueTaskExecutor(
 		shardContext:   shardContext,
 		cache:          workflowCache,
 		logger:         logger,
-		metricProvider: metricProvider,
+		metricsHandler: metricsHandler,
 		visibilityMgr:  visibilityMgr,
 
 		ensureCloseBeforeDelete:       ensureCloseBeforeDelete,
@@ -70,6 +73,10 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
+	inflightTasks := t.inflightTasks.Add(1)
+	defer t.inflightTasks.Add(-1)
+	metrics.VisibilityTaskExecutorInflightTasks.With(t.metricsHandler).Record(float64(inflightTasks))
+
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
