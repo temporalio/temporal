@@ -13,8 +13,6 @@ var ErrMalformedComponentRef = serviceerror.NewInvalidArgument("malformed compon
 // ErrInvalidComponentRef is returned when component ref bytes deserialize to an invalid component ref.
 var ErrInvalidComponentRef = serviceerror.NewInvalidArgument("invalid component ref")
 
-var defaultShardingFn = func(key ExecutionKey) string { return key.NamespaceID + "_" + key.BusinessID }
-
 // ExecutionKey uniquely identifies a CHASM execution in the system.
 type ExecutionKey struct {
 	NamespaceID string
@@ -83,26 +81,6 @@ func (r *ComponentRef) ArchetypeID(
 	r.archetypeID = rc.componentID
 
 	return r.archetypeID, nil
-}
-
-// ShardingKey returns the sharding key used for determining the shardID of the run
-// that contains the referenced component.
-// TODO: remove this method and ShardingKey concept, we don't need this functionality.
-func (r *ComponentRef) ShardingKey(
-	registry *Registry,
-) (string, error) {
-
-	archetypeID, err := r.ArchetypeID(registry)
-	if err != nil {
-		return "", err
-	}
-
-	rc, ok := registry.ComponentByID(archetypeID)
-	if !ok {
-		return "", serviceerror.NewInternalf("unknown chasm component type id: %d", archetypeID)
-	}
-
-	return rc.shardingFn(r.ExecutionKey), nil
 }
 
 func (r *ComponentRef) Serialize(
