@@ -319,7 +319,7 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	tqName := testcore.RandomizeStr("tq-current-absorbs-unversioned-when-ramping-to-unversioned")
+	tqName := testcore.RandomizeStr("ramping-unversioned")
 	deploymentName := tqName + "-deployment"
 	currentBuildID := "current-build-id"
 
@@ -385,7 +385,7 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	tqName := testcore.RandomizeStr("tq-ramping-and-current-absorb-unversioned")
+	tqName := testcore.RandomizeStr("tq-ramping-and-current")
 	deploymentName := tqName + "-deployment"
 	currentBuildID := "current-build-id"
 	rampingBuildID := "ramping-build-id"
@@ -564,7 +564,7 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
-	tqName := testcore.RandomizeStr("tq-ramping-and-current-absorb-unversioned")
+	tqName := testcore.RandomizeStr("inactive-version")
 	deploymentName := tqName + "-deployment"
 	currentBuildID := "current-build-id"
 	inactiveBuildID := "inactive-build-id"
