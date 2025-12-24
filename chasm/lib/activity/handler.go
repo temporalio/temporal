@@ -66,7 +66,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy()))
 	}
 
-	response, key, _, err := chasm.NewExecution(
+	response, result, err := chasm.NewExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
@@ -84,7 +84,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			return newActivity, &workflowservice.StartActivityExecutionResponse{
-				Started: true, // TODO for ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING, we need a know from chasm the execution is existing and to set false
 				// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 			}, nil
 		},
@@ -116,7 +115,8 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
-	response.RunId = key.RunID
+	response.RunId = result.ExecutionKey.RunID
+	response.Started = result.Created
 
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: response,
