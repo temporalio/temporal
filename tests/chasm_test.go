@@ -228,7 +228,7 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
 	s.True(ok)
 
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND PayloadStoreId = '%s'", archetypeID, storeID)
 
 	var visRecord *chasm.ExecutionInfo[*testspb.TestPayloadStore]
 	s.Eventually(
