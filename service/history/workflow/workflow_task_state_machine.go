@@ -81,20 +81,21 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 	}
 
 	workflowTask := &historyi.WorkflowTaskInfo{
-		Version:               version,
-		ScheduledEventID:      scheduledEventID,
-		StartedEventID:        common.EmptyEventID,
-		RequestID:             emptyUUID,
-		WorkflowTaskTimeout:   startToCloseTimeout.AsDuration(),
-		TaskQueue:             taskQueue,
-		Attempt:               attempt,
-		ScheduledTime:         scheduledTime.AsTime(),
-		StartedTime:           time.Time{},
-		OriginalScheduledTime: originalScheduledTimestamp.AsTime(),
-		Type:                  workflowTaskType,
-		SuggestContinueAsNew:  false, // reset, will be recomputed on workflow task started
-		HistorySizeBytes:      0,     // reset, will be recomputed on workflow task started
-		Stamp:                 m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
+		Version:                  version,
+		ScheduledEventID:         scheduledEventID,
+		StartedEventID:           common.EmptyEventID,
+		RequestID:                emptyUUID,
+		WorkflowTaskTimeout:      startToCloseTimeout.AsDuration(),
+		TaskQueue:                taskQueue,
+		Attempt:                  attempt,
+		AttemptsSinceLastSuccess: m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess,
+		ScheduledTime:            scheduledTime.AsTime(),
+		StartedTime:              time.Time{},
+		OriginalScheduledTime:    originalScheduledTimestamp.AsTime(),
+		Type:                     workflowTaskType,
+		SuggestContinueAsNew:     false, // reset, will be recomputed on workflow task started
+		HistorySizeBytes:         0,     // reset, will be recomputed on workflow task started
+		Stamp:                    m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
@@ -145,14 +146,15 @@ func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*histo
 		WorkflowTaskTimeout: m.ms.GetExecutionInfo().DefaultWorkflowTaskTimeout.AsDuration(),
 		// Task queue is always normal (not sticky) because transient workflow task is created only for
 		// failed/timed out workflow task and fail/timeout clears sticky task queue.
-		TaskQueue:            m.ms.CurrentTaskQueue(),
-		Attempt:              m.ms.GetExecutionInfo().WorkflowTaskAttempt,
-		ScheduledTime:        timestamppb.New(m.ms.timeSource.Now()).AsTime(),
-		StartedTime:          time.Unix(0, 0).UTC(),
-		Type:                 enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-		SuggestContinueAsNew: false, // reset, will be recomputed on workflow task started
-		HistorySizeBytes:     0,     // reset, will be recomputed on workflow task started
-		Stamp:                m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
+		TaskQueue:                m.ms.CurrentTaskQueue(),
+		Attempt:                  m.ms.GetExecutionInfo().WorkflowTaskAttempt,
+		AttemptsSinceLastSuccess: m.ms.GetExecutionInfo().WorkflowTaskAttemptsSinceLastSuccess,
+		ScheduledTime:            timestamppb.New(m.ms.timeSource.Now()).AsTime(),
+		StartedTime:              time.Unix(0, 0).UTC(),
+		Type:                     enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		SuggestContinueAsNew:     false, // reset, will be recomputed on workflow task started
+		HistorySizeBytes:         0,     // reset, will be recomputed on workflow task started
+		Stamp:                    m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	m.retainWorkflowTaskBuildIdInfo(workflowTask)
@@ -195,21 +197,22 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	}
 
 	workflowTask = &historyi.WorkflowTaskInfo{
-		Version:                version,
-		ScheduledEventID:       scheduledEventID,
-		StartedEventID:         startedEventID,
-		RequestID:              requestID,
-		WorkflowTaskTimeout:    workflowTask.WorkflowTaskTimeout,
-		Attempt:                workflowTask.Attempt,
-		StartedTime:            startedTime,
-		ScheduledTime:          workflowTask.ScheduledTime,
-		TaskQueue:              workflowTask.TaskQueue,
-		OriginalScheduledTime:  workflowTask.OriginalScheduledTime,
-		Type:                   workflowTask.Type,
-		SuggestContinueAsNew:   suggestContinueAsNew,
-		HistorySizeBytes:       historySizeBytes,
-		BuildIdRedirectCounter: redirectCounter,
-		Stamp:                  m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
+		Version:                  version,
+		ScheduledEventID:         scheduledEventID,
+		StartedEventID:           startedEventID,
+		RequestID:                requestID,
+		WorkflowTaskTimeout:      workflowTask.WorkflowTaskTimeout,
+		Attempt:                  workflowTask.Attempt,
+		AttemptsSinceLastSuccess: workflowTask.AttemptsSinceLastSuccess,
+		StartedTime:              startedTime,
+		ScheduledTime:            workflowTask.ScheduledTime,
+		TaskQueue:                workflowTask.TaskQueue,
+		OriginalScheduledTime:    workflowTask.OriginalScheduledTime,
+		Type:                     workflowTask.Type,
+		SuggestContinueAsNew:     suggestContinueAsNew,
+		HistorySizeBytes:         historySizeBytes,
+		BuildIdRedirectCounter:   redirectCounter,
+		Stamp:                    m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 	}
 
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
@@ -924,34 +927,40 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		m.ms.ClearStickyTaskQueue()
 	}
 
-	failWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
-		Version:               common.EmptyVersion,
-		ScheduledEventID:      common.EmptyEventID,
-		StartedEventID:        common.EmptyEventID,
-		RequestID:             emptyUUID,
-		WorkflowTaskTimeout:   time.Duration(0),
-		StartedTime:           time.Unix(0, 0).UTC(),
-		TaskQueue:             nil,
-		OriginalScheduledTime: time.Unix(0, 0).UTC(),
-		Attempt:               1,
-		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
-		SuggestContinueAsNew:  false,
-		HistorySizeBytes:      0,
-		// need to retain Build ID of failed WF task to compare it with the build ID of next attempt
-		BuildId: m.ms.executionInfo.WorkflowTaskBuildId,
-	}
+	newAttemptsSinceLastSuccess := m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess
+	newAttempt := int32(1)
 	if incrementAttempt {
-		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
-		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
+		// Increment the failure counter for this WFT failure
+		newAttemptsSinceLastSuccess = m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess + 1
+		// Also increment Attempt for transient workflow task tracking
+		newAttempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
 		if m.ms.config.EnableWorkflowTaskStampIncrementOnFailure() {
 			m.ms.executionInfo.WorkflowTaskStamp += 1
 		}
+	}
+
+	failWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
+		Version:                  common.EmptyVersion,
+		ScheduledEventID:         common.EmptyEventID,
+		StartedEventID:           common.EmptyEventID,
+		RequestID:                emptyUUID,
+		WorkflowTaskTimeout:      time.Duration(0),
+		StartedTime:              time.Unix(0, 0).UTC(),
+		TaskQueue:                nil,
+		OriginalScheduledTime:    time.Unix(0, 0).UTC(),
+		Attempt:                  newAttempt,
+		AttemptsSinceLastSuccess: newAttemptsSinceLastSuccess,
+		Type:                     enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
+		SuggestContinueAsNew:     false,
+		HistorySizeBytes:         0,
+		// need to retain Build ID of failed WF task to compare it with the build ID of next attempt
+		BuildId: m.ms.executionInfo.WorkflowTaskBuildId,
 	}
 	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 
 	consecutiveFailuresRequired := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())
-	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.Attempt >= int32(consecutiveFailuresRequired) {
+	if consecutiveFailuresRequired > 0 && failWorkflowTaskInfo.AttemptsSinceLastSuccess >= int32(consecutiveFailuresRequired) {
 		if err := m.ms.UpdateReportedProblemsSearchAttribute(); err != nil {
 			return err
 		}
@@ -1016,6 +1025,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskRequestId = workflowTask.RequestID
 	m.ms.executionInfo.WorkflowTaskTimeout = durationpb.New(workflowTask.WorkflowTaskTimeout)
 	m.ms.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
+	m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess = workflowTask.AttemptsSinceLastSuccess
 	if !workflowTask.StartedTime.IsZero() {
 		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
 	}
@@ -1141,6 +1151,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		RequestID:                  m.ms.executionInfo.WorkflowTaskRequestId,
 		WorkflowTaskTimeout:        m.ms.executionInfo.WorkflowTaskTimeout.AsDuration(),
 		Attempt:                    m.ms.executionInfo.WorkflowTaskAttempt,
+		AttemptsSinceLastSuccess:   m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess,
 		StartedTime:                m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
 		ScheduledTime:              m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
 		TaskQueue:                  m.ms.CurrentTaskQueue(),
