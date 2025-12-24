@@ -167,7 +167,7 @@ type (
 
 var (
 	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
-	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponse{}
+	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{}
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 
@@ -593,7 +593,7 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
 	req *matchingservice.PollWorkflowTaskQueueRequest,
 	opMetrics metrics.Handler,
-) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+) (*matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
@@ -636,7 +636,7 @@ pollLoop:
 		}
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollWorkflowTaskQueueResponse(), nil
+			return e.convertPollWorkflowTaskQueueResponse(task.pollWorkflowTaskQueueResponse(), task.namespace)
 		}
 
 		if task.isQuery() {
@@ -2851,7 +2851,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
 	recordStartResp *historyservice.RecordWorkflowTaskStartedResponse,
 	metricsHandler metrics.Handler,
-) *matchingservice.PollWorkflowTaskQueueResponse {
+) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
 
 	var serializedToken []byte
 	if task.isQuery() {
@@ -2895,6 +2895,57 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	}
 	response.PollerScalingDecision = task.pollerScalingDecision
 	return response
+}
+
+// convertPollWorkflowTaskQueueResponse converts a PollWorkflowTaskQueueResponse to
+// PollWorkflowTaskQueueResponseWithRawHistory. This is used when forwarding tasks
+// from remote matching nodes where the client has already deserialized the response.
+// This function processes search attributes if the history came from raw bytes
+// (RawHistory field), since raw history hasn't been processed yet.
+// If history came from the History field, it's already been processed by history service.
+func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
+	resp *matchingservice.PollWorkflowTaskQueueResponse,
+	ns namespace.Name,
+) (*matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, error) {
+	if resp == nil {
+		return nil, nil
+	}
+	// RawHistory from forwarded response contains deserialized History (auto-deserialized by gRPC).
+	// We don't re-serialize it back to bytes. The History field is used instead.
+	// Use RawHistory only if History is not available (backward compat with old matching services).
+	history := resp.History
+	if history == nil && resp.RawHistory != nil { //nolint:staticcheck
+		history = resp.RawHistory //nolint:staticcheck
+		// Process search attributes only when using RawHistory.
+		// RawHistory contains auto-deserialized raw bytes that bypass history service's SA processing.
+		// History field means it was already processed by history service.
+		if err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, history.Events, ns, e.visibilityManager); err != nil {
+			return nil, err
+		}
+	}
+	newResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
+		TaskToken:                  resp.TaskToken,
+		WorkflowExecution:          resp.WorkflowExecution,
+		WorkflowType:               resp.WorkflowType,
+		PreviousStartedEventId:     resp.PreviousStartedEventId,
+		StartedEventId:             resp.StartedEventId,
+		Attempt:                    resp.Attempt,
+		NextEventId:                resp.NextEventId,
+		BacklogCountHint:           resp.BacklogCountHint,
+		StickyExecutionEnabled:     resp.StickyExecutionEnabled,
+		Query:                      resp.Query,
+		TransientWorkflowTask:      resp.TransientWorkflowTask,
+		WorkflowExecutionTaskQueue: resp.WorkflowExecutionTaskQueue,
+		BranchToken:                resp.BranchToken,
+		ScheduledTime:              resp.ScheduledTime,
+		StartedTime:                resp.StartedTime,
+		Queries:                    resp.Queries,
+		Messages:                   resp.Messages,
+		History:                    history,
+		NextPageToken:              resp.NextPageToken,
+		PollerScalingDecision:      resp.PollerScalingDecision,
+	}
+	return newResp, nil
 }
 
 // Populate the activity task response based on context and scheduled/started events.
@@ -3007,15 +3058,16 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	if err != nil {
 		return nil, err
 	}
-	// History service can send history events in response.RawHistory. This happens when history.sendRawHistoryBetweenInternalServices is enabled.
-	// In that case use that directly. This is done to avoid deserializing history event blobs in history service.
-	// We need to process search attributes here since history service will not be able to do that on raw events.
-	if resp.RawHistory != nil {
-		resp.History = resp.RawHistory
-		err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, resp.History.Events, task.namespace, e.visibilityManager)
-		if err != nil {
-			return nil, err
-		}
+	// When history.sendRawHistoryBetweenInternalServices is enabled:
+	// - History service sends raw bytes in RawHistoryBytes field, History is nil
+	// - CreateMatchingPollWorkflowTaskQueueResponse copies RawHistoryBytes to RawHistory
+	// - Frontend receives RawHistory auto-deserialized by gRPC and processes search attributes there
+	// Search attribute processing is NOT done here - it's handled by:
+	// 1. Frontend for non-forwarded requests (processes RawHistory after receiving from matching)
+	// 2. convertPollWorkflowTaskQueueResponse for forwarded requests (processes deserialized history)
+	if resp.RawHistory != nil && resp.History == nil { //nolint:staticcheck
+		// Backward compat: old history service using deprecated RawHistory field (auto-deserialized by gRPC).
+		resp.History = resp.RawHistory //nolint:staticcheck
 	}
 	return resp, nil
 }
