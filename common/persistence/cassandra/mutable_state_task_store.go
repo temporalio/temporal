@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -163,15 +162,15 @@ const (
 
 type (
 	MutableStateTaskStore struct {
-		Session gocql.Session
-		Logger  log.Logger
+		Session    gocql.Session
+		serializer serialization.Serializer
 	}
 )
 
-func NewMutableStateTaskStore(session gocql.Session, logger log.Logger) *MutableStateTaskStore {
+func NewMutableStateTaskStore(session gocql.Session, serializer serialization.Serializer) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
-		Session: session,
-		Logger:  logger,
+		Session:    session,
+		serializer: serializer,
 	}
 }
 
@@ -510,7 +509,7 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	task := request.TaskInfo
-	datablob, err := serialization.ReplicationTaskInfoToBlob(task)
+	datablob, err := d.serializer.ReplicationTaskInfoToBlob(task)
 	if err != nil {
 		return gocql.ConvertError("PutReplicationTaskToDLQ", err)
 	}

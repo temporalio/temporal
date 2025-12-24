@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -527,7 +526,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		if err != nil {
 			return serviceerror.NewInternalf("failed to get new run history when backfill: %v", err)
 		}
-		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
+		events, err := e.Serializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
 			return serviceerror.NewInternalf("failed to deserailize run history events when backfill: %v", err)
 		}
@@ -571,7 +570,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		if err != nil {
 			return err
 		}
-		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
+		events, err := e.Serializer.DeserializeEvents(batch.RawEventBatch)
 		if err != nil {
 			return err
 		}
@@ -692,7 +691,7 @@ func (e *ExecutableTaskImpl) SyncState(
 
 		tasksToAdd := make([]*adminservice.AddTasksRequest_Task, 0, len(taskEquivalents))
 		for _, taskEquivalent := range taskEquivalents {
-			blob, err := serialization.ReplicationTaskInfoToBlob(taskEquivalent)
+			blob, err := e.Serializer.ReplicationTaskInfoToBlob(taskEquivalent)
 			if err != nil {
 				return false, err
 			}

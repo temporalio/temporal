@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -68,6 +69,7 @@ type (
 		SearchAttributeMapperProvider searchattribute.MapperProvider
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
 		WorkersRegistry               workers.Registry
+		Serializer                    serialization.Serializer
 	}
 )
 
@@ -109,6 +111,7 @@ func NewHandler(
 			params.SearchAttributeProvider,
 			params.SearchAttributeMapperProvider,
 			params.RateLimiter,
+			params.Serializer,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,

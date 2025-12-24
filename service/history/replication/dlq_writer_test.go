@@ -72,7 +72,7 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
 			queueWriter := &queuestest.FakeQueueWriter{}
-			taskSerializer := serialization.NewTaskSerializer()
+			taskSerializer := serialization.NewSerializer()
 			namespaceRegistry := namespace.NewMockRegistry(controller)
 			namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 			metricsHandler := metricstest.NewCaptureHandler()
