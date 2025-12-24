@@ -197,6 +197,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
+	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskStartedEvent(
 		scheduledEventID,
@@ -207,6 +208,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 		historySizeBytes,
 		versioningStamp,
 		buildIdRedirectCounter,
+		suggestContinueAsNewReasons,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

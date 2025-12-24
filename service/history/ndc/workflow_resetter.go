@@ -532,6 +532,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			nil,
 			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
 			true,
+			nil,
 		)
 		if err != nil {
 			return err
