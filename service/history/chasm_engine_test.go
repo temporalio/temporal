@@ -885,7 +885,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 	s.Error(err)
 	var unavailable *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailable)
-	s.Equal("please retry", unavailable.Message)
+	s.Equal("stale state, please retry", unavailable.Message)
 }
 
 func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
@@ -999,9 +999,8 @@ func (s *chasmEngineSuite) serializeComponentState(
 }
 
 const (
-	testComponentPausedSAName   = "PausedSA"
-	testComponentPausedMemoName = "PausedMemo"
-	testTransitionCount         = 10
+	testComponentPausedSAName = "PausedSA"
+	testTransitionCount       = 10
 )
 
 var (
