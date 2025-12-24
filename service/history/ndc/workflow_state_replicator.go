@@ -429,12 +429,16 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		versionedTransition.EventBatches,
 		true,
 	)
-	defer func() {
-		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
-	}()
 	if err != nil {
 		return err
 	}
+
+	shouldCleanup := true
+	defer func() {
+		if shouldCleanup {
+			r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
+		}
+	}()
 
 	if mutation != nil {
 		err = localMutableState.ApplyMutation(mutation.StateMutation)
@@ -445,27 +449,11 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 		return err
 	}
 
-	if versionedTransition.NewRunInfo != nil {
-		err = r.createNewRunWorkflow(
-			ctx,
-			namespace.ID(executionInfo.NamespaceId),
-			executionInfo.WorkflowId,
-			archetypeID,
-			versionedTransition.NewRunInfo,
-			localMutableState,
-			true,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
 	err = r.taskRefresher.Refresh(ctx, localMutableState, false)
 	if err != nil {
 		return err
 	}
-
-	return r.transactionMgr.CreateWorkflow(
+	err = r.transactionMgr.CreateWorkflow(
 		ctx,
 		archetypeID,
 		NewWorkflow(
@@ -475,6 +463,25 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			releaseFn,
 		),
 	)
+	if err != nil {
+		return err
+	}
+	releaseFn(nil)
+	shouldCleanup = false
+
+	if versionedTransition.NewRunInfo != nil {
+		return r.createNewRunWorkflow(
+			ctx,
+			namespace.ID(executionInfo.NamespaceId),
+			executionInfo.WorkflowId,
+			archetypeID,
+			versionedTransition.NewRunInfo,
+			localMutableState,
+			true,
+		)
+	}
+
+	return nil
 }
 
 func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(
