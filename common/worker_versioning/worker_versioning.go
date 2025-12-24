@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
@@ -530,28 +529,25 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 func validatePinnedVersionInTaskQueue(ctx context.Context,
 	pinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	matchingClient resource.MatchingClient,
-	versionMembershipCache cache.Cache,
+	versionMembershipCache VersionMembershipCache,
 	tq string,
 	tqType enumspb.TaskQueueType,
 	namespaceID string) error {
 
 	// Check if we have recently queried matching to validate if this version exists in the task queue.
-	key := versionMembershipCacheKey{
-		namespaceID:    namespaceID,
-		taskQueue:      tq,
-		taskQueueType:  tqType,
-		deploymentName: pinnedVersion.DeploymentName,
-		buildID:        pinnedVersion.BuildId,
-	}
-	if cached := versionMembershipCache.Get(key); cached != nil {
-		if isMember, ok := cached.(bool); ok {
-			if isMember {
-				return nil
-			}
-			return serviceerror.NewFailedPrecondition(
-				"Pinned version is not present in the task queue",
-			)
+	if isMember, ok := versionMembershipCache.Get(
+		namespaceID,
+		tq,
+		tqType,
+		pinnedVersion.DeploymentName,
+		pinnedVersion.BuildId,
+	); ok {
+		if isMember {
+			return nil
 		}
+		return serviceerror.NewFailedPrecondition(
+			"Pinned version is not present in the task queue",
+		)
 	}
 
 	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
@@ -565,7 +561,14 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 	}
 
 	// Add result to cache
-	versionMembershipCache.Put(key, resp.GetIsMember())
+	versionMembershipCache.Put(
+		namespaceID,
+		tq,
+		tqType,
+		pinnedVersion.DeploymentName,
+		pinnedVersion.BuildId,
+		resp.GetIsMember(),
+	)
 	if !resp.GetIsMember() {
 		return serviceerror.NewFailedPrecondition(
 			"Pinned version is not present in the task queue",
@@ -574,18 +577,10 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 	return nil
 }
 
-type versionMembershipCacheKey struct {
-	namespaceID    string
-	taskQueue      string
-	taskQueueType  enumspb.TaskQueueType
-	deploymentName string
-	buildID        string
-}
-
 func ValidateVersioningOverride(ctx context.Context,
 	override *workflowpb.VersioningOverride,
 	matchingClient resource.MatchingClient,
-	versionMembershipCache cache.Cache,
+	versionMembershipCache VersionMembershipCache,
 	tq string,
 	tqType enumspb.TaskQueueType,
 	namespaceID string) error {
