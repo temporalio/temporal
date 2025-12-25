@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -42,6 +44,20 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
+	if activityRefProto := request.GetComponentRef(); len(activityRefProto) > 0 {
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			activityRefProto,
+			(*activity.Activity).HandleStarted,
+			request,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return response, nil
+	}
 
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
@@ -108,7 +124,7 @@ func recordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.RecordActivityTaskStartedResponse, rejectCode, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}
@@ -165,12 +181,11 @@ func recordActivityTaskStarted(
 	}
 
 	if ai.Stamp != request.Stamp {
-		// activity has changes before task is started.
-		// ErrActivityStampMismatch is the error to indicate that requested activity has mismatched stamp
+		// This happens when the workflow task was rescheduled.
 		errorMessage := fmt.Sprintf(
-			"Activity task with this stamp not found. Id: %s,: type: %s, current stamp: %d",
+			"Activity task rejected; stamp has changed. Id: %s,: type: %s, current stamp: %d",
 			ai.ActivityId, ai.ActivityType.Name, ai.Stamp)
-		return nil, rejectCodeUndefined, serviceerror.NewNotFound(errorMessage)
+		return nil, rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask(errorMessage)
 	}
 
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()

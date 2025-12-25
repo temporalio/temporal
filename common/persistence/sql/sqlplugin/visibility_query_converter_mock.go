@@ -13,7 +13,6 @@ import (
 	reflect "reflect"
 
 	sqlparser "github.com/temporalio/sqlparser"
-	namespace "go.temporal.io/server/common/namespace"
 	query "go.temporal.io/server/common/persistence/visibility/store/query"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,33 +42,33 @@ func (m *MockVisibilityQueryConverter) EXPECT() *MockVisibilityQueryConverterMoc
 }
 
 // BuildCountStmt mocks base method.
-func (m *MockVisibilityQueryConverter) BuildCountStmt(namespaceID namespace.ID, queryExpr *query.QueryParams[sqlparser.Expr]) (string, []any) {
+func (m *MockVisibilityQueryConverter) BuildCountStmt(queryExpr *query.QueryParams[sqlparser.Expr]) (string, []any) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BuildCountStmt", namespaceID, queryExpr)
+	ret := m.ctrl.Call(m, "BuildCountStmt", queryExpr)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].([]any)
 	return ret0, ret1
 }
 
 // BuildCountStmt indicates an expected call of BuildCountStmt.
-func (mr *MockVisibilityQueryConverterMockRecorder) BuildCountStmt(namespaceID, queryExpr any) *gomock.Call {
+func (mr *MockVisibilityQueryConverterMockRecorder) BuildCountStmt(queryExpr any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BuildCountStmt", reflect.TypeOf((*MockVisibilityQueryConverter)(nil).BuildCountStmt), namespaceID, queryExpr)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BuildCountStmt", reflect.TypeOf((*MockVisibilityQueryConverter)(nil).BuildCountStmt), queryExpr)
 }
 
 // BuildSelectStmt mocks base method.
-func (m *MockVisibilityQueryConverter) BuildSelectStmt(namespaceID namespace.ID, queryExpr *query.QueryParams[sqlparser.Expr], pageSize int, pageToken *VisibilityPageToken) (string, []any) {
+func (m *MockVisibilityQueryConverter) BuildSelectStmt(queryExpr *query.QueryParams[sqlparser.Expr], pageSize int, pageToken *VisibilityPageToken) (string, []any) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BuildSelectStmt", namespaceID, queryExpr, pageSize, pageToken)
+	ret := m.ctrl.Call(m, "BuildSelectStmt", queryExpr, pageSize, pageToken)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].([]any)
 	return ret0, ret1
 }
 
 // BuildSelectStmt indicates an expected call of BuildSelectStmt.
-func (mr *MockVisibilityQueryConverterMockRecorder) BuildSelectStmt(namespaceID, queryExpr, pageSize, pageToken any) *gomock.Call {
+func (mr *MockVisibilityQueryConverterMockRecorder) BuildSelectStmt(queryExpr, pageSize, pageToken any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BuildSelectStmt", reflect.TypeOf((*MockVisibilityQueryConverter)(nil).BuildSelectStmt), namespaceID, queryExpr, pageSize, pageToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BuildSelectStmt", reflect.TypeOf((*MockVisibilityQueryConverter)(nil).BuildSelectStmt), queryExpr, pageSize, pageToken)
 }
 
 // ConvertKeywordListComparisonExpr mocks base method.

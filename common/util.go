@@ -89,6 +89,8 @@ const (
 
 	contextExpireThreshold = 10 * time.Millisecond
 
+	// FailureReasonActivityTimeout is failureReason for when an activity times out, with %v as the timeout type.
+	FailureReasonActivityTimeout = "activity %v timeout"
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -592,9 +594,9 @@ func CheckEventBlobSizeLimit(
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",
-				tag.WorkflowNamespace(namespace),
-				tag.WorkflowID(workflowID),
-				tag.WorkflowRunID(runID),
+				tag.WorkflowNamespace(namespace), // TODO: Not necessarily a "workflow" namespace, fix the tag.
+				tag.WorkflowID(workflowID),       // TODO: this should be entity ID and we need an archetype too.
+				tag.WorkflowRunID(runID),         // TODO: not necessarily a workflow run ID, fix the tag.
 				tag.WorkflowSize(int64(actualSize)),
 				blobSizeViolationOperationTag)
 		}

@@ -29,6 +29,7 @@ const (
 	PriorityTagName             = "priority"
 	PersistenceDBKindTagName    = "db_kind"
 	WorkerPluginNameTagName     = "worker_plugin_name"
+	headerCallsiteTagName       = "header_callsite"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -42,6 +43,7 @@ const (
 
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
+	VersionMembershipCacheTypeTagValue                = "version_membership"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -280,10 +282,14 @@ const (
 	VisibilityPersistenceDeleteWorkflowExecutionScope = "DeleteWorkflowExecution"
 	// VisibilityPersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceListWorkflowExecutionsScope = "ListWorkflowExecutions"
+	// VisibilityPersistenceListChasmExecutionsScope tracks ListChasmExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListChasmExecutionsScope = "ListChasmExecutions"
 	// VisibilityPersistenceScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceScanWorkflowExecutionsScope = "ScanWorkflowExecutions"
 	// VisibilityPersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceCountWorkflowExecutionsScope = "CountWorkflowExecutions"
+	// VisibilityPersistenceCountChasmExecutionsScope tracks CountChasmExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceCountChasmExecutionsScope = "CountChasmExecutions"
 	// VisibilityPersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to visibility persistence layer
 	VisibilityPersistenceGetWorkflowExecutionScope = "GetWorkflowExecution"
 	// VisibilityPersistenceAddSearchAttributesScope tracks AddSearchAttributes calls made by service to visibility persistence layer
@@ -334,6 +340,8 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
+	// ActivityTerminatedScope tracks TerminateActivityExecution API calls received by service
+	ActivityTerminatedScope = "ActivityTerminated"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
@@ -443,6 +451,10 @@ const (
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
 	// OperationOutboundQueueProcessorScope is a scope for the outbound queue processor.
 	OperationOutboundQueueProcessorScope = "OutboundQueueProcessor"
+	// VersionMembershipCacheGetScope is the scope used by version membership cache
+	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
+	// VersionMembershipCachePutScope is the scope used by version membership cache
+	VersionMembershipCachePutScope = "VersionMembershipCachePut"
 )
 
 // Matching Scope
@@ -568,6 +580,7 @@ const (
 	TaskTypeTimerActiveTaskWorkflowBackoffTimer           = "TimerActiveTaskWorkflowBackoffTimer"
 	TaskTypeTimerActiveTaskDeleteHistoryEvent             = "TimerActiveTaskDeleteHistoryEvent"
 	TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout = "TimerActiveTaskSpeculativeWorkflowTaskTimeout"
+	TaskTypeTimerActiveTaskChasmPureTask                  = "TimerActiveTaskChasmPureTask"
 	TaskTypeTimerStandbyTaskActivityTimeout               = "TimerStandbyTaskActivityTimeout"
 	TaskTypeTimerStandbyTaskWorkflowTaskTimeout           = "TimerStandbyTaskWorkflowTaskTimeout"
 	TaskTypeTimerStandbyTaskUserTimer                     = "TimerStandbyTaskUserTimer"
@@ -576,6 +589,7 @@ const (
 	TaskTypeTimerStandbyTaskActivityRetryTimer            = "TimerStandbyTaskActivityRetryTimer"
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer          = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent            = "TimerStandbyTaskDeleteHistoryEvent"
+	TaskTypeTimerStandbyTaskChasmPureTask                 = "TimerStandbyTaskChasmPureTask"
 )
 
 // Schedule action types
@@ -634,6 +648,7 @@ var (
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
+	HeaderSize                               = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
 	LockRequests                             = NewCounterDef("lock_requests")
 	LockLatency                              = NewTimerDef("lock_latency")
 	SemaphoreRequests                        = NewCounterDef("semaphore_requests")
@@ -853,7 +868,8 @@ var (
 	ActivitySuccess                                      = NewCounterDef("activity_success", WithDescription("Number of activities that succeeded (doesn't include retries)."))
 	ActivityFail                                         = NewCounterDef("activity_fail", WithDescription("Number of activities that failed and won't be retried anymore."))
 	ActivityTaskFail                                     = NewCounterDef("activity_task_fail", WithDescription("Number of activity task failures (includes retries)."))
-	ActivityCancel                                       = NewCounterDef("activity_cancel")
+	ActivityCancel                                       = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
+	ActivityTerminate                                    = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
 	ActivityTaskTimeout                                  = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
 	ActivityTimeout                                      = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                                  = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
@@ -1251,10 +1267,6 @@ var (
 		"schedule_action_success",
 		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
 	)
-	ScheduleActionAttempt = NewCounterDef(
-		"schedule_action_attempt",
-		WithDescription("The number of schedule actions attempts"),
-	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
 		WithDescription("The number of failed attempts from starting schedule actions"),
@@ -1271,10 +1283,6 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
-	ScheduleActionDropped = NewCounterDef(
-		"schedule_action_dropped",
-		WithDescription("The number of schedule actions that failed to start"),
-	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
 		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
@@ -1287,6 +1295,8 @@ var (
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
+	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
+	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
 
 	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
 	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_success_count")

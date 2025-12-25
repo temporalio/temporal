@@ -10,9 +10,11 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -31,7 +33,7 @@ func TestWithSearchAttributeInterceptor(t *testing.T) {
 	c := NewQueryConverter(
 		storeQCMock,
 		testNamespaceName,
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 	)
 	r.Equal(nopSearchAttributeInterceptor, c.saInterceptor)
@@ -40,7 +42,7 @@ func TestWithSearchAttributeInterceptor(t *testing.T) {
 	c = NewQueryConverter(
 		storeQCMock,
 		testNamespaceName,
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 	).WithSearchAttributeInterceptor(nil)
 	r.Equal(nopSearchAttributeInterceptor, c.saInterceptor)
@@ -50,7 +52,7 @@ func TestWithSearchAttributeInterceptor(t *testing.T) {
 	c = NewQueryConverter(
 		storeQCMock,
 		testNamespaceName,
-		searchattribute.TestNameTypeMap,
+		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
 	).WithSearchAttributeInterceptor(i)
 	r.Equal(i, c.saInterceptor)
@@ -76,9 +78,6 @@ func TestQueryConverter_Convert(t *testing.T) {
 		setupMocks                func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr])
 		mockNamespaceDivisionExpr bool
 		mockNamespaceDivisionErr  error
-		mockParenQueryExpr        bool
-		mockParenQueryExprRes     sqlparser.Expr
-		mockParenQueryExprErr     error
 		mockBuildFinalAndExpr     bool
 		mockBuildFinalAndRes      sqlparser.Expr
 		mockBuildFinalAndErr      error
@@ -103,13 +102,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(e, nil)
 			},
 			mockNamespaceDivisionExpr: true,
-			mockParenQueryExpr:        true,
-			mockParenQueryExprRes: &sqlparser.ComparisonExpr{
-				Operator: sqlparser.EqualStr,
-				Left:     keywordCol,
-				Right:    NewUnsafeSQLString("foo"),
-			},
-			mockBuildFinalAndExpr: true,
+			mockBuildFinalAndExpr:     true,
 			mockBuildFinalAndRes: &sqlparser.AndExpr{
 				Left: namespaceDivisionExpr,
 				Right: &sqlparser.ComparisonExpr{
@@ -124,8 +117,6 @@ func TestQueryConverter_Convert(t *testing.T) {
 			name:                      "success empty",
 			in:                        "",
 			mockNamespaceDivisionExpr: true,
-			mockParenQueryExpr:        true,
-			mockParenQueryExprRes:     nil,
 			mockBuildFinalAndExpr:     true,
 			mockBuildFinalAndRes:      namespaceDivisionExpr,
 		},
@@ -167,21 +158,6 @@ func TestQueryConverter_Convert(t *testing.T) {
 					ConvertKeywordComparisonExpr(sqlparser.EqualStr, NamespaceDivisionSAColumn(), "bar").
 					Return(e2, nil)
 				storeQCMock.EXPECT().BuildAndExpr(e1, e2).Return(e1e2, nil)
-			},
-			mockParenQueryExpr: true,
-			mockParenQueryExprRes: &sqlparser.ParenExpr{
-				Expr: &sqlparser.AndExpr{
-					Left: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     keywordCol,
-						Right:    NewUnsafeSQLString("foo"),
-					},
-					Right: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     NamespaceDivisionSAColumn(),
-						Right:    NewUnsafeSQLString("bar"),
-					},
-				},
 			},
 			mockBuildFinalAndExpr: true,
 			mockBuildFinalAndRes: &sqlparser.ParenExpr{
@@ -232,30 +208,6 @@ func TestQueryConverter_Convert(t *testing.T) {
 		},
 
 		{
-			name: "fail wrap query expr parenthesis",
-			in:   "AliasForKeyword01 = 'foo'",
-			inExpr: &sqlparser.ComparisonExpr{
-				Operator: sqlparser.EqualStr,
-				Left:     keywordCol,
-				Right:    NewUnsafeSQLString("foo"),
-			},
-			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
-				e := &sqlparser.ComparisonExpr{
-					Operator: sqlparser.EqualStr,
-					Left:     keywordCol,
-					Right:    NewUnsafeSQLString("foo"),
-				}
-				storeQCMock.EXPECT().
-					ConvertKeywordComparisonExpr(sqlparser.EqualStr, keywordCol, "foo").
-					Return(e, nil)
-			},
-			mockNamespaceDivisionExpr: true,
-			mockParenQueryExpr:        true,
-			mockParenQueryExprErr:     errors.New("mock error"),
-			err:                       "mock error",
-		},
-
-		{
 			name: "fail final and expr",
 			in:   "AliasForKeyword01 = 'foo'",
 			inExpr: &sqlparser.ComparisonExpr{
@@ -274,15 +226,9 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(e, nil)
 			},
 			mockNamespaceDivisionExpr: true,
-			mockParenQueryExpr:        true,
-			mockParenQueryExprRes: &sqlparser.ComparisonExpr{
-				Operator: sqlparser.EqualStr,
-				Left:     keywordCol,
-				Right:    NewUnsafeSQLString("foo"),
-			},
-			mockBuildFinalAndExpr: true,
-			mockBuildFinalAndErr:  errors.New("mock error"),
-			err:                   "mock error",
+			mockBuildFinalAndExpr:     true,
+			mockBuildFinalAndErr:      errors.New("mock error"),
+			err:                       "mock error",
 		},
 	}
 
@@ -294,7 +240,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -309,12 +255,8 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(namespaceDivisionExpr, tc.mockNamespaceDivisionErr)
 				exprs[0] = namespaceDivisionExpr
 			}
-			if tc.mockParenQueryExpr {
-				storeQCMock.EXPECT().BuildParenExpr(tc.inExpr).
-					Return(tc.mockParenQueryExprRes, tc.mockParenQueryExprErr)
-				exprs[1] = tc.mockParenQueryExprRes
-			}
 			if tc.mockBuildFinalAndExpr {
+				exprs[1] = tc.inExpr
 				storeQCMock.EXPECT().
 					BuildAndExpr(exprs...).
 					Return(tc.mockBuildFinalAndRes, tc.mockBuildFinalAndErr)
@@ -323,7 +265,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 			if tc.err != "" {
 				r.Error(err)
 				r.ErrorContains(err, tc.err)
-				if tc.mockNamespaceDivisionErr == nil && tc.mockParenQueryExprErr == nil && tc.mockBuildFinalAndErr == nil {
+				if tc.mockNamespaceDivisionErr == nil && tc.mockBuildFinalAndErr == nil {
 					var expectedErr *ConverterError
 					r.ErrorAs(err, &expectedErr)
 				}
@@ -393,8 +335,8 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 				OrderBy: sqlparser.OrderBy{
 					&sqlparser.Order{
 						Expr: NewSAColumn(
-							searchattribute.WorkflowType,
-							searchattribute.WorkflowType,
+							sadefs.WorkflowType,
+							sadefs.WorkflowType,
 							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 						),
 						Direction: sqlparser.AscScr,
@@ -409,8 +351,8 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 			out: &QueryParams[sqlparser.Expr]{
 				GroupBy: []*SAColumn{
 					NewSAColumn(
-						searchattribute.ExecutionStatus,
-						searchattribute.ExecutionStatus,
+						sadefs.ExecutionStatus,
+						sadefs.ExecutionStatus,
 						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					),
 				},
@@ -432,7 +374,7 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -506,8 +448,8 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 				OrderBy: sqlparser.OrderBy{
 					&sqlparser.Order{
 						Expr: NewSAColumn(
-							searchattribute.WorkflowType,
-							searchattribute.WorkflowType,
+							sadefs.WorkflowType,
+							sadefs.WorkflowType,
 							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 						),
 						Direction: sqlparser.AscScr,
@@ -522,8 +464,8 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			out: &QueryParams[sqlparser.Expr]{
 				GroupBy: []*SAColumn{
 					NewSAColumn(
-						searchattribute.ExecutionStatus,
-						searchattribute.ExecutionStatus,
+						sadefs.ExecutionStatus,
+						sadefs.ExecutionStatus,
 						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					),
 				},
@@ -555,7 +497,7 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			name: "fail not supported group by field",
 			in:   "select * from t group by RunId",
 			err: fmt.Sprintf(
-				"%s: 'GROUP BY' clause is only supported for search attributes",
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
 				NotSupportedErrMessage,
 			),
 		},
@@ -590,7 +532,7 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -623,8 +565,8 @@ func TestQueryConverter_ConvertWhereExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	statusCol := NewSAColumn(
-		searchattribute.ExecutionStatus,
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -860,7 +802,7 @@ func TestQueryConverter_ConvertWhereExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -950,7 +892,7 @@ func TestQueryConverter_ConvertParenExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1030,7 +972,7 @@ func TestQueryConverter_ConvertNotExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1061,8 +1003,8 @@ func TestQueryConverter_ConvertAndExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	wfTypeCol := NewSAColumn(
-		searchattribute.WorkflowType,
-		searchattribute.WorkflowType,
+		sadefs.WorkflowType,
+		sadefs.WorkflowType,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1139,7 +1081,7 @@ func TestQueryConverter_ConvertAndExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1170,8 +1112,8 @@ func TestQueryConverter_ConvertOrExpr(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	wfTypeCol := NewSAColumn(
-		searchattribute.WorkflowType,
-		searchattribute.WorkflowType,
+		sadefs.WorkflowType,
+		sadefs.WorkflowType,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1248,7 +1190,7 @@ func TestQueryConverter_ConvertOrExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1370,7 +1312,7 @@ func TestQueryConverter_ConvertComparisonExprStoreQueryConverterCalled(t *testin
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
@@ -1463,7 +1405,7 @@ func TestQueryConverter_ConvertComparisonExprFail(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1558,7 +1500,7 @@ func TestQueryConverter_ConvertRangeCond(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1695,7 +1637,7 @@ func TestQueryConverter_ConvertIsExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1728,8 +1670,8 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 	statusCol := NewSAColumn(
-		searchattribute.ExecutionStatus,
-		searchattribute.ExecutionStatus,
+		sadefs.ExecutionStatus,
+		sadefs.ExecutionStatus,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
@@ -1742,7 +1684,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		{
 			name: "success",
 			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(searchattribute.ExecutionStatus),
+				Name: sqlparser.NewColIdent(sadefs.ExecutionStatus),
 			},
 			out: statusCol,
 		},
@@ -1758,11 +1700,11 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		{
 			name: "success special ScheduleID",
 			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(searchattribute.ScheduleID),
+				Name: sqlparser.NewColIdent(sadefs.ScheduleID),
 			},
 			out: NewSAColumn(
-				searchattribute.ScheduleID,
-				searchattribute.WorkflowID,
+				sadefs.ScheduleID,
+				sadefs.WorkflowID,
 				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			),
 		},
@@ -1812,7 +1754,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -1825,7 +1767,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 			} else {
 				r.NoError(err)
 				r.Equal(tc.out, out)
-				if tc.out.FieldName == searchattribute.TemporalNamespaceDivision {
+				if tc.out.FieldName == sadefs.TemporalNamespaceDivision {
 					r.True(queryConverter.seenNamespaceDivision)
 				} else {
 					r.False(queryConverter.seenNamespaceDivision)
@@ -1922,8 +1864,7 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			name:                 "success custom ScheduleId",
 			in:                   "ScheduleId",
 			withCustomScheduleID: true,
-			useNoopMapper:        true,
-			outFn:                "ScheduleId",
+			outFn:                searchattribute.TestScheduleIDFieldName,
 			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 
@@ -1931,7 +1872,6 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			name:                 "success custom ScheduleId reserved TemporalScheduleId",
 			in:                   "TemporalScheduleId",
 			withCustomScheduleID: true,
-			useNoopMapper:        true,
 			outFn:                "WorkflowId",
 			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
@@ -1940,7 +1880,6 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			name:                 "success noop mapper ScheduleId",
 			in:                   "ScheduleId",
 			withCustomScheduleID: false,
-			useNoopMapper:        true,
 			outFn:                "WorkflowId",
 			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
@@ -1949,7 +1888,6 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			name:                 "success noop mapper TemporalScheduleId",
 			in:                   "TemporalScheduleId",
 			withCustomScheduleID: false,
-			useNoopMapper:        true,
 			outFn:                "WorkflowId",
 			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
@@ -1972,13 +1910,12 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
-				&searchattribute.TestMapper{},
+				searchattribute.TestNameTypeMap(),
+				&searchattribute.TestMapper{
+					WithCustomScheduleID: tc.withCustomScheduleID,
+				},
 			)
 
-			if tc.withCustomScheduleID {
-				queryConverter.saTypeMap = searchattribute.TestNameTypeMapWithScheduleId
-			}
 			if tc.useNoopMapper {
 				queryConverter.saMapper = searchattribute.NewNoopMapper()
 			}
@@ -2013,8 +1950,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "success SQLVal",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  searchattribute.WorkflowType,
-			field:  searchattribute.WorkflowType,
+			alias:  sadefs.WorkflowType,
+			field:  sadefs.WorkflowType,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "foo",
 		},
@@ -2022,8 +1959,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "success special ScheduleID",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  searchattribute.ScheduleID,
-			field:  searchattribute.WorkflowID,
+			alias:  sadefs.ScheduleID,
+			field:  sadefs.WorkflowID,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    primitives.ScheduleWorkflowIDPrefix + "foo",
 		},
@@ -2052,8 +1989,8 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 		{
 			name:   "fail SQLVal",
 			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  searchattribute.WorkflowType,
-			field:  searchattribute.WorkflowType,
+			alias:  sadefs.WorkflowType,
+			field:  sadefs.WorkflowType,
 			saType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			err:    InvalidExpressionErrMessage,
 		},
@@ -2127,7 +2064,7 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 
@@ -2194,7 +2131,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "success ExecutionStatus",
 			expr:   sqlparser.NewStrVal([]byte("Running")),
-			saName: searchattribute.ExecutionStatus,
+			saName: sadefs.ExecutionStatus,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "Running",
 		},
@@ -2202,7 +2139,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "fail ExecutionStatus",
 			expr:   sqlparser.NewStrVal([]byte("Invalid")),
-			saName: searchattribute.ExecutionStatus,
+			saName: sadefs.ExecutionStatus,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			err:    InvalidExpressionErrMessage,
 		},
@@ -2210,7 +2147,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "success ExecutionDuration",
 			expr:   sqlparser.NewStrVal([]byte("1m")),
-			saName: searchattribute.ExecutionDuration,
+			saName: sadefs.ExecutionDuration,
 			saType: enumspb.INDEXED_VALUE_TYPE_INT,
 			out:    int64(1 * time.Minute),
 		},
@@ -2218,7 +2155,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 		{
 			name:   "fail ExecutionDuration",
 			expr:   sqlparser.NewStrVal([]byte("1t")),
-			saName: searchattribute.ExecutionDuration,
+			saName: sadefs.ExecutionDuration,
 			saType: enumspb.INDEXED_VALUE_TYPE_INT,
 			err:    InvalidExpressionErrMessage,
 		},
@@ -2232,7 +2169,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
@@ -2449,7 +2386,7 @@ func TestQueryConverter_ValidateValueType(t *testing.T) {
 			queryConverter := NewQueryConverter(
 				storeQCMock,
 				testNamespaceName,
-				searchattribute.TestNameTypeMap,
+				searchattribute.TestNameTypeMap(),
 				&searchattribute.TestMapper{},
 			)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
@@ -2590,4 +2527,133 @@ func parseWhereString(where string) sqlparser.Expr {
 		panic(err)
 	}
 	return stmt.(*sqlparser.Select).Where.Expr
+}
+
+func TestQueryConverter_WithChasmMapper(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctrl := gomock.NewController(t)
+	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	c := NewQueryConverter(
+		storeQCMock,
+		testNamespaceName,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+	)
+	r.Nil(c.chasmMapper)
+
+	c = c.WithChasmMapper(chasmMapper)
+	r.Equal(chasmMapper, c.chasmMapper)
+
+	c = c.WithChasmMapper(nil)
+	r.Nil(c.chasmMapper)
+}
+
+func TestQueryConverter_WithArchetypeID(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctrl := gomock.NewController(t)
+	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+
+	c := NewQueryConverter(
+		storeQCMock,
+		testNamespaceName,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+	)
+	r.Equal(chasm.UnspecifiedArchetypeID, c.archetypeID)
+
+	c = c.WithArchetypeID(123)
+	r.Equal(chasm.ArchetypeID(123), c.archetypeID)
+
+	c = c.WithArchetypeID(chasm.UnspecifiedArchetypeID)
+	r.Equal(chasm.UnspecifiedArchetypeID, c.archetypeID)
+}
+
+func TestQueryConverter_ResolveSearchAttributeAlias_WithChasmMapper(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalBool01":    "ChasmCompleted",
+			"TemporalKeyword01": "ChasmStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalBool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	queryConverter := NewQueryConverter(
+		storeQCMock,
+		testNamespaceName,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+	).WithChasmMapper(chasmMapper)
+
+	testCases := []struct {
+		name                    string
+		expectedFieldName       string
+		expectedFieldType       enumspb.IndexedValueType
+		expectedErr             bool
+		expectNamespaceDivision bool
+	}{
+		{
+			name:                    "ChasmCompleted",
+			expectedFieldName:       "TemporalBool01",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_BOOL,
+			expectedErr:             false,
+			expectNamespaceDivision: false,
+		},
+		{
+			name:                    "ChasmStatus",
+			expectedFieldName:       "TemporalKeyword01",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			expectedErr:             false,
+			expectNamespaceDivision: false,
+		},
+		{
+			name:                    "TemporalNamespaceDivision",
+			expectedFieldName:       "TemporalNamespaceDivision",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			expectedErr:             false,
+			expectNamespaceDivision: true,
+		},
+		{
+			name:                    "NonExistentChasmAlias",
+			expectedFieldName:       "",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
+			expectedErr:             true,
+			expectNamespaceDivision: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			fieldName, fieldType, err := queryConverter.resolveSearchAttributeAlias(tc.name)
+			if tc.expectedErr {
+				r.Error(err)
+				// Note: fieldName may have been set during resolution attempts
+				r.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fieldType)
+			} else {
+				r.NoError(err)
+				r.Equal(tc.expectedFieldName, fieldName)
+				r.Equal(tc.expectedFieldType, fieldType)
+				// Note: seenNamespaceDivision is only set in convertColName, not resolveSearchAttributeAlias
+			}
+		})
+	}
 }

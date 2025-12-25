@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -68,9 +68,9 @@ func (s *bufferEventFlusherSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.namespaceID = uuid.New()
+	s.namespaceID = uuid.NewString()
 	s.workflowID = "some random workflow ID"
-	s.runID = uuid.New()
+	s.runID = uuid.NewString()
 	s.nDCBufferEventFlusher = NewBufferEventFlusher(
 		s.mockShard, s.mockContext, s.mockMutableState, s.logger,
 	)
@@ -158,6 +158,7 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 		"",
 		int64(0),
 	).Return(&historypb.HistoryEvent{}, nil)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	s.mockMutableState.EXPECT().AddWorkflowTaskScheduledEvent(
 		false,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,

@@ -295,9 +295,9 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = NewNamespaceIntSetting(
 		"system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute",
-		0,
+		5,
 		`NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute is the number of consecutive workflow task problems to trigger the TemporalReportedProblems search attribute.
-Setting this to 0 (the default) prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
+Setting this to 0 prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
 	)
 
 	// keys for size limit
@@ -959,6 +959,13 @@ so forwarding by endpoint ID will not work out of the box.`,
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
+	// NOTE (seankane): MaxCHASMCallbacksPerWorkflow is temporary, this will be removed and replaced with MaxCallbacksPerWorkflow
+	// once CHASM is fully enabled
+	MaxCHASMCallbacksPerWorkflow = NewNamespaceIntSetting(
+		"system.maxCHASMCallbacksPerWorkflow",
+		2000,
+		`MaxCHASMCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow when using the CHASM implementation.`,
+	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
 		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
@@ -989,13 +996,6 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"frontend.enableUpdateWorkflowExecution",
 		true,
 		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
-	)
-
-	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
-		"frontend.enableExecuteMultiOperation",
-		true,
-		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
-The API is under active development.`,
 	)
 
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
@@ -1292,6 +1292,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		5*time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingDeploymentWorkflowVersion = NewNamespaceIntSetting(
+		"matching.deploymentWorkflowVersion",
+		0,
+		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
+	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
 		1000,
@@ -1306,6 +1311,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.maxVersionsInDeployment",
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
+	)
+	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
+		"matching.maxVersionsInTaskQueue",
+		200,
+		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue. 
+ Should be larger than MatchingMaxVersionsInDeployment because a task queue can be in versions spanning across more than one deployments.`,
 	)
 	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeploymentVersion",
@@ -1373,9 +1384,43 @@ second per poller by one physical queue manager`,
 	MatchingEnableWorkerPluginMetrics = NewGlobalBoolSetting(
 		"matching.enableWorkerPluginMetrics",
 		false,
-		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics. 
-The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is 
+		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics.
+The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
+	)
+
+	// Worker registry settings
+	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
+		"matching.workerRegistryNumBuckets",
+		10,
+		`MatchingWorkerRegistryNumBuckets is the number of buckets used to partition the worker registry
+keyspace for reduced lock contention. Changes require a restart to take effect.`,
+	)
+	MatchingWorkerRegistryEntryTTL = NewGlobalDurationSetting(
+		"matching.workerRegistryEntryTTL",
+		5*time.Minute,
+		`MatchingWorkerRegistryEntryTTL is the time after which worker heartbeat entries are considered expired
+and eligible for eviction. Workers typically heartbeat every 30-60 seconds, so 5 minutes without a
+heartbeat indicates the worker is likely dead.`,
+	)
+	MatchingWorkerRegistryMinEvictAge = NewGlobalDurationSetting(
+		"matching.workerRegistryMinEvictAge",
+		1*time.Minute,
+		`MatchingWorkerRegistryMinEvictAge is the minimum age of worker heartbeat entries before they can be
+evicted due to capacity pressure. This prevents evicting recently-heartbeated workers even when
+the registry is at capacity. Lower values help handle crash-looping workers more aggressively.`,
+	)
+	MatchingWorkerRegistryMaxEntries = NewGlobalIntSetting(
+		"matching.workerRegistryMaxEntries",
+		1_000_000,
+		`MatchingWorkerRegistryMaxEntries is the maximum number of worker heartbeat entries allowed across
+all namespaces. When exceeded, the oldest entries (older than MinEvictAge) are evicted.`,
+	)
+	MatchingWorkerRegistryEvictionInterval = NewGlobalDurationSetting(
+		"matching.workerRegistryEvictionInterval",
+		1*time.Minute,
+		`MatchingWorkerRegistryEvictionInterval is how often the worker registry runs background eviction
+to remove expired entries. Should be shorter than EntryTTL for timely cleanup. Lower values mean faster cleanup but more CPU overhead.`,
 	)
 
 	// keys for history
@@ -1384,6 +1429,11 @@ an optional feature and also requires a metrics collection system that can handl
 		"history.enableReplicationStream",
 		true,
 		`EnableReplicationStream turn on replication stream`,
+	)
+	EnableSeparateReplicationEnableFlag = NewGlobalBoolSetting(
+		"history.enableSeparateReplicationEnableFlag",
+		false,
+		`EnableSeparateReplicationEnableFlag controls whether to use the new ReplicationEnabled flag to control replication streams separately from cluster connectivity. When false, falls back to using only the Enabled flag for both connectivity and replication.`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",
@@ -1647,13 +1697,13 @@ NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicate
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
 		500,
-		`The base number of pending tasks count for a task group to be moved to the next level reader. 
+		`The base number of pending tasks count for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
 	)
 	QueueMoveGroupTaskCountMultiplier = NewGlobalFloatSetting(
 		"history.queueMoveGroupTaskCountMultiplier",
 		3.0,
-		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader. 
+		`The multiplier used to calculate the number of pending tasks for a task group to be moved to the next level reader.
 The actual count is calculated as base * (multiplier ^ level)`,
 	)
 
@@ -2261,6 +2311,11 @@ the number of children greater than or equal to this threshold`,
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
 	)
+	EnableWorkflowTaskStampIncrementOnFailure = NewGlobalBoolSetting(
+		"history.enableWorkflowTaskStampIncrementOnFailure",
+		false,
+		`EnableWorkflowTaskStampIncrementOnFailure controls whether the workflow task stamp is incremented when a workflow task fails and is rescheduled`,
+	)
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
 		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
 		10,
@@ -2612,7 +2667,7 @@ that task will be sent to DLQ.`,
 		"Enable generating request ID reference links",
 	)
 
-	EnableChasm = NewGlobalBoolSetting(
+	EnableChasm = NewNamespaceBoolSetting(
 		"history.enableChasm",
 		false,
 		"Use real chasm tree implementation instead of the noop one",
@@ -2636,6 +2691,25 @@ instead of the existing (V1) implementation.`,
 		false,
 		`EnableCHASMSchedulerMigration controls whether existing V1 schedules are automatically migrated
 to the CHASM (V2) implementation on active scheduler workflows.`,
+	)
+
+	EnableCHASMCallbacks = NewNamespaceBoolSetting(
+		"history.enableCHASMCallbacks",
+		false,
+		`Controls whether new callbacks are created using the CHASM implementation
+instead of the previous HSM backed implementation.`,
+	)
+
+	VersionMembershipCacheTTL = NewGlobalDurationSetting(
+		"history.versionMembershipCacheTTL",
+		1*time.Second,
+		`TTL for caching RPC results that check whether a version is present in a task queue.`,
+	)
+
+	VersionMembershipCacheMaxSize = NewGlobalIntSetting(
+		"history.versionMembershipCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version membership cache.`,
 	)
 
 	// keys for worker
@@ -2927,5 +3001,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkerCommandsEnabled",
 		false,
 		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
+	)
+
+	WorkflowPauseEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkflowPauseEnabled",
+		false,
+		`WorkflowPauseEnabled is a "feature enable" flag. When enabled it allows clients to pause workflows.`,
 	)
 )

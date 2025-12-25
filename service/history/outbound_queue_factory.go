@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
@@ -241,6 +242,8 @@ func (f *outboundQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		shardContext.GetNamespaceRegistry(),
 		shardContext.GetClusterMetadata(),
+		f.ChasmRegistry,
+		queues.GetTaskTypeTagValue,
 		logger,
 		metricsHandler,
 		f.TracerProvider.Tracer(telemetry.ComponentQueueOutbound),
@@ -292,13 +295,13 @@ func getOutbountQueueProcessorMetricsHandler(handler metrics.Handler) metrics.Ha
 func StateMachineTask(smRegistry *hsm.Registry, task tasks.Task) (hsm.Ref, hsm.Task, error) {
 	cbt, ok := task.(*tasks.StateMachineOutboundTask)
 	if !ok {
-		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError("unknown task type")
+		return hsm.Ref{}, nil, queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
 	def, ok := smRegistry.TaskSerializer(cbt.Info.Type)
 	if !ok {
 		return hsm.Ref{},
 			nil,
-			queues.NewUnprocessableTaskError(
+			queueserrors.NewUnprocessableTaskError(
 				fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type),
 			)
 	}
@@ -308,7 +311,7 @@ func StateMachineTask(smRegistry *hsm.Registry, task tasks.Task) (hsm.Ref, hsm.T
 			nil,
 			fmt.Errorf(
 				"%w: %w",
-				queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
+				queueserrors.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
 				err,
 			)
 	}

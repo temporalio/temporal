@@ -41,6 +41,7 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
+	PersistenceRateLimiterProvider,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
 	fx.Annotated{
@@ -108,7 +109,7 @@ func replicationTaskExecutorProvider() TaskExecutorProvider {
 		return NewTaskExecutor(
 			params.RemoteCluster,
 			params.Shard,
-			params.HistoryResender,
+			params.RemoteHistoryFetcher,
 			params.DeleteManager,
 			params.WorkflowCache,
 		)
@@ -279,7 +280,12 @@ func sequentialTaskQueueFactoryProvider(
 		if config.EnableReplicationTaskBatching() {
 			return NewSequentialBatchableTaskQueue(task, nil, logger, metricsHandler)
 		}
-		return NewSequentialTaskQueue(task)
+		item := task.QueueID()
+		workflowKey, ok := item.(definition.WorkflowKey)
+		if !ok {
+			return NewSequentialTaskQueueWithID(item)
+		}
+		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
 	}
 }
 

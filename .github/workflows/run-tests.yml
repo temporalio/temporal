@@ -108,7 +108,7 @@ jobs:
           cat "$GITHUB_OUTPUT"
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -139,13 +139,13 @@ jobs:
     name: Pre-build for cache
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
@@ -181,7 +181,7 @@ jobs:
     needs: pre-build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -189,7 +189,7 @@ jobs:
           # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
           fetch-depth: 100
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
@@ -229,12 +229,12 @@ jobs:
     needs: [pre-build, set-up-single-test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -253,7 +253,7 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: make unit-test-coverage
+        run: TEST_TIMEOUT=15m make unit-test-coverage
         env:
           UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
@@ -319,7 +319,7 @@ jobs:
     needs: [pre-build, set-up-single-test]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -334,7 +334,7 @@ jobs:
             postgresql
           down-flags: -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -481,7 +481,7 @@ jobs:
         with:
           key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -495,7 +495,7 @@ jobs:
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
@@ -645,7 +645,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -665,7 +665,7 @@ jobs:
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -806,7 +806,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -826,7 +826,7 @@ jobs:
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -930,3 +930,33 @@ jobs:
               exit 1
             fi
           fi
+
+  notify-failure:
+    name: Notify Slack on Failure
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.test-status.result == 'failure'
+    needs: test-status
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          go run ./cmd/tools/ci-notify \
+            --run-id "${{ github.run_id }}" \
+            --slack-webhook "$SLACK_WEBHOOK"

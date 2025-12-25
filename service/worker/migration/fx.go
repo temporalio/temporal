@@ -3,11 +3,12 @@ package migration
 import (
 	"context"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -38,6 +39,7 @@ type (
 		MetricsHandler            metrics.Handler
 		DynamicCollection         *dynamicconfig.Collection
 		WorkflowVerifier          WorkflowVerifier
+		ChasmRegistry             *chasm.Registry
 	}
 
 	fxResult struct {
@@ -98,7 +100,7 @@ func workflowVerifierProvider() WorkflowVerifier {
 		remoteAdminClient adminservice.AdminServiceClient,
 		localAdminClient adminservice.AdminServiceClient,
 		ns *namespace.Namespace,
-		we *commonpb.WorkflowExecution,
+		execution *replicationspb.MigrationExecutionInfo,
 		mu *adminservice.DescribeMutableStateResponse,
 	) (verifyResult, error) {
 		return verifyResult{
@@ -124,5 +126,6 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
 		workflowVerifier:                 wc.WorkflowVerifier,
+		chasmRegistry:                    wc.ChasmRegistry,
 	}
 }

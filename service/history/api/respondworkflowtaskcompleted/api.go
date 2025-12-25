@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -30,7 +31,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -110,15 +110,15 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// then the lease is released without an error, i.e. workflow context and mutable state are NOT cleared.
 	releaseLeaseWithError := true
 
-	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
+	}
+
+	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	if err != nil {
+		return nil, err
 	}
 
 	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -130,12 +130,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				metrics.StaleMutableStateCounter.With(handler.metricsHandler).Record(
 					1,
 					metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-				softassert.Sometimes(handler.logger).Debug("stale mutable state detected",
-					tag.WorkflowID(token.GetWorkflowId()),
-					tag.WorkflowRunID(token.GetRunId()),
-					tag.WorkflowScheduledEventID(token.GetScheduledEventId()),
-					tag.NewInt64("mutable-state-next-event-id", mutableState.GetNextEventID()),
-				)
 				return false
 			}
 			return true
@@ -173,7 +167,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// This is NOT 100% bulletproof solution because this write operation may also fail.
 			// TODO: remove this call when GetWorkflowExecutionHistory includes speculative WFT events.
 			if clearStickyErr := handler.clearStickyTaskQueue(ctx, workflowLease.GetContext()); clearStickyErr != nil {
-				softassert.Sometimes(handler.logger).Error("Failed to clear stickiness after speculative workflow task failed to complete.",
+				handler.logger.Error("Failed to clear stickiness after speculative workflow task failed to complete.",
 					tag.NewErrorTag("clear-sticky-error", clearStickyErr),
 					tag.Error(retError),
 					tag.WorkflowID(token.GetWorkflowId()),
@@ -199,6 +193,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// Mutable state wasn't changed yet and doesn't have to be cleared.
 		releaseLeaseWithError = false
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
+	}
+
+	// We don't accept the request to create a new workflow task if the workflow is paused.
+	if ms.IsWorkflowExecutionStatusPaused() && request.GetForceCreateNewWorkflowTask() {
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
+		return nil, serviceerror.NewFailedPrecondition("Workflow is paused and force create new workflow task is not allowed.")
 	}
 
 	behavior := request.GetVersioningBehavior()
@@ -232,7 +233,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if retError != nil {
 			cancelled := effects.Cancel(ctx)
 			if cancelled {
-				softassert.Sometimes(handler.logger).Info("Canceled effects due to error",
+				handler.logger.Info("Canceled effects due to error",
 					tag.Error(retError),
 					tag.WorkflowID(token.GetWorkflowId()),
 					tag.WorkflowRunID(token.GetRunId()),
@@ -291,11 +292,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				metrics.NamespaceTag(nsName),
 			)
 			metrics.WorkflowTaskHeartbeatTimeoutCounter.With(scope).Record(1)
-			softassert.Sometimes(handler.logger).Debug("workflow task heartbeat timed out",
-				tag.WorkflowNamespaceID(nsName),
-				tag.WorkflowID(token.GetWorkflowId()),
-				tag.WorkflowRunID(token.GetRunId()),
-			)
 			completedEvent, err = ms.AddWorkflowTaskTimedOutEvent(currentWorkflowTask)
 			if err != nil {
 				return nil, err
@@ -350,12 +346,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	//   and admitted updates are lost. Uncomment this check when durable admitted is implemented
 	//   or updates stay in the registry after WFT is failed.
 	hasBufferedEventsOrMessages := ms.HasBufferedEvents() // || updateRegistry.HasOutgoingMessages(false)
-	if hasBufferedEventsOrMessages {
-		softassert.Sometimes(handler.logger).Debug("workflow has buffered events/messages",
-			tag.WorkflowID(token.GetWorkflowId()),
-			tag.WorkflowRunID(token.GetRunId()),
-		)
-	}
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -465,7 +455,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			metrics.FailureTag(wtFailedCause.failedCause.String()),
 			metrics.FirstAttemptTag(currentWorkflowTask.Attempt),
 		)
-		softassert.Sometimes(handler.logger).Info("Failing the workflow task.",
+		handler.logger.Info("Failing the workflow task.",
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),
 			tag.WorkflowRunID(token.GetRunId()),
@@ -615,6 +605,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 					newWorkflowExecutionInfo.WorkflowId,
 					newWorkflowExecutionState.RunId,
 				),
+				chasm.WorkflowArchetypeID,
 				handler.logger,
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),
@@ -641,12 +632,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// if updateErr resulted in TransactionSizeLimitError then fail workflow
 		switch updateErr.(type) {
 		case *persistence.TransactionSizeLimitError:
-			softassert.Sometimes(handler.logger).Debug("workflow terminated due to size limit",
-				tag.WorkflowID(token.GetWorkflowId()),
-				tag.WorkflowRunID(token.GetRunId()),
-				tag.Error(updateErr),
-			)
-
 			// must reload mutable state because the first call to updateWorkflowExecutionWithContext or continueAsNewWorkflowExecution
 			// clears mutable state if error is returned
 			ms, err = weContext.LoadMutableState(ctx, handler.shardContext)

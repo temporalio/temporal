@@ -4,23 +4,26 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 // ResolveSearchAttributeAlias resolves the search attribute alias for the given name. The process is:
 //  1. If the name has the "Temporal", skip mapping to a custom search attribute.
 //  2. If the search attribute exists in the visibility mapper, pass it through.
-//  3. If it exists as a system / predefined attribute, map it.
-//     3.1 Some pre-defined attributes are already defined with the Temporal prefix, so both options need to be checked.
-//  4. In the future, also need to lookup in the CHASM archetype search attribute mapping
+//  3. If the search attribute exists in the CHASM mapper, pass it through.
+//  4. If it exists as a system / predefined attribute, map it.
+//     4.1 Some pre-defined attributes are already defined with the Temporal prefix, so both options need to be checked.
 func ResolveSearchAttributeAlias(
 	name string,
 	ns namespace.Name,
 	mapper searchattribute.Mapper,
 	saTypeMap searchattribute.NameTypeMap,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) (string, enumspb.IndexedValueType, error) {
-	if searchattribute.IsMappable(name) {
+	if sadefs.IsMappable(name) {
 		// First check if the visibility mapper can handle this field (e.g., custom search attributes)
 		fieldName, fieldType := tryVisibilityMapper(name, ns, mapper, saTypeMap)
 		if fieldName != "" {
@@ -29,10 +32,22 @@ func ResolveSearchAttributeAlias(
 
 		// Handle ScheduleID → WorkflowID transformation, but only if ScheduleID is not defined as a custom search attribute
 		// This fallback only applies when the visibility mapper doesn't handle the field
-		if name == searchattribute.ScheduleID {
+		if name == sadefs.ScheduleID {
 			// ScheduleID is not defined, transform to WorkflowID
-			saType, _ := saTypeMap.GetType(searchattribute.WorkflowID)
-			return searchattribute.WorkflowID, saType, nil
+			saType, _ := saTypeMap.GetType(sadefs.WorkflowID)
+			return sadefs.WorkflowID, saType, nil
+		}
+
+		// Handle ActivityId → WorkflowID transformation for standalone activities.
+		// TODO: Remove this hardcoded transformation.
+		if name == sadefs.ActivityID {
+			saType, _ := saTypeMap.GetType(sadefs.WorkflowID)
+			return sadefs.WorkflowID, saType, nil
+		}
+
+		fieldName, fieldType = tryChasmMapper(name, chasmMapper)
+		if fieldName != "" {
+			return fieldName, fieldType, nil
 		}
 	}
 
@@ -74,17 +89,34 @@ func tryVisibilityMapper(
 	return fieldName, fieldType
 }
 
+func tryChasmMapper(name string, chasmMapper *chasm.VisibilitySearchAttributesMapper) (string, enumspb.IndexedValueType) {
+	if chasmMapper == nil {
+		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+	}
+
+	fieldName, err := chasmMapper.Field(name)
+	if err != nil {
+		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+	}
+
+	fieldType, err := chasmMapper.ValueType(fieldName)
+	if err != nil {
+		return "", enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+	}
+	return fieldName, fieldType
+}
+
 func tryDirectAndPrefixedLookup(name string, saTypeMap searchattribute.NameTypeMap) (string, enumspb.IndexedValueType, bool) {
 	if saType, err := saTypeMap.GetType(name); err == nil {
 		return name, saType, true
 	}
 
-	prefixedName := searchattribute.ReservedPrefix + name
+	prefixedName := sadefs.ReservedPrefix + name
 	if saType, err := saTypeMap.GetType(prefixedName); err == nil {
 		return prefixedName, saType, true
 	}
 
-	strippedName := strings.TrimPrefix(name, searchattribute.ReservedPrefix)
+	strippedName := strings.TrimPrefix(name, sadefs.ReservedPrefix)
 	if saType, err := saTypeMap.GetType(strippedName); err == nil {
 		return strippedName, saType, true
 	}

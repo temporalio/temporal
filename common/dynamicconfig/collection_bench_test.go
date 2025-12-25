@@ -1,6 +1,7 @@
 package dynamicconfig_test
 
 import (
+	"fmt"
 	"testing"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -121,4 +122,41 @@ func BenchmarkCollection(b *testing.B) {
 			_ = size("other-ns", "other-tq", 1)
 		}
 	})
+}
+
+func BenchmarkCollectionIndexed(b *testing.B) {
+	// You might want to set constraintsCacheThreshold to a high value before running this to
+	// measure the performance of linear search.
+
+	var nums []int
+	for v := 1.0; v < 1000; v *= 1.5 {
+		nums = append(nums, int(v+0.999))
+	}
+	for _, numNs := range nums {
+		// query for the middle one to measure the average
+		queryNs := numNs / 2
+
+		b.Run(fmt.Sprintf("num%d", numNs), func(b *testing.B) {
+			cvs := make([]dynamicconfig.ConstrainedValue, numNs)
+			for i := range cvs {
+				cvs[i] = dynamicconfig.ConstrainedValue{
+					Constraints: dynamicconfig.Constraints{
+						Namespace: fmt.Sprintf("namespace%d", i),
+					},
+					Value: 1000 + i,
+				}
+			}
+
+			cli := dynamicconfig.StaticClient{
+				dynamicconfig.FrontendGlobalNamespaceRPS.Key(): cvs,
+			}
+			cln := dynamicconfig.NewCollection(cli, log.NewNoopLogger())
+			get := dynamicconfig.FrontendGlobalNamespaceRPS.Get(cln)
+			query := fmt.Sprintf("namespace%d", queryNs)
+
+			for b.Loop() {
+				get(query)
+			}
+		})
+	}
 }

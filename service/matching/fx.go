@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -20,7 +21,6 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
 	"go.temporal.io/server/service/matching/workers"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -29,7 +29,6 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
-	deployment.Module,
 	workerdeployment.Module,
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
@@ -161,6 +160,7 @@ func VisibilityManagerProvider(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -170,6 +170,7 @@ func VisibilityManagerProvider(
 		saProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -194,5 +195,13 @@ func WorkersRegistryProvider(
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
 ) workers.Registry {
-	return workers.NewRegistry(lc, metricsHandler, serviceConfig.EnableWorkerPluginMetrics)
+	return workers.NewRegistry(lc, workers.RegistryParams{
+		NumBuckets:          serviceConfig.WorkerRegistryNumBuckets,
+		TTL:                 serviceConfig.WorkerRegistryEntryTTL,
+		MinEvictAge:         serviceConfig.WorkerRegistryMinEvictAge,
+		MaxItems:            serviceConfig.WorkerRegistryMaxEntries,
+		EvictionInterval:    serviceConfig.WorkerRegistryEvictionInterval,
+		MetricsHandler:      metricsHandler,
+		EnablePluginMetrics: serviceConfig.EnableWorkerPluginMetrics,
+	})
 }

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -149,6 +150,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
 
 		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
+			ctx,
 			historyi.TransactionPolicyActive,
 		)
 		if err != nil {
@@ -340,6 +342,7 @@ func (r *workflowResetterImpl) persistToDB(
 	currentRunID := currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
 	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -352,6 +355,7 @@ func (r *workflowResetterImpl) persistToDB(
 		// So check if current was already prepared for transaction. If not prepare the mutation for transaction.
 		if currentWorkflowMutation == nil {
 			currentWorkflowMutation, currentWorkflowEventsSeq, err = currentWorkflow.GetMutableState().CloseTransactionAsMutation(
+				ctx,
 				historyi.TransactionPolicyActive,
 			)
 			if err != nil {
@@ -363,6 +367,7 @@ func (r *workflowResetterImpl) persistToDB(
 		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
+			chasm.WorkflowArchetypeID,
 			currentWorkflow.GetMutableState().GetCurrentVersion(),
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,
@@ -381,6 +386,7 @@ func (r *workflowResetterImpl) persistToDB(
 		// We have 2 different runs to update here - the base run & the new run. There were no changes to current.
 		// However we are still preparing current for transaction only to be able to use transaction.ConflictResolveWorkflowExecution() method below.
 		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentWorkflow.GetMutableState().CloseTransactionAsMutation(
+			ctx,
 			historyi.TransactionPolicyActive,
 		)
 		if err != nil {
@@ -391,6 +397,7 @@ func (r *workflowResetterImpl) persistToDB(
 	// We have 3 different runs to update here. However we have to prepare the snapshot of the base for transaction to be used in transaction.ConflictResolveWorkflowExecution() method.
 	// We use this method since it allows us to commit changes from all 3 different runs in the same DB transaction.
 	baseSnapshot, baseEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -401,6 +408,7 @@ func (r *workflowResetterImpl) persistToDB(
 	if _, _, _, err := r.transaction.ConflictResolveWorkflowExecution(
 		ctx,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+		chasm.WorkflowArchetypeID,
 		baseWorkflow.GetMutableState().GetCurrentVersion(),
 		baseSnapshot,
 		baseEventsSeq,
@@ -448,6 +456,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 			workflowID,
 			resetRunID,
 		),
+		chasm.WorkflowArchetypeID,
 		r.logger,
 		r.shardContext.GetLogger(),
 		r.shardContext.GetMetricsHandler(),
@@ -949,6 +958,8 @@ func reapplyEvents(
 				requestID,
 				callbacks,
 				event.Links,
+				attr.GetIdentity(),
+				attr.GetPriority(),
 			); err != nil {
 				return reappliedEvents, err
 			}
@@ -1162,7 +1173,8 @@ func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, r
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask())
+			// TODO(carlydf): Put the reset requester in the event so that with state-based replication this code will run on the passive side.
+			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask(), "")
 			if err != nil {
 				return err
 			}

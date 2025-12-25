@@ -5,20 +5,27 @@ import (
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/log"
 )
 
 type handler struct {
 	schedulerpb.UnimplementedSchedulerServiceServer
+
+	logger log.Logger
 }
 
-func newHandler() *handler {
-	return &handler{}
+func newHandler(logger log.Logger) *handler {
+	return &handler{
+		logger: logger,
+	}
 }
 
-func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (*schedulerpb.CreateScheduleResponse, error) {
-	resp, _, _, err := chasm.NewEntity(
+func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, _, err = chasm.NewExecution(
 		ctx,
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
 			BusinessID:  req.FrontendRequest.ScheduleId,
 		},
@@ -29,11 +36,13 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 	return resp, err
 }
 
-func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (*schedulerpb.UpdateScheduleResponse, error) {
-	resp, _, err := chasm.UpdateComponent(
+func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
@@ -44,11 +53,13 @@ func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateSch
 	return resp, err
 }
 
-func (h *handler) PatchSchedule(ctx context.Context, req *schedulerpb.PatchScheduleRequest) (*schedulerpb.PatchScheduleResponse, error) {
-	resp, _, err := chasm.UpdateComponent(
+func (h *handler) PatchSchedule(ctx context.Context, req *schedulerpb.PatchScheduleRequest) (resp *schedulerpb.PatchScheduleResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
@@ -59,11 +70,13 @@ func (h *handler) PatchSchedule(ctx context.Context, req *schedulerpb.PatchSched
 	return resp, err
 }
 
-func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteScheduleRequest) (*schedulerpb.DeleteScheduleResponse, error) {
-	resp, _, err := chasm.UpdateComponent(
+func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteScheduleRequest) (resp *schedulerpb.DeleteScheduleResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},
@@ -74,11 +87,13 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 	return resp, err
 }
 
-func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.DescribeScheduleRequest) (*schedulerpb.DescribeScheduleResponse, error) {
+func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.DescribeScheduleRequest) (resp *schedulerpb.DescribeScheduleResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
 	return chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*Scheduler](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: req.NamespaceId,
 				BusinessID:  req.FrontendRequest.ScheduleId,
 			},

@@ -24,15 +24,15 @@ func Invoke(
 	tokenSerializer *tasktoken.Serializer,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (retError error) {
-	_, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-
 	request := req.FailedRequest
 	token, err := tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return consts.ErrDeserializingToken
+	}
+
+	_, err = api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	if err != nil {
+		return err
 	}
 
 	return api.GetAndUpdateWorkflowWithNew(
@@ -44,7 +44,7 @@ func Invoke(
 			token.RunId,
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+			namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
 			if err != nil {
 				return nil, err
 			}
@@ -75,19 +75,6 @@ func Invoke(
 				}, nil
 			}
 
-			if _, err := mutableState.AddWorkflowTaskFailedEvent(
-				workflowTask,
-				request.GetCause(),
-				request.GetFailure(),
-				request.GetIdentity(),
-				request.GetWorkerVersion(),
-				request.GetBinaryChecksum(),
-				"",
-				"",
-				0); err != nil {
-				return nil, err
-			}
-
 			metrics.FailedWorkflowTasksCounter.With(shardContext.GetMetricsHandler()).Record(
 				1,
 				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskFailedScope),
@@ -110,6 +97,21 @@ func Invoke(
 				}
 
 				return api.UpdateWorkflowTerminate, nil
+			}
+
+			if _, err := mutableState.AddWorkflowTaskFailedEvent(
+				workflowTask,
+				request.GetCause(),
+				request.GetFailure(),
+				request.GetIdentity(),
+				//nolint:staticcheck
+				request.GetWorkerVersion(),
+				//nolint:staticcheck
+				request.GetBinaryChecksum(),
+				"",
+				"",
+				0); err != nil {
+				return nil, err
 			}
 
 			// TODO (alex-update): if it was speculative WT that failed, and there is nothing but pending updates,

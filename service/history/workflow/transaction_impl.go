@@ -6,6 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +49,7 @@ func NewTransaction(
 func (t *TransactionImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	createMode persistence.CreateWorkflowMode,
+	archetypeID chasm.ArchetypeID,
 	newWorkflowFailoverVersion int64,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -67,6 +69,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 			ShardID: t.shard.GetShardID(),
 			// RangeID , this is set by shard context
 			Mode:                createMode,
+			ArchetypeID:         archetypeID,
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 			NewWorkflowEvents:   newWorkflowEventsSeq,
 		},
@@ -89,6 +92,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
+	archetypeID chasm.ArchetypeID,
 	resetWorkflowFailoverVersion int64,
 	resetWorkflowSnapshot *persistence.WorkflowSnapshot,
 	resetWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -116,6 +120,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 			ShardID: t.shard.GetShardID(),
 			// RangeID , this is set by shard context
 			Mode:                    conflictResolveMode,
+			ArchetypeID:             archetypeID,
 			ResetWorkflowSnapshot:   *resetWorkflowSnapshot,
 			ResetWorkflowEvents:     resetWorkflowEventsSeq,
 			NewWorkflowSnapshot:     newWorkflowSnapshot,
@@ -158,6 +163,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 func (t *TransactionImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	updateMode persistence.UpdateWorkflowMode,
+	archetypeID chasm.ArchetypeID,
 	currentWorkflowFailoverVersion int64,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -180,6 +186,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 			ShardID: t.shard.GetShardID(),
 			// RangeID , this is set by shard context
 			Mode:                   updateMode,
+			ArchetypeID:            archetypeID,
 			UpdateWorkflowMutation: *currentWorkflowMutation,
 			UpdateWorkflowEvents:   currentWorkflowEventsSeq,
 			NewWorkflowSnapshot:    newWorkflowSnapshot,
@@ -190,6 +197,27 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+
+		// TODO(dan): there is no test coverage for on-delete or on-create CHASM notifications.
+
+		// Notify for current workflow if it has CHASM updates
+		if len(currentWorkflowMutation.UpsertChasmNodes) > 0 ||
+			len(currentWorkflowMutation.DeleteChasmNodes) > 0 {
+			engine.NotifyChasmExecution(chasm.ExecutionKey{
+				NamespaceID: currentWorkflowMutation.ExecutionInfo.NamespaceId,
+				BusinessID:  currentWorkflowMutation.ExecutionInfo.WorkflowId,
+				RunID:       currentWorkflowMutation.ExecutionState.RunId,
+			}, nil)
+		}
+
+		// Notify for new workflow if it has CHASM nodes
+		if newWorkflowSnapshot != nil && len(newWorkflowSnapshot.ChasmNodes) > 0 {
+			engine.NotifyChasmExecution(chasm.ExecutionKey{
+				NamespaceID: newWorkflowSnapshot.ExecutionInfo.NamespaceId,
+				BusinessID:  newWorkflowSnapshot.ExecutionInfo.WorkflowId,
+				RunID:       newWorkflowSnapshot.ExecutionState.RunId,
+			}, nil)
+		}
 	}
 	if err != nil {
 		return 0, 0, err
@@ -211,6 +239,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 
 func (t *TransactionImpl) SetWorkflowExecution(
 	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
@@ -221,6 +250,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 	_, err = setWorkflowExecution(ctx, t.shard, &persistence.SetWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
+		ArchetypeID:         archetypeID,
 		SetWorkflowSnapshot: *workflowSnapshot,
 	})
 	if persistence.OperationPossiblySucceeded(err) {

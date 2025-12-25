@@ -16,11 +16,14 @@ type Context interface {
 	// In a context of a transaction, this time must be used to allow for framework support of pause and time skipping.
 	Now(Component) time.Time
 	// ExecutionKey returns the execution key for the execution the context is operating on.
-	ExecutionKey() EntityKey
-
+	ExecutionKey() ExecutionKey
+	// ExecutionCloseTime returns the time when the execution was closed. An execution is closed when its root component reaches a terminal
+	// state in its lifecycle. If the component is still running (not yet closed), it returns a zero time.Time value.
+	ExecutionCloseTime() time.Time
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
 
+	structuredRef(Component) (ComponentRef, error)
 	getContext() context.Context
 }
 
@@ -51,7 +54,7 @@ type immutableCtx struct {
 	// and the framework potentially needs to go to persistence to load some fields.
 	ctx context.Context
 
-	executionKey EntityKey
+	executionKey ExecutionKey
 
 	// Not embedding the Node here to avoid exposing AddTask() method on Node,
 	// so that ContextImpl won't implement MutableContext interface.
@@ -82,10 +85,10 @@ func newContext(
 	return &immutableCtx{
 		ctx:  ctx,
 		root: node.root(),
-		executionKey: EntityKey{
+		executionKey: ExecutionKey{
 			NamespaceID: workflowKey.NamespaceID,
 			BusinessID:  workflowKey.WorkflowID,
-			EntityID:    workflowKey.RunID,
+			RunID:       workflowKey.RunID,
 		},
 	}
 }
@@ -94,11 +97,15 @@ func (c *immutableCtx) Ref(component Component) ([]byte, error) {
 	return c.root.Ref(component)
 }
 
+func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) {
+	return c.root.structuredRef(component)
+}
+
 func (c *immutableCtx) Now(component Component) time.Time {
 	return c.root.Now(component)
 }
 
-func (c *immutableCtx) ExecutionKey() EntityKey {
+func (c *immutableCtx) ExecutionKey() ExecutionKey {
 	return c.executionKey
 }
 
@@ -106,10 +113,18 @@ func (c *immutableCtx) getContext() context.Context {
 	return c.ctx
 }
 
+func (c *immutableCtx) ExecutionCloseTime() time.Time {
+	closeTime := c.root.backend.GetExecutionInfo().GetCloseTime()
+	if closeTime == nil {
+		return time.Time{}
+	}
+	return closeTime.AsTime()
+}
+
 // NewMutableContext creates a new MutableContext from an existing Context and root Node.
 //
 // NOTE: Library authors should not invoke this constructor directly, and instead use the [UpdateComponent],
-// [UpdateWithNewEntity], or [NewEntity] APIs.
+// [UpdateWithNewExecution], or [NewExecution] APIs.
 func NewMutableContext(
 	ctx context.Context,
 	root *Node,

@@ -21,7 +21,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
+	queuescommon "go.temporal.io/server/service/history/queues/common"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
 var retryable4xxErrorTypes = []int{
@@ -51,8 +52,8 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 }
 
 func (n nexusInvocation) WrapError(result invocationResult, err error) error {
-	if failure, ok := result.(invocationResultRetry); ok {
-		return queues.NewDestinationDownError(failure.err.Error(), err)
+	if retry, ok := result.(invocationResultRetry); ok {
+		return queueserrors.NewDestinationDownError(retry.err.Error(), err)
 	}
 	return err
 }
@@ -81,7 +82,7 @@ func (n nexusInvocation) Invoke(
 
 	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
-		return invocationResultFail{queues.NewUnprocessableTaskError(
+		return invocationResultFail{queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
 		)}
 	}
@@ -92,7 +93,7 @@ func (n nexusInvocation) Invoke(
 		request.Header.Set(k, v)
 	}
 
-	caller := e.httpCallerProvider(queues.NamespaceIDAndDestination{
+	caller := e.httpCallerProvider(queuescommon.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
 		Destination: taskAttr.Destination,
 	})
@@ -108,7 +109,7 @@ func (n nexusInvocation) Invoke(
 
 	if err != nil {
 		e.logger.Error("Callback request failed with error", tag.Error(err))
-		return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
+		return invocationResultRetry{err: err}
 	}
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
@@ -118,7 +119,7 @@ func (n nexusInvocation) Invoke(
 		if _, err = io.Copy(io.Discard, response.Body); err == nil {
 			if err = response.Body.Close(); err != nil {
 				e.logger.Error("Callback request failed with error", tag.Error(err))
-				return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
+				return invocationResultRetry{err: err}
 			}
 		}
 		return invocationResultOK{}
@@ -128,7 +129,7 @@ func (n nexusInvocation) Invoke(
 	err = readHandlerErrFromResponse(response, e.logger)
 	e.logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
-		return invocationResultRetry{err: err, retryPolicy: e.config.RetryPolicy()}
+		return invocationResultRetry{err: err}
 	}
 	return invocationResultFail{err}
 }

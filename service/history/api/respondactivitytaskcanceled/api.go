@@ -6,6 +6,8 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -23,18 +25,46 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RespondActivityTaskCanceledResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	namespace := namespaceEntry.Name()
-
 	request := req.CancelRequest
 	tokenSerializer := tasktoken.NewSerializer()
 	token, err0 := tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
+
+	// Handle standalone activity if component ref is present in the token
+	if componentRef := token.GetComponentRef(); len(componentRef) > 0 {
+		namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.ActivityId)
+		if err != nil {
+			return nil, err
+		}
+		response, _, err := chasm.UpdateComponent(
+			ctx,
+			componentRef,
+			(*activity.Activity).HandleCanceled,
+			activity.RespondCancelledEvent{
+				Request: req,
+				Token:   token,
+				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
+					Handler:                     shard.GetMetricsHandler(),
+					NamespaceName:               namespaceEntry.Name().String(),
+					BreakdownMetricsByTaskQueue: shard.GetConfig().BreakdownMetricsByTaskQueue,
+				},
+			},
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return response, nil
+	}
+
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), token.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+	namespaceName := namespaceEntry.Name()
 	if err := api.SetActivityTaskRunID(ctx, token, workflowConsistencyChecker); err != nil {
 		return nil, err
 	}
@@ -113,7 +143,7 @@ func Invoke(
 	if err == nil {
 		workflow.RecordActivityCompletionMetrics(
 			shard,
-			namespace,
+			namespaceName,
 			taskQueue,
 			workflow.ActivityCompletionMetrics{
 				Status:             workflow.ActivityStatusCanceled,

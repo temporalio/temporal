@@ -18,7 +18,7 @@ type Invoker struct {
 
 	*schedulerpb.InvokerState
 
-	Scheduler chasm.Field[*Scheduler]
+	Scheduler chasm.ParentPtr[*Scheduler]
 }
 
 func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
@@ -27,13 +27,12 @@ func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 
 // NewInvoker returns an intialized Invoker component, which should
 // be parented under a Scheduler root component.
-func NewInvoker(ctx chasm.MutableContext, scheduler *Scheduler) *Invoker {
+func NewInvoker(ctx chasm.MutableContext) *Invoker {
 	return &Invoker{
 		InvokerState: &schedulerpb.InvokerState{
 			BufferedStarts:        []*schedulespb.BufferedStart{},
 			RequestIdToWorkflowId: make(map[string]string),
 		},
-		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
 }
 

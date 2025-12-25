@@ -15,5 +15,5 @@ func (s *Scheduler) RecordCompletedAction(
 	workflowID string,
 	workflowStatus enumspb.WorkflowExecutionStatus,
 ) {
-	s.recordCompletedAction(ctx, scheduleTime, workflowID, workflowStatus)
+	s.recordCompletedAction(scheduleTime, workflowID, workflowStatus)
 }

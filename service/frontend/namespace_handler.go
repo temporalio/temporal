@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -182,7 +182,7 @@ func (d *namespaceHandler) RegisterNamespace(
 	}
 
 	info := &persistencespb.NamespaceInfo{
-		Id:          uuid.New(),
+		Id:          uuid.NewString(),
 		Name:        registerRequest.GetNamespace(),
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Owner:       registerRequest.GetOwnerEmail(),
@@ -862,6 +862,11 @@ func (d *namespaceHandler) createResponse(
 			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
 			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
 			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
+			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
+		},
+		Limits: &namespacepb.NamespaceInfo_Limits{
+			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),
+			MemoSizeLimitError: int64(d.config.MemoSizeLimitError(info.Name)),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}

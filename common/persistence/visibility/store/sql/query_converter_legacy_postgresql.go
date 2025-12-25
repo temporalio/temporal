@@ -5,10 +5,12 @@ import (
 	"strings"
 
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -44,6 +46,8 @@ func newPostgreSQLQueryConverter(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *QueryConverterLegacy {
 	return newQueryConverterInternal(
 		&pgQueryConverter{},
@@ -52,6 +56,8 @@ func newPostgreSQLQueryConverter(
 		saTypeMap,
 		saMapper,
 		queryString,
+		chasmMapper,
+		archetypeID,
 	)
 }
 
@@ -203,7 +209,7 @@ func (c *pgQueryConverter) buildSelectStmt(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 
@@ -217,10 +223,10 @@ func (c *pgQueryConverter) buildSelectStmt(
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				searchattribute.GetSqlDbColName(searchattribute.RunID),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
+				sadefs.GetSqlDbColName(sadefs.RunID),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
-				searchattribute.GetSqlDbColName(searchattribute.StartTime),
+				sadefs.GetSqlDbColName(sadefs.StartTime),
 				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
@@ -246,8 +252,8 @@ func (c *pgQueryConverter) buildSelectStmt(
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
 		sqlparser.String(c.getCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(sadefs.StartTime),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 	), queryArgs
 }
 
@@ -261,7 +267,7 @@ func (c *pgQueryConverter) buildCountStmt(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("(%s = ?)", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, namespaceID.String())
 

@@ -1,0 +1,31 @@
+name: Promote Server Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      source-tag:
+        description: "Source tag from temporaliotest registry (e.g. sha-abc123)"
+        required: true
+      target-tags:
+        description: "Target tags for temporalio registry (comma or newline separated, e.g., 1.29.1, latest)"
+        required: true
+      override-security-scan:
+        description: "Override security scan failures (use with caution)"
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    uses: ./.github/workflows/promote-docker-image.yml
+    with:
+      image-name: server
+      source-tag: ${{ inputs.source-tag }}
+      target-tags: ${{ inputs.target-tags }}
+      override-security-scan: ${{ inputs.override-security-scan }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

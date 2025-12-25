@@ -95,6 +95,6 @@ func TestNilStoreQueryConverter_ConvertIsExpr(t *testing.T) {
 
 func TestNewNilQueryConverter(t *testing.T) {
 	t.Parallel()
-	c := NewNilQueryConverter("", searchattribute.TestNameTypeMap, nil)
+	c := NewNilQueryConverter("", searchattribute.TestNameTypeMap(), nil)
 	require.Equal(t, &nilStoreQueryConverter{}, c.storeQC)
 }

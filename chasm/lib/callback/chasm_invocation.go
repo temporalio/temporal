@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -18,7 +19,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -33,11 +33,12 @@ type chasmInvocation struct {
 }
 
 func (c chasmInvocation) WrapError(result invocationResult, err error) error {
-	if failure, ok := result.(invocationResultFail); ok {
-		return queues.NewUnprocessableTaskError(failure.err.Error())
+	// Return the invocation result error if present
+	if resultErr := result.error(); resultErr != nil {
+		return resultErr
 	}
 
-	return result.error()
+	return err
 }
 
 // logInternalError emits a log statement for internalMsg, tagged with both
@@ -56,9 +57,14 @@ func (c chasmInvocation) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
+	header := nexus.Header(c.nexus.GetHeader())
+	if header == nil {
+		header = nexus.Header{}
+	}
+
 	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
-	if !ok {
+	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
+	if encodedRef == "" {
 		return invocationResultFail{logInternalError(e.logger, "callback missing token", nil)}
 	}
 
@@ -84,7 +90,7 @@ func (c chasmInvocation) Invoke(
 	if err != nil {
 		msg := logInternalError(e.logger, "failed to complete Nexus operation: %v", err)
 		if isRetryableRPCResponse(err) {
-			return invocationResultRetry{err: msg, retryPolicy: e.config.RetryPolicy()}
+			return invocationResultRetry{err: msg}
 		}
 		return invocationResultFail{msg}
 	}
@@ -136,17 +142,21 @@ func (c chasmInvocation) getHistoryRequest(
 			return nil, fmt.Errorf("failed to read payload: %v", err)
 		}
 
-		var payload commonpb.Payload
+		var payload *commonpb.Payload
 		if payloadBody != nil {
-			err := proto.Unmarshal(payloadBody, &payload)
+			content := &nexus.Content{
+				Header: op.Reader.Header,
+				Data:   payloadBody,
+			}
+			err := commonnexus.PayloadSerializer.Deserialize(content, &payload)
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal payload body: %v", err)
+				return nil, fmt.Errorf("failed to deserialize payload: %v", err)
 			}
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
-				Success: &payload,
+				Success: payload,
 			},
 			CloseTime:  timestamppb.New(op.CloseTime),
 			Completion: completion,

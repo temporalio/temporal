@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -8,8 +9,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
 )
 
@@ -39,60 +40,62 @@ func (s *componentRefSuite) SetupTest() {
 	s.NoError(err)
 }
 
-func (s *componentRefSuite) TestArchetype() {
-	tv := testvars.New(s.T())
-	entityKey := EntityKey{
-		tv.NamespaceID().String(),
-		tv.WorkflowID(),
-		tv.RunID(),
+func (s *componentRefSuite) TestArchetypeID() {
+	executionKey := ExecutionKey{
+		NamespaceID: primitives.NewUUID().String(),
+		BusinessID:  primitives.NewUUID().String(),
+		RunID:       primitives.NewUUID().String(),
 	}
-	ref := NewComponentRef[*TestComponent](entityKey)
+	ref := NewComponentRef[*TestComponent](executionKey)
 
-	archetype, err := ref.Archetype(s.registry)
+	archetypeID, err := ref.ArchetypeID(s.registry)
 	s.NoError(err)
 
-	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
+	rc, ok := s.registry.componentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
 
-	s.Equal(rc.FqType(), archetype.String())
+	s.Equal(rc.componentID, archetypeID)
 }
 
 func (s *componentRefSuite) TestShardingKey() {
-	tv := testvars.New(s.T())
-	entityKey := EntityKey{
-		tv.NamespaceID().String(),
-		tv.WorkflowID(),
-		tv.RunID(),
+	executionKey := ExecutionKey{
+		NamespaceID: primitives.NewUUID().String(),
+		BusinessID:  primitives.NewUUID().String(),
+		RunID:       primitives.NewUUID().String(),
 	}
-	ref := NewComponentRef[*TestComponent](entityKey)
+	ref := NewComponentRef[*TestComponent](executionKey)
 
 	shardingKey, err := ref.ShardingKey(s.registry)
 	s.NoError(err)
 
-	rc, ok := s.registry.ComponentOf(reflect.TypeFor[*TestComponent]())
+	rc, ok := s.registry.componentOf(reflect.TypeFor[*TestComponent]())
 	s.True(ok)
 
-	s.Equal(rc.shardingFn(entityKey), shardingKey)
+	s.Equal(rc.shardingFn(executionKey), shardingKey)
 }
 
 func (s *componentRefSuite) TestSerializeDeserialize() {
-	tv := testvars.New(s.T())
-	entityKey := EntityKey{
-		tv.NamespaceID().String(),
-		tv.WorkflowID(),
-		tv.RunID(),
+	_, err := DeserializeComponentRef(nil)
+	s.ErrorIs(err, ErrInvalidComponentRef)
+	_, err = DeserializeComponentRef([]byte{})
+	s.ErrorIs(err, ErrInvalidComponentRef)
+
+	executionKey := ExecutionKey{
+		NamespaceID: primitives.NewUUID().String(),
+		BusinessID:  primitives.NewUUID().String(),
+		RunID:       primitives.NewUUID().String(),
 	}
 	ref := ComponentRef{
-		EntityKey:    entityKey,
-		entityGoType: reflect.TypeFor[*TestComponent](),
-		entityLastUpdateVT: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: tv.Namespace().FailoverVersion(),
-			TransitionCount:          tv.Any().Int64(),
+		ExecutionKey:    executionKey,
+		executionGoType: reflect.TypeFor[*TestComponent](),
+		executionLastUpdateVT: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
 		},
-		componentPath: []string{tv.Any().String(), tv.Any().String()},
+		componentPath: []string{primitives.NewUUID().String(), primitives.NewUUID().String()},
 		componentInitialVT: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: tv.Namespace().FailoverVersion(),
-			TransitionCount:          tv.Any().Int64(),
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
 		},
 	}
 
@@ -102,13 +105,13 @@ func (s *componentRefSuite) TestSerializeDeserialize() {
 	deserializedRef, err := DeserializeComponentRef(serializedRef)
 	s.NoError(err)
 
-	s.ProtoEqual(ref.entityLastUpdateVT, deserializedRef.entityLastUpdateVT)
+	s.ProtoEqual(ref.executionLastUpdateVT, deserializedRef.executionLastUpdateVT)
 	s.ProtoEqual(ref.componentInitialVT, deserializedRef.componentInitialVT)
 
 	rootRc, ok := s.registry.ComponentFor(&TestComponent{})
 	s.True(ok)
-	s.Equal(rootRc.FqType(), deserializedRef.archetype.String())
+	s.Equal(rootRc.componentID, deserializedRef.archetypeID)
 
-	s.Equal(ref.EntityKey, deserializedRef.EntityKey)
+	s.Equal(ref.ExecutionKey, deserializedRef.ExecutionKey)
 	s.Equal(ref.componentPath, deserializedRef.componentPath)
 }

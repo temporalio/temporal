@@ -110,7 +110,7 @@ func (tm *priTaskMatcher) Start() {
 
 	if tm.fwdr == nil {
 		// Root doesn't forward. But it does need something to validate tasks.
-		go tm.validateTasksOnRoot(lim, retrier)
+		go tm.validateTasksOnRoot(retrier)
 		return
 	}
 
@@ -128,8 +128,10 @@ func (tm *priTaskMatcher) Stop() {}
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
 	poller := waitingPoller{isTaskForwarder: true}
+	skipLimiter := false
+	var err error
 	for {
-		if lim.Wait(tm.tqCtx) != nil {
+		if !skipLimiter && lim.Wait(tm.tqCtx) != nil {
 			return
 		}
 
@@ -141,7 +143,7 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 			continue
 		}
 
-		err := tm.forwardTask(res.task)
+		skipLimiter, err = tm.forwardTask(res.task)
 
 		// backoff on resource exhausted errors
 		if common.IsResourceExhausted(err) {
@@ -152,7 +154,7 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 	}
 }
 
-func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
+func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	if task.forwardCtx != nil {
@@ -175,7 +177,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
 
-			return nil
+			return true, nil
 		}
 
 		// Add a timeout for forwarding.
@@ -187,30 +189,26 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 	if task.isQuery() {
 		res, err := tm.fwdr.ForwardQueryTask(ctx, task)
 		task.finishForward(res, err, true)
-		return err
+		return false, err
 	}
 
 	if task.isNexus() {
 		res, err := tm.fwdr.ForwardNexusTask(ctx, task)
 		task.finishForward(res, err, true)
-		return err
+		return false, err
 	}
 
 	// normal wf/activity task
 	err := tm.fwdr.ForwardTask(ctx, task)
 	task.finishForward(nil, err, true)
 
-	return err
+	return false, err
 }
 
-func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier backoff.Retrier) {
+func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
 	poller := &waitingPoller{isTaskForwarder: true, isTaskValidator: true}
 	for {
-		if lim.Wait(tm.tqCtx) != nil {
-			return
-		}
-
 		res := tm.data.EnqueuePollerAndWait(ctxs, poller)
 		if res.ctxErr != nil {
 			return // task queue closing
@@ -480,7 +478,7 @@ func (tm *priTaskMatcher) poll(
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
 		if pollMetadata.forwardedFrom == "" {
-			// Only recording for original polls
+			// Only recording for original polls (i.e. on child if forwarded)
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
 				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
@@ -509,19 +507,22 @@ func (tm *priTaskMatcher) poll(
 	}
 
 	task := res.task
-	pollWasForwarded = task.isStarted()
+	pollWasForwarded = task.isStarted() // true if this poll was forwarded _from_ this matcher
 	priority = task.getPriority().GetPriorityKey()
 
-	if !task.isQuery() {
-		if task.isSyncMatchTask() {
+	if !pollWasForwarded {
+		// Only record these metrics on the parent for forwarded polls
+		if !task.isQuery() {
+			if task.isSyncMatchTask() {
+				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			}
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		} else {
 			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-	} else {
-		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom)
 	}
-	tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom, pollWasForwarded)
 
 	return task, nil
 }
@@ -533,14 +534,7 @@ func (tm *priTaskMatcher) isForwardingAllowed() bool {
 func (tm *priTaskMatcher) emitForwardedSourceStats(
 	isTaskForwarded bool,
 	pollForwardedSource string,
-	forwardedPoll bool,
 ) {
-	if forwardedPoll {
-		// This means we forwarded the poll to another partition. Skipping this to prevent duplicate emits.
-		// Only the partition in which the match happened should emit this metric.
-		return
-	}
-
 	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
