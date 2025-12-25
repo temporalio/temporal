@@ -229,16 +229,19 @@ func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, error) {
 	switch p := m.partition.(type) {
 	case *tqid.NormalPartition:
-		// change to the workflow task queue
-		p = p.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(p.PartitionId())
+		if p.IsRoot() {
+			if p.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+				// we shouldn't get here since the root workflow queue should read from the db
+				return nil, tqid.ErrNoParent
+			}
+			// root of other queue types goes to root workflow queue
+			return p.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), nil
+		}
+		// go to parent of the same type
 		degree := m.config.ForwarderMaxChildrenPerNode()
 		parent, err := p.ParentPartition(degree)
-		if err == tqid.ErrNoParent {
-			// we're the root activity task queue, ask the root workflow task queue
-			return p, nil
-		} else if err != nil {
-			// invalid degree
-			return nil, err
+		if err != nil {
+			return nil, err // invalid degree
 		}
 		return parent, nil
 	default:
@@ -253,7 +256,7 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 		wfTQ := normalQ.Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		// use hash of the sticky queue name to pick a consistent "parent"
 		partitions := m.config.NumReadPartitions()
-		partition := int(farm.Fingerprint32([]byte(m.partition.RpcName()))) % partitions
+		partition := int(farm.Fingerprint32([]byte(p.RpcName()))) % partitions
 		return wfTQ.NormalPartition(partition), nil
 	}
 
