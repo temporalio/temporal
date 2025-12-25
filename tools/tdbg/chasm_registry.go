@@ -15,7 +15,8 @@ func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
 		return nil, err
 	}
 
-	if err := registry.Register(chasmworkflow.NewLibrary()); err != nil {
+	// TODO: when we add tasks we'll need to register the full library.
+	if err := registry.Register(chasmworkflow.NewComponentOnlyLibrary()); err != nil {
 		return nil, err
 	}
 

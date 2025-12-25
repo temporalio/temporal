@@ -13,6 +13,12 @@ func Register(
 	return registry.Register(library)
 }
 
+var FrontendModule = fx.Module(
+	"chasm.lib.scheduler-frontend",
+	fx.Invoke(func(registry *chasm.Registry) {
+		registry.Register(&ComponentOnlyLibrary{})
+	}),
+)
 var Module = fx.Module(
 	"chasm.lib.scheduler",
 	fx.Provide(ConfigProvider),

@@ -65,6 +65,14 @@ func (ch *commandHandler) HandleScheduleCommand(
 			// Links are not needed for validation.
 		}, attrs.Service, attrs.Operation, attrs.Input)
 		if err != nil {
+			var notFoundErr *serviceerror.NotFound
+			var invalidArgumentErr *serviceerror.InvalidArgument
+			if errors.As(err, &notFoundErr) || errors.As(err, &invalidArgumentErr) {
+				return workflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: err.Error(),
+				}
+			}
 			var handlerErr *nexus.HandlerError
 			if errors.As(err, &handlerErr) {
 				// nolint:exhaustive

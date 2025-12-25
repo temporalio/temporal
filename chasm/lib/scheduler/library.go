@@ -6,21 +6,38 @@ import (
 	"google.golang.org/grpc"
 )
 
-type (
-	Library struct {
-		chasm.UnimplementedLibrary
+type ComponentOnlyLibrary struct {
+	chasm.UnimplementedLibrary
+}
 
-		handler *handler
+func (l *ComponentOnlyLibrary) Name() string {
+	return chasm.SchedulerLibraryName
+}
 
-		SchedulerIdleTaskHandler        *SchedulerIdleTaskHandler
-		SchedulerCallbacksTaskHandler   *SchedulerCallbacksTaskHandler
-		GeneratorTaskHandler            *GeneratorTaskHandler
-		InvokerExecuteTaskHandler       *InvokerExecuteTaskHandler
-		InvokerProcessBufferTaskHandler *InvokerProcessBufferTaskHandler
-		BackfillerTaskHandler           *BackfillerTaskHandler
-		MigrateToWorkflowTaskHandler    *SchedulerMigrateToWorkflowTaskHandler
+func (l *ComponentOnlyLibrary) Components() []*chasm.RegistrableComponent {
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*Scheduler](
+			chasm.SchedulerComponentName,
+			chasm.WithBusinessIDAlias("ScheduleId"),
+			chasm.WithSearchAttributes(executionStatusSearchAttribute),
+		),
+		chasm.NewRegistrableComponent[*Generator]("generator"),
+		chasm.NewRegistrableComponent[*Invoker]("invoker"),
+		chasm.NewRegistrableComponent[*Backfiller]("backfiller"),
 	}
-)
+}
+
+type Library struct {
+	ComponentOnlyLibrary
+
+	handler *handler
+
+	SchedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
+	GeneratorTaskExecutor            *GeneratorTaskExecutor
+	InvokerExecuteTaskExecutor       *InvokerExecuteTaskExecutor
+	InvokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor
+	BackfillerTaskExecutor           *BackfillerTaskExecutor
+}
 
 // NewNilLibrary creates a Library with all nil handlers. Useful for
 // registration-only contexts like tdbg where no task execution is needed.
@@ -50,22 +67,6 @@ func NewLibrary(
 	}
 }
 
-func (l *Library) Name() string {
-	return chasm.SchedulerLibraryName
-}
-
-func (l *Library) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Scheduler](
-			chasm.SchedulerComponentName,
-			chasm.WithBusinessIDAlias("ScheduleId"),
-			chasm.WithSearchAttributes(executionStatusSearchAttribute),
-		),
-		chasm.NewRegistrableComponent[*Generator]("generator"),
-		chasm.NewRegistrableComponent[*Invoker]("invoker"),
-		chasm.NewRegistrableComponent[*Backfiller]("backfiller"),
-	}
-}
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{

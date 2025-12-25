@@ -131,7 +131,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.NoError(err)
 	err = chasmRegistry.Register(&testChasmLibrary{})
 	s.NoError(err)
-	err = chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err = chasmRegistry.Register(chasmworkflow.NewComponentOnlyLibrary())
 	s.NoError(err)
 
 	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(

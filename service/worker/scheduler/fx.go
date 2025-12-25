@@ -75,7 +75,7 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
-	// SpecBuilder is provided as part of chasm Scheduler module at top level.
+	fx.Provide(NewSpecBuilder),
 )
 
 func NewResult(

@@ -128,7 +128,7 @@ func (s *activitiesSuite) SetupTest() {
 		Return(&testNamespace, nil).AnyTimes()
 
 	chasmRegistry := chasm.NewRegistry(s.logger)
-	err := chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err := chasmRegistry.Register(chasmworkflow.NewComponentOnlyLibrary())
 	s.NoError(err)
 
 	s.a = &activities{

@@ -67,7 +67,7 @@ func (s *historyAPISuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 
 	s.chasmRegistry = chasm.NewRegistry(s.logger)
-	err := s.chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err := s.chasmRegistry.Register(chasmworkflow.NewComponentOnlyLibrary())
 	s.NoError(err)
 }
 
