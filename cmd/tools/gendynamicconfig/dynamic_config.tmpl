@@ -75,12 +75,31 @@ func (s {{$P.Name}}TypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
 }
+func (s {{$P.Name}}TypedSetting[T]) Documentation() SettingDoc {
+	return SettingDoc{
+		Key:          s.key.String(),
+		Type:         getTypeName(s.def),
+		Precedence:   "{{$P.Name}}",
+		Description:  s.description,
+		DefaultValue: formatDefaultValue(s.def),
+	}
+}
 
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Precedence() Precedence { return Precedence{{$P.Name}} }
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
+}
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Documentation() SettingDoc {
+	var zero T
+	return SettingDoc{
+		Key:          s.key.String(),
+		Type:         getTypeName(zero),
+		Precedence:   "{{$P.Name}}",
+		Description:  s.description,
+		DefaultValue: formatConstrainedDefaults(s.cdef),
+	}
 }
 
 func (s {{$P.Name}}TypedSetting[T]) WithDefault(v T) {{$P.Name}}TypedSetting[T] {
