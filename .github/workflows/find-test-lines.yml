@@ -1,0 +1,58 @@
+name: Find Test Lines
+
+on:
+  workflow_call:
+    inputs:
+      test_path:
+        description: "Test path in format TestSuiteName/TestFunctionName[/SubtestName]"
+        required: true
+        type: string
+      commit:
+        description: "Git commit hash to find contributors (optional)"
+        required: false
+        type: string
+        default: ""
+      go_version:
+        description: "Go version to use"
+        required: false
+        type: string
+        default: "1.23"
+    outputs:
+      file:
+        description: "Absolute path to the file containing the test"
+        value: ${{ jobs.find.outputs.file }}
+      start_line:
+        description: "Start line of the test function"
+        value: ${{ jobs.find.outputs.start_line }}
+      end_line:
+        description: "End line of the test function"
+        value: ${{ jobs.find.outputs.end_line }}
+      contributors:
+        description: "JSON array of contributors (if commit was provided)"
+        value: ${{ jobs.find.outputs.contributors }}
+      result:
+        description: "Full result as JSON object"
+        value: ${{ jobs.find.outputs.result }}
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    outputs:
+      file: ${{ steps.find-test.outputs.file }}
+      start_line: ${{ steps.find-test.outputs.start_line }}
+      end_line: ${{ steps.find-test.outputs.end_line }}
+      contributors: ${{ steps.find-test.outputs.contributors }}
+      result: ${{ steps.find-test.outputs.result }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find test lines
+        id: find-test
+        uses: ./.github/actions/find-test-lines
+        with:
+          test_path: ${{ inputs.test_path }}
+          commit: ${{ inputs.commit }}
+          go_version: ${{ inputs.go_version }}

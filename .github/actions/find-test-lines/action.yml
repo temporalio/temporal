@@ -1,0 +1,62 @@
+name: Find Test Lines
+description: Find the file location and line bounds of a Go test function, optionally with contributor info
+# NOTE: If a commit is provided, this action will checkout that commit,
+# leaving the workspace in a different state than before. Callers should
+# use the wrapper workflow (.github/workflows/find-test-lines.yml) or
+# re-checkout their desired ref after calling this action.
+inputs:
+  test_path:
+    description: "Test path in format TestSuiteName/TestFunctionName[/SubtestName]"
+    required: true
+  commit:
+    description: "Git commit hash to find contributors (optional)"
+    required: false
+    default: ""
+  go_version:
+    description: "Go version to use"
+    required: false
+    default: "1.23"
+outputs:
+  file:
+    description: "Absolute path to the file containing the test"
+    value: ${{ steps.find.outputs.file }}
+  start_line:
+    description: "Start line of the test function"
+    value: ${{ steps.find.outputs.start_line }}
+  end_line:
+    description: "End line of the test function"
+    value: ${{ steps.find.outputs.end_line }}
+  contributors:
+    description: "JSON array of contributors (if commit was provided)"
+    value: ${{ steps.find.outputs.contributors }}
+  result:
+    description: "Full result as JSON object"
+    value: ${{ steps.find.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go_version }}
+        cache: false
+
+    - name: Build find-test-lines
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: go build -o find-test-lines .
+
+    - name: Checkout commit
+      if: inputs.commit != ''
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.commit }}
+
+    - name: Find test location
+      id: find
+      shell: bash
+      env:
+        INPUT_TEST_PATH: ${{ inputs.test_path }}
+        INPUT_COMMIT: ${{ inputs.commit }}
+        INPUT_DIR: ${{ github.workspace }}
+      run: ${{ github.action_path }}/find-test-lines
