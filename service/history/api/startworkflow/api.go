@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -62,7 +61,7 @@ type Starter struct {
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
 	enableRequestIdRefLinks    dynamicconfig.BoolPropertyFn
-	versionMembershipCache     cache.Cache
+	versionMembershipCache     worker_versioning.VersionMembershipCache
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -91,7 +90,7 @@ func NewStarter(
 	tokenSerializer *tasktoken.Serializer,
 	request *historyservice.StartWorkflowExecutionRequest,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache cache.Cache,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
