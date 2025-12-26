@@ -55,3 +55,8 @@ history.hostLevelCacheMaxSize:
   - value: 8192
 history.enableTransitionHistory:
   - value: true
+# Enable CHASM framework and worker liveness tracking
+history.enableChasm:
+  - value: true
+matching.enableWorkerStateTracking:
+  - value: true
