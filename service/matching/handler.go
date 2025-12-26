@@ -589,6 +589,12 @@ func (h *Handler) ListWorkers(
 	}, nil
 }
 
+func (h *Handler) UpdateFairnessState(
+	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	return h.engine.UpdateFairnessState(ctx, request)
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {
