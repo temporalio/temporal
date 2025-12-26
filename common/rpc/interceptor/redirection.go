@@ -259,7 +259,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 		i.AfterCall(scope, startTime, clusterName, namespaceName.String(), retError)
 	}()
 
-	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
+	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, req, func(targetDC string) error {
 		clusterName = targetDC
 		if targetDC == i.currentClusterName {
 			resp, err = handler(ctx, req)

@@ -1,0 +1,401 @@
+package interceptor
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/api"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tasktoken"
+	"google.golang.org/grpc"
+)
+
+func TestWorkflowIDInterceptor_AllMethods(t *testing.T) {
+	extractor := NewWorkflowIDExtractor()
+	logger := log.NewTestLogger()
+	interceptor := NewWorkflowIDInterceptor(extractor, logger)
+
+	serializer := tasktoken.NewSerializer()
+	createTaskToken := func(workflowID string) []byte {
+		taskToken := &tokenspb.Task{WorkflowId: workflowID}
+		tokenBytes, err := serializer.Serialize(taskToken)
+		require.NoError(t, err)
+		return tokenBytes
+	}
+
+	// Test all methods in methodToPattern
+	testCases := []struct {
+		methodName         string
+		request            any
+		expectedWorkflowID string
+	}{
+		// PatternWorkflowID methods (direct WorkflowId field)
+		{
+			methodName:         "StartWorkflowExecution",
+			request:            &workflowservice.StartWorkflowExecutionRequest{WorkflowId: "wf-id"},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "SignalWithStartWorkflowExecution",
+			request:            &workflowservice.SignalWithStartWorkflowExecutionRequest{WorkflowId: "wf-id"},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "PauseWorkflowExecution",
+			request:            &workflowservice.PauseWorkflowExecutionRequest{WorkflowId: "wf-id"},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "UnpauseWorkflowExecution",
+			request:            &workflowservice.UnpauseWorkflowExecutionRequest{WorkflowId: "wf-id"},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RecordActivityTaskHeartbeatById",
+			request:            &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: "wf-id"},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RespondActivityTaskCompletedById",
+			request:            &workflowservice.RespondActivityTaskCompletedByIdRequest{WorkflowId: "wf-id"},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RespondActivityTaskCanceledById",
+			request:            &workflowservice.RespondActivityTaskCanceledByIdRequest{WorkflowId: "wf-id"},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RespondActivityTaskFailedById",
+			request:            &workflowservice.RespondActivityTaskFailedByIdRequest{WorkflowId: "wf-id"},
+			expectedWorkflowID: "wf-id",
+		},
+
+		// PatternWorkflowExecution methods (GetWorkflowExecution().GetWorkflowId())
+		{
+			methodName:         "DeleteWorkflowExecution",
+			request:            &workflowservice.DeleteWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RequestCancelWorkflowExecution",
+			request:            &workflowservice.RequestCancelWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "ResetWorkflowExecution",
+			request:            &workflowservice.ResetWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "SignalWorkflowExecution",
+			request:            &workflowservice.SignalWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "TerminateWorkflowExecution",
+			request:            &workflowservice.TerminateWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "UpdateWorkflowExecution",
+			request:            &workflowservice.UpdateWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "UpdateWorkflowExecutionOptions",
+			request:            &workflowservice.UpdateWorkflowExecutionOptionsRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+
+		// PatternExecution methods (GetExecution().GetWorkflowId())
+		{
+			methodName:         "DescribeWorkflowExecution",
+			request:            &workflowservice.DescribeWorkflowExecutionRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "GetWorkflowExecutionHistory",
+			request:            &workflowservice.GetWorkflowExecutionHistoryRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "GetWorkflowExecutionHistoryReverse",
+			request:            &workflowservice.GetWorkflowExecutionHistoryReverseRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "QueryWorkflow",
+			request:            &workflowservice.QueryWorkflowRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "ResetStickyTaskQueue",
+			request:            &workflowservice.ResetStickyTaskQueueRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "ResetActivity",
+			request:            &workflowservice.ResetActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "PauseActivity",
+			request:            &workflowservice.PauseActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "UnpauseActivity",
+			request:            &workflowservice.UnpauseActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "UpdateActivityOptions",
+			request:            &workflowservice.UpdateActivityOptionsRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "TriggerWorkflowRule",
+			request:            &workflowservice.TriggerWorkflowRuleRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
+			expectedWorkflowID: "wf-id",
+		},
+
+		// PatternTaskToken methods (TaskToken deserialization)
+		{
+			methodName:         "RecordActivityTaskHeartbeat",
+			request:            &workflowservice.RecordActivityTaskHeartbeatRequest{TaskToken: createTaskToken("wf-id")},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RespondActivityTaskCompleted",
+			request:            &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: createTaskToken("wf-id")},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RespondActivityTaskCanceled",
+			request:            &workflowservice.RespondActivityTaskCanceledRequest{TaskToken: createTaskToken("wf-id")},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RespondActivityTaskFailed",
+			request:            &workflowservice.RespondActivityTaskFailedRequest{TaskToken: createTaskToken("wf-id")},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RespondWorkflowTaskCompleted",
+			request:            &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: createTaskToken("wf-id")},
+			expectedWorkflowID: "wf-id",
+		},
+		{
+			methodName:         "RespondWorkflowTaskFailed",
+			request:            &workflowservice.RespondWorkflowTaskFailedRequest{TaskToken: createTaskToken("wf-id")},
+			expectedWorkflowID: "wf-id",
+		},
+
+		// PatternMultiOperation
+		{
+			methodName: "ExecuteMultiOperation",
+			request: &workflowservice.ExecuteMultiOperationRequest{
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					{
+						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{WorkflowId: "wf-id"},
+						},
+					},
+				},
+			},
+			expectedWorkflowID: "wf-id",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.methodName, func(t *testing.T) {
+			var capturedWorkflowID string
+			handler := func(ctx context.Context, req any) (any, error) {
+				capturedWorkflowID = GetWorkflowIDFromContext(ctx)
+				return nil, nil
+			}
+
+			info := &grpc.UnaryServerInfo{
+				FullMethod: api.WorkflowServicePrefix + tc.methodName,
+			}
+
+			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedWorkflowID, capturedWorkflowID)
+		})
+	}
+
+	// Verify we tested all methods in methodToPattern
+	require.Len(t, testCases, len(methodToPattern), "test cases should cover all methods in methodToPattern")
+}
+
+func TestWorkflowIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *testing.T) {
+	extractor := NewWorkflowIDExtractor()
+	logger := log.NewTestLogger()
+	interceptor := NewWorkflowIDInterceptor(extractor, logger)
+
+	testCases := []struct {
+		name       string
+		fullMethod string
+		request    any
+	}{
+		{
+			name:       "NonWorkflowServiceAPI",
+			fullMethod: "/temporal.api.operatorservice.v1.OperatorService/AddSearchAttributes",
+			request:    &workflowservice.StartWorkflowExecutionRequest{WorkflowId: "should-not-extract"},
+		},
+		{
+			name:       "UnmappedMethod",
+			fullMethod: api.WorkflowServicePrefix + "ListNamespaces",
+			request:    &workflowservice.ListNamespacesRequest{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedWorkflowID string
+			handler := func(ctx context.Context, req any) (any, error) {
+				capturedWorkflowID = GetWorkflowIDFromContext(ctx)
+				return nil, nil
+			}
+
+			info := &grpc.UnaryServerInfo{FullMethod: tc.fullMethod}
+			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
+			require.NoError(t, err)
+			require.Equal(t, namespace.EmptyBusinessID, capturedWorkflowID)
+		})
+	}
+}
+
+func TestWorkflowIDInterceptor_EdgeCases(t *testing.T) {
+	extractor := NewWorkflowIDExtractor()
+	logger := log.NewTestLogger()
+	interceptor := NewWorkflowIDInterceptor(extractor, logger)
+
+	testCases := []struct {
+		name               string
+		methodName         string
+		request            any
+		expectedWorkflowID string
+	}{
+		{
+			name:               "NilWorkflowExecution",
+			methodName:         "TerminateWorkflowExecution",
+			request:            &workflowservice.TerminateWorkflowExecutionRequest{WorkflowExecution: nil},
+			expectedWorkflowID: namespace.EmptyBusinessID,
+		},
+		{
+			name:               "InvalidTaskToken",
+			methodName:         "RespondActivityTaskCompleted",
+			request:            &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: []byte("invalid")},
+			expectedWorkflowID: namespace.EmptyBusinessID,
+		},
+		{
+			name:               "EmptyMultiOperations",
+			methodName:         "ExecuteMultiOperation",
+			request:            &workflowservice.ExecuteMultiOperationRequest{Operations: nil},
+			expectedWorkflowID: namespace.EmptyBusinessID,
+		},
+		{
+			name:       "MultiOperation_UpdateWorkflowFallback",
+			methodName: "ExecuteMultiOperation",
+			request: &workflowservice.ExecuteMultiOperationRequest{
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					{
+						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+								WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-update"},
+								Request:           &updatepb.Request{},
+							},
+						},
+					},
+				},
+			},
+			expectedWorkflowID: "wf-update",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedWorkflowID string
+			handler := func(ctx context.Context, req any) (any, error) {
+				capturedWorkflowID = GetWorkflowIDFromContext(ctx)
+				return nil, nil
+			}
+
+			info := &grpc.UnaryServerInfo{
+				FullMethod: api.WorkflowServicePrefix + tc.methodName,
+			}
+
+			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedWorkflowID, capturedWorkflowID)
+		})
+	}
+}
+
+func TestWorkflowIDContext(t *testing.T) {
+	t.Run("RoundTrip", func(t *testing.T) {
+		ctx := AddWorkflowIDContext(context.Background(), "test-workflow-id")
+		require.Equal(t, "test-workflow-id", GetWorkflowIDFromContext(ctx))
+	})
+
+	t.Run("MissingReturnsEmptyBusinessID", func(t *testing.T) {
+		require.Equal(t, namespace.EmptyBusinessID, GetWorkflowIDFromContext(context.Background()))
+	})
+}
+
+func TestMethodToPatternMapping(t *testing.T) {
+	expectedMappings := map[string]WorkflowIDPattern{
+		// PatternWorkflowID
+		"StartWorkflowExecution":           PatternWorkflowID,
+		"SignalWithStartWorkflowExecution": PatternWorkflowID,
+		"PauseWorkflowExecution":           PatternWorkflowID,
+		"UnpauseWorkflowExecution":         PatternWorkflowID,
+		"RecordActivityTaskHeartbeatById":  PatternWorkflowID,
+		"RespondActivityTaskCompletedById": PatternWorkflowID,
+		"RespondActivityTaskCanceledById":  PatternWorkflowID,
+		"RespondActivityTaskFailedById":    PatternWorkflowID,
+
+		// PatternWorkflowExecution
+		"DeleteWorkflowExecution":        PatternWorkflowExecution,
+		"RequestCancelWorkflowExecution": PatternWorkflowExecution,
+		"ResetWorkflowExecution":         PatternWorkflowExecution,
+		"SignalWorkflowExecution":        PatternWorkflowExecution,
+		"TerminateWorkflowExecution":     PatternWorkflowExecution,
+		"UpdateWorkflowExecution":        PatternWorkflowExecution,
+		"UpdateWorkflowExecutionOptions": PatternWorkflowExecution,
+
+		// PatternExecution
+		"DescribeWorkflowExecution":          PatternExecution,
+		"GetWorkflowExecutionHistory":        PatternExecution,
+		"GetWorkflowExecutionHistoryReverse": PatternExecution,
+		"QueryWorkflow":                      PatternExecution,
+		"ResetStickyTaskQueue":               PatternExecution,
+		"ResetActivity":                      PatternExecution,
+		"PauseActivity":                      PatternExecution,
+		"UnpauseActivity":                    PatternExecution,
+		"UpdateActivityOptions":              PatternExecution,
+		"TriggerWorkflowRule":                PatternExecution,
+
+		// PatternTaskToken
+		"RecordActivityTaskHeartbeat":  PatternTaskToken,
+		"RespondActivityTaskCompleted": PatternTaskToken,
+		"RespondActivityTaskCanceled":  PatternTaskToken,
+		"RespondActivityTaskFailed":    PatternTaskToken,
+		"RespondWorkflowTaskCompleted": PatternTaskToken,
+		"RespondWorkflowTaskFailed":    PatternTaskToken,
+
+		// PatternMultiOperation
+		"ExecuteMultiOperation": PatternMultiOperation,
+	}
+
+	require.Equal(t, expectedMappings, methodToPattern)
+}
