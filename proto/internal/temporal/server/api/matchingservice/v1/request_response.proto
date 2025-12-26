@@ -30,6 +30,9 @@ message PollWorkflowTaskQueueRequest {
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 3;
     string forwarded_source = 4;
+
+    // TODO: this should move to the public PollWorkflowTaskQueueRequest eventually
+    PollConditions conditions = 5;
 }
 
 message PollWorkflowTaskQueueResponse {
@@ -64,6 +67,9 @@ message PollActivityTaskQueueRequest {
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 3;
     string forwarded_source = 4;
+
+    // TODO: this should move to the public PollActivityTaskQueueRequest eventually
+    PollConditions conditions = 5;
 }
 
 message PollActivityTaskQueueResponse {
@@ -494,6 +500,9 @@ message PollNexusTaskQueueRequest {
     temporal.api.workflowservice.v1.PollNexusTaskQueueRequest request = 3;
     // Non-empty if this poll was forwarded from a child partition.
     string forwarded_source = 4;
+
+    // TODO: this should move to the public PollWorkflowTaskQueueRequest eventually
+    PollConditions conditions = 5;
 }
 
 message PollNexusTaskQueueResponse {
@@ -645,4 +654,14 @@ message CheckTaskQueueVersionMembershipRequest {
 
 message CheckTaskQueueVersionMembershipResponse {
     bool is_member = 1;
+}
+
+message PollConditions {
+    // If set (non-zero), this poll will not match a task with lower priority than this value.
+    // Note that "min" priority is "max" numeric value.
+    int32 min_priority = 1;
+    // If true, don't block waiting for a task, just return a task immediately or an empty
+    // response. This is most useful combined with min_priority, to poll for task at a specific
+    // priority level on a partition that you think is there.
+    bool no_wait = 2;
 }
