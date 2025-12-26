@@ -46,6 +46,7 @@ const (
 	AdminService_PurgeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
 	AdminService_MergeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
 	AdminService_RefreshWorkflowTasks_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/RefreshWorkflowTasks"
+	AdminService_StartAdminBatchOperation_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/StartAdminBatchOperation"
 	AdminService_ResendReplicationTasks_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ResendReplicationTasks"
 	AdminService_GetTaskQueueTasks_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks"
 	AdminService_DeleteWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
@@ -130,6 +131,8 @@ type AdminServiceClient interface {
 	MergeDLQMessages(ctx context.Context, in *MergeDLQMessagesRequest, opts ...grpc.CallOption) (*MergeDLQMessagesResponse, error)
 	// RefreshWorkflowTasks refreshes all tasks of a workflow.
 	RefreshWorkflowTasks(ctx context.Context, in *RefreshWorkflowTasksRequest, opts ...grpc.CallOption) (*RefreshWorkflowTasksResponse, error)
+	// StartAdminBatchOperation starts an admin batch operation. Supports internal operations like RefreshWorkflowTasks.
+	StartAdminBatchOperation(ctx context.Context, in *StartAdminBatchOperationRequest, opts ...grpc.CallOption) (*StartAdminBatchOperationResponse, error)
 	// ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
 	ResendReplicationTasks(ctx context.Context, in *ResendReplicationTasksRequest, opts ...grpc.CallOption) (*ResendReplicationTasksResponse, error)
 	// GetTaskQueueTasks returns tasks from task queue.
@@ -397,6 +400,15 @@ func (c *adminServiceClient) RefreshWorkflowTasks(ctx context.Context, in *Refre
 	return out, nil
 }
 
+func (c *adminServiceClient) StartAdminBatchOperation(ctx context.Context, in *StartAdminBatchOperationRequest, opts ...grpc.CallOption) (*StartAdminBatchOperationResponse, error) {
+	out := new(StartAdminBatchOperationResponse)
+	err := c.cc.Invoke(ctx, AdminService_StartAdminBatchOperation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) ResendReplicationTasks(ctx context.Context, in *ResendReplicationTasksRequest, opts ...grpc.CallOption) (*ResendReplicationTasksResponse, error) {
 	out := new(ResendReplicationTasksResponse)
 	err := c.cc.Invoke(ctx, AdminService_ResendReplicationTasks_FullMethodName, in, out, opts...)
@@ -637,6 +649,8 @@ type AdminServiceServer interface {
 	MergeDLQMessages(context.Context, *MergeDLQMessagesRequest) (*MergeDLQMessagesResponse, error)
 	// RefreshWorkflowTasks refreshes all tasks of a workflow.
 	RefreshWorkflowTasks(context.Context, *RefreshWorkflowTasksRequest) (*RefreshWorkflowTasksResponse, error)
+	// StartAdminBatchOperation starts an admin batch operation. Supports internal operations like RefreshWorkflowTasks.
+	StartAdminBatchOperation(context.Context, *StartAdminBatchOperationRequest) (*StartAdminBatchOperationResponse, error)
 	// ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
 	ResendReplicationTasks(context.Context, *ResendReplicationTasksRequest) (*ResendReplicationTasksResponse, error)
 	// GetTaskQueueTasks returns tasks from task queue.
@@ -744,6 +758,9 @@ func (UnimplementedAdminServiceServer) MergeDLQMessages(context.Context, *MergeD
 }
 func (UnimplementedAdminServiceServer) RefreshWorkflowTasks(context.Context, *RefreshWorkflowTasksRequest) (*RefreshWorkflowTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RefreshWorkflowTasks not implemented")
+}
+func (UnimplementedAdminServiceServer) StartAdminBatchOperation(context.Context, *StartAdminBatchOperationRequest) (*StartAdminBatchOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartAdminBatchOperation not implemented")
 }
 func (UnimplementedAdminServiceServer) ResendReplicationTasks(context.Context, *ResendReplicationTasksRequest) (*ResendReplicationTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResendReplicationTasks not implemented")
@@ -1277,6 +1294,24 @@ func _AdminService_RefreshWorkflowTasks_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_StartAdminBatchOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartAdminBatchOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).StartAdminBatchOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_StartAdminBatchOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).StartAdminBatchOperation(ctx, req.(*StartAdminBatchOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_ResendReplicationTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResendReplicationTasksRequest)
 	if err := dec(in); err != nil {
@@ -1701,6 +1736,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RefreshWorkflowTasks",
 			Handler:    _AdminService_RefreshWorkflowTasks_Handler,
+		},
+		{
+			MethodName: "StartAdminBatchOperation",
+			Handler:    _AdminService_StartAdminBatchOperation_Handler,
 		},
 		{
 			MethodName: "ResendReplicationTasks",

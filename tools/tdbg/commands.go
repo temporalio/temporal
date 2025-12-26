@@ -635,6 +635,13 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 	return nil
 }
 
+func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
+	if c.IsSet(FlagVisibilityQuery) {
+		return AdminBatchRefreshWorkflowTasks(c, clientFactory)
+	}
+	return AdminRefreshWorkflowTasks(c, clientFactory)
+}
+
 // AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
 func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
 	adminClient := clientFactory.AdminClient(c)
@@ -672,6 +679,52 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "Refresh workflow task succeeded.")
 	}
+	return nil
+}
+
+// AdminBatchRefreshWorkflowTasks starts a batch job to refresh workflow tasks for multiple workflows
+func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	query, err := getRequiredOption(c, FlagVisibilityQuery)
+	if err != nil {
+		return err
+	}
+
+	reason, err := getRequiredOption(c, FlagReason)
+	if err != nil {
+		return err
+	}
+
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       nsName,
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
+	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintln(c.App.Writer, "Batch Refresh Workflow Tasks started successfully.")
 	return nil
 }
 

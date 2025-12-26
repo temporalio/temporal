@@ -863,6 +863,26 @@ func (mr *MockAdminServiceClientMockRecorder) ResendReplicationTasks(ctx, in any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ResendReplicationTasks), varargs...)
 }
 
+// StartAdminBatchOperation mocks base method.
+func (m *MockAdminServiceClient) StartAdminBatchOperation(ctx context.Context, in *adminservice.StartAdminBatchOperationRequest, opts ...grpc.CallOption) (*adminservice.StartAdminBatchOperationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StartAdminBatchOperation", varargs...)
+	ret0, _ := ret[0].(*adminservice.StartAdminBatchOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartAdminBatchOperation indicates an expected call of StartAdminBatchOperation.
+func (mr *MockAdminServiceClientMockRecorder) StartAdminBatchOperation(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartAdminBatchOperation", reflect.TypeOf((*MockAdminServiceClient)(nil).StartAdminBatchOperation), varargs...)
+}
+
 // StreamWorkflowReplicationMessages mocks base method.
 func (m *MockAdminServiceClient) StreamWorkflowReplicationMessages(ctx context.Context, opts ...grpc.CallOption) (adminservice.AdminService_StreamWorkflowReplicationMessagesClient, error) {
 	m.ctrl.T.Helper()
@@ -1678,6 +1698,21 @@ func (m *MockAdminServiceServer) ResendReplicationTasks(arg0 context.Context, ar
 func (mr *MockAdminServiceServerMockRecorder) ResendReplicationTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ResendReplicationTasks), arg0, arg1)
+}
+
+// StartAdminBatchOperation mocks base method.
+func (m *MockAdminServiceServer) StartAdminBatchOperation(arg0 context.Context, arg1 *adminservice.StartAdminBatchOperationRequest) (*adminservice.StartAdminBatchOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartAdminBatchOperation", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.StartAdminBatchOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartAdminBatchOperation indicates an expected call of StartAdminBatchOperation.
+func (mr *MockAdminServiceServerMockRecorder) StartAdminBatchOperation(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartAdminBatchOperation", reflect.TypeOf((*MockAdminServiceServer)(nil).StartAdminBatchOperation), arg0, arg1)
 }
 
 // StreamWorkflowReplicationMessages mocks base method.

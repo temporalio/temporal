@@ -18,10 +18,12 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
+	batchspb "go.temporal.io/server/api/batch/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -47,6 +49,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -60,6 +64,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -1566,6 +1571,130 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, err
 	}
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
+}
+
+// StartAdminBatchOperation starts an admin batch operation.
+func (adh *AdminHandler) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+) (_ *adminservice.StartAdminBatchOperationResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateAdminBatchOperation(request); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate concurrent batch operation
+	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(request.GetNamespace())
+	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespaceID,
+		Namespace:   namespace.Name(request.GetNamespace()),
+		Query:       batcher.OpenAdminBatchOperationQuery,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	openAdminBatchOperationCount := int(countResp.Count)
+	if openAdminBatchOperationCount >= maxConcurrentBatchOperation {
+		return nil, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Max concurrent admin batch operations is reached",
+		}
+	}
+
+	input := &batchspb.BatchOperationInput{
+		AdminRequest: request,
+		NamespaceId:  namespaceID.String(),
+	}
+
+	identity := request.GetIdentity()
+	var batchTypeMemo string
+	switch op := request.Operation.(type) {
+	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
+		batchTypeMemo = "refresh_tasks"
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
+	}
+
+	inputPayload, err := payloads.Encode(input)
+	if err != nil {
+		return nil, err
+	}
+
+	memo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			batcher.BatchOperationTypeMemo: payload.EncodeString(batchTypeMemo),
+			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
+		},
+	}
+
+	var searchAttributes *commonpb.SearchAttributes
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
+
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                request.Namespace,
+		WorkflowId:               request.GetJobId(),
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayload,
+		Identity:                 identity,
+		RequestId:                uuid.NewString(),
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		Memo:                     memo,
+		SearchAttributes:         searchAttributes,
+	}
+
+	_, err = adh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			namespaceID.String(),
+			startReq,
+			nil,
+			nil,
+			time.Now().UTC(),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.StartAdminBatchOperationResponse{}, nil
+}
+
+func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
+	if params.GetOperation() == nil ||
+		params.GetReason() == "" ||
+		params.GetNamespace() == "" ||
+		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
+		return serviceerror.NewInvalidArgument("must provide required parameters: Operation/Reason/Namespace/Query or Executions")
+	}
+
+	if len(params.GetJobId()) == 0 {
+		return serviceerror.NewInvalidArgument("JobId is not set on request.")
+	}
+	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
+		return serviceerror.NewInvalidArgument("batch query and executions are mutually exclusive")
+	}
+
+	switch op := params.GetOperation().(type) {
+	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
+		// No additional validation needed
+		return nil
+	default:
+		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
+	}
 }
 
 // ResendReplicationTasks requests replication task from remote cluster
