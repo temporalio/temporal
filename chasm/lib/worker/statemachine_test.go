@@ -85,12 +85,12 @@ func TestRecordHeartbeat_InactiveWorker(t *testing.T) {
 	require.True(t, ok, "expected WorkerInactiveError")
 }
 
-func TestUpdateWorkerLease(t *testing.T) {
+func TestUpdateLease(t *testing.T) {
 	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
 	leaseDeadline := time.Now().Add(30 * time.Second)
 
-	updateWorkerLease(ctx, worker, leaseDeadline)
+	worker.updateLease(ctx, leaseDeadline)
 
 	// Verify lease deadline was set
 	require.NotNil(t, worker.LeaseExpirationTime)
@@ -149,7 +149,7 @@ func TestScheduleLeaseExpiry(t *testing.T) {
 	leaseDeadline := time.Now().Add(1 * time.Minute)
 
 	// Schedule lease expiry
-	scheduleLeaseExpiry(ctx, worker, leaseDeadline)
+	worker.scheduleLeaseExpiry(ctx, leaseDeadline)
 
 	// Verify task was scheduled
 	require.Len(t, ctx.Tasks, 1)

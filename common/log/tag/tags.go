@@ -306,11 +306,6 @@ func WorkerBuildId(buildId string) ZapTag {
 	return NewStringTag("worker-build-id", buildId)
 }
 
-// WorkerID returns tag for a worker
-func WorkerID(workerID string) ZapTag {
-	return NewStringTag("worker-id", workerID)
-}
-
 // ReachabilityExitPointTag returns tag for reachabilityExitPoint
 func ReachabilityExitPointTag(reachabilityExitPoint string) ZapTag {
 	return NewStringTag("reachability-exit-point", reachabilityExitPoint)
