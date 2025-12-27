@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -294,7 +295,12 @@ func (e *matchingEngineImpl) Stop() {
 
 	e.nexusEndpointClient.notifyOwnershipChanged(false)
 
-	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
+	e.partitionsLock.Lock()
+	partitions := expmaps.Values(e.partitions)
+	clear(e.partitions)
+	e.partitionsLock.Unlock()
+
+	for _, l := range partitions {
 		l.Stop(unloadCauseShuttingDown)
 	}
 }
