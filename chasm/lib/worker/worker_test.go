@@ -19,6 +19,7 @@ func TestNewWorker(t *testing.T) {
 	require.Nil(t, worker.LeaseExpirationTime)
 	require.Nil(t, worker.WorkerHeartbeat) // No heartbeat data initially
 	require.Empty(t, worker.workerID())    // Empty until first heartbeat
+	require.Zero(t, worker.ConflictToken)  // Zero until first heartbeat
 }
 
 func TestWorkerLifecycleState(t *testing.T) {
@@ -29,13 +30,8 @@ func TestWorkerLifecycleState(t *testing.T) {
 	state := worker.LifecycleState(ctx)
 	require.Equal(t, chasm.LifecycleStateRunning, state)
 
-	// Test INACTIVE -> Running (still running until cleanup)
+	// Test INACTIVE -> Completed (terminal state)
 	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
-	state = worker.LifecycleState(ctx)
-	require.Equal(t, chasm.LifecycleStateRunning, state)
-
-	// Test CLEANED_UP -> Completed
-	worker.Status = workerstatepb.WORKER_STATUS_CLEANED_UP
 	state = worker.LifecycleState(ctx)
 	require.Equal(t, chasm.LifecycleStateCompleted, state)
 }
@@ -49,9 +45,10 @@ func TestWorkerRecordHeartbeat(t *testing.T) {
 	}
 	leaseDuration := 30 * time.Second
 
-	// Test recording heartbeat on new worker
-	err := worker.recordHeartbeat(ctx, heartbeat, leaseDuration)
+	// Test recording heartbeat on new worker (no token)
+	newToken, err := worker.recordHeartbeat(ctx, heartbeat, nil, leaseDuration)
 	require.NoError(t, err)
+	require.NotEmpty(t, newToken)
 
 	// Verify heartbeat data was set
 	require.Equal(t, heartbeat, worker.WorkerHeartbeat)
@@ -65,4 +62,76 @@ func TestWorkerRecordHeartbeat(t *testing.T) {
 
 	// Verify a task was scheduled (lease expiry)
 	require.Len(t, ctx.Tasks, 1)
+
+	// Verify conflict token was incremented
+	require.Equal(t, int64(1), worker.ConflictToken)
+}
+
+func TestWorkerRecordHeartbeat_TokenMismatch(t *testing.T) {
+	worker := NewWorker()
+	ctx := &chasm.MockMutableContext{}
+
+	heartbeat := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "test-worker",
+	}
+	leaseDuration := 30 * time.Second
+
+	// First heartbeat - get token
+	token1, err := worker.recordHeartbeat(ctx, heartbeat, nil, leaseDuration)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), worker.ConflictToken)
+
+	// Second heartbeat with wrong token (wrong length)
+	wrongToken := []byte("wrong")
+	_, err = worker.recordHeartbeat(ctx, heartbeat, wrongToken, leaseDuration)
+	require.Error(t, err)
+
+	// Verify error type and current token is included
+	tokenErr, ok := err.(*TokenMismatchError)
+	require.True(t, ok)
+	require.Equal(t, token1, tokenErr.CurrentToken)
+
+	// Second heartbeat with correct token should succeed
+	token2, err := worker.recordHeartbeat(ctx, heartbeat, token1, leaseDuration)
+	require.NoError(t, err)
+	require.NotEqual(t, token1, token2) // Token should change
+	require.Equal(t, int64(2), worker.ConflictToken)
+}
+
+func TestWorkerRecordHeartbeat_InactiveWorker(t *testing.T) {
+	worker := NewWorker()
+	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
+	ctx := &chasm.MockMutableContext{}
+
+	heartbeat := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "test-worker",
+	}
+	leaseDuration := 30 * time.Second
+
+	// Heartbeat on inactive worker should fail
+	_, err := worker.recordHeartbeat(ctx, heartbeat, nil, leaseDuration)
+	require.Error(t, err)
+	_, ok := err.(*WorkerInactiveError)
+	require.True(t, ok, "expected WorkerInactiveError")
+}
+
+func TestEncodeAndValidateConflictToken(t *testing.T) {
+	worker := NewWorker()
+
+	// Set conflict token
+	worker.ConflictToken = 42
+
+	// Encode token
+	token := worker.encodeConflictToken()
+	require.Len(t, token, 8)
+
+	// Validate correct token
+	require.True(t, worker.validateConflictToken(token))
+
+	// Validate wrong token
+	wrongToken := []byte{0, 0, 0, 0, 0, 0, 0, 1}
+	require.False(t, worker.validateConflictToken(wrongToken))
+
+	// Validate wrong length
+	require.False(t, worker.validateConflictToken([]byte{1, 2, 3}))
 }

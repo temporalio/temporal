@@ -23,6 +23,7 @@ const (
 )
 
 // Task that fires when a worker lease expires.
+// When this fires, the worker transitions to INACTIVE (terminal) and is deleted.
 type LeaseExpiryTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -59,50 +60,12 @@ func (*LeaseExpiryTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
-// Task that fires when an inactive worker is ready to be cleaned up.
-type CleanupTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CleanupTask) Reset() {
-	*x = CleanupTask{}
-	mi := &file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CleanupTask) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CleanupTask) ProtoMessage() {}
-
-func (x *CleanupTask) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CleanupTask.ProtoReflect.Descriptor instead.
-func (*CleanupTask) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
-}
-
 var File_temporal_server_chasm_lib_worker_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
 	"5temporal/server/chasm/lib/worker/proto/v1/tasks.proto\x12)temporal.server.chasm.lib.worker.proto.v1\"\x11\n" +
-	"\x0fLeaseExpiryTask\"\r\n" +
-	"\vCleanupTaskB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
+	"\x0fLeaseExpiryTaskB>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -116,10 +79,9 @@ func file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescGZIP() []
 	return file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_goTypes = []any{
 	(*LeaseExpiryTask)(nil), // 0: temporal.server.chasm.lib.worker.proto.v1.LeaseExpiryTask
-	(*CleanupTask)(nil),     // 1: temporal.server.chasm.lib.worker.proto.v1.CleanupTask
 }
 var file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -140,7 +102,7 @@ func file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_worker_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

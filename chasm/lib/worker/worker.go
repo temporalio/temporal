@@ -3,7 +3,7 @@
 package worker
 
 import (
-	"fmt"
+	"encoding/binary"
 	"time"
 
 	workerpb "go.temporal.io/api/worker/v1"
@@ -14,6 +14,24 @@ import (
 const (
 	Archetype chasm.Archetype = "Worker"
 )
+
+// WorkerInactiveError is returned when a heartbeat is received for an inactive worker.
+// Client should re-register with a new WorkerInstanceKey.
+type WorkerInactiveError struct{}
+
+func (e *WorkerInactiveError) Error() string {
+	return "worker is inactive: re-register with new WorkerInstanceKey"
+}
+
+// TokenMismatchError is returned when the conflict token doesn't match.
+// Client should use the token from the error response and resend heartbeat.
+type TokenMismatchError struct {
+	CurrentToken []byte
+}
+
+func (e *TokenMismatchError) Error() string {
+	return "conflict token mismatch: use token from error response"
+}
 
 type Worker struct {
 	chasm.UnimplementedComponent
@@ -34,10 +52,10 @@ func NewWorker() *Worker {
 // LifecycleState returns the current lifecycle state of the worker.
 func (w *Worker) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch w.Status {
-	case workerstatepb.WORKER_STATUS_CLEANED_UP:
+	case workerstatepb.WORKER_STATUS_INACTIVE:
+		// INACTIVE is the terminal state - CHASM will delete the entity.
 		return chasm.LifecycleStateCompleted
 	default:
-		// Active workers and inactive workers awaiting cleanup are still running.
 		return chasm.LifecycleStateRunning
 	}
 }
@@ -61,25 +79,56 @@ func (w *Worker) workerID() string {
 }
 
 // recordHeartbeat processes a heartbeat, updating worker state and extending the lease.
-func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, heartbeat *workerpb.WorkerHeartbeat, leaseDuration time.Duration) error {
+// Returns WorkerInactiveError if the worker is inactive (client must re-register).
+// Returns TokenMismatchError if the token doesn't match. Client should update its token
+// from the error and resend heartbeat with the same payload (deltas since last success).
+func (w *Worker) recordHeartbeat(
+	ctx chasm.MutableContext,
+	heartbeat *workerpb.WorkerHeartbeat,
+	token []byte,
+	leaseDuration time.Duration,
+) (newToken []byte, err error) {
+	// Check if worker is inactive (terminal state)
+	if w.Status == workerstatepb.WORKER_STATUS_INACTIVE {
+		return nil, &WorkerInactiveError{}
+	}
+
+	// Validate token (skip for first heartbeat when ConflictToken is 0)
+	if w.ConflictToken > 0 && !w.validateConflictToken(token) {
+		return nil, &TokenMismatchError{CurrentToken: w.encodeConflictToken()}
+	}
+
+	// Update worker state
 	w.WorkerHeartbeat = heartbeat
 
-	// Calculate lease deadline
-	leaseDeadline := ctx.Now(w).Add(leaseDuration)
+	// Increment conflict token
+	w.ConflictToken++
+	newToken = w.encodeConflictToken()
 
-	// Apply appropriate state transition based on current status
-	switch w.Status {
-	case workerstatepb.WORKER_STATUS_ACTIVE:
-		return TransitionActiveHeartbeat.Apply(ctx, w, EventHeartbeatReceived{
-			LeaseDeadline: leaseDeadline,
-		})
-	case workerstatepb.WORKER_STATUS_INACTIVE:
-		// Handle worker resurrection (example network partition, overloaded worker, etc.)
-		return TransitionResurrected.Apply(ctx, w, EventHeartbeatReceived{
-			LeaseDeadline: leaseDeadline,
-		})
-	default:
-		// CLEANED_UP or other states - not allowed
-		return fmt.Errorf("cannot record heartbeat for worker in state %v", w.Status)
+	// Calculate lease deadline and apply transition
+	leaseDeadline := ctx.Now(w).Add(leaseDuration)
+	err = TransitionActiveHeartbeat.Apply(ctx, w, EventHeartbeatReceived{
+		LeaseDeadline: leaseDeadline,
+	})
+	if err != nil {
+		return nil, err
 	}
+
+	return newToken, nil
+}
+
+// encodeConflictToken encodes the conflict token as bytes for the client.
+func (w *Worker) encodeConflictToken() []byte {
+	token := make([]byte, 8)
+	binary.LittleEndian.PutUint64(token, uint64(w.ConflictToken))
+	return token
+}
+
+// validateConflictToken checks if the provided token matches the current conflict token.
+func (w *Worker) validateConflictToken(token []byte) bool {
+	if len(token) != 8 {
+		return false
+	}
+	provided := binary.LittleEndian.Uint64(token)
+	return provided == uint64(w.ConflictToken)
 }
