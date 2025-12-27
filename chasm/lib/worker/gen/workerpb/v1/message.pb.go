@@ -31,8 +31,7 @@ type WorkerStatus int32
 const (
 	WORKER_STATUS_UNSPECIFIED WorkerStatus = 0
 	WORKER_STATUS_ACTIVE      WorkerStatus = 1 // Worker is actively sending heartbeats
-	WORKER_STATUS_INACTIVE    WorkerStatus = 2 // Worker lease has expired, awaiting cleanup
-	WORKER_STATUS_CLEANED_UP  WorkerStatus = 3 // Worker has been cleaned up. Terminal state.
+	WORKER_STATUS_INACTIVE    WorkerStatus = 2 // Worker lease has expired. Terminal state.
 )
 
 // Enum value maps for WorkerStatus.
@@ -41,13 +40,11 @@ var (
 		0: "WORKER_STATUS_UNSPECIFIED",
 		1: "WORKER_STATUS_ACTIVE",
 		2: "WORKER_STATUS_INACTIVE",
-		3: "WORKER_STATUS_CLEANED_UP",
 	}
 	WorkerStatus_value = map[string]int32{
 		"WORKER_STATUS_UNSPECIFIED": 0,
 		"WORKER_STATUS_ACTIVE":      1,
 		"WORKER_STATUS_INACTIVE":    2,
-		"WORKER_STATUS_CLEANED_UP":  3,
 	}
 )
 
@@ -65,8 +62,6 @@ func (x WorkerStatus) String() string {
 		return "Active"
 	case WORKER_STATUS_INACTIVE:
 		return "Inactive"
-	case WORKER_STATUS_CLEANED_UP:
-		return "CleanedUp"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -99,8 +94,9 @@ type WorkerState struct {
 	WorkerHeartbeat *v1.WorkerHeartbeat `protobuf:"bytes,2,opt,name=worker_heartbeat,json=workerHeartbeat,proto3" json:"worker_heartbeat,omitempty"`
 	// Time when the lease expires. (Active to Inactive state transition).
 	LeaseExpirationTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=lease_expiration_time,json=leaseExpirationTime,proto3" json:"lease_expiration_time,omitempty"`
-	// Time when the cleanup is scheduled (Inactive to CleanedUp state transition).
-	CleanupTime   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=cleanup_time,json=cleanupTime,proto3" json:"cleanup_time,omitempty"`
+	// Sequence number for optimistic locking. Client must echo this in subsequent heartbeats.
+	// Used to recover from lost responses (server succeeded but client didn't receive new token).
+	ConflictToken int64 `protobuf:"varint,4,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -156,28 +152,27 @@ func (x *WorkerState) GetLeaseExpirationTime() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *WorkerState) GetCleanupTime() *timestamppb.Timestamp {
+func (x *WorkerState) GetConflictToken() int64 {
 	if x != nil {
-		return x.CleanupTime
+		return x.ConflictToken
 	}
-	return nil
+	return 0
 }
 
 var File_temporal_server_chasm_lib_worker_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/worker/v1/message.proto\"\xc1\x02\n" +
+	"7temporal/server/chasm/lib/worker/proto/v1/message.proto\x12)temporal.server.chasm.lib.worker.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/worker/v1/message.proto\"\xa9\x02\n" +
 	"\vWorkerState\x12O\n" +
 	"\x06status\x18\x01 \x01(\x0e27.temporal.server.chasm.lib.worker.proto.v1.WorkerStatusR\x06status\x12R\n" +
 	"\x10worker_heartbeat\x18\x02 \x01(\v2'.temporal.api.worker.v1.WorkerHeartbeatR\x0fworkerHeartbeat\x12N\n" +
-	"\x15lease_expiration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\x12=\n" +
-	"\fcleanup_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vcleanupTime*\x81\x01\n" +
+	"\x15lease_expiration_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime\x12%\n" +
+	"\x0econflict_token\x18\x04 \x01(\x03R\rconflictToken*c\n" +
 	"\fWorkerStatus\x12\x1d\n" +
 	"\x19WORKER_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14WORKER_STATUS_ACTIVE\x10\x01\x12\x1a\n" +
-	"\x16WORKER_STATUS_INACTIVE\x10\x02\x12\x1c\n" +
-	"\x18WORKER_STATUS_CLEANED_UP\x10\x03B>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
+	"\x16WORKER_STATUS_INACTIVE\x10\x02B>Z<go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_worker_proto_v1_message_proto_rawDescOnce sync.Once
@@ -203,12 +198,11 @@ var file_temporal_server_chasm_lib_worker_proto_v1_message_proto_depIdxs = []int
 	0, // 0: temporal.server.chasm.lib.worker.proto.v1.WorkerState.status:type_name -> temporal.server.chasm.lib.worker.proto.v1.WorkerStatus
 	2, // 1: temporal.server.chasm.lib.worker.proto.v1.WorkerState.worker_heartbeat:type_name -> temporal.api.worker.v1.WorkerHeartbeat
 	3, // 2: temporal.server.chasm.lib.worker.proto.v1.WorkerState.lease_expiration_time:type_name -> google.protobuf.Timestamp
-	3, // 3: temporal.server.chasm.lib.worker.proto.v1.WorkerState.cleanup_time:type_name -> google.protobuf.Timestamp
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_worker_proto_v1_message_proto_init() }

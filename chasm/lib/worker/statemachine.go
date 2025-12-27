@@ -42,50 +42,15 @@ var TransitionActiveHeartbeat = chasm.NewTransition(
 )
 
 // EventLeaseExpired is triggered when the worker lease expires.
-type EventLeaseExpired struct {
-	CleanupDelay time.Duration
-}
+type EventLeaseExpired struct{}
 
-// TransitionLeaseExpired handles lease expiry, marking worker as inactive and scheduling cleanup.
+// TransitionLeaseExpired handles lease expiry, marking worker as inactive (terminal).
+// INACTIVE is the terminal state - the CHASM framework will delete the entity.
 var TransitionLeaseExpired = chasm.NewTransition(
 	[]workerstatepb.WorkerStatus{workerstatepb.WORKER_STATUS_ACTIVE},
 	workerstatepb.WORKER_STATUS_INACTIVE,
 	func(w *Worker, ctx chasm.MutableContext, event EventLeaseExpired) error {
-		// Schedule cleanup task with provided delay.
-		cleanupTime := ctx.Now(w).Add(event.CleanupDelay)
-		w.CleanupTime = timestamppb.New(cleanupTime)
-
-		cleanupTask := &workerstatepb.CleanupTask{}
-		taskAttrs := chasm.TaskAttributes{
-			ScheduledTime: cleanupTime,
-		}
-		ctx.AddTask(w, taskAttrs, cleanupTask)
-		return nil
-	},
-)
-
-// EventCleanupCompleted is triggered when cleanup is finished.
-type EventCleanupCompleted struct{}
-
-// TransitionCleanupCompleted handles cleanup completion, marking worker as cleaned up.
-var TransitionCleanupCompleted = chasm.NewTransition(
-	[]workerstatepb.WorkerStatus{workerstatepb.WORKER_STATUS_INACTIVE},
-	workerstatepb.WORKER_STATUS_CLEANED_UP,
-	func(w *Worker, ctx chasm.MutableContext, event EventCleanupCompleted) error {
-		return nil
-	},
-)
-
-// TransitionResurrected handles worker reconnection when in INACTIVE state.
-// This is a special case for when the same worker process reconnects after network partition.
-// Note: Any activities associated with this worker may have already been rescheduled.
-var TransitionResurrected = chasm.NewTransition(
-	[]workerstatepb.WorkerStatus{workerstatepb.WORKER_STATUS_INACTIVE},
-	workerstatepb.WORKER_STATUS_ACTIVE,
-	func(w *Worker, ctx chasm.MutableContext, event EventHeartbeatReceived) error {
-		// Clear cleanup time since worker is now active
-		w.CleanupTime = nil
-		updateWorkerLease(ctx, w, event.LeaseDeadline)
+		// TODO: Reschedule activities bound to this worker.
 		return nil
 	},
 )

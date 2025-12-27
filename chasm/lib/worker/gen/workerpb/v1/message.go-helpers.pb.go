@@ -49,7 +49,6 @@ var (
 		"Unspecified": 0,
 		"Active":      1,
 		"Inactive":    2,
-		"CleanedUp":   3,
 	}
 )
 
