@@ -220,7 +220,8 @@ func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		if err = m.refreshUserDataFromDB(ctx); errors.Is(err, errUserDataVersionMismatch) {
-			m.onFatalErr(unloadCauseConflict)
+			go m.onFatalErr(unloadCauseConflict)
+			return err
 		}
 		util.InterruptibleSleep(ctx, backoff.Jitter(m.config.GetUserDataRefresh(), 0.2))
 	}
