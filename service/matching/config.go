@@ -86,6 +86,7 @@ type (
 		QueryPollerUnavailableWindow             dynamicconfig.DurationPropertyFn
 		QueryWorkflowTaskTimeoutLogRate          dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
+		ConfigChangeRateLimit                    dynamicconfig.FloatPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
@@ -197,6 +198,7 @@ type (
 		FairnessKeyRateLimitCacheSize func() int
 		MaxFairnessKeyWeightOverrides func() int
 
+		// metrics tags
 		BreakdownMetricsByTaskQueue func() bool
 		BreakdownMetricsByPartition func() bool
 		BreakdownMetricsByBuildID   func() bool
@@ -315,6 +317,7 @@ func NewConfig(
 		QueryPollerUnavailableWindow:             dynamicconfig.QueryPollerUnavailableWindow.Get(dc),
 		QueryWorkflowTaskTimeoutLogRate:          dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate.Get(dc),
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
+		ConfigChangeRateLimit:                    dynamicconfig.MatchingConfigChangeRateLimit.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,

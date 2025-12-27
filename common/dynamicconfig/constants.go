@@ -1281,6 +1281,11 @@ duration since last poll exceeds this threshold.`,
 		`MatchingMembershipUnloadDelay is how long to wait to re-confirm loss of ownership before unloading a task queue.
 Set to zero to disable proactive unload.`,
 	)
+	MatchingConfigChangeRateLimit = NewGlobalFloatSetting(
+		"matching.configChangeRateLimit",
+		100.0,
+		`Rate limit for reloading task queues on config change.`,
+	)
 	MatchingQueryWorkflowTaskTimeoutLogRate = NewTaskQueueFloatSetting(
 		"matching.queryWorkflowTaskTimeoutLogRate",
 		0.0,

@@ -128,3 +128,5 @@ func (d *MutableRateBurstImpl) Rate() float64 {
 func (d *MutableRateBurstImpl) Burst() int {
 	return int(d.burst.Load())
 }
+
+func NoBurst() int { return 1 }
