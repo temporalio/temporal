@@ -1130,8 +1130,8 @@ func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	s.NoError(err)
 
 	// Test the case where child node is applied before parent node.
-	err = root.ApplySnapshot(NodesSnapshot{
-		Nodes: map[string]*persistencespb.ChasmNode{
+	err = root.ApplyMutation(NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
 			"SubComponent1/SubComponent11": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
