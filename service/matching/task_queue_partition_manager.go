@@ -116,6 +116,7 @@ func newTaskQueuePartitionManager(
 	}
 
 	unload := func(bool) {
+		// note this is a dynamic config subscription callback so it runs in a new goroutine
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
