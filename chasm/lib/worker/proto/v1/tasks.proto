@@ -5,9 +5,6 @@ package temporal.server.chasm.lib.worker.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
 
 // Task that fires when a worker lease expires.
+// When this fires, the worker transitions to INACTIVE (terminal) and is deleted.
 message LeaseExpiryTask {
-}
-
-// Task that fires when an inactive worker is ready to be cleaned up.
-message CleanupTask {
 }

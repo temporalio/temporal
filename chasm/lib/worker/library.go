@@ -9,8 +9,7 @@ import (
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	leaseExpiryTaskExecutor   *LeaseExpiryTaskExecutor
-	workerCleanupTaskExecutor *WorkerCleanupTaskExecutor
+	leaseExpiryTaskExecutor *LeaseExpiryTaskExecutor
 }
 
 func NewLibrary(
@@ -18,8 +17,7 @@ func NewLibrary(
 	config *Config,
 ) *Library {
 	return &Library{
-		leaseExpiryTaskExecutor:   NewLeaseExpiryTaskExecutor(logger, config),
-		workerCleanupTaskExecutor: NewWorkerCleanupTaskExecutor(logger),
+		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(logger),
 	}
 }
 
@@ -39,11 +37,6 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 			"expiry",
 			l.leaseExpiryTaskExecutor,
 			l.leaseExpiryTaskExecutor,
-		),
-		chasm.NewRegistrablePureTask(
-			"cleanup",
-			l.workerCleanupTaskExecutor,
-			l.workerCleanupTaskExecutor,
 		),
 	}
 }
