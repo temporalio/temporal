@@ -17,7 +17,7 @@ The Worker CHASM component tracks the health and availability of Temporal worker
 - **Worker**: A unique instance of a worker process identified by `WorkerInstanceKey`
 - **Lease**: Period for which a worker should be considered alive
 - **Heartbeat**: Periodic signal from worker to extend its lease
-- **Conflict Token**: Sequence number for optimistic locking (detecting lost heartbeat responses)
+- **Conflict Token**: Sequence number to enforce ordering and detect lost heartbeat responses
 - **Activity Binding**: Association between workers and their assigned activities
 
 ## Worker Lifecycle
@@ -56,7 +56,7 @@ ACTIVE ──────► INACTIVE (terminal)
 Each heartbeat response includes an opaque token. The client must include this token in subsequent heartbeats. This enables detection of:
 
 1. **Lost responses**: Server processed heartbeat but client didn't receive the new token
-2. **Out-of-order delivery**: Network reordering caused heartbeats to arrive out of sequence
+2. **Out-of-order delivery**: Network reordering caused heartbeats to arrive out of sequence. This should not happen since the worker is supposed to send only one heartbeat at a time.
 
 ### Error Types
 
@@ -73,7 +73,7 @@ Each heartbeat response includes an opaque token. The client must include this t
 
 ### Important Constraints
 
-- **No pipelining**: Client must wait for each heartbeat response before sending the next
+- Client must wait for each heartbeat response before sending the next
 - **Deltas are idempotent**: Server handles duplicate bind/unbind operations gracefully
 
 ## Heartbeat Flow
@@ -137,12 +137,8 @@ Worker Process ──► Frontend Service ──► History Service ──► CH
 
 ### Why INACTIVE is Terminal (No Resurrection)
 
-Previous design allowed workers to "resurrect" from INACTIVE back to ACTIVE. This was removed because:
-
-1. **Complexity**: Extra state transitions, cleanup timers, and entity accumulation
-2. **No functional benefit**: Activities are already rescheduled when entering INACTIVE, so resurrected worker has no activities anyway
-3. **Simpler recovery**: Re-registering with new `WorkerInstanceKey` is equivalent and cleaner
-4. **Reduced timers**: One timer per worker (lease expiry) instead of two (lease + cleanup)
+1. **No functional benefit**: Activities are already rescheduled when entering INACTIVE, so resurrected worker has no activities anyway
+2. **Simpler recovery**: Re-registering with new `WorkerInstanceKey` is simpler
 
 ### Why Token in Error Response
 

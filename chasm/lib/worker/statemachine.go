@@ -9,14 +9,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// updateWorkerLease is a shared helper that updates the worker's lease and schedules expiry.
-func updateWorkerLease(ctx chasm.MutableContext, w *Worker, leaseDeadline time.Time) {
+// updateLease updates the worker's lease and schedules expiry.
+func (w *Worker) updateLease(ctx chasm.MutableContext, leaseDeadline time.Time) {
 	w.LeaseExpirationTime = timestamppb.New(leaseDeadline)
-	scheduleLeaseExpiry(ctx, w, leaseDeadline)
+	w.scheduleLeaseExpiry(ctx, leaseDeadline)
 }
 
 // scheduleLeaseExpiry schedules a timer task that will fire when the lease expires.
-func scheduleLeaseExpiry(ctx chasm.MutableContext, w *Worker, leaseDeadline time.Time) {
+func (w *Worker) scheduleLeaseExpiry(ctx chasm.MutableContext, leaseDeadline time.Time) {
 	expiryTask := &workerstatepb.LeaseExpiryTask{}
 
 	taskAttrs := chasm.TaskAttributes{
@@ -36,7 +36,7 @@ var TransitionActiveHeartbeat = chasm.NewTransition(
 	[]workerstatepb.WorkerStatus{workerstatepb.WORKER_STATUS_ACTIVE},
 	workerstatepb.WORKER_STATUS_ACTIVE,
 	func(w *Worker, ctx chasm.MutableContext, event EventHeartbeatReceived) error {
-		updateWorkerLease(ctx, w, event.LeaseDeadline)
+		w.updateLease(ctx, event.LeaseDeadline)
 		return nil
 	},
 )

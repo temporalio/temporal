@@ -132,3 +132,22 @@ func (w *Worker) validateConflictToken(token []byte) bool {
 	provided := binary.LittleEndian.Uint64(token)
 	return provided == uint64(w.ConflictToken)
 }
+
+// isLeaseExpiryTaskValid checks if this lease expiry task is valid or if the lease has been renewed.
+// Returns (valid, errorReason) where errorReason is non-empty if there's a bug in state machine.
+func (w *Worker) isLeaseExpiryTaskValid(attrs chasm.TaskAttributes) (bool, string) {
+	// If worker is not active, no point in processing the lease expiry task.
+	// A previous lease expiry must have already transitioned it to inactive.
+	if w.GetStatus() != workerstatepb.WORKER_STATUS_ACTIVE {
+		return false, ""
+	}
+
+	// A nil means bug in the state machine.
+	if w.GetLeaseExpirationTime() == nil {
+		return false, "Lease expiration time is nil"
+	}
+
+	// The lease expiry task is valid only if it matches the scheduled lease expiration time.
+	// Otherwise, the lease expiry task has been rescheduled.
+	return attrs.ScheduledTime.Equal(w.GetLeaseExpirationTime().AsTime()), ""
+}
