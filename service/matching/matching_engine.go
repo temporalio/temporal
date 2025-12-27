@@ -2729,7 +2729,7 @@ func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitio
 		// For config change, rate-limit unloads. Note that calls to unloadTaskQueuePartition
 		// with unloadCauseConfigChange must be okay to block, i.e. they should probably be in
 		// separate goroutines.
-		e.configChangeRateLimit.Wait(context.Background())
+		_ = e.configChangeRateLimit.Wait(context.Background())
 	}
 	e.unloadTaskQueuePartitionByKey(unloadPM.Partition(), unloadPM, unloadCause)
 }
