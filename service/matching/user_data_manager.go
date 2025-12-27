@@ -151,6 +151,8 @@ func (m *userDataManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 
 func (m *userDataManagerImpl) Stop() {
 	m.goroGroup.Cancel()
+	// ensure fetch/loadUserData are not running so we can safely call setUserDataState
+	m.goroGroup.Wait()
 	// Set user data state on stop to wake up anyone blocked on the user data changed channel.
 	m.setUserDataState(userDataClosed, nil)
 }
@@ -185,12 +187,12 @@ func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.Version
 	}
 }
 
-// Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
-// userDataState controls whether GetUserData return an error, and which.
+// setUserDataState sets user data enabled/disabled and marks the future ready (if it's not ready yet).
+// userDataState controls whether GetUserData return an error, and which error.
 // futureError is the error to set on the ready future. If this is non-nil, the task queue will
 // be unloaded.
-// Note that this must only be called from a single goroutine since the Ready/Set sequence is
-// potentially racy otherwise.
+// setUserDataState must not be called concurrently since the Ready/Set sequence is potentially
+// racy otherwise.
 func (m *userDataManagerImpl) setUserDataState(userDataState userDataState, futureError error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
