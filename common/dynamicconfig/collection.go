@@ -15,7 +15,6 @@ import (
 	"weak"
 
 	"github.com/mitchellh/mapstructure"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -36,10 +35,9 @@ type (
 
 		cancelClientSubscription func()
 
-		subscriptionLock sync.Mutex          // protects subscriptions, subscriptionIdx, and callbackPool
+		subscriptionLock sync.Mutex          // protects subscriptions and subscriptionIdx
 		subscriptions    map[Key]map[int]any // final "any" is *subscription[T]
 		subscriptionIdx  int
-		callbackPool     *goro.AdaptivePool
 
 		poller goro.Group
 
@@ -126,10 +124,8 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 }
 
 func (c *Collection) Start() {
-	s := DynamicConfigSubscriptionCallback.Get(c)()
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
 	if notifyingClient, ok := c.client.(NotifyingClient); ok {
 		c.cancelClientSubscription = notifyingClient.Subscribe(c.keysChanged)
 	} else {
@@ -143,10 +139,6 @@ func (c *Collection) Stop() {
 	if c.cancelClientSubscription != nil {
 		c.cancelClientSubscription()
 	}
-	c.subscriptionLock.Lock()
-	defer c.subscriptionLock.Unlock()
-	c.callbackPool.Stop()
-	c.callbackPool = nil
 }
 
 // Implement pingable.Pingable
@@ -157,14 +149,8 @@ func (c *Collection) GetPingChecks() []pingable.Check {
 			Timeout: 5 * time.Second,
 			Ping: func() []pingable.Pingable {
 				c.subscriptionLock.Lock()
-				defer c.subscriptionLock.Unlock()
-				if c.callbackPool == nil {
-					return nil
-				}
-				var wg sync.WaitGroup
-				wg.Add(1)
-				c.callbackPool.Do(wg.Done)
-				wg.Wait()
+				//nolint:staticcheck // SA2001 just checking if we can acquire the lock
+				c.subscriptionLock.Unlock()
 				return nil
 			},
 		},
@@ -183,9 +169,6 @@ func (c *Collection) pollForChanges(ctx context.Context) error {
 func (c *Collection) pollOnce() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	if c.callbackPool == nil {
-		return
-	}
 
 	for key, subs := range c.subscriptions {
 		setting := queryRegistry(key)
@@ -202,9 +185,6 @@ func (c *Collection) pollOnce() {
 func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	if c.callbackPool == nil {
-		return
-	}
 
 	for key, cvs := range changed {
 		setting := queryRegistry(key)
@@ -535,7 +515,7 @@ func dispatchUpdate[T any](
 	}
 
 	sub.raw = raw
-	c.callbackPool.Do(func() { sub.f(newVal) })
+	go sub.f(newVal)
 }
 
 // called with subscriptionLock
@@ -562,7 +542,7 @@ func dispatchUpdateWithConstrainedDefault[T any](
 	}
 
 	sub.raw = raw
-	c.callbackPool.Do(func() { sub.f(newVal) })
+	go sub.f(newVal)
 }
 
 func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
