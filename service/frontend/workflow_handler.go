@@ -33,6 +33,10 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
@@ -125,7 +129,6 @@ type (
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
 		workerClient                    workerstatepb.WorkerServiceClient
-		deploymentStoreClient           deployment.DeploymentStoreClient
 		workerDeploymentClient          workerdeployment.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
 		archiverProvider                provider.ArchiverProvider
@@ -159,7 +162,6 @@ func NewWorkflowHandler(
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	workerClient workerstatepb.WorkerServiceClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -204,7 +206,6 @@ func NewWorkflowHandler(
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
 		workerClient:                    workerClient,
-		deploymentStoreClient:           deploymentStoreClient,
 		workerDeploymentClient:          workerDeploymentClient,
 		schedulerClient:                 schedulerClient,
 		archiverProvider:                archiverProvider,
@@ -6428,25 +6429,13 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 		return nil, err
 	}
 
-	// Call matching service to record heartbeat
+	// Call matching service to record heartbeat (in-memory registry)
 	_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 		NamespaceId:       namespaceID.String(),
 		HeartbeartRequest: request,
 	})
-
 	if err != nil {
 		return nil, err
-	}
-
-	// Call history service (CHASM worker handler) if enabled
-	if wh.config.EnableWorkerStateTracking(request.GetNamespace()) {
-		_, err = wh.workerClient.RecordHeartbeat(ctx, &workerstatepb.RecordHeartbeatRequest{
-			NamespaceId:     namespaceID.String(),
-			FrontendRequest: request,
-		})
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	return &workflowservice.RecordWorkerHeartbeatResponse{}, nil

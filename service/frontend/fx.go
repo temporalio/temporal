@@ -6,6 +6,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmworker "go.temporal.io/server/chasm/lib/worker"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 	"go.temporal.io/server/client"
@@ -771,7 +774,6 @@ func HandlerProvider(
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	workerClient workerstatepb.WorkerServiceClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
 	workerDeploymentStoreClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
@@ -802,7 +804,6 @@ func HandlerProvider(
 		historyClient,
 		matchingClient,
 		workerClient,
-		deploymentStoreClient,
 		workerDeploymentStoreClient,
 		schedulerClient,
 		archiverProvider,
