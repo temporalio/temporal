@@ -109,7 +109,7 @@ func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, req *workerstatepb.Re
 
 	// Calculate lease deadline and apply transition
 	leaseDeadline := ctx.Now(w).Add(leaseDuration)
-	err := TransitionActiveHeartbeat.Apply(ctx, w, EventHeartbeatReceived{
+	err := TransitionActiveHeartbeat.Apply(w, ctx, EventHeartbeatReceived{
 		LeaseDeadline: leaseDeadline,
 	})
 	if err != nil {
