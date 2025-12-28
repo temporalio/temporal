@@ -76,6 +76,44 @@ Each heartbeat response includes an opaque token. The client must include this t
 - Client must wait for each heartbeat response before sending the next
 - **Deltas are idempotent**: Server handles duplicate bind/unbind operations gracefully
 
+## Activity Rescheduling for Orphaned Task
+
+Worker liveness alone cannot detect all activity failures. Consider:
+
+1. Worker polls Matching for activity task
+2. Matching calls History's `RecordActivityTaskStarted`
+3. Activity marked as STARTED
+4. **Poll times out** — worker never receives the task
+
+The worker is still alive (heartbeating normally), but this specific activity is orphaned. Worker liveness cannot detect this because the worker doesn't know about the task.
+
+### Solution: Activity Verification Timer
+At `RecordActivityTaskStarted`, store `WorkerInstanceKey` in ActivityInfo and schedule a verification timer.
+
+When the timer fires:
+
+1. **Check activity state locally** — if already completed/failed/timed out, discard timer (no RPC needed)
+2. **Query worker entity** — if activity still running, check worker state:
+
+| Worker State | Activity Bound? | Action |
+|--------------|-----------------|--------|
+| ACTIVE | Yes | Discard timer, rely on worker lease expiry |
+| ACTIVE | No | Reschedule (poll timeout or binding never sent) |
+| INACTIVE | - | Reschedule |
+| Not found | - | Reschedule |
+
+ Note: Set the verification timer longer than typical short activities (e.g., 2 minutes) so most complete before it fires, avoiding the cross-shard RPC.
+
+### Design Alternative: Push Notification (Not Chosen)
+
+An alternative approach is to notify the activity when the worker binds it:
+
+```
+Worker heartbeat → Worker entity → RPC to Activity → Set "bound" flag
+```
+
+This was **not chosen** because it requires a cross-shard **write** to workflow mutable state. The pull approach only requires a cross-shard **read**, which is simpler and has a natural fail-safe (if query fails, reschedule).
+
 ## Heartbeat Flow
 
 ### End-to-End Process
@@ -155,3 +193,4 @@ For throttling worker registration (protecting against crash loops), a separate 
 - Different validation/capabilities for registration vs heartbeat
 
 Current implementation uses heartbeat for both registration and lease renewal.
+
