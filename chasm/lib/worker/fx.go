@@ -35,7 +35,7 @@ func NewWorkerServiceClient(
 	metricsHandler metrics.Handler,
 ) (workerstatepb.WorkerServiceClient, error) {
 	// This wrapper returns the interface type expected by consumers
-	return workerstatepb.NewNewWorkerServiceLayeredClient(
+	return workerstatepb.NewWorkerServiceLayeredClient(
 		dc,
 		rpcFactory,
 		monitor,
