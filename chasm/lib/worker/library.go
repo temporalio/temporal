@@ -10,9 +10,8 @@ import (
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	handler                   *handler
-	leaseExpiryTaskExecutor   *LeaseExpiryTaskExecutor
-	workerCleanupTaskExecutor *WorkerCleanupTaskExecutor
+	handler                 *handler
+	leaseExpiryTaskExecutor *LeaseExpiryTaskExecutor
 }
 
 func NewLibrary(
@@ -20,9 +19,8 @@ func NewLibrary(
 	config *Config,
 ) *Library {
 	return &Library{
-		handler:                   newHandler(),
-		leaseExpiryTaskExecutor:   NewLeaseExpiryTaskExecutor(logger, config),
-		workerCleanupTaskExecutor: NewWorkerCleanupTaskExecutor(logger),
+		handler:                 newHandler(),
+		leaseExpiryTaskExecutor: NewLeaseExpiryTaskExecutor(logger),
 	}
 }
 
