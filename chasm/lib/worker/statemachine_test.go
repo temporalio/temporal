@@ -112,7 +112,7 @@ func TestTransitionActiveHeartbeat(t *testing.T) {
 	}
 
 	// Apply the transition
-	err := TransitionActiveHeartbeat.Apply(ctx, worker, event)
+	err := TransitionActiveHeartbeat.Apply(worker, ctx, event)
 	require.NoError(t, err)
 
 	// Verify state was updated
@@ -133,7 +133,7 @@ func TestTransitionLeaseExpired(t *testing.T) {
 	event := EventLeaseExpired{}
 
 	// Apply the transition
-	err := TransitionLeaseExpired.Apply(ctx, worker, event)
+	err := TransitionLeaseExpired.Apply(worker, ctx, event)
 	require.NoError(t, err)
 
 	// Verify status changed to inactive (terminal)
@@ -200,7 +200,7 @@ func TestInvalidTransitions(t *testing.T) {
 		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 
 		event := EventLeaseExpired{}
-		err := TransitionLeaseExpired.Apply(ctx, worker, event)
+		err := TransitionLeaseExpired.Apply(worker, ctx, event)
 
 		// Should fail because worker is not active
 		require.Error(t, err)
