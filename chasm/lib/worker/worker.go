@@ -17,6 +17,24 @@ const (
 	defaultLeaseDuration = 1 * time.Minute
 )
 
+// WorkerInactiveError is returned when a heartbeat is received for an inactive worker.
+// Client should re-register with a new WorkerInstanceKey.
+type WorkerInactiveError struct{}
+
+func (e *WorkerInactiveError) Error() string {
+	return "worker is inactive: re-register with new WorkerInstanceKey"
+}
+
+// TokenMismatchError is returned when the conflict token doesn't match.
+// Client should use the token from the error response and resend heartbeat.
+type TokenMismatchError struct {
+	CurrentToken []byte
+}
+
+func (e *TokenMismatchError) Error() string {
+	return "conflict token mismatch: use token from error response"
+}
+
 // Worker is a Chasm component that tracks worker heartbeats and manages worker lifecycle.
 type Worker struct {
 	chasm.UnimplementedComponent
@@ -64,7 +82,10 @@ func (w *Worker) workerID() string {
 }
 
 // recordHeartbeat processes a heartbeat, updating worker state and extending the lease.
-func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, req *workerstatepb.RecordHeartbeatRequest) error {
+// Returns WorkerInactiveError if the worker is inactive (client must re-register).
+// Returns TokenMismatchError if the token doesn't match. Client should use the token
+// from the error response and resend heartbeat.
+func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, req *workerstatepb.RecordHeartbeatRequest) (*workerstatepb.RecordHeartbeatResponse, error) {
 	// Extract worker heartbeat from request
 	frontendReq := req.GetFrontendRequest()
 	workerHeartbeat := frontendReq.GetWorkerHeartbeat()[0]
@@ -72,22 +93,30 @@ func (w *Worker) recordHeartbeat(ctx chasm.MutableContext, req *workerstatepb.Re
 	// TODO: Honor the lease duration from the request.
 	leaseDuration := defaultLeaseDuration
 
+	// Check if worker is inactive (terminal state)
+	if w.Status == workerstatepb.WORKER_STATUS_INACTIVE {
+		return nil, &WorkerInactiveError{}
+	}
+
+	// TODO: Validate token from request once the request proto includes it.
+	// For now, skip token validation.
+
+	// Update worker state
 	w.WorkerHeartbeat = workerHeartbeat
 
 	// Increment conflict token
 	w.ConflictToken++
-	newToken = w.encodeConflictToken()
 
 	// Calculate lease deadline and apply transition
 	leaseDeadline := ctx.Now(w).Add(leaseDuration)
-	err = TransitionActiveHeartbeat.Apply(w, ctx, EventHeartbeatReceived{
+	err := TransitionActiveHeartbeat.Apply(ctx, w, EventHeartbeatReceived{
 		LeaseDeadline: leaseDeadline,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return newToken, nil
+	return &workerstatepb.RecordHeartbeatResponse{}, nil
 }
 
 // encodeConflictToken encodes the conflict token as bytes for the client.
