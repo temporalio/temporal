@@ -214,10 +214,11 @@ type Config struct {
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	WorkerHeartbeatsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowPauseEnabled    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerHeartbeatsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkerStateTracking dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ListWorkersEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerCommandsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowPauseEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
@@ -371,6 +372,7 @@ func NewConfig(
 		WorkflowRulesAPIsEnabled:       dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
 		MaxWorkflowRulesPerNamespace:   dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
 		WorkerHeartbeatsEnabled:        dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
+		EnableWorkerStateTracking:      dynamicconfig.EnableWorkerStateTracking.Get(dc),
 		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
 		WorkflowPauseEnabled:           dynamicconfig.WorkflowPauseEnabled.Get(dc),
