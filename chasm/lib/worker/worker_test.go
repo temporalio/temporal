@@ -50,7 +50,6 @@ func TestWorkerRecordHeartbeat(t *testing.T) {
 					WorkerInstanceKey: "test-worker-3",
 				},
 			},
-			// LeaseDuration: durationpb.New(30 * time.Second), // Will be available after proto regeneration
 		},
 	}
 
@@ -75,49 +74,26 @@ func TestWorkerRecordHeartbeat(t *testing.T) {
 	require.Equal(t, int64(1), worker.ConflictToken)
 }
 
-func TestWorkerRecordHeartbeat_TokenMismatch(t *testing.T) {
-	worker := NewWorker()
-	ctx := &chasm.MockMutableContext{}
-
-	heartbeat := &workerpb.WorkerHeartbeat{
-		WorkerInstanceKey: "test-worker",
-	}
-	leaseDuration := 30 * time.Second
-
-	// First heartbeat - get token
-	token1, err := worker.recordHeartbeat(ctx, heartbeat, nil, leaseDuration)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), worker.ConflictToken)
-
-	// Second heartbeat with wrong token (wrong length)
-	wrongToken := []byte("wrong")
-	_, err = worker.recordHeartbeat(ctx, heartbeat, wrongToken, leaseDuration)
-	require.Error(t, err)
-
-	// Verify error type and current token is included
-	tokenErr, ok := err.(*TokenMismatchError)
-	require.True(t, ok)
-	require.Equal(t, token1, tokenErr.CurrentToken)
-
-	// Second heartbeat with correct token should succeed
-	token2, err := worker.recordHeartbeat(ctx, heartbeat, token1, leaseDuration)
-	require.NoError(t, err)
-	require.NotEqual(t, token1, token2) // Token should change
-	require.Equal(t, int64(2), worker.ConflictToken)
-}
-
 func TestWorkerRecordHeartbeat_InactiveWorker(t *testing.T) {
 	worker := NewWorker()
 	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
 
-	heartbeat := &workerpb.WorkerHeartbeat{
-		WorkerInstanceKey: "test-worker",
+	req := &workerstatepb.RecordHeartbeatRequest{
+		NamespaceId: "test-namespace-id",
+		FrontendRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+			Namespace: "test-namespace",
+			Identity:  "test-identity",
+			WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+				{
+					WorkerInstanceKey: "test-worker",
+				},
+			},
+		},
 	}
-	leaseDuration := 30 * time.Second
 
 	// Heartbeat on inactive worker should fail
-	_, err := worker.recordHeartbeat(ctx, heartbeat, nil, leaseDuration)
+	_, err := worker.recordHeartbeat(ctx, req)
 	require.Error(t, err)
 	_, ok := err.(*WorkerInactiveError)
 	require.True(t, ok, "expected WorkerInactiveError")
