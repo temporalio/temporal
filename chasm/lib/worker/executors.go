@@ -35,7 +35,7 @@ func (e *LeaseExpiryTaskExecutor) Execute(
 	e.logger.Info("Worker lease expired, marking as inactive",
 		workerIDTag(worker.workerID()))
 
-	return TransitionLeaseExpired.Apply(ctx, worker, EventLeaseExpired{})
+	return TransitionLeaseExpired.Apply(worker, ctx, EventLeaseExpired{})
 }
 
 // Validate checks if the lease expiry task is still valid (implements TaskValidator interface).
