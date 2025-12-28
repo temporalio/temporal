@@ -68,7 +68,7 @@ func (s *workerHeartbeatTestSuite) TestRecordHeartbeat() {
 	worker, err := chasm.ReadComponent(
 		engineCtx,
 		chasm.NewComponentRef[*chasmworker.Worker](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: s.NamespaceID().String(),
 				BusinessID:  workerInstanceKey,
 			},
@@ -114,7 +114,7 @@ func (s *workerHeartbeatTestSuite) TestRecordMultipleHeartbeats() {
 	worker1, err := chasm.ReadComponent(
 		engineCtx,
 		chasm.NewComponentRef[*chasmworker.Worker](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: s.NamespaceID().String(),
 				BusinessID:  workerInstanceKey,
 			},
@@ -140,7 +140,7 @@ func (s *workerHeartbeatTestSuite) TestRecordMultipleHeartbeats() {
 	worker2, err := chasm.ReadComponent(
 		engineCtx,
 		chasm.NewComponentRef[*chasmworker.Worker](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: s.NamespaceID().String(),
 				BusinessID:  workerInstanceKey,
 			},
