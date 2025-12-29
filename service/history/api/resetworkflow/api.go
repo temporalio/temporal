@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -29,7 +28,7 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache cache.Cache,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -215,7 +214,7 @@ func GetResetReapplyExcludeTypes(
 func validatePostResetOperationInputs(ctx context.Context,
 	postResetOperations []*workflowpb.PostResetOperation,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache cache.Cache,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 	taskQueue string,
 	namespaceID string) error {
 	for _, operation := range postResetOperations {
