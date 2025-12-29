@@ -5,15 +5,6 @@ package temporal.server.chasm.lib.worker.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
-import "temporal/server/api/routing/v1/extension.proto";
-
-// WorkerService handles worker heartbeats via CHASM.
-service WorkerService {
-    // RecordHeartbeat records a worker heartbeat.
-    rpc RecordHeartbeat(RecordHeartbeatRequest) returns (RecordHeartbeatResponse) {
-        option (temporal.server.api.routing.v1.routing).business_id = "worker_instance_key";
-    }
-}
 
 // RecordHeartbeatRequest is the internal request for recording a worker heartbeat.
 message RecordHeartbeatRequest {
@@ -29,4 +20,5 @@ message RecordHeartbeatRequest {
 
 // RecordHeartbeatResponse is the response for recording a worker heartbeat.
 message RecordHeartbeatResponse {
+    temporal.api.workflowservice.v1.RecordWorkerHeartbeatResponse frontend_response = 1;
 }
