@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -635,9 +636,9 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 	return nil
 }
 
-func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
-	if c.IsSet(FlagVisibilityQuery) {
-		return AdminBatchRefreshWorkflowTasks(c, clientFactory)
+func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
+		return AdminBatchRefreshWorkflowTasks(c, clientFactory, prompter)
 	}
 	return AdminRefreshWorkflowTasks(c, clientFactory)
 }
@@ -683,8 +684,9 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 }
 
 // AdminBatchRefreshWorkflowTasks starts a batch job to refresh workflow tasks for multiple workflows
-func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
+func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
 	adminClient := clientFactory.AdminClient(c)
+	workflowClient := clientFactory.WorkflowClient(c)
 
 	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -708,6 +710,19 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory)
 
 	ctx, cancel := newContext(c)
 	defer cancel()
+
+	// Count workflows matching the query to confirm with user
+	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: nsName,
+		Query:     query,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to count workflow executions: %w", err)
+	}
+
+	msg := fmt.Sprintf("Will refresh workflow tasks for %d workflow(s) matching query %q in namespace %q. Continue Y/N?",
+		countResp.GetCount(), query, nsName)
+	prompter.Prompt(msg)
 
 	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
