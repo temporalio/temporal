@@ -352,8 +352,6 @@ func setHistoryForRecordWfTaskStartedResp(
 			historyBlobs[i] = blob.Data
 		}
 		response.RawHistoryBytes = historyBlobs
-		// History is left nil - matching service will use RawHistoryBytes which gets
-		// auto-deserialized to RawHistory by gRPC due to wire compatibility.
 	} else {
 		response.History = history
 	}

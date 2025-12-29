@@ -316,10 +316,25 @@ func (x *PollWorkflowTaskQueueResponse) GetRawHistory() *v16.History {
 	return nil
 }
 
-// PollWorkflowTaskQueueResponseWithRawHistory should be wire compatible with PollWorkflowTaskQueueResponse.
-// The only difference is that PollWorkflowTaskQueueResponseWithRawHistory has a `raw_history` field that contains the
-// raw history batches as bytes. PollWorkflowTaskQueueResponseWithRawHistory will be returned by matching service.
-// Matching client will deserialize this message to PollWorkflowTaskQueueResponse.
+// PollWorkflowTaskQueueResponseWithRawHistory is wire-compatible with PollWorkflowTaskQueueResponse.
+//
+// WIRE COMPATIBILITY PATTERN:
+// This message uses the same field numbers as PollWorkflowTaskQueueResponse (1-21 are identical),
+// but field 22 differs in type: `repeated bytes raw_history` vs `History raw_history`.
+// This enables the following optimization:
+//
+// 1. Matching service serializes PollWorkflowTaskQueueResponseWithRawHistory with raw_history as [][]byte
+// 2. Matching client receives the raw bytes and deserializes them as PollWorkflowTaskQueueResponse
+// 3. Protobuf automatically deserializes the [][]byte into a History message because:
+//   - Field 22 in PollWorkflowTaskQueueResponse expects History
+//   - Each []byte in the repeated field is a valid proto-encoded HistoryEventBatch
+//   - Protobuf concatenates repeated message fields into a single message
+//
+// This pattern avoids deserialization in matching service, reducing CPU usage.
+// The matching service passes raw history bytes through without parsing them.
+//
+// IMPORTANT: Field numbers and all other fields must remain identical between these two messages.
+// Any change to PollWorkflowTaskQueueResponse must be mirrored here.
 type PollWorkflowTaskQueueResponseWithRawHistory struct {
 	state                      protoimpl.MessageState         `protogen:"open.v1"`
 	TaskToken                  []byte                         `protobuf:"bytes,1,opt,name=task_token,json=taskToken,proto3" json:"task_token,omitempty"`
