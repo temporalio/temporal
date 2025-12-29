@@ -2384,7 +2384,7 @@ func (s *ExecutionMutableStateSuite) TestListConcreteExecutions() {
 		rand.Int63(),
 	)
 
-	// Can NOT use CreateCHASMExecution() here, which uses the same runID as CreateWorkflow().
+	// Do NOT use CreateCHASMExecution() here, which uses the same runID as CreateWorkflow().
 	chasmSnapshot, events := RandomSnapshot(
 		s.T(),
 		uuid.New().String(),
@@ -2456,14 +2456,16 @@ func (s *ExecutionMutableStateSuite) TestArchetypeSeparateIDSpace() {
 		s.T().Skip("SeparateID space is only implemented by cassandra persistence")
 	}
 
-	_, workflowSnapshot, _ := s.CreateWorkflow(
+	// Create workflow execution.
+	workflowBranchToken, workflowSnapshot, _ := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	// Can NOT use CreateCHASMExecution() here, which uses the runID as CreateWorkflow().
+	// Create CHASM execution with same ID.
+	// Do NOT use CreateCHASMExecution() here, which uses the runID as CreateWorkflow().
 	chasmRunID := uuid.New().String()
 	chasmArchetypeID := rand.Uint32()
 	chasmSnapshot, events := RandomSnapshot(
@@ -2493,6 +2495,63 @@ func (s *ExecutionMutableStateSuite) TestArchetypeSeparateIDSpace() {
 	})
 	s.NoError(err)
 
+	// Update Workflow execution.
+	workflowMutation, workflowEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		workflowSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		workflowSnapshot.DBRecordVersion+1,
+		workflowBranchToken,
+	)
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *workflowMutation,
+		UpdateWorkflowEvents:   workflowEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	// Update CHASM execution.
+	chasmMutation, chasmEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		chasmRunID,
+		chasmSnapshot.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		chasmSnapshot.DBRecordVersion+1,
+		nil, // No branch token for CHASM
+	)
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasmArchetypeID,
+
+		UpdateWorkflowMutation: *chasmMutation,
+		UpdateWorkflowEvents:   chasmEvents,
+
+		NewWorkflowSnapshot: nil,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	// Validate current execution for both archetypes.
 	resp, err := s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
 		ShardID:     s.ShardID,
 		NamespaceID: s.NamespaceID,
@@ -2501,7 +2560,6 @@ func (s *ExecutionMutableStateSuite) TestArchetypeSeparateIDSpace() {
 	})
 	s.NoError(err)
 	s.Equal(s.RunID, resp.RunID)
-
 	resp, err = s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
 		ShardID:     s.ShardID,
 		NamespaceID: s.NamespaceID,
@@ -2511,11 +2569,50 @@ func (s *ExecutionMutableStateSuite) TestArchetypeSeparateIDSpace() {
 	s.NoError(err)
 	s.Equal(chasmRunID, resp.RunID)
 
-	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, workflowSnapshot)
-	s.AssertMSEqualWithDB(chasmArchetypeID, chasmSnapshot)
+	// Validate concrete execution for both archetypes.
+	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, workflowSnapshot, workflowMutation)
+	s.AssertMSEqualWithDB(chasmArchetypeID, chasmSnapshot, chasmMutation)
 
-	// TODO: check other apis as well:
-	// UpdateWorkflowExecution, DeleteWorkflowExecution, DeleteCurrentWorkflowExecution
+	// Delete workflow execution.
+	err = s.ExecutionManager.DeleteCurrentWorkflowExecution(s.Ctx, &p.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+	err = s.ExecutionManager.DeleteWorkflowExecution(s.Ctx, &p.DeleteWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.NoError(err)
+
+	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID, chasm.WorkflowArchetypeID)
+	s.AssertMSEqualWithDB(chasmArchetypeID, chasmSnapshot, chasmMutation)
+
+	// Delete CHASM execution.
+	err = s.ExecutionManager.DeleteCurrentWorkflowExecution(s.Ctx, &p.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       chasmRunID,
+		ArchetypeID: chasmArchetypeID,
+	})
+	s.NoError(err)
+	err = s.ExecutionManager.DeleteWorkflowExecution(s.Ctx, &p.DeleteWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       chasmRunID,
+		ArchetypeID: chasmArchetypeID,
+	})
+	s.NoError(err)
+
+	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, chasmRunID, chasmArchetypeID)
 }
 
 func (s *ExecutionMutableStateSuite) CreateWorkflow(

@@ -252,8 +252,6 @@ func extractWorkflowConflictError(
 		return nil
 	}
 
-	// TODO: handle different archetypeID
-
 	actualNextEventID, _ := conflictRecord["next_event_id"].(int64)
 	actualDBVersion, _ := conflictRecord["db_record_version"].(int64)
 
