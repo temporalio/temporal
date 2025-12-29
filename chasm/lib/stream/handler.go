@@ -2,13 +2,17 @@ package stream
 
 import (
 	"context"
-	"sort"
+	"encoding/binary"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 )
+
+const serverMaxMessages = 1000
 
 type handler struct {
 	streampb.UnimplementedStreamServiceServer
@@ -16,6 +20,42 @@ type handler struct {
 
 func newHandler() *handler {
 	return &handler{}
+}
+
+// encodeCursor converts a message ID to an opaque bytes token.
+// The cursor is an int64 encoded as 8 bytes using BigEndian byte order.
+func encodeCursor(messageID int64) []byte {
+	if messageID < 0 {
+		messageID = 0
+	}
+	cursor := make([]byte, 8)
+	binary.BigEndian.PutUint64(cursor, uint64(messageID))
+	return cursor
+}
+
+// decodeCursor extracts a message ID from an opaque bytes token.
+// Returns the message ID and an error if the cursor is invalid.
+// An empty cursor is valid and represents starting from the beginning (message ID 0).
+func decodeCursor(cursor []byte) (int64, error) {
+	if len(cursor) == 0 {
+		// Empty cursor means start from beginning
+		return 0, nil
+	}
+
+	if len(cursor) != 8 {
+		return 0, serviceerror.NewInvalidArgument(
+			fmt.Sprintf("invalid cursor: expected 8 bytes, got %d", len(cursor)),
+		)
+	}
+
+	messageID := int64(binary.BigEndian.Uint64(cursor))
+	if messageID < 0 {
+		return 0, serviceerror.NewInvalidArgument(
+			fmt.Sprintf("invalid cursor: negative message ID %d", messageID),
+		)
+	}
+
+	return messageID, nil
 }
 
 // CreateStream creates a new stream with optional initial messages.
@@ -93,6 +133,19 @@ func (h *handler) PollStream(
 		RunID:       request.GetRunId(),
 	}
 
+	// Decode cursor to get starting message ID
+	startMessageID, err := decodeCursor(request.GetCursor())
+	if err != nil {
+		return nil, err
+	}
+
+	// Default to 100 if not specified, cap at serverMaxMessages
+	maxMessages := request.GetMaxMessages()
+	if maxMessages <= 0 {
+		maxMessages = 100
+	}
+	maxMessages = min(maxMessages, serverMaxMessages)
+
 	response, _, err := chasm.PollComponent(
 		ctx,
 		chasm.NewComponentRef[*Stream](key),
@@ -101,27 +154,39 @@ func (h *handler) PollStream(
 			ctx chasm.Context,
 			req *workflowservice.PollStreamRequest,
 		) (*workflowservice.PollStreamResponse, bool, error) {
-			// TODO: this is fake implementation. Need to design correct wait condition predicate,
-			// obtain correct set of new messages, pass cursor token back to caller, etc.
-
-			// Collect message IDs and sort them to ensure deterministic ordering
-			messageIDs := make([]int64, 0, len(s.Messages))
-			for id := range s.Messages {
-				messageIDs = append(messageIDs, id)
+			if s.StreamState.Tail <= startMessageID {
+				// No new messages yet, keep polling
+				return nil, false, nil
 			}
-			// Sort by message ID (which corresponds to insertion order)
-			sort.Slice(messageIDs, func(i, j int) bool {
-				return messageIDs[i] < messageIDs[j]
-			})
 
-			// Build messages array in sorted order
-			messages := make([]*commonpb.Payload, 0, len(messageIDs))
-			for _, id := range messageIDs {
-				messages = append(messages, s.Messages[id].Get(ctx))
+			// Calculate end position: either maxMessages ahead or tail, whichever is smaller
+			endMessageID := min(startMessageID+int64(maxMessages), s.StreamState.Tail)
+
+			// Build messages array
+			expectedCount := endMessageID - startMessageID
+			messages := make([]*commonpb.Payload, 0, expectedCount)
+			for id := startMessageID; id < endMessageID; id++ {
+				msg, ok := s.Messages[id]
+				if !ok {
+					break
+				}
+				messages = append(messages, msg.Get(ctx))
+			}
+
+			lastMessageID := startMessageID + int64(len(messages)) - 1
+			if len(messages) == 0 {
+				lastMessageID = startMessageID
+			}
+
+			// Calculate next cursor: points to AFTER the last returned message
+			nextCursor := s.StreamState.Tail
+			if len(messages) > 0 {
+				nextCursor = lastMessageID + 1
 			}
 
 			return &workflowservice.PollStreamResponse{
-				Messages: messages,
+				Messages:   messages,
+				NextCursor: encodeCursor(nextCursor),
 			}, true, nil
 		},
 		request,

@@ -57,7 +57,7 @@ func CreateStream(
 		req.NamespaceId,
 		req.FrontendRequest.StreamId,
 		executionKey.RunID,
-		req.FrontendRequest.InitialMessages,
+		req.FrontendRequest.Messages,
 	)
 
 	return stream, &streampb.CreateStreamResponse{
