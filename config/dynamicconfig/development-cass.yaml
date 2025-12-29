@@ -53,7 +53,13 @@ history.hostLevelCacheMaxSize:
   - value: 8192
 history.enableTransitionHistory:
   - value: true
+# Enable CHASM framework and worker liveness tracking
 history.enableChasm:
   - value: true
-activity.enableStandalone:
+frontend.enableWorkerStateTracking:
   - value: true
+# Increase limits for stress testing
+frontend.namespaceCount:
+  - value: 10000  # poller limit (default: 1200)
+frontend.namespaceRPS:
+  - value: 10000  # RPS limit (default: 2400)
