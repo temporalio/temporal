@@ -26,25 +26,30 @@ var File_temporal_server_chasm_lib_stream_proto_v1_service_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_stream_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/stream/proto/v1/service.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a@temporal/server/chasm/lib/stream/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xee\x02\n" +
-	"\rStreamService\x12\xae\x01\n" +
+	"7temporal/server/chasm/lib/stream/proto/v1/service.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a@temporal/server/chasm/lib/stream/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xa2\x04\n" +
+	"\rStreamService\x12\xb1\x01\n" +
+	"\fCreateStream\x12>.temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest\x1a?.temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse\" \x92\xc4\x03\x1c\x1a\x1afrontend_request.stream_id\x12\xae\x01\n" +
 	"\vAddToStream\x12=.temporal.server.chasm.lib.stream.proto.v1.AddToStreamRequest\x1a>.temporal.server.chasm.lib.stream.proto.v1.AddToStreamResponse\" \x92\xc4\x03\x1c\x1a\x1afrontend_request.stream_id\x12\xab\x01\n" +
 	"\n" +
 	"PollStream\x12<.temporal.server.chasm.lib.stream.proto.v1.PollStreamRequest\x1a=.temporal.server.chasm.lib.stream.proto.v1.PollStreamResponse\" \x92\xc4\x03\x1c\x1a\x1afrontend_request.stream_idB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var file_temporal_server_chasm_lib_stream_proto_v1_service_proto_goTypes = []any{
-	(*AddToStreamRequest)(nil),  // 0: temporal.server.chasm.lib.stream.proto.v1.AddToStreamRequest
-	(*PollStreamRequest)(nil),   // 1: temporal.server.chasm.lib.stream.proto.v1.PollStreamRequest
-	(*AddToStreamResponse)(nil), // 2: temporal.server.chasm.lib.stream.proto.v1.AddToStreamResponse
-	(*PollStreamResponse)(nil),  // 3: temporal.server.chasm.lib.stream.proto.v1.PollStreamResponse
+	(*CreateStreamRequest)(nil),  // 0: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest
+	(*AddToStreamRequest)(nil),   // 1: temporal.server.chasm.lib.stream.proto.v1.AddToStreamRequest
+	(*PollStreamRequest)(nil),    // 2: temporal.server.chasm.lib.stream.proto.v1.PollStreamRequest
+	(*CreateStreamResponse)(nil), // 3: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse
+	(*AddToStreamResponse)(nil),  // 4: temporal.server.chasm.lib.stream.proto.v1.AddToStreamResponse
+	(*PollStreamResponse)(nil),   // 5: temporal.server.chasm.lib.stream.proto.v1.PollStreamResponse
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_service_proto_depIdxs = []int32{
-	0, // 0: temporal.server.chasm.lib.stream.proto.v1.StreamService.AddToStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.AddToStreamRequest
-	1, // 1: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.PollStreamRequest
-	2, // 2: temporal.server.chasm.lib.stream.proto.v1.StreamService.AddToStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.AddToStreamResponse
-	3, // 3: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.PollStreamResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	0, // 0: temporal.server.chasm.lib.stream.proto.v1.StreamService.CreateStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest
+	1, // 1: temporal.server.chasm.lib.stream.proto.v1.StreamService.AddToStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.AddToStreamRequest
+	2, // 2: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.PollStreamRequest
+	3, // 3: temporal.server.chasm.lib.stream.proto.v1.StreamService.CreateStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse
+	4, // 4: temporal.server.chasm.lib.stream.proto.v1.StreamService.AddToStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.AddToStreamResponse
+	5, // 5: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.PollStreamResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name

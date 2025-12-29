@@ -49,6 +49,16 @@ func (c *clientImpl) CreateSchedule(
 	return c.client.CreateSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) CreateStream(
+	ctx context.Context,
+	request *workflowservice.CreateStreamRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateStreamResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CreateStream(ctx, request, opts...)
+}
+
 func (c *clientImpl) CreateWorkflowRule(
 	ctx context.Context,
 	request *workflowservice.CreateWorkflowRuleRequest,

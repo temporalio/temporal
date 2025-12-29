@@ -26,6 +26,9 @@ type StreamState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Head          int64                  `protobuf:"varint,1,opt,name=head,proto3" json:"head,omitempty"`
 	Tail          int64                  `protobuf:"varint,2,opt,name=tail,proto3" json:"tail,omitempty"`
+	NamespaceId   string                 `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	StreamId      string                 `protobuf:"bytes,4,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	RunId         string                 `protobuf:"bytes,5,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -74,14 +77,38 @@ func (x *StreamState) GetTail() int64 {
 	return 0
 }
 
+func (x *StreamState) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *StreamState) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
+}
+
+func (x *StreamState) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
 var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\"5\n" +
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\"\x8c\x01\n" +
 	"\vStreamState\x12\x12\n" +
 	"\x04head\x18\x01 \x01(\x03R\x04head\x12\x12\n" +
-	"\x04tail\x18\x02 \x01(\x03R\x04tailB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
+	"\x04tail\x18\x02 \x01(\x03R\x04tail\x12!\n" +
+	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceId\x12\x1b\n" +
+	"\tstream_id\x18\x04 \x01(\tR\bstreamId\x12\x15\n" +
+	"\x06run_id\x18\x05 \x01(\tR\x05runIdB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescOnce sync.Once

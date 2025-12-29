@@ -10,6 +10,7 @@ import (
 
 // StreamFrontendHandler handles stream-related frontend requests.
 type StreamFrontendHandler interface {
+	CreateStream(ctx context.Context, req *workflowservice.CreateStreamRequest) (*workflowservice.CreateStreamResponse, error)
 	AddToStream(ctx context.Context, req *workflowservice.AddToStreamRequest) (*workflowservice.AddToStreamResponse, error)
 	PollStream(ctx context.Context, req *workflowservice.PollStreamRequest) (*workflowservice.PollStreamResponse, error)
 }
@@ -28,6 +29,27 @@ func NewFrontendHandler(
 		client:            client,
 		namespaceRegistry: namespaceRegistry,
 	}
+}
+
+// CreateStream creates a new stream with optional initial messages.
+func (h *frontendHandler) CreateStream(
+	ctx context.Context,
+	req *workflowservice.CreateStreamRequest,
+) (*workflowservice.CreateStreamResponse, error) {
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.client.CreateStream(ctx, &streampb.CreateStreamRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.GetFrontendResponse(), nil
 }
 
 // AddToStream pushes messages to the stream.

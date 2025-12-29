@@ -7,4 +7,7 @@ option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streamp
 message StreamState {
     int64 head = 1;
     int64 tail = 2;
+    string namespace_id = 3;
+    string stream_id = 4;
+    string run_id = 5;
 }

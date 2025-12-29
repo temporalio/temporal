@@ -2,10 +2,9 @@ package stream
 
 import (
 	"context"
-	"errors"
+	"sort"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
@@ -17,6 +16,41 @@ type handler struct {
 
 func newHandler() *handler {
 	return &handler{}
+}
+
+// CreateStream creates a new stream with optional initial messages.
+func (h *handler) CreateStream(
+	ctx context.Context,
+	req *streampb.CreateStreamRequest,
+) (*streampb.CreateStreamResponse, error) {
+	request := req.GetFrontendRequest()
+
+	// Use the provided RunId (or empty string if not provided)
+	// CHASM identifies streams by (NamespaceID, StreamID, RunID)
+	// An empty RunId is valid and commonly used
+	runID := request.GetRunId()
+
+	key := chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  request.GetStreamId(),
+		RunID:       runID,
+	}
+
+	resp, executionKey, _, err := chasm.NewExecution(
+		ctx,
+		key,
+		CreateStream,
+		req,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Use the generated RunID from CHASM
+	resp.FrontendResponse.RunId = executionKey.RunID
+
+	return resp, nil
 }
 
 // AddToStream appends messages to the stream.
@@ -31,33 +65,17 @@ func (h *handler) AddToStream(
 		RunID:       request.GetRunId(),
 	}
 
-	// This is an upsert: we have not added a separate CreateStream API. However, CHASM lacks an
-	// upsert API, so we are doing two transactions currently.
-	// TODO: do this in one transaction
-
+	// Simple update - single transaction
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Stream](key),
 		(*Stream).AddMessages,
 		request.GetMessages(),
 	)
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
-		// Stream doesn't exist, create it with the messages
-		_, _, _, err = chasm.NewExecution(
-			ctx,
-			key,
-			func(ctx chasm.MutableContext, req *workflowservice.AddToStreamRequest) (*Stream, int64, error) {
-				s := newStream(req)
-				_, err := s.AddMessages(ctx, req.GetMessages())
-				return s, 0, err
-			},
-			request,
-		)
-	}
 	if err != nil {
 		return nil, err
 	}
+
 	return &streampb.AddToStreamResponse{
 		FrontendResponse: &workflowservice.AddToStreamResponse{},
 	}, nil
@@ -85,10 +103,23 @@ func (h *handler) PollStream(
 		) (*workflowservice.PollStreamResponse, bool, error) {
 			// TODO: this is fake implementation. Need to design correct wait condition predicate,
 			// obtain correct set of new messages, pass cursor token back to caller, etc.
-			messages := make([]*commonpb.Payload, 0, len(s.Messages))
-			for _, field := range s.Messages {
-				messages = append(messages, field.Get(ctx))
+
+			// Collect message IDs and sort them to ensure deterministic ordering
+			messageIDs := make([]int64, 0, len(s.Messages))
+			for id := range s.Messages {
+				messageIDs = append(messageIDs, id)
 			}
+			// Sort by message ID (which corresponds to insertion order)
+			sort.Slice(messageIDs, func(i, j int) bool {
+				return messageIDs[i] < messageIDs[j]
+			})
+
+			// Build messages array in sorted order
+			messages := make([]*commonpb.Payload, 0, len(messageIDs))
+			for _, id := range messageIDs {
+				messages = append(messages, s.Messages[id].Get(ctx))
+			}
+
 			return &workflowservice.PollStreamResponse{
 				Messages: messages,
 			}, true, nil

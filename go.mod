@@ -77,8 +77,10 @@ require (
 	modernc.org/sqlite v1.39.1
 )
 
+require github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
+
 require (
-	cel.dev/expr v0.20.0 // indirect
+	cel.dev/expr v0.23.1 // indirect
 	cloud.google.com/go v0.118.3 // indirect; indirect e
 	cloud.google.com/go/auth v0.15.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
@@ -114,7 +116,6 @@ require (
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.5 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
-	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -170,3 +171,7 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace go.temporal.io/api => /Users/seankane/git/github.com/temporalio/api-go
+
+replace go.temporal.io/sdk => /Users/seankane/git/github.com/temporalio/sdk-go

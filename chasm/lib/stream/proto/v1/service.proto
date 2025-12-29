@@ -8,6 +8,10 @@ import "chasm/lib/stream/proto/v1/request_response.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 
 service StreamService {
+    rpc CreateStream(CreateStreamRequest) returns (CreateStreamResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    }
+
     rpc AddToStream(AddToStreamRequest) returns (AddToStreamResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
     }
