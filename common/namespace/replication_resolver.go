@@ -6,8 +6,8 @@ import (
 )
 
 type ReplicationResolver interface {
-	ActiveClusterName() string
-	ClusterNames() []string
+	ActiveClusterName(businessID string) string
+	ClusterNames(businessID string) []string
 	ReplicationState() enumspb.ReplicationState
 	IsGlobalNamespace() bool
 	FailoverVersion(businessID string) int64
@@ -44,14 +44,14 @@ func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
 	}
 }
 
-func (r *defaultReplicationResolver) ActiveClusterName() string {
+func (r *defaultReplicationResolver) ActiveClusterName(businessID string) string {
 	if r.replicationConfig == nil {
 		return ""
 	}
 	return r.replicationConfig.ActiveClusterName
 }
 
-func (r *defaultReplicationResolver) ClusterNames() []string {
+func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {
 	if r.replicationConfig == nil {
 		return nil
 	}
