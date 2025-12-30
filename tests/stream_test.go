@@ -65,7 +65,7 @@ func (s *streamSuite) TestHappyPath() {
 		MaxMessages: 100, // Request up to 100 messages
 	})
 	s.NoError(err)
-	s.Equal(2, len(resp1.Messages))
+	s.Len(resp1.Messages, 2)
 	s.Equal([]byte("hello"), resp1.Messages[0].Data)
 	s.Equal([]byte("world"), resp1.Messages[1].Data)
 	s.NotNil(resp1.NextCursor, "NextCursor should be set")
@@ -89,7 +89,7 @@ func (s *streamSuite) TestHappyPath() {
 		MaxMessages: 100,
 	})
 	s.NoError(err)
-	s.Equal(2, len(resp2.Messages))
+	s.Len(resp2.Messages, 2)
 	s.Equal([]byte("goodbye"), resp2.Messages[0].Data)
 	s.Equal([]byte("friend"), resp2.Messages[1].Data)
 	s.NotNil(resp2.NextCursor, "NextCursor should be set")
@@ -102,7 +102,7 @@ func (s *streamSuite) TestHappyPath() {
 		MaxMessages: 100,
 	})
 	s.NoError(err)
-	s.Equal(4, len(respAll.Messages), "Should get all messages when no cursor")
+	s.Len(respAll.Messages, 4, "Should get all messages when no cursor")
 	s.Equal([]byte("hello"), respAll.Messages[0].Data)
 	s.Equal([]byte("world"), respAll.Messages[1].Data)
 	s.Equal([]byte("goodbye"), respAll.Messages[2].Data)
@@ -150,7 +150,7 @@ func (s *streamSuite) TestCreateEmptyThenAdd() {
 	s.NoError(err, "PollStream should succeed")
 
 	messages := pollResp.GetMessages()
-	s.Equal(2, len(messages), "Should have 2 messages")
+	s.Len(messages, 2, "Should have 2 messages")
 	s.Equal([]byte("first"), messages[0].GetData())
 	s.Equal([]byte("message"), messages[1].GetData())
 }
@@ -230,7 +230,7 @@ func (s *streamSuite) TestCursorWithMaxMessages() {
 	}
 
 	// Verify we got all 10 messages in the correct order
-	s.Equal(10, len(allMessages), "Should have retrieved all 10 messages")
+	s.Len(allMessages, 10, "Should have retrieved all 10 messages")
 	for i := 0; i < 10; i++ {
 		expected := fmt.Sprintf("message-%d", i)
 		s.Equal([]byte(expected), allMessages[i].Data, "Messages should be in correct order")
@@ -262,7 +262,7 @@ func (s *streamSuite) TestInvalidCursor() {
 		MaxMessages: 100,
 	})
 	s.NoError(err, "Empty cursor should be valid")
-	s.Equal(2, len(resp.Messages), "Empty cursor should read from beginning")
+	s.Len(resp.Messages, 2, "Empty cursor should read from beginning")
 
 	// Test 2: Invalid cursor length (not 8 bytes) should fail
 	_, err = s.FrontendClient().PollStream(ctx, &workflowservice.PollStreamRequest{

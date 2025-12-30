@@ -154,13 +154,13 @@ func (h *handler) PollStream(
 			ctx chasm.Context,
 			req *workflowservice.PollStreamRequest,
 		) (*workflowservice.PollStreamResponse, bool, error) {
-			if s.StreamState.Tail <= startMessageID {
+			if s.Tail <= startMessageID {
 				// No new messages yet, keep polling
 				return nil, false, nil
 			}
 
 			// Calculate end position: either maxMessages ahead or tail, whichever is smaller
-			endMessageID := min(startMessageID+int64(maxMessages), s.StreamState.Tail)
+			endMessageID := min(startMessageID+int64(maxMessages), s.Tail)
 
 			// Build messages array
 			expectedCount := endMessageID - startMessageID
@@ -179,7 +179,7 @@ func (h *handler) PollStream(
 			}
 
 			// Calculate next cursor: points to AFTER the last returned message
-			nextCursor := s.StreamState.Tail
+			nextCursor := s.Tail
 			if len(messages) > 0 {
 				nextCursor = lastMessageID + 1
 			}

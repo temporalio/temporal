@@ -62,7 +62,7 @@ func CreateStream(
 
 	return stream, &streampb.CreateStreamResponse{
 		FrontendResponse: &workflowservice.CreateStreamResponse{
-			RunId: stream.StreamState.RunId,
+			RunId: stream.RunId,
 		},
 	}, nil
 }
@@ -79,8 +79,8 @@ func (s *Stream) AddMessages(ctx chasm.MutableContext, messages []*commonpb.Payl
 
 	var messageID int64
 	for _, message := range messages {
-		messageID = s.StreamState.Tail
-		s.StreamState.Tail++
+		messageID = s.Tail
+		s.Tail++
 		s.Messages[messageID] = chasm.NewDataField(ctx, message)
 	}
 	return messageID, nil
