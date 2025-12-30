@@ -865,7 +865,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 		RunId:       executionKey.RunID,
 		ArchetypeId: uint32(testComponentTypeID),
 		ExecutionVersionedTransition: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 1, // ahead of persisted state
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(executionKey.BusinessID) + 1, // ahead of persisted state
 			TransitionCount:          testTransitionCount,
 		},
 	}
