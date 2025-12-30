@@ -147,8 +147,9 @@ var (
 		"TerminateActivityExecution":     func() any { return &workflowservice.TerminateActivityExecutionResponse{} },
 		"DeleteActivityExecution":        func() any { return &workflowservice.DeleteActivityExecutionResponse{} },
 
-		"AddToStream": func() any { return &workflowservice.AddToStreamResponse{} },
-		"PollStream":  func() any { return &workflowservice.PollStreamResponse{} },
+		"CreateStream": func() any { return &workflowservice.CreateStreamResponse{} },
+		"AddToStream":  func() any { return &workflowservice.AddToStreamResponse{} },
+		"PollStream":   func() any { return &workflowservice.PollStreamResponse{} },
 	}
 )
 

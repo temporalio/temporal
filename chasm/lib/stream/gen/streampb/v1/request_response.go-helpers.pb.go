@@ -5,6 +5,80 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Marshal an object of type CreateStreamRequest to the protobuf v3 wire format
+func (val *CreateStreamRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CreateStreamRequest from the protobuf v3 wire format
+func (val *CreateStreamRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CreateStreamRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CreateStreamRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CreateStreamRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CreateStreamRequest
+	switch t := that.(type) {
+	case *CreateStreamRequest:
+		that1 = t
+	case CreateStreamRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CreateStreamResponse to the protobuf v3 wire format
+func (val *CreateStreamResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CreateStreamResponse from the protobuf v3 wire format
+func (val *CreateStreamResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CreateStreamResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CreateStreamResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CreateStreamResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CreateStreamResponse
+	switch t := that.(type) {
+	case *CreateStreamResponse:
+		that1 = t
+	case CreateStreamResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type AddToStreamRequest to the protobuf v3 wire format
 func (val *AddToStreamRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

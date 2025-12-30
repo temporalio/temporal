@@ -20,14 +20,16 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	StreamService_AddToStream_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/AddToStream"
-	StreamService_PollStream_FullMethodName  = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/PollStream"
+	StreamService_CreateStream_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/CreateStream"
+	StreamService_AddToStream_FullMethodName  = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/AddToStream"
+	StreamService_PollStream_FullMethodName   = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/PollStream"
 )
 
 // StreamServiceClient is the client API for StreamService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StreamServiceClient interface {
+	CreateStream(ctx context.Context, in *CreateStreamRequest, opts ...grpc.CallOption) (*CreateStreamResponse, error)
 	AddToStream(ctx context.Context, in *AddToStreamRequest, opts ...grpc.CallOption) (*AddToStreamResponse, error)
 	PollStream(ctx context.Context, in *PollStreamRequest, opts ...grpc.CallOption) (*PollStreamResponse, error)
 }
@@ -38,6 +40,15 @@ type streamServiceClient struct {
 
 func NewStreamServiceClient(cc grpc.ClientConnInterface) StreamServiceClient {
 	return &streamServiceClient{cc}
+}
+
+func (c *streamServiceClient) CreateStream(ctx context.Context, in *CreateStreamRequest, opts ...grpc.CallOption) (*CreateStreamResponse, error) {
+	out := new(CreateStreamResponse)
+	err := c.cc.Invoke(ctx, StreamService_CreateStream_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *streamServiceClient) AddToStream(ctx context.Context, in *AddToStreamRequest, opts ...grpc.CallOption) (*AddToStreamResponse, error) {
@@ -62,6 +73,7 @@ func (c *streamServiceClient) PollStream(ctx context.Context, in *PollStreamRequ
 // All implementations must embed UnimplementedStreamServiceServer
 // for forward compatibility
 type StreamServiceServer interface {
+	CreateStream(context.Context, *CreateStreamRequest) (*CreateStreamResponse, error)
 	AddToStream(context.Context, *AddToStreamRequest) (*AddToStreamResponse, error)
 	PollStream(context.Context, *PollStreamRequest) (*PollStreamResponse, error)
 	mustEmbedUnimplementedStreamServiceServer()
@@ -71,6 +83,9 @@ type StreamServiceServer interface {
 type UnimplementedStreamServiceServer struct {
 }
 
+func (UnimplementedStreamServiceServer) CreateStream(context.Context, *CreateStreamRequest) (*CreateStreamResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateStream not implemented")
+}
 func (UnimplementedStreamServiceServer) AddToStream(context.Context, *AddToStreamRequest) (*AddToStreamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddToStream not implemented")
 }
@@ -88,6 +103,24 @@ type UnsafeStreamServiceServer interface {
 
 func RegisterStreamServiceServer(s grpc.ServiceRegistrar, srv StreamServiceServer) {
 	s.RegisterService(&StreamService_ServiceDesc, srv)
+}
+
+func _StreamService_CreateStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateStreamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamServiceServer).CreateStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamService_CreateStream_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamServiceServer).CreateStream(ctx, req.(*CreateStreamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _StreamService_AddToStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -133,6 +166,10 @@ var StreamService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "temporal.server.chasm.lib.stream.proto.v1.StreamService",
 	HandlerType: (*StreamServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreateStream",
+			Handler:    _StreamService_CreateStream_Handler,
+		},
 		{
 			MethodName: "AddToStream",
 			Handler:    _StreamService_AddToStream_Handler,

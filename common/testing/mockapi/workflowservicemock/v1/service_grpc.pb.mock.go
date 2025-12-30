@@ -122,6 +122,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) CreateSchedule(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSchedule", reflect.TypeOf((*MockWorkflowServiceClient)(nil).CreateSchedule), varargs...)
 }
 
+// CreateStream mocks base method.
+func (m *MockWorkflowServiceClient) CreateStream(ctx context.Context, in *workflowservice.CreateStreamRequest, opts ...grpc.CallOption) (*workflowservice.CreateStreamResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateStream", varargs...)
+	ret0, _ := ret[0].(*workflowservice.CreateStreamResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateStream indicates an expected call of CreateStream.
+func (mr *MockWorkflowServiceClientMockRecorder) CreateStream(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateStream", reflect.TypeOf((*MockWorkflowServiceClient)(nil).CreateStream), varargs...)
+}
+
 // CreateWorkflowRule mocks base method.
 func (m *MockWorkflowServiceClient) CreateWorkflowRule(ctx context.Context, in *workflowservice.CreateWorkflowRuleRequest, opts ...grpc.CallOption) (*workflowservice.CreateWorkflowRuleResponse, error) {
 	m.ctrl.T.Helper()

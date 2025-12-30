@@ -58,6 +58,49 @@ func NewStreamServiceLayeredClient(
 		retryPolicy:    common.CreateHistoryClientRetryPolicy(),
 	}, nil
 }
+func (c *StreamServiceLayeredClient) callCreateStreamNoRetry(
+	ctx context.Context,
+	request *CreateStreamRequest,
+	opts ...grpc.CallOption,
+) (*CreateStreamResponse, error) {
+	var response *CreateStreamResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("StreamService.CreateStream"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetStreamId(), c.numShards)
+	op := func(ctx context.Context, client StreamServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.CreateStream(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *StreamServiceLayeredClient) CreateStream(
+	ctx context.Context,
+	request *CreateStreamRequest,
+	opts ...grpc.CallOption,
+) (*CreateStreamResponse, error) {
+	call := func(ctx context.Context) (*CreateStreamResponse, error) {
+		return c.callCreateStreamNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
 func (c *StreamServiceLayeredClient) callAddToStreamNoRetry(
 	ctx context.Context,
 	request *AddToStreamRequest,

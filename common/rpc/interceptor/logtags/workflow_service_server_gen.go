@@ -14,7 +14,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.AddToStreamResponse:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.CountActivityExecutionsRequest:
 		return nil
 	case *workflowservice.CountActivityExecutionsResponse:
@@ -27,6 +29,14 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.CreateScheduleResponse:
 		return nil
+	case *workflowservice.CreateStreamRequest:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
+	case *workflowservice.CreateStreamResponse:
+		return []tag.Tag{
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.CreateWorkflowRuleRequest:
 		return nil
 	case *workflowservice.CreateWorkflowRuleResponse:
