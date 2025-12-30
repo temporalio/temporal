@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"go.temporal.io/server/common/log"
 )
 
 // MockContext is a mock implementation of [Context].
@@ -48,6 +50,10 @@ func (c *MockContext) ExecutionCloseTime() time.Time {
 		return c.HandleExecutionCloseTime()
 	}
 	return time.Time{}
+}
+
+func (c *MockContext) Logger() log.Logger {
+	return log.NewTestLogger()
 }
 
 // MockMutableContext is a mock implementation of [MutableContext] that records added tasks for inspection in
