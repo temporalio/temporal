@@ -286,6 +286,15 @@ func NewMutableState(
 	runID string,
 	startTime time.Time,
 ) *MutableStateImpl {
+
+	logger = log.NewLazyLogger(logger, func() []tag.Tag {
+		return []tag.Tag{
+			tag.WorkflowNamespaceID(namespaceEntry.Name().String()),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+		}
+	})
+
 	s := &MutableStateImpl{
 		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
 		pendingActivityTimerHeartbeats: make(map[int64]time.Time),
@@ -315,7 +324,8 @@ func NewMutableState(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
-		// TODO: wire up with real chasm tree implementation
+		// This field will be initialized with a real chasm tree at the end of this function
+		// when feature flag is enabled.
 		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
@@ -403,7 +413,7 @@ func NewMutableState(
 			shard.GetTimeSource(),
 			s,
 			chasm.DefaultPathEncoder,
-			shard.GetLogger(),
+			logger,
 		)
 	}
 
@@ -550,7 +560,7 @@ func NewMutableStateFromDB(
 			shard.GetTimeSource(),
 			mutableState,
 			chasm.DefaultPathEncoder,
-			shard.GetLogger(),
+			mutableState.logger, // this logger is tagged with execution key.
 		)
 		if err != nil {
 			return nil, err
@@ -8261,34 +8271,21 @@ func (ms *MutableStateImpl) createCallerError(
 	return serviceerror.NewInvalidArgument(msg)
 }
 
+// TODO: Deprecate following logging methods and use ms.logger directly.
 func (ms *MutableStateImpl) logInfo(msg string, tags ...tag.Tag) {
-	tags = append(tags, tag.WorkflowID(ms.executionInfo.WorkflowId))
-	tags = append(tags, tag.WorkflowRunID(ms.executionState.RunId))
-	tags = append(tags, tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId))
 	ms.logger.Info(msg, tags...)
 }
 
 func (ms *MutableStateImpl) logWarn(msg string, tags ...tag.Tag) {
-	tags = append(tags, tag.WorkflowID(ms.executionInfo.WorkflowId))
-	tags = append(tags, tag.WorkflowRunID(ms.executionState.RunId))
-	tags = append(tags, tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId))
 	ms.logger.Warn(msg, tags...)
 }
 
 func (ms *MutableStateImpl) logError(msg string, tags ...tag.Tag) {
-	logError(ms.logger, msg, ms.executionInfo, ms.executionState, tags...)
+	ms.logger.Error(msg, tags...)
 }
 
 func (ms *MutableStateImpl) logDataInconsistency() {
-	namespaceID := ms.executionInfo.NamespaceId
-	workflowID := ms.executionInfo.WorkflowId
-	runID := ms.executionState.RunId
-
-	ms.logger.Error("encounter cassandra data inconsistency",
-		tag.WorkflowNamespaceID(namespaceID),
-		tag.WorkflowID(workflowID),
-		tag.WorkflowRunID(runID),
-	)
+	ms.logger.Error("encounter cassandra data inconsistency")
 }
 
 func (ms *MutableStateImpl) HasCompletedAnyWorkflowTask() bool {
