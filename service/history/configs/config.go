@@ -211,6 +211,8 @@ type Config struct {
 	ParentClosePolicyThreshold dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// total number of parentClosePolicy system workflows
 	NumParentClosePolicySystemWorkflows dynamicconfig.IntPropertyFn
+	// EnableParentClosePolicyTransferTasks enables dedicated transfer tasks for parent close policy
+	EnableParentClosePolicyTransferTasks dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Size limit related settings
 	BlobSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -604,6 +606,7 @@ func NewConfig(
 		NumParentClosePolicySystemWorkflows: dynamicconfig.NumParentClosePolicySystemWorkflows.Get(dc),
 		EnableParentClosePolicyWorker:       dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
 		ParentClosePolicyThreshold:          dynamicconfig.ParentClosePolicyThreshold.Get(dc),
+		EnableParentClosePolicyTransferTasks: dynamicconfig.EnableParentClosePolicyTransferTasks.Get(dc),
 
 		BlobSizeLimitError:                        dynamicconfig.BlobSizeLimitError.Get(dc),
 		BlobSizeLimitWarn:                         dynamicconfig.BlobSizeLimitWarn.Get(dc),
