@@ -99,10 +99,10 @@ var (
 	errKeyNotPresent        = errors.New("key not present")
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 
-	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
-	errorType     = reflect.TypeOf((*error)(nil)).Elem()
-	durationType  = reflect.TypeOf(time.Duration(0))
-	stringType    = reflect.TypeOf("")
+	protoEnumType = reflect.TypeFor[protoreflect.Enum]()
+	errorType     = reflect.TypeFor[error]()
+	durationType  = reflect.TypeFor[time.Duration]()
+	stringType    = reflect.TypeFor[string]()
 
 	usingDefaultValue any = defaultValue{}
 )
