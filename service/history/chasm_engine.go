@@ -353,8 +353,6 @@ func (e *ChasmEngine) predicateSatisfied(
 		)
 	}
 
-	// We know now that execution VT >= ref VT
-
 	chasmContext := chasm.NewContext(ctx, chasmTree)
 	component, err := chasmTree.Component(chasmContext, ref)
 	if err != nil {
@@ -685,12 +683,12 @@ func (e *ChasmEngine) getShardContext(
 	return e.shardController.GetShardByID(shardID)
 }
 
-// getExecutionLease returns shard context and mutable state for the execution identified by the
-// supplied component reference, with the lock held. An error is returned if the state transition
-// specified by the component reference is inconsistent with mutable state transition history. If
-// the state transition specified by the component reference is consistent with mutable state being
-// stale, then mutable state is reloaded from persistence before returning. It does not check that
-// mutable state is non-stale after reload.
+// getExecutionLease returns shard context and mutable state for the chasm execution, with the lock
+// held. An error is returned if the state transition specified by the component reference is
+// inconsistent with mutable state transition history. If the state transition specified by the
+// component reference is consistent with mutable state being stale, then mutable state is reloaded
+// from persistence. The returned mutable state is guaranteed not to be stale with respect to the
+// supplied component reference.
 func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -718,20 +716,23 @@ func (e *ChasmEngine) getExecutionLease(
 		return nil, nil, err
 	}
 
-	var staleReferenceErr error
+	var predicateErr error
+	var needReload bool
 	executionLease, err := consistencyChecker.GetChasmLeaseWithConsistencyCheck(
 		ctx,
 		nil,
 		func(mutableState historyi.MutableState) bool {
 			err := mutableState.ChasmTree().IsStale(ref)
-			if errors.Is(err, consts.ErrStaleState) {
-				return false
+			needReload = errors.Is(err, consts.ErrStaleState)
+			if !needReload {
+				// Reference itself might be stale.
+				// No need to reload mutable state in this case, but request should be failed.
+				predicateErr = err
 			}
 
-			// Reference itself might be stale.
-			// No need to reload mutable state in this case, but request should be failed.
-			staleReferenceErr = err
-			return true
+			// Return false (i.e. consistency predicate check failed)
+			// here to indicate reload is needed.
+			return !needReload
 		},
 		definition.NewWorkflowKey(
 			ref.NamespaceID,
@@ -745,12 +746,17 @@ func (e *ChasmEngine) getExecutionLease(
 		return nil, nil, err
 	}
 
-	if staleReferenceErr != nil {
+	if predicateErr != nil {
 		executionLease.GetReleaseFn()(nil)
-		return nil, nil, staleReferenceErr
+		return nil, nil, predicateErr
 	}
 
-	// Do a final check to ensure mutable state is not stale after reload.
+	if !needReload {
+		return shardContext, executionLease, nil
+	}
+
+	// Mutable state was previously detected as stale and get reloaded,
+	// do a final check to ensure mutable state is not stale after reload.
 	err = executionLease.GetMutableState().ChasmTree().IsStale(ref)
 	if err != nil {
 		logger := log.With(shardContext.GetLogger(),
