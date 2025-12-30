@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -235,6 +234,9 @@ func (s *engine2Suite) TearDownSubTest() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
+	// Disable raw history to test the non-raw history path
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return false }
+
 	fakeHistory := []*historypb.HistoryEvent{
 		{
 			EventId:   int64(1),
@@ -307,7 +309,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
@@ -339,8 +341,9 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInternalRawHistory() {
-	s.config.SendRawHistoryBetweenInternalServices = func() bool { return true }
-	serializer := serialization.NewSerializer()
+	// Disable raw history to test the non-raw history path
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return false }
+
 	fakeHistory := []*historypb.HistoryEvent{
 		{
 			EventId:   int64(1),
@@ -365,19 +368,15 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
-	historyBlob, err := serializer.SerializeEvents(fakeHistory)
-	s.NoError(err)
 
-	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*commonpb.DataBlob{
-			{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         historyBlob.Data,
-			},
-		},
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: fakeHistory,
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil)
+	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
 	namespaceID := tests.NamespaceID
 	we := &commonpb.WorkflowExecution{
@@ -417,7 +416,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
@@ -437,7 +436,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	currentBranchTokken, err := ms.GetCurrentBranchToken()
 	s.NoError(err)
 	expectedResponse.BranchToken = currentBranchTokken
-	expectedResponse.RawHistory = [][]byte{historyBlob.Data}
+	expectedResponse.History = &historypb.History{Events: fakeHistory}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)
@@ -659,6 +658,9 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
+	// Disable raw history to test the non-raw history path
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return false }
+
 	fakeHistory := []*historypb.HistoryEvent{
 		{
 			EventId:   int64(1),
