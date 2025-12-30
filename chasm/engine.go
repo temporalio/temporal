@@ -4,6 +4,8 @@ package chasm
 
 import (
 	"context"
+
+	"go.temporal.io/api/serviceerror"
 )
 
 // NoValue is a sentinel type representing no value.
@@ -215,7 +217,11 @@ func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](
 ) (O1, O2, ExecutionKey, []byte, error) {
 	var output1 O1
 	var output2 O2
-	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithNewExecution(
+	engine, err := getEngineFromContext(ctx)
+	if err != nil {
+		return output1, output2, ExecutionKey{}, nil, err
+	}
+	executionKey, serializedRef, err := engine.UpdateWithNewExecution(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
@@ -259,7 +265,12 @@ func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 		return output, nil, err
 	}
 
-	newSerializedRef, err := engineFromContext(ctx).UpdateComponent(
+	engine, err := getEngineFromContext(ctx)
+	if err != nil {
+		return output, nil, err
+	}
+
+	newSerializedRef, err := engine.UpdateComponent(
 		ctx,
 		ref,
 		func(ctx MutableContext, c Component) error {
@@ -292,7 +303,12 @@ func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 		return output, err
 	}
 
-	err = engineFromContext(ctx).ReadComponent(
+	engine, err := getEngineFromContext(ctx)
+	if err != nil {
+		return output, err
+	}
+
+	err = engine.ReadComponent(
 		ctx,
 		ref,
 		func(ctx Context, c Component) error {
@@ -327,7 +343,12 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 		return output, nil, err
 	}
 
-	newSerializedRef, err := engineFromContext(ctx).PollComponent(
+	engine, err := getEngineFromContext(ctx)
+	if err != nil {
+		return output, nil, err
+	}
+
+	newSerializedRef, err := engine.PollComponent(
 		ctx,
 		ref,
 		func(ctx Context, c Component) (bool, error) {
@@ -378,4 +399,14 @@ func engineFromContext(
 		return nil
 	}
 	return e
+}
+
+var errEngineMissingFromContext = serviceerror.NewInternal("CHASM engine not found in context; ensure ChasmEngineInterceptor is in the gRPC interceptor chain")
+
+func getEngineFromContext(ctx context.Context) (Engine, error) {
+	engine := engineFromContext(ctx)
+	if engine == nil {
+		return nil, errEngineMissingFromContext
+	}
+	return engine, nil
 }
