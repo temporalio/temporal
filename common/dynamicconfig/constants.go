@@ -2991,6 +2991,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
 	)
 
+	EnableWorkerStateTracking = NewNamespaceBoolSetting(
+		"frontend.enableWorkerStateTracking",
+		false,
+		`EnableWorkerStateTracking enables CHASM-based worker state tracking. When enabled, worker heartbeats are persisted to history for durable liveness tracking.`,
+	)
+
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
 		true,

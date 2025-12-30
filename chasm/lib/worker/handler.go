@@ -4,24 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
-)
-
-const (
-	// Default lease duration for worker heartbeats.
-	defaultLeaseDuration = 1 * time.Minute
+	"go.temporal.io/server/common/metrics"
 )
 
 type handler struct {
 	workerstatepb.UnimplementedWorkerServiceServer
+	metricsHandler metrics.Handler
 }
 
-func newHandler() *handler {
-	return &handler{}
+func newHandler(metricsHandler metrics.Handler) *handler {
+	return &handler{
+		metricsHandler: metricsHandler,
+	}
 }
 
 func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.RecordHeartbeatRequest) (*workerstatepb.RecordHeartbeatResponse, error) {
@@ -38,24 +36,19 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 		BusinessID:  workerHeartbeat.WorkerInstanceKey,
 	}
 
-	// TODO: Get lease duration from request once the proto supports it.
-	leaseDuration := defaultLeaseDuration
-
 	// Try to update existing worker, or create new one if not found
-	_, _, _, _, err := chasm.UpdateWithNewExecution(
+	// newResp is set if a new worker is created, updateResp is set if an existing worker is updated
+	newResp, updateResp, _, _, err := chasm.UpdateWithNewExecution(
 		ctx,
 		executionKey,
 		// newFn: called if worker doesn't exist
-		func(ctx chasm.MutableContext, _ *workerstatepb.RecordHeartbeatRequest) (*Worker, []byte, error) {
+		func(ctx chasm.MutableContext, req *workerstatepb.RecordHeartbeatRequest) (*Worker, *workerstatepb.RecordHeartbeatResponse, error) {
 			w := NewWorker()
-			token, err := w.recordHeartbeat(ctx, workerHeartbeat, nil, leaseDuration)
-			return w, token, err
+			resp, err := w.recordHeartbeat(ctx, req)
+			return w, resp, err
 		},
 		// updateFn: called if worker exists
-		func(w *Worker, ctx chasm.MutableContext, _ *workerstatepb.RecordHeartbeatRequest) ([]byte, error) {
-			// TODO: Extract token from request once the proto supports it.
-			return w.recordHeartbeat(ctx, workerHeartbeat, nil, leaseDuration)
-		},
+		(*Worker).recordHeartbeat,
 		req,
 	)
 
@@ -69,5 +62,10 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 		return nil, err
 	}
 
-	return &workerstatepb.RecordHeartbeatResponse{}, nil
+	// Return the response from whichever path was taken
+	if newResp != nil {
+		metrics.ChasmWorkerCreated.With(h.metricsHandler).Record(1)
+		return newResp, nil
+	}
+	return updateResp, nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	workerpb "go.temporal.io/api/worker/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
@@ -20,19 +21,36 @@ func newTestWorker() *Worker {
 	return worker
 }
 
+// newTestRequest creates a test RecordHeartbeatRequest
+func newTestRequest(workerInstanceKey string) *workerstatepb.RecordHeartbeatRequest {
+	return &workerstatepb.RecordHeartbeatRequest{
+		NamespaceId: "test-namespace-id",
+		FrontendRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+			Namespace: "test-namespace",
+			Identity:  "test-identity",
+			WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+				{
+					WorkerInstanceKey: workerInstanceKey,
+				},
+			},
+		},
+	}
+}
+
 func TestRecordHeartbeat(t *testing.T) {
 	worker := newTestWorker()
 	ctx := &chasm.MockMutableContext{}
-	leaseDuration := 30 * time.Second
 
-	// Test successful heartbeat recording (first heartbeat, no token)
-	newToken, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, nil, leaseDuration)
+	req := newTestRequest("test-worker")
+
+	// Test successful heartbeat recording
+	resp, err := worker.recordHeartbeat(ctx, req)
 	require.NoError(t, err)
-	require.NotEmpty(t, newToken)
+	require.NotNil(t, resp)
 
-	// Verify lease deadline was set (approximately)
+	// Verify lease deadline was set (approximately, using default 1 minute)
 	require.NotNil(t, worker.LeaseExpirationTime)
-	expectedDeadline := time.Now().Add(leaseDuration)
+	expectedDeadline := time.Now().Add(1 * time.Minute) // Default lease duration
 	actualDeadline := worker.LeaseExpirationTime.AsTime()
 	require.WithinDuration(t, expectedDeadline, actualDeadline, time.Second)
 
@@ -46,40 +64,15 @@ func TestRecordHeartbeat(t *testing.T) {
 	require.Equal(t, int64(1), worker.ConflictToken)
 }
 
-func TestRecordHeartbeat_TokenValidation(t *testing.T) {
-	worker := newTestWorker()
-	ctx := &chasm.MockMutableContext{}
-	leaseDuration := 30 * time.Second
-
-	// First heartbeat - no token required
-	token1, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, nil, leaseDuration)
-	require.NoError(t, err)
-	require.NotEmpty(t, token1)
-
-	// Second heartbeat with correct token
-	token2, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, token1, leaseDuration)
-	require.NoError(t, err)
-	require.NotEmpty(t, token2)
-
-	// Third heartbeat with wrong token
-	wrongToken := []byte("wrong-token")
-	_, err = worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, wrongToken, leaseDuration)
-	require.Error(t, err)
-
-	// Verify it's a TokenMismatchError with correct token
-	tokenErr, ok := err.(*TokenMismatchError)
-	require.True(t, ok, "expected TokenMismatchError")
-	require.Equal(t, token2, tokenErr.CurrentToken)
-}
-
 func TestRecordHeartbeat_InactiveWorker(t *testing.T) {
 	worker := newTestWorker()
 	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
-	leaseDuration := 30 * time.Second
+
+	req := newTestRequest("test-worker")
 
 	// Heartbeat on inactive worker should fail
-	_, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, nil, leaseDuration)
+	_, err := worker.recordHeartbeat(ctx, req)
 	require.Error(t, err)
 	_, ok := err.(*WorkerInactiveError)
 	require.True(t, ok, "expected WorkerInactiveError")
@@ -166,14 +159,14 @@ func TestMultipleHeartbeats(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 
 	// First heartbeat
-	firstDuration := 30 * time.Second
-	token1, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, nil, firstDuration)
+	resp, err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 	require.NoError(t, err)
+	require.NotNil(t, resp)
 
-	// Second heartbeat extends the lease (with correct token)
-	secondDuration := 60 * time.Second
-	_, err = worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, token1, secondDuration)
+	// Second heartbeat extends the lease
+	resp, err = worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 	require.NoError(t, err)
+	require.NotNil(t, resp)
 
 	// Verify two tasks were scheduled (one for each heartbeat)
 	require.Len(t, ctx.Tasks, 2)
@@ -186,11 +179,11 @@ func TestInvalidTransitions(t *testing.T) {
 		worker := newTestWorker()
 		worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 
-		leaseDuration := 30 * time.Second
-		_, err := worker.recordHeartbeat(ctx, worker.WorkerHeartbeat, nil, leaseDuration)
+		resp, err := worker.recordHeartbeat(ctx, newTestRequest("test-worker"))
 
 		// Should fail because worker is inactive (terminal state)
 		require.Error(t, err)
+		require.Nil(t, resp)
 		_, ok := err.(*WorkerInactiveError)
 		require.True(t, ok, "expected WorkerInactiveError")
 	})

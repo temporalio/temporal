@@ -2,10 +2,10 @@ package worker
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	workerpb "go.temporal.io/api/worker/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
 )
@@ -40,18 +40,25 @@ func TestWorkerRecordHeartbeat(t *testing.T) {
 	worker := NewWorker()
 	ctx := &chasm.MockMutableContext{}
 
-	heartbeat := &workerpb.WorkerHeartbeat{
-		WorkerInstanceKey: "test-worker-3",
+	req := &workerstatepb.RecordHeartbeatRequest{
+		NamespaceId: "test-namespace-id",
+		FrontendRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+			Namespace: "test-namespace",
+			Identity:  "test-identity",
+			WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+				{
+					WorkerInstanceKey: "test-worker-3",
+				},
+			},
+		},
 	}
-	leaseDuration := 30 * time.Second
 
-	// Test recording heartbeat on new worker (no token)
-	newToken, err := worker.recordHeartbeat(ctx, heartbeat, nil, leaseDuration)
+	// Test recording heartbeat on new worker
+	resp, err := worker.recordHeartbeat(ctx, req)
 	require.NoError(t, err)
-	require.NotEmpty(t, newToken)
+	require.NotNil(t, resp)
 
 	// Verify heartbeat data was set
-	require.Equal(t, heartbeat, worker.WorkerHeartbeat)
 	require.Equal(t, "test-worker-3", worker.workerID())
 
 	// Verify lease expiration time was set
@@ -67,49 +74,26 @@ func TestWorkerRecordHeartbeat(t *testing.T) {
 	require.Equal(t, int64(1), worker.ConflictToken)
 }
 
-func TestWorkerRecordHeartbeat_TokenMismatch(t *testing.T) {
-	worker := NewWorker()
-	ctx := &chasm.MockMutableContext{}
-
-	heartbeat := &workerpb.WorkerHeartbeat{
-		WorkerInstanceKey: "test-worker",
-	}
-	leaseDuration := 30 * time.Second
-
-	// First heartbeat - get token
-	token1, err := worker.recordHeartbeat(ctx, heartbeat, nil, leaseDuration)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), worker.ConflictToken)
-
-	// Second heartbeat with wrong token (wrong length)
-	wrongToken := []byte("wrong")
-	_, err = worker.recordHeartbeat(ctx, heartbeat, wrongToken, leaseDuration)
-	require.Error(t, err)
-
-	// Verify error type and current token is included
-	tokenErr, ok := err.(*TokenMismatchError)
-	require.True(t, ok)
-	require.Equal(t, token1, tokenErr.CurrentToken)
-
-	// Second heartbeat with correct token should succeed
-	token2, err := worker.recordHeartbeat(ctx, heartbeat, token1, leaseDuration)
-	require.NoError(t, err)
-	require.NotEqual(t, token1, token2) // Token should change
-	require.Equal(t, int64(2), worker.ConflictToken)
-}
-
 func TestWorkerRecordHeartbeat_InactiveWorker(t *testing.T) {
 	worker := NewWorker()
 	worker.Status = workerstatepb.WORKER_STATUS_INACTIVE
 	ctx := &chasm.MockMutableContext{}
 
-	heartbeat := &workerpb.WorkerHeartbeat{
-		WorkerInstanceKey: "test-worker",
+	req := &workerstatepb.RecordHeartbeatRequest{
+		NamespaceId: "test-namespace-id",
+		FrontendRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+			Namespace: "test-namespace",
+			Identity:  "test-identity",
+			WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+				{
+					WorkerInstanceKey: "test-worker",
+				},
+			},
+		},
 	}
-	leaseDuration := 30 * time.Second
 
 	// Heartbeat on inactive worker should fail
-	_, err := worker.recordHeartbeat(ctx, heartbeat, nil, leaseDuration)
+	_, err := worker.recordHeartbeat(ctx, req)
 	require.Error(t, err)
 	_, ok := err.(*WorkerInactiveError)
 	require.True(t, ok, "expected WorkerInactiveError")
