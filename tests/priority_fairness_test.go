@@ -266,7 +266,6 @@ func (s *FairnessSuite) SetupSuite() {
 	}
 	if s.doAutoEnable {
 		dynamicConfigOverrides[dynamicconfig.MatchingAutoEnableV2.Key()] = true
-		dynamicConfigOverrides[dynamicconfig.MatchingEnableMigration.Key()] = true
 		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = false
 		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = false
 	} else {
@@ -276,12 +275,60 @@ func (s *FairnessSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
+func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
+	// We need to trigger both a worklow and activity reload.
+	// We gurantee that a successfull call triggers the reload
+	// however we need to loop multiple times to ensure that a workflow
+	// gets enqueued for us to create an activity on.
+	for range 15 {
+		s.FrontendClient().StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   "trigger",
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+			Priority: &commonpb.Priority{
+				PriorityKey: 3,
+			},
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				var commands []*commandpb.Command
+				commands = append(commands,
+					&commandpb.Command{
+						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+								ActivityId:             "trigger",
+								ActivityType:           tv.ActivityType(),
+								TaskQueue:              tv.TaskQueue(),
+								ScheduleToCloseTimeout: durationpb.New(time.Minute),
+							},
+						},
+					},
+				)
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+		if err == nil {
+			cancel()
+			return
+		}
+		cancel()
+	}
+	s.T().Fatal("Could not trigger auto enable")
+}
+
 func (s *FairnessSuite) TestFairness_Activity_Basic() {
 	const Workflows = 15
 	const Tasks = 15
 	const Keys = 10
 
 	tv := testvars.New(s.T())
+	if s.doAutoEnable {
+		s.TriggerAutoEnable(tv)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
