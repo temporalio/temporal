@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"math"
 	"os"
 	"path"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -727,7 +729,21 @@ func TestSQLiteHistoryCurrentExecutionSuite(t *testing.T) {
 		_ = store.Close()
 	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, chasm.WorkflowArchetypeID)
+	suite.Run(t, s)
+}
+
+func TestSQLiteHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, math.MaxUint32)
 	suite.Run(t, s)
 }
 
@@ -1067,7 +1083,20 @@ func TestSQLiteFileHistoryCurrentExecutionSuite(t *testing.T) {
 	}
 	defer os.Remove(cfg.DatabaseName)
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, chasm.WorkflowArchetypeID)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileHistoryCurrentChasmExecutionSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer os.Remove(cfg.DatabaseName)
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(t, store, math.MaxUint32)
 	suite.Run(t, s)
 }
 
