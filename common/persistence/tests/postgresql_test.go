@@ -1,9 +1,11 @@
 package tests
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
@@ -384,7 +386,24 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryCurrentExecutionSuite() {
 		TearDownPostgreSQLDatabase(p.T(), cfg)
 	}()
 
-	s := sqltests.NewHistoryCurrentExecutionSuite(p.T(), store)
+	s := sqltests.NewHistoryCurrentExecutionSuite(p.T(), store, chasm.WorkflowArchetypeID)
+	suite.Run(p.T(), s)
+}
+
+func (p *PostgreSQLSuite) TestPostgreSQLHistoryCurrentChasmExecutionSuite() {
+	cfg := NewPostgreSQLConfig(p.pluginName)
+	SetupPostgreSQLDatabase(p.T(), cfg)
+	SetupPostgreSQLSchema(p.T(), cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(p.T(), cfg)
+	}()
+
+	s := sqltests.NewHistoryCurrentExecutionSuite(p.T(), store, math.MaxUint32)
 	suite.Run(p.T(), s)
 }
 
