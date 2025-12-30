@@ -788,7 +788,6 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}
-	const N = 64
 	didUpdate := &atomic.Bool{}
 	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (resp *matchingservice.UpdateFairnessStateResponse, err error) {
@@ -808,31 +807,27 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	s.Require().NoError(err)
 	defer cancel()
 
-	// It's possible that autoenable triggers an unload before the WorkflowTask can be enqueued
-	for range N {
-		_, _, err = s.matchingEngine.AddWorkflowTask(
-			context.Background(),
-			&matchingservice.AddWorkflowTaskRequest{
-				NamespaceId: s.ns.ID().String(),
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: "workflow1",
-					RunId:      uuid.NewString(),
-				},
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: "makeToast",
-					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
-				Priority: &commonpb.Priority{
-					PriorityKey: 3,
-				},
+	_, _, err = s.matchingEngine.AddWorkflowTask(
+		context.Background(),
+		&matchingservice.AddWorkflowTaskRequest{
+			NamespaceId: s.ns.ID().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflow1",
+				RunId:      uuid.NewString(),
 			},
-		)
-		if err == errShutdown {
-			continue
-		}
-		break
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: "makeToast",
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Priority: &commonpb.Priority{
+				PriorityKey: 3,
+			},
+		},
+	)
+	// The task may or may not be enqueued before a shutdown, so ignore that error
+	if err != errShutdown {
+		s.Require().NoError(err)
 	}
-	s.Require().NoError(err)
 	s.Eventually(didUpdate.Load, time.Second, time.Millisecond)
 
 	// We check the old partition manager for the change because a new partition created will not reference the same mockUserDataManager.
