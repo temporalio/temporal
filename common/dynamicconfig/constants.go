@@ -998,13 +998,6 @@ so forwarding by endpoint ID will not work out of the box.`,
 		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
 	)
 
-	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
-		"frontend.enableExecuteMultiOperation",
-		true,
-		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
-The API is under active development.`,
-	)
-
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
 		true,
@@ -1318,6 +1311,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.maxVersionsInDeployment",
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
+	)
+	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
+		"matching.maxVersionsInTaskQueue",
+		200,
+		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue. 
+ Should be larger than MatchingMaxVersionsInDeployment because a task queue can be in versions spanning across more than one deployments.`,
 	)
 	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeploymentVersion",
@@ -2699,6 +2698,18 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 		false,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
+	)
+
+	VersionMembershipCacheTTL = NewGlobalDurationSetting(
+		"history.versionMembershipCacheTTL",
+		1*time.Second,
+		`TTL for caching RPC results that check whether a version is present in a task queue.`,
+	)
+
+	VersionMembershipCacheMaxSize = NewGlobalIntSetting(
+		"history.versionMembershipCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version membership cache.`,
 	)
 
 	// keys for worker

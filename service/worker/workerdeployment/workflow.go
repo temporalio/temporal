@@ -1482,6 +1482,7 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 		RampingSinceTime:     versionSummary.GetRampingSinceTime(),
 		RoutingUpdateTime:    versionSummary.GetRoutingUpdateTime(),
 		FirstActivationTime:  versionSummary.GetFirstActivationTime(),
+		LastCurrentTime:      versionSummary.GetLastCurrentTime(),
 		LastDeactivationTime: versionSummary.GetLastDeactivationTime(),
 	}
 }

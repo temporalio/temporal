@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -365,11 +364,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
 	dummyTime := time.Now().UTC()
 
-	createPayloadBytes := func(data []byte) []byte {
-		p := &commonpb.Payload{Data: data}
-		payloadBytes, err := proto.Marshal(p)
-		require.NoError(t, err)
-		return payloadBytes
+	createPayloadBytes := func(data []byte) *commonpb.Payload {
+		return &commonpb.Payload{Data: data}
 	}
 
 	cases := []struct {
@@ -405,7 +401,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
 					nexusrpc.OperationCompletionSuccessfulOptions{
-						CloseTime: dummyTime,
+						Serializer: commonnexus.PayloadSerializer,
+						CloseTime:  dummyTime,
 					},
 				)
 				require.NoError(t, err)
@@ -465,7 +462,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -489,7 +488,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -509,7 +510,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -529,7 +532,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
 					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp

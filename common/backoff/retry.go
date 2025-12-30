@@ -2,10 +2,13 @@ package backoff
 
 import (
 	"context"
+	"math"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -168,4 +171,41 @@ func IgnoreErrors(errorsToExclude []error) func(error) bool {
 
 		return true
 	}
+}
+
+// BackoffCalculatorAlgorithmFunc is a function type that calculates backoff duration based on
+// initial duration, coefficient, and current attempt number.
+type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
+
+// ExponentialBackoffAlgorithm calculates the backoff duration using exponential algorithm.
+// The result is initInterval * (backoffCoefficient ^ (currentAttempt - 1)).
+// If the calculation overflows int64, it returns the maximum possible duration. A negative result will also never be returned.
+func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
+	result := float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))
+	return time.Duration(max(0, min(int64(result), math.MaxInt64)))
+}
+
+// MakeBackoffAlgorithm creates a BackoffCalculatorAlgorithmFunc that returns a fixed delay if requestedDelay is non-nil,
+// otherwise falls back to exponential backoff algorithm.
+func MakeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgorithmFunc {
+	return func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration {
+		if requestedDelay != nil {
+			return *requestedDelay
+		}
+		return ExponentialBackoffAlgorithm(duration, coefficient, currentAttempt)
+	}
+}
+
+// CalculateExponentialRetryInterval calculates the retry interval using exponential backoff algorithm
+func CalculateExponentialRetryInterval(retryPolicy *commonpb.RetryPolicy, attempt int32) time.Duration {
+	interval := ExponentialBackoffAlgorithm(retryPolicy.GetInitialInterval(), retryPolicy.GetBackoffCoefficient(), attempt)
+
+	maxInterval := retryPolicy.GetMaximumInterval()
+
+	// Cap interval to maximum if it's set
+	if maxInterval.AsDuration() != 0 && interval > maxInterval.AsDuration() {
+		interval = maxInterval.AsDuration()
+	}
+
+	return interval
 }
