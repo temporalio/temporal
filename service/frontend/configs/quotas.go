@@ -45,6 +45,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollStream":                  1,
 
 		// Long-running if activity outcome is not already available
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
@@ -81,6 +82,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartActivityExecution":           1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CreateStream":                     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/AddToStream":                      1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
 		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
@@ -162,6 +165,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 4,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollStream":                         4,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               4,
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     4,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 4,

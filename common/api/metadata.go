@@ -172,6 +172,9 @@ var (
 		"UpdateWorkerConfig":                    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"PauseWorkflowExecution":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UnpauseWorkflowExecution":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"CreateStream":                          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"AddToStream":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"PollStream":                            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},

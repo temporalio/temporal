@@ -201,6 +201,10 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RequestCancelActivityExecution": {},
 		"TerminateActivityExecution":     {},
 		"DeleteActivityExecution":        {},
+
+		"CreateStream": {},
+		"AddToStream":  {},
+		"PollStream":   {},
 	}, apis)
 }
 
