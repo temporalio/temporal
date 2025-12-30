@@ -550,26 +550,26 @@ func (s *MatcherDataSuite) TestMinPriorityFiltering() {
 	// Poll with minPriority=2 should only get tasks with priority <= 2
 	// (i.e., tasks at priority 1 and 2, but not 3 or 5)
 	res := s.pollWithMinPriority(20*time.Millisecond, 2)
-	s.Assert().NoError(res.ctxErr)
+	s.Require().NoError(res.ctxErr)
 	s.Equal(t1, res.task) // priority 1 task
 
 	// Next poll with minPriority=2 should timeout since t2 (pri 3) and t3 (pri 5) don't match
 	res = s.pollWithMinPriority(20*time.Millisecond, 2)
-	s.Assert().Error(res.ctxErr)
+	s.Require().Error(res.ctxErr)
 
 	// Poll with minPriority=3 should get t2 (pri 3)
 	res = s.pollWithMinPriority(20*time.Millisecond, 3)
-	s.Assert().NoError(res.ctxErr)
+	s.Require().NoError(res.ctxErr)
 	s.Equal(t2, res.task)
 
 	// Poll with minPriority=5 should get t3 (pri 5)
 	res = s.pollWithMinPriority(20*time.Millisecond, 5)
-	s.Assert().NoError(res.ctxErr)
+	s.Require().NoError(res.ctxErr)
 	s.Equal(t3, res.task)
 
 	// No more tasks
 	res = s.pollWithMinPriority(20*time.Millisecond, 5)
-	s.Assert().Error(res.ctxErr)
+	s.Require().Error(res.ctxErr)
 }
 
 func (s *MatcherDataSuite) TestMinPriorityZeroMatchesAll() {
@@ -582,11 +582,11 @@ func (s *MatcherDataSuite) TestMinPriorityZeroMatchesAll() {
 
 	// Poll with minPriority=0 should match first task
 	res := s.pollWithMinPriority(20*time.Millisecond, 0)
-	s.Assert().NoError(res.ctxErr)
+	s.Require().NoError(res.ctxErr)
 	s.Equal(t1, res.task)
 
 	res = s.pollWithMinPriority(20*time.Millisecond, 0)
-	s.Assert().NoError(res.ctxErr)
+	s.Require().NoError(res.ctxErr)
 	s.Equal(t2, res.task)
 }
 
