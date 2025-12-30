@@ -8,14 +8,18 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	workerstatepb "go.temporal.io/server/chasm/lib/worker/gen/workerpb/v1"
+	"go.temporal.io/server/common/metrics"
 )
 
 type handler struct {
 	workerstatepb.UnimplementedWorkerServiceServer
+	metricsHandler metrics.Handler
 }
 
-func newHandler() *handler {
-	return &handler{}
+func newHandler(metricsHandler metrics.Handler) *handler {
+	return &handler{
+		metricsHandler: metricsHandler,
+	}
 }
 
 func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.RecordHeartbeatRequest) (*workerstatepb.RecordHeartbeatResponse, error) {
@@ -33,7 +37,8 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 	}
 
 	// Try to update existing worker, or create new one if not found
-	resp, _, _, _, err := chasm.UpdateWithNewExecution(
+	// newResp is set if a new worker is created, updateResp is set if an existing worker is updated
+	newResp, updateResp, _, _, err := chasm.UpdateWithNewExecution(
 		ctx,
 		executionKey,
 		// newFn: called if worker doesn't exist
@@ -57,5 +62,10 @@ func (h *handler) RecordHeartbeat(ctx context.Context, req *workerstatepb.Record
 		return nil, err
 	}
 
-	return resp, nil
+	// Return the response from whichever path was taken
+	if newResp != nil {
+		metrics.ChasmWorkerCreated.With(h.metricsHandler).Record(1)
+		return newResp, nil
+	}
+	return updateResp, nil
 }
