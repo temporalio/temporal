@@ -80,6 +80,7 @@ type (
 		GetNamespaceInfo(
 			ctx context.Context,
 			namespaceID string,
+			businessID string,
 		) (string, bool, error)
 		SyncState(
 			ctx context.Context,
@@ -661,6 +662,20 @@ func (e *ExecutableTaskImpl) SyncState(
 			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
 			return false, nil
 		}
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			logger.Error(
+				"workflow not found in source cluster, proceed to cleanup")
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return false, e.DeleteWorkflow(
+				ctx,
+				definition.NewWorkflowKey(
+					syncStateErr.NamespaceId,
+					syncStateErr.WorkflowId,
+					syncStateErr.RunId,
+				),
+			)
+		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		if !errors.As(err, &failedPreconditionErr) {
 			return false, err
@@ -742,6 +757,7 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	ctx context.Context,
 	namespaceID string,
+	businessID string,
 ) (string, bool, error) {
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
@@ -776,7 +792,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 	shouldProcessTask := false
 FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames() {
+	for _, targetCluster := range namespaceEntry.ClusterNames(businessID) {
 		if e.ClusterMetadata.GetCurrentClusterName() == targetCluster {
 			shouldProcessTask = true
 			break FilterLoop
