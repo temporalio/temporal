@@ -1299,6 +1299,370 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	s.Nil(resp.ExecutionErr)
 }
 
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessParentClosePolicyTask_ChildTerminated() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "parent-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "parent-workflow-type"
+	taskQueueName := "parent-task-queue"
+
+	childNamespaceID := tests.ChildNamespaceID.String()
+	childWorkflowID := "child-workflow-id"
+	childRunID := uuid.NewString()
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	taskID := s.mustGenerateTaskID()
+	now := time.Now().UTC()
+	transferTask := &tasks.ParentClosePolicyTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		VisibilityTimestamp: now,
+		TaskID:              taskID,
+		TargetNamespaceID:   childNamespaceID,
+		TargetWorkflowID:    childWorkflowID,
+		TargetRunID:         childRunID,
+		ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).AnyTimes()
+
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: childNamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+		},
+	}).Return(&historyservice.DescribeMutableStateResponse{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			},
+		},
+	}, nil).AnyTimes()
+
+	s.mockShard.SetCurrentTime(s.clusterName, now)
+	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessParentClosePolicyTask_ChildNotFound() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "parent-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "parent-workflow-type"
+	taskQueueName := "parent-task-queue"
+
+	childNamespaceID := tests.ChildNamespaceID.String()
+	childWorkflowID := "child-workflow-id"
+	childRunID := uuid.NewString()
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	// Close the workflow
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	taskID := s.mustGenerateTaskID()
+	now := time.Now().UTC()
+	transferTask := &tasks.ParentClosePolicyTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		VisibilityTimestamp: now,
+		TaskID:              taskID,
+		TargetNamespaceID:   childNamespaceID,
+		TargetWorkflowID:    childWorkflowID,
+		TargetRunID:         childRunID,
+		ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).AnyTimes()
+
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: childNamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+		},
+	}).Return(nil, serviceerror.NewNotFound("workflow not found")).AnyTimes()
+
+	// When child is not found locally, we check if it exists on source cluster
+	// to distinguish "deleted" from "not replicated yet". Fresh task should retry.
+	s.mockShard.SetCurrentTime(s.clusterName, now)
+	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+
+	// After discard duration, if child doesn't exist on source either, task succeeds.
+	// (Source check will conservatively assume child exists since admin client is not mocked,
+	// so we expect ErrTaskDiscarded here.)
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessParentClosePolicyTask_ChildStillRunning() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "parent-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "parent-workflow-type"
+	taskQueueName := "parent-task-queue"
+
+	childNamespaceID := tests.ChildNamespaceID.String()
+	childWorkflowID := "child-workflow-id"
+	childRunID := uuid.NewString()
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	// Close the workflow
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	taskID := s.mustGenerateTaskID()
+	now := time.Now().UTC()
+	transferTask := &tasks.ParentClosePolicyTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		VisibilityTimestamp: now,
+		TaskID:              taskID,
+		TargetNamespaceID:   childNamespaceID,
+		TargetWorkflowID:    childWorkflowID,
+		TargetRunID:         childRunID,
+		ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).AnyTimes()
+
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: childNamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+		},
+	}).Return(&historyservice.DescribeMutableStateResponse{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
+		},
+	}, nil).AnyTimes()
+
+	s.mockShard.SetCurrentTime(s.clusterName, now)
+	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessParentClosePolicyTask_ChildCanceled() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "parent-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "parent-workflow-type"
+	taskQueueName := "parent-task-queue"
+
+	childNamespaceID := tests.ChildNamespaceID.String()
+	childWorkflowID := "child-workflow-id"
+	childRunID := uuid.NewString()
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	// Close the workflow
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	taskID := s.mustGenerateTaskID()
+	now := time.Now().UTC()
+	transferTask := &tasks.ParentClosePolicyTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		VisibilityTimestamp: now,
+		TaskID:              taskID,
+		TargetNamespaceID:   childNamespaceID,
+		TargetWorkflowID:    childWorkflowID,
+		TargetRunID:         childRunID,
+		ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).AnyTimes()
+
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: childNamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+		},
+	}).Return(&historyservice.DescribeMutableStateResponse{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+			},
+		},
+	}, nil).AnyTimes()
+
+	s.mockShard.SetCurrentTime(s.clusterName, now)
+	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessParentClosePolicyTask_AbandonPolicy() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "parent-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "parent-workflow-type"
+	taskQueueName := "parent-task-queue"
+
+	childNamespaceID := tests.ChildNamespaceID.String()
+	childWorkflowID := "child-workflow-id"
+	childRunID := uuid.NewString()
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	// Close the workflow
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	taskID := s.mustGenerateTaskID()
+	now := time.Now().UTC()
+	transferTask := &tasks.ParentClosePolicyTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		VisibilityTimestamp: now,
+		TaskID:              taskID,
+		TargetNamespaceID:   childNamespaceID,
+		TargetWorkflowID:    childWorkflowID,
+		TargetRunID:         childRunID,
+		ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_ABANDON,
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil).AnyTimes()
+
+	// ABANDON policy should not make any DescribeMutableState call
+	s.mockShard.SetCurrentTime(s.clusterName, now)
+	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+}
+
 func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 	ms historyi.MutableState,
 	lastEventID int64,
