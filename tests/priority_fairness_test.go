@@ -281,7 +281,7 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 	// however we need to loop multiple times to ensure that a workflow
 	// gets enqueued for us to create an activity on.
 	for range 15 {
-		s.FrontendClient().StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
+		_, err := s.FrontendClient().StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   "trigger",
 			WorkflowType: tv.WorkflowType(),
@@ -290,8 +290,9 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 				PriorityKey: 3,
 			},
 		})
+		s.T().Log("AutoEnable StartWorkflowExecution:", err)
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv,
+		_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				var commands []*commandpb.Command
 				commands = append(commands,
@@ -315,6 +316,7 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 			cancel()
 			return
 		}
+		s.T().Log("AutoEnable PollAndHandleWorkflowTask:", err)
 		cancel()
 	}
 	s.T().Fatal("Could not trigger auto enable")
