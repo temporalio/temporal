@@ -181,7 +181,20 @@ func (e *ChasmEngine) UpdateWithNewExecution(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	opts ...chasm.TransitionOption,
 ) (newExecutionKey chasm.ExecutionKey, newExecutionRef []byte, retError error) {
-	return chasm.ExecutionKey{}, nil, serviceerror.NewUnimplemented("UpdateWithNewExecution is not yet supported")
+	// Simple implementation: try update first, create if not found.
+	// This delegates to existing well-tested methods.
+	updatedRef, err := e.UpdateComponent(ctx, executionRef, updateFn, opts...)
+	if err == nil {
+		return executionRef.ExecutionKey, updatedRef, nil
+	}
+
+	// If not a NotFound error, return it
+	if !common.IsNotFoundError(err) {
+		return chasm.ExecutionKey{}, nil, err
+	}
+
+	// Execution doesn't exist, create it
+	return e.NewExecution(ctx, executionRef, newFn, opts...)
 }
 
 // UpdateComponent applies updateFn to the component identified by the supplied component reference,
