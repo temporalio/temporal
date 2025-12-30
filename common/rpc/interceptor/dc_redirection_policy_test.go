@@ -77,10 +77,10 @@ func (s *noopDCRedirectionPolicySuite) TestWithNamespaceRedirect() {
 		return nil
 	}
 
-	err := s.policy.WithNamespaceIDRedirect(context.Background(), namespaceID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), namespaceID, apiName, nil, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithNamespaceRedirect(context.Background(), namespaceName, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), namespaceName, apiName, nil, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
@@ -133,10 +133,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 		return nil
 	}
 
-	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
@@ -153,10 +153,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 		return nil
 	}
 
-	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
@@ -173,10 +173,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 		return nil
 	}
 
-	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
@@ -193,10 +193,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 		s.Nil(err)
 	}
 
@@ -214,10 +214,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 		s.Nil(err)
 	}
 
@@ -235,10 +235,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 		s.Nil(err)
 	}
 
@@ -295,10 +295,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 				if !tc.apiWhitelisted {
 					api = api + "_notwhitelisted"
 				}
-				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, api, callFn)
+				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, api, nil, callFn)
 				s.Nil(err)
 
-				err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, api, callFn)
+				err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, api, nil, callFn)
 				s.Nil(err)
 			}
 
@@ -326,10 +326,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 		s.Nil(err)
 	}
 
@@ -356,10 +356,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.Nil(err)
 
-		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 		s.Nil(err)
 	}
 
@@ -387,10 +387,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	}
 
 	apiName := "NotExistRandomAPI"
-	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
 	s.Nil(err)
 
 	s.Equal(2, currentClustercallCount)
