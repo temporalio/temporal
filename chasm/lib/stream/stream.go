@@ -19,16 +19,12 @@ type Stream struct {
 // NewStream returns an initialized CHASM stream root component.
 func NewStream(
 	ctx chasm.MutableContext,
-	namespaceID, streamID, runID string,
 	initialMessages []*commonpb.Payload,
 ) *Stream {
 	s := &Stream{
 		StreamState: &streampb.StreamState{
-			Head:        0, // Read cursor
-			Tail:        0, // Write cursor
-			NamespaceId: namespaceID,
-			StreamId:    streamID,
-			RunId:       runID,
+			Head: 0, // Read cursor
+			Tail: 0, // Write cursor
 		},
 		Messages: make(chasm.Map[int64, *commonpb.Payload]),
 		// Always initialize Metadata to ensure at least one CHASM data field exists
@@ -54,15 +50,12 @@ func CreateStream(
 
 	stream := NewStream(
 		ctx,
-		req.NamespaceId,
-		req.FrontendRequest.StreamId,
-		executionKey.RunID,
 		req.FrontendRequest.Messages,
 	)
 
 	return stream, &streampb.CreateStreamResponse{
 		FrontendResponse: &workflowservice.CreateStreamResponse{
-			RunId: stream.RunId,
+			RunId: executionKey.RunID,
 		},
 	}, nil
 }
