@@ -30,8 +30,6 @@ message PollWorkflowTaskQueueRequest {
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 3;
     string forwarded_source = 4;
-
-    // TODO: this should move to the public PollWorkflowTaskQueueRequest eventually
     PollConditions conditions = 5;
 }
 
@@ -67,8 +65,6 @@ message PollActivityTaskQueueRequest {
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 3;
     string forwarded_source = 4;
-
-    // TODO: this should move to the public PollActivityTaskQueueRequest eventually
     PollConditions conditions = 5;
 }
 
@@ -500,8 +496,7 @@ message PollNexusTaskQueueRequest {
     temporal.api.workflowservice.v1.PollNexusTaskQueueRequest request = 3;
     // Non-empty if this poll was forwarded from a child partition.
     string forwarded_source = 4;
-
-    // TODO: this should move to the public PollWorkflowTaskQueueRequest eventually
+    // Extra conditions on this poll request.
     PollConditions conditions = 5;
 }
 

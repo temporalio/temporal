@@ -45,10 +45,9 @@ type PollWorkflowTaskQueueRequest struct {
 	PollerId        string                           `protobuf:"bytes,2,opt,name=poller_id,json=pollerId,proto3" json:"poller_id,omitempty"`
 	PollRequest     *v1.PollWorkflowTaskQueueRequest `protobuf:"bytes,3,opt,name=poll_request,json=pollRequest,proto3" json:"poll_request,omitempty"`
 	ForwardedSource string                           `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
-	// TODO: this should move to the public PollWorkflowTaskQueueRequest eventually
-	Conditions    *PollConditions `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Conditions      *PollConditions                  `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PollWorkflowTaskQueueRequest) Reset() {
@@ -321,10 +320,9 @@ type PollActivityTaskQueueRequest struct {
 	PollerId        string                           `protobuf:"bytes,2,opt,name=poller_id,json=pollerId,proto3" json:"poller_id,omitempty"`
 	PollRequest     *v1.PollActivityTaskQueueRequest `protobuf:"bytes,3,opt,name=poll_request,json=pollRequest,proto3" json:"poll_request,omitempty"`
 	ForwardedSource string                           `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
-	// TODO: this should move to the public PollActivityTaskQueueRequest eventually
-	Conditions    *PollConditions `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Conditions      *PollConditions                  `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PollActivityTaskQueueRequest) Reset() {
@@ -3598,7 +3596,7 @@ type PollNexusTaskQueueRequest struct {
 	Request *v1.PollNexusTaskQueueRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	// Non-empty if this poll was forwarded from a child partition.
 	ForwardedSource string `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
-	// TODO: this should move to the public PollWorkflowTaskQueueRequest eventually
+	// Extra conditions on this poll request.
 	Conditions    *PollConditions `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
