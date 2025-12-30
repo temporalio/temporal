@@ -58,7 +58,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.59.1-0.20251222184938-2c1c6eac7f7e
+	go.temporal.io/api v1.59.1-0.20251230164215-217fd41bac8d
 	go.temporal.io/sdk v1.35.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0
@@ -77,7 +77,7 @@ require (
 	modernc.org/sqlite v1.39.1
 )
 
-require github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
+require github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 
 require (
 	cel.dev/expr v0.23.1 // indirect
@@ -172,6 +172,6 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace go.temporal.io/api => /Users/seankane/git/github.com/temporalio/api-go
+// replace go.temporal.io/api => /Users/seankane/git/github.com/temporalio/api-go
 
-replace go.temporal.io/sdk => /Users/seankane/git/github.com/temporalio/sdk-go
+// replace go.temporal.io/sdk => /Users/seankane/git/github.com/temporalio/sdk-go
