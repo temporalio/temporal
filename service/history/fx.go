@@ -1,9 +1,14 @@
 package history
 
 import (
+	"context"
+	"time"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
+	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -23,6 +28,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
@@ -76,11 +82,13 @@ var Module = fx.Options(
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
+	fx.Provide(VersionMembershipCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
+	activity.HistoryModule,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -352,4 +360,21 @@ func ReplicationProgressCacheProvider(
 	handler metrics.Handler,
 ) replication.ProgressCache {
 	return replication.NewProgressCache(serviceConfig, logger, handler)
+}
+
+func VersionMembershipCacheProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+) worker_versioning.VersionMembershipCache {
+	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
+	})
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			c.Stop()
+			return nil
+		},
+	})
+	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
 }
