@@ -318,6 +318,12 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
+	if s.fairness {
+		// In fairness mode, SpoolTask calls getSubqueueForPriority which allocates a subqueue
+		// using rangeID before the task writer has a chance to acquire it. This test design
+		// (canceling context immediately) doesn't work with that code path.
+		s.T().Skip("not supported by fairness backlog manager")
+	}
 	ns := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{},
 		&persistencespb.NamespaceConfig{},

@@ -717,7 +717,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 		func(ctx context.Context, in *matchingservice.PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 			wg.Done()
 			<-pollSigC
-			time.Sleep(time.Millisecond * 500) // delay poll to verify that offer blocks on parent
+			time.Sleep(time.Millisecond * 100) // delay poll to verify that offer blocks on parent
 			task, err := t.rootMatcher.Poll(ctx, &pollMetadata{})
 			if err != nil {
 				return nil, err

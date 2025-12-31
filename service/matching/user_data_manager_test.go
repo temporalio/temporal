@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -694,12 +695,15 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		Data:    mkUserData(1),
 	}
 
+	var mu sync.Mutex
 	matchGetTaskQueueUserDataRequest := func(expectedReq *matchingservice.GetTaskQueueUserDataRequest, out *string) gomock.Matcher {
 		expectedReq = common.CloneProto(expectedReq)
 		expectedTQ := expectedReq.TaskQueue
 		expectedReq.TaskQueue = ""
 		return gomock.Cond(func(req *matchingservice.GetTaskQueueUserDataRequest) bool {
+			mu.Lock()
 			*out = req.TaskQueue
+			mu.Unlock()
 			// must be some partition of expected name, just use substring match
 			if !strings.Contains(req.TaskQueue, expectedTQ) {
 				return false
@@ -745,8 +749,13 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	require.Equal(t, firstPartition, secondPartition)
+	// Stop the manager first to ensure no more mock calls can happen,
+	// then safely read the captured partition values
 	m.Stop()
+	mu.Lock()
+	first, second := firstPartition, secondPartition
+	mu.Unlock()
+	require.Equal(t, first, second)
 }
 
 func TestUserData_UpdateOnNonRootFails(t *testing.T) {

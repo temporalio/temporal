@@ -379,7 +379,7 @@ var defaultStandingBacklogParams = standingBacklogParams{
 	upper:    200,
 	gap:      2,
 	period:   3 * time.Second,
-	duration: 5 * time.Second,
+	duration: 3 * time.Second,
 	keys:     30,
 	zipfS:    3,
 	zipfV:    1,

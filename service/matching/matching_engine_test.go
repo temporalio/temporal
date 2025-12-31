@@ -2507,8 +2507,8 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		}))
 	userData.Version++
 
-	// GetTaskQueueUserData will try to return 5s with a min of 1s before the deadline, so this will block 1s
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// GetTaskQueueUserData will try to return 5s with a min of 1s before the deadline, so this will block ~1s
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	start := time.Now()
