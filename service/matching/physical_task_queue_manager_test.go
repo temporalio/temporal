@@ -406,20 +406,3 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
 	<-pollCh
 	s.Less(time.Since(pollStart), 4*time.Second)
 }
-
-// func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
-// 	rl := quotas.NewMockRateLimiter(s.controller)
-// 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).Times(1)
-// 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(false).Times(1)
-// 	s.tqMgr.pollerScalingRateLimiter = rl
-
-// 	fakeStats := &taskqueuepb.TaskQueueStats{
-// 		ApproximateBacklogCount: 100,
-// 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
-// 	}
-// 	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-// 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
-
-// 	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-// 	s.Nil(decision)
-// }

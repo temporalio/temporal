@@ -610,13 +610,12 @@ func (s *PartitionManagerTestSuite) TestPollScalingUpOnBacklog() {
 	})
 
 	// Call the partition manager's method with the real default queue
-	decision, err := s.partitionMgr.MakePollerScalingDecision(
+	decision := s.partitionMgr.MakePollerScalingDecision(
 		ctx,
 		time.Now(),
 		s.partitionMgr.defaultQueue,
 	)
 
-	s.NoError(err)
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
@@ -674,13 +673,12 @@ func (s *PartitionManagerTestSuite) TestPollScalingUpAddRateExceedsDispatchRate(
 	})
 
 	// Call MakePollerScalingDecision
-	decision, err := s.partitionMgr.MakePollerScalingDecision(
+	decision := s.partitionMgr.MakePollerScalingDecision(
 		ctx,
 		time.Now(),
 		s.partitionMgr.defaultQueue,
 	)
 
-	s.NoError(err)
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
@@ -702,13 +700,11 @@ func (s *PartitionManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFastMatch(
 			uvStats.GetApproximateBacklogAge().AsDuration() == 0
 	})
 
-	decision, err := s.partitionMgr.MakePollerScalingDecision(
+	decision := s.partitionMgr.MakePollerScalingDecision(
 		ctx,
 		time.Now(),
 		s.partitionMgr.defaultQueue,
 	)
-
-	s.NoError(err)
 	s.Nil(decision) // No scaling decision when there's no backlog
 }
 
@@ -746,12 +742,11 @@ func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
 	})
 
 	// Should emit scaling decision for high backlog on non-root partition
-	decision, err := s.partitionMgr.MakePollerScalingDecision(
+	decision := s.partitionMgr.MakePollerScalingDecision(
 		ctx,
 		time.Now(),
 		s.partitionMgr.defaultQueue,
 	)
-	s.NoError(err)
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 
@@ -772,12 +767,11 @@ func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
 	})
 
 	// Should NOT emit scaling decision when no backlog (non-root partition restriction)
-	decision, err = s.partitionMgr.MakePollerScalingDecision(
+	decision = s.partitionMgr.MakePollerScalingDecision(
 		ctx,
 		time.Now(),
 		s.partitionMgr.defaultQueue,
 	)
-	s.NoError(err)
 	s.Nil(decision)
 }
 
@@ -788,13 +782,11 @@ func (s *PartitionManagerTestSuite) TestPollScalingDownOnLongSyncMatch() {
 	// This is well past the default threshold of 1 second (PollerScalingWaitTime)
 	pollStartTime := time.Now().Add(-2 * time.Second)
 
-	decision, err := s.partitionMgr.MakePollerScalingDecision(
+	decision := s.partitionMgr.MakePollerScalingDecision(
 		ctx,
 		pollStartTime,
 		s.partitionMgr.defaultQueue,
 	)
-
-	s.NoError(err)
 	s.NotNil(decision)
 	s.LessOrEqual(decision.PollRequestDeltaSuggestion, int32(-1))
 }
@@ -833,22 +825,20 @@ func (s *PartitionManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
 	})
 
 	// First call should return a scaling decision (AllowPollerScalingDecision returns true)
-	decision1, err := s.partitionMgr.MakePollerScalingDecision(
+	decision1 := s.partitionMgr.MakePollerScalingDecision(
 		ctx,
 		time.Now(),
 		mockPhysicalQueue,
 	)
-	s.NoError(err)
 	s.NotNil(decision1, "First scaling decision should be allowed")
 	s.GreaterOrEqual(decision1.PollRequestDeltaSuggestion, int32(1))
 
 	// Second call should return nil (AllowPollerScalingDecision returns false, indicating rate limit)
-	decision2, err := s.partitionMgr.MakePollerScalingDecision(
+	decision2 := s.partitionMgr.MakePollerScalingDecision(
 		ctx,
 		time.Now(),
 		mockPhysicalQueue,
 	)
-	s.NoError(err)
 	s.Nil(decision2, "Second scaling decision should be rate limited")
 }
 

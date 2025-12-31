@@ -248,12 +248,11 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) LongPollExpirationInterval(
 }
 
 // MakePollerScalingDecision mocks base method.
-func (m *MocktaskQueuePartitionManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, physicalQueue physicalTaskQueueManager) (*taskqueue.PollerScalingDecision, error) {
+func (m *MocktaskQueuePartitionManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, physicalQueue physicalTaskQueueManager) *taskqueue.PollerScalingDecision {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MakePollerScalingDecision", ctx, pollStartTime, physicalQueue)
 	ret0, _ := ret[0].(*taskqueue.PollerScalingDecision)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // MakePollerScalingDecision indicates an expected call of MakePollerScalingDecision.

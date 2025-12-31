@@ -213,20 +213,6 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) LegacyDescribeTaskQueue(incl
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LegacyDescribeTaskQueue", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).LegacyDescribeTaskQueue), includeTaskQueueStatus)
 }
 
-// MakePollerScalingDecision mocks base method.
-func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(pollStartTime time.Time) *taskqueue.PollerScalingDecision {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MakePollerScalingDecision", pollStartTime)
-	ret0, _ := ret[0].(*taskqueue.PollerScalingDecision)
-	return ret0
-}
-
-// MakePollerScalingDecision indicates an expected call of MakePollerScalingDecision.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) MakePollerScalingDecision(pollStartTime any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MakePollerScalingDecision), pollStartTime)
-}
-
 // MarkAlive mocks base method.
 func (m *MockphysicalTaskQueueManager) MarkAlive() {
 	m.ctrl.T.Helper()

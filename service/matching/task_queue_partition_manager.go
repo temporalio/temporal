@@ -390,7 +390,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
-		task.pollerScalingDecision, _ = pm.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, dbq)
+		task.pollerScalingDecision = pm.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, dbq)
 	}
 
 	return task, versionSetUsed, err
@@ -399,7 +399,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.Context,
 	pollStartTime time.Time,
 	physicalQueue physicalTaskQueueManager,
-) (*taskqueuepb.PollerScalingDecision, error) {
+) *taskqueuepb.PollerScalingDecision {
 	// buildID would be empty for either the unversioned queue or when using v3 worker-versioning.
 	buildID := physicalQueue.QueueKey().Version().BuildId()
 
@@ -411,7 +411,7 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 
 	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
 	pollWaitTime := pm.engine.timeSource.Since(pollStartTime)
@@ -420,18 +420,18 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 		// Decrease if any poll matched after sitting idle for some configured period
 		return &taskqueuepb.PollerScalingDecision{
 			PollRequestDeltaSuggestion: -1,
-		}, nil
+		}
 	}
 
 	delta := int32(0)
 	now := pm.engine.timeSource.Now()
 	if !physicalQueue.AllowPollerScalingDecision(now) {
-		return nil, nil
+		return nil
 	}
 
 	info, ok := partitionInfo.GetVersionsInfoInternal()[buildID]
 	if !ok || info.GetPhysicalTaskQueueInfo().GetTaskQueueStats() == nil {
-		return nil, nil
+		return nil
 	}
 	stats := info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
 
@@ -442,7 +442,7 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 		delta = 1
 	} else if !physicalQueue.QueueKey().Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
-		return nil, nil
+		return nil
 	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
 		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
 		// since those (currently) don't get backlogged.
@@ -450,11 +450,11 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 	}
 
 	if delta == 0 {
-		return nil, nil
+		return nil
 	}
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
-	}, nil
+	}
 }
 
 // TODO(pri): old matcher cleanup
