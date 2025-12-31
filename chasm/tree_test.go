@@ -2705,13 +2705,25 @@ func (s *nodeSuite) TestEachPureTask() {
 							},
 							{
 								TypeId: testPureTaskTypeID,
-								// Expired
+								// Expired, but when processing this task, delete the SubComponent11 itself.
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 4,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data: mustEncode(&commonpb.Payload{
 									Data: []byte("some-random-data-sc11-2"),
+								}),
+							},
+							{
+								TypeId: testPureTaskTypeID,
+								// Expired, but should not be executed because previous task deletes SubComponent1
+								// (this node's parent).
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 5,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("some-random-data-sc11-3"),
 								}),
 							},
 						},
@@ -2732,7 +2744,7 @@ func (s *nodeSuite) TestEachPureTask() {
 								// when processing the pure task from the root component.
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 5,
+								VersionedTransitionOffset: 6,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data: mustEncode(&commonpb.Payload{
 									Data: []byte("some-random-data-sc2"),
@@ -2749,7 +2761,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NoError(err)
 	s.NotNil(root)
 
-	actualTaskCount := 0
+	processedTaskData := [][]byte{}
 	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
 		s.NotNil(executor)
 		s.NotNil(taskAttributes)
@@ -2757,8 +2769,9 @@ func (s *nodeSuite) TestEachPureTask() {
 		testPureTask, ok := task.(*TestPureTask)
 		s.True(ok)
 
-		actualTaskCount += 1
+		processedTaskData = append(processedTaskData, testPureTask.Payload.Data)
 
+		// When processing root component task, delete SubComponent2 to verify its task is not executed.
 		if slices.Equal(
 			testPureTask.Payload.Data,
 			[]byte("some-random-data-root"),
@@ -2767,15 +2780,30 @@ func (s *nodeSuite) TestEachPureTask() {
 			rootComponent, err := root.Component(mutableContext, ComponentRef{})
 			s.NoError(err)
 
-			// delete
-			rootComponent.(*TestComponent).SubComponent2 = Field[*TestSubComponent2]{}
+			rootComponent.(*TestComponent).SubComponent2 = NewEmptyField[*TestSubComponent2]()
+		}
+
+		// When processing task for subcomponent11, delete it's parent SubComponent1 to remaining task is not executed.
+		if slices.Equal(
+			testPureTask.Payload.Data,
+			[]byte("some-random-data-sc11-2"),
+		) {
+			mutableContext := NewMutableContext(context.Background(), root)
+			rootComponent, err := root.Component(mutableContext, ComponentRef{})
+			s.NoError(err)
+
+			rootComponent.(*TestComponent).SubComponent1 = NewEmptyField[*TestSubComponent1]()
 		}
 
 		return true, nil
 	})
 	s.NoError(err)
-	s.Equal(3, actualTaskCount)
-	s.Len(root.taskValueCache, actualTaskCount)
+	s.Equal([][]byte{
+		[]byte("some-random-data-root"),
+		[]byte("some-random-data-sc11-1"),
+		[]byte("some-random-data-sc11-2"),
+	}, processedTaskData)
+	s.Empty(root.taskValueCache) // processed tasks should be removed from cache
 }
 
 func (s *nodeSuite) TestExecutePureTask() {
