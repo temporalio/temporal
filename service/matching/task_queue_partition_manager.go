@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -16,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -115,18 +117,26 @@ func newTaskQueuePartitionManager(
 		)
 	}
 
-	unload := func(bool) {
+	unload := func() {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
 	var fairness bool
-	fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
+	changeKey := []byte(pm.partition.RoutingKey())
+	fairnessChangeChanged := makeChangeChangedFunc(changeKey, &fairness, unload)
+	fairnessChange, cancel1 := tqConfig.EnableFairnessSub(fairnessChangeChanged)
+	fairness = fairnessChange.Value(changeKey, time.Now())
+	pm.cancelFairnessSub = cancel1
+
 	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
 	tqConfig.EnableFairness = fairness && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
 	if fairness {
 		tqConfig.NewMatcher = true
 	} else {
-		tqConfig.NewMatcher, pm.cancelNewMatcherSub = tqConfig.NewMatcherSub(unload)
+		newMatcherChangeChanged := makeChangeChangedFunc(changeKey, &tqConfig.NewMatcher, unload)
+		newMatcherChange, cancel2 := tqConfig.NewMatcherSub(newMatcherChangeChanged)
+		tqConfig.NewMatcher = newMatcherChange.Value(changeKey, time.Now())
+		pm.cancelNewMatcherSub = cancel2
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
@@ -1316,4 +1326,25 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
 
 	// Do this one in this goroutine.
 	pm.defaultQueue.UserDataChanged()
+}
+
+func makeChangeChangedFunc[T comparable](changeKey []byte, initialVal *T, action func()) func(change dynamicconfig.GradualChange[T]) {
+	var tmr atomic.Pointer[time.Timer]
+	var reeval func(change dynamicconfig.GradualChange[T])
+	reeval = func(change dynamicconfig.GradualChange[T]) {
+		now := time.Now()
+		// TODO: can we do anything about the data race on *initialVal? the calling code is
+		// expected to write to it soon after calling this.
+		if change.Value(changeKey, now) != *initialVal {
+			// it changed already
+			action()
+		} else if at := change.When(changeKey); at.After(now) {
+			// it will change in the future
+			newTmr := time.AfterFunc(at.Sub(now), func() { reeval(change) })
+			if oldTmr := tmr.Swap(newTmr); oldTmr != nil {
+				oldTmr.Stop()
+			}
+		}
+	}
+	return reeval
 }
