@@ -287,9 +287,10 @@ func NewMutableState(
 	startTime time.Time,
 ) *MutableStateImpl {
 
+	namespaceName := namespaceEntry.Name().String()
 	logger = log.NewLazyLogger(logger, func() []tag.Tag {
 		return []tag.Tag{
-			tag.WorkflowNamespaceID(namespaceEntry.Name().String()),
+			tag.WorkflowNamespace(namespaceName),
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(runID),
 		}
@@ -407,7 +408,7 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
-	if s.config.EnableChasm(namespaceEntry.Name().String()) {
+	if s.config.EnableChasm(namespaceName) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
 			shard.GetTimeSource(),
