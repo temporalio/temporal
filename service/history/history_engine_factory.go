@@ -4,13 +4,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
@@ -49,7 +49,7 @@ type (
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
-		VersionMembershipCache          cache.Cache
+		VersionMembershipCache          worker_versioning.VersionMembershipCache
 	}
 
 	historyEngineFactory struct {

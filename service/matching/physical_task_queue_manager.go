@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -610,8 +611,7 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueue
 	if m := c.drainBacklogMgr.Load(); m != nil {
 		drainStats := m.(backlogManager).BacklogStatsByPriority()
 		for pri, tqs := range drainStats {
-			ensureStats(stats, pri)
-			mergeStats(stats[pri], tqs)
+			mergeStats(util.GetOrSetNew(stats, pri), tqs)
 		}
 	}
 
@@ -619,12 +619,10 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueue
 	defer c.taskTrackerLock.RUnlock()
 
 	for pri, tt := range c.tasksAdded {
-		ensureStats(stats, pri)
-		stats[int32(pri)].TasksAddRate = tt.rate()
+		util.GetOrSetNew(stats, int32(pri)).TasksAddRate = tt.rate()
 	}
 	for pri, tt := range c.tasksDispatched {
-		ensureStats(stats, pri)
-		stats[int32(pri)].TasksDispatchRate = tt.rate()
+		util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
 	}
 	return stats
 }
@@ -855,10 +853,4 @@ func oldestBacklogAge(left, right *durationpb.Duration) *durationpb.Duration {
 		return left
 	}
 	return right
-}
-
-func ensureStats[T ~int32](stats map[int32]*taskqueuepb.TaskQueueStats, pri T) {
-	if _, ok := stats[int32(pri)]; !ok {
-		stats[int32(pri)] = &taskqueuepb.TaskQueueStats{}
-	}
 }
