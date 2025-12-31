@@ -319,7 +319,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		a.NoError(err)
 		a.NotNil(descResp)
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
-		a.Equal(2, len(descResp.GetVersionTaskQueues())) // one for workflow TQ, one for activity TQ
+		a.Len(descResp.GetVersionTaskQueues(), 2) // one for workflow TQ, one for activity TQ
 
 		// Promote the deployment version to either current or ramping.
 		err = promoteDeploymentVersion(ctx, feClient, deploymentName, testBuildID)
@@ -424,5 +424,5 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	})
 	s.NoError(err)
 	s.NotNil(actResp.PollerScalingDecision)
-	s.Assert().Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 }

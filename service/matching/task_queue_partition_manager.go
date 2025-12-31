@@ -396,10 +396,12 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	return task, versionSetUsed, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.Context,
-	pollStartTime time.Time,
+// getPhysicalQueueStats retrieves task queue stats for the given physical queue.
+// Returns nil if stats cannot be retrieved or are not available.
+func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueStats(
+	ctx context.Context,
 	physicalQueue physicalTaskQueueManager,
-) *taskqueuepb.PollerScalingDecision {
+) *taskqueuepb.TaskQueueStats {
 	// buildID would be empty for either the unversioned queue or when using v3 worker-versioning.
 	buildID := physicalQueue.QueueKey().Version().BuildId()
 
@@ -414,8 +416,20 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 		return nil
 	}
 
-	pollWaitTime := pm.engine.timeSource.Since(pollStartTime)
+	info, ok := partitionInfo.GetVersionsInfoInternal()[buildID]
+	if !ok || info.GetPhysicalTaskQueueInfo().GetTaskQueueStats() == nil {
+		return nil
+	}
+	return info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+}
+
+func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.Context,
+	pollStartTime time.Time,
+	physicalQueue physicalTaskQueueManager,
+) *taskqueuepb.PollerScalingDecision {
+
 	// If a poller has waited around a while, we can always suggest a decrease.
+	pollWaitTime := pm.engine.timeSource.Since(pollStartTime)
 	if pollWaitTime >= pm.config.PollerScalingWaitTime() {
 		// Decrease if any poll matched after sitting idle for some configured period
 		return &taskqueuepb.PollerScalingDecision{
@@ -423,17 +437,18 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 		}
 	}
 
+	// If the poller is not allowed to make a scaling decision, based on the rate limiter, no scaling decision is made
 	delta := int32(0)
 	now := pm.engine.timeSource.Now()
 	if !physicalQueue.AllowPollerScalingDecision(now) {
 		return nil
 	}
 
-	info, ok := partitionInfo.GetVersionsInfoInternal()[buildID]
-	if !ok || info.GetPhysicalTaskQueueInfo().GetTaskQueueStats() == nil {
+	// Scaling decision is now made based on the overall backlog of the task queue:
+	stats := pm.getPhysicalQueueStats(ctx, physicalQueue)
+	if stats == nil {
 		return nil
 	}
-	stats := info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
 
 	if stats.ApproximateBacklogCount > 0 &&
 		stats.ApproximateBacklogAge.AsDuration() > pm.config.PollerScalingBacklogAgeScaleUp() {

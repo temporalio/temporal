@@ -1109,7 +1109,7 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 
 	// validating the metadata
 	entries := resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
-	s.Equal(2, len(entries))
+	s.Len(entries, 2)
 	s.Equal(testRandomMetadataValue, entries["key1"].Data)
 	s.Equal(testRandomMetadataValue, entries["key2"].Data)
 

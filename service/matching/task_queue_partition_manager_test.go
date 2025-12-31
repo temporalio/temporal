@@ -711,7 +711,6 @@ func (s *PartitionManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFastMatch(
 func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
 	// This test verifies that non-root partitions have different scaling behavior:
 	// They can only emit scaling decisions based on backlog, not on add/dispatch rate ratio
-	// (See task_queue_partition_manager.go:446-448)
 
 	ctx := context.Background()
 
