@@ -36,6 +36,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token }}
           fetch-depth: 0
 
       - name: Set up Python
