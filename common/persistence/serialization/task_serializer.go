@@ -90,6 +90,8 @@ func (s *TaskSerializer) serializeTransferTask(
 		transferTask = s.transferDeleteExecutionTaskToProto(task)
 	case *tasks.ChasmTask:
 		transferTask = s.transferChasmTaskToProto(task)
+	case *tasks.ParentClosePolicyTask:
+		transferTask = s.transferParentClosePolicyTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", task)
 	}
@@ -139,6 +141,8 @@ func (s *TaskSerializer) deserializeTransferTasks(
 		task = s.transferDeleteExecutionTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_CHASM:
 		task = s.transferChasmTaskFromProto(transferTask)
+	case enumsspb.TASK_TYPE_TRANSFER_PARENT_CLOSE_POLICY:
+		task = s.transferParentClosePolicyTaskFromProto(transferTask)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", transferTask.TaskType)
 	}
@@ -641,6 +645,7 @@ func (s *TaskSerializer) transferCloseTaskToProto(
 				// We set this to true even though it's no longer checked in case someone downgrades to a version that
 				// still checks this field.
 				CanSkipVisibilityArchival: true,
+				ChildPolicyTasksGenerated: closeTask.ChildPolicyTasksGenerated,
 			},
 		},
 	}
@@ -655,12 +660,57 @@ func (s *TaskSerializer) transferCloseTaskFromProto(
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: closeTask.VisibilityTime.AsTime(),
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp:       closeTask.VisibilityTime.AsTime(),
+		TaskID:                    closeTask.TaskId,
+		Version:                   closeTask.Version,
+		DeleteAfterClose:          closeTask.DeleteAfterClose,
+		ChildPolicyTasksGenerated: closeTask.GetCloseExecutionTaskDetails().GetChildPolicyTasksGenerated(),
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
 		DeleteProcessStage: tasks.DeleteWorkflowExecutionStageNone,
+	}
+}
+
+func (s *TaskSerializer) transferParentClosePolicyTaskToProto(
+	task *tasks.ParentClosePolicyTask,
+) *persistencespb.TransferTaskInfo {
+	return &persistencespb.TransferTaskInfo{
+		NamespaceId:             task.NamespaceID,
+		WorkflowId:              task.WorkflowID,
+		RunId:                   task.RunID,
+		TaskType:                enumsspb.TASK_TYPE_TRANSFER_PARENT_CLOSE_POLICY,
+		TargetNamespaceId:       task.TargetNamespaceID,
+		TargetWorkflowId:        task.TargetWorkflowID,
+		TargetRunId:             task.TargetRunID,
+		TargetChildWorkflowOnly: true, // Always true for parent close policy
+		TaskQueue:               "",
+		ScheduledEventId:        0,
+		Version:                 task.Version,
+		TaskId:                  task.TaskID,
+		VisibilityTime:          timestamppb.New(task.VisibilityTimestamp),
+		TaskDetails: &persistencespb.TransferTaskInfo_ParentClosePolicyTaskDetails_{
+			ParentClosePolicyTaskDetails: &persistencespb.TransferTaskInfo_ParentClosePolicyTaskDetails{
+				ParentClosePolicy: task.ParentClosePolicy,
+			},
+		},
+	}
+}
+
+func (s *TaskSerializer) transferParentClosePolicyTaskFromProto(
+	task *persistencespb.TransferTaskInfo,
+) *tasks.ParentClosePolicyTask {
+	return &tasks.ParentClosePolicyTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			task.NamespaceId,
+			task.WorkflowId,
+			task.RunId,
+		),
+		VisibilityTimestamp: task.VisibilityTime.AsTime(),
+		TaskID:              task.TaskId,
+		Version:             task.Version,
+		TargetNamespaceID:   task.TargetNamespaceId,
+		TargetWorkflowID:    task.TargetWorkflowId,
+		TargetRunID:         task.TargetRunId,
+		ParentClosePolicy:   task.GetParentClosePolicyTaskDetails().GetParentClosePolicy(),
 	}
 }
 

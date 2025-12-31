@@ -18,6 +18,10 @@ type (
 		Version             int64
 		DeleteAfterClose    bool
 		DeleteProcessStage  DeleteWorkflowExecutionStage
+		// ChildPolicyTasksGenerated indicates that ParentClosePolicyTask tasks were generated
+		// for this workflow's children. When true, processCloseExecution should skip
+		// the legacy parent close policy processing to avoid duplicate work.
+		ChildPolicyTasksGenerated bool
 	}
 )
 
@@ -58,12 +62,13 @@ func (a *CloseExecutionTask) GetType() enumsspb.TaskType {
 }
 
 func (a *CloseExecutionTask) String() string {
-	return fmt.Sprintf("CloseExecutionTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, Version: %v, DeleteAfterClose: %v, DeleteProcessStage: %v}",
+	return fmt.Sprintf("CloseExecutionTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, Version: %v, DeleteAfterClose: %v, DeleteProcessStage: %v, ChildPolicyTasksGenerated: %v}",
 		a.WorkflowKey.String(),
 		a.VisibilityTimestamp,
 		a.TaskID,
 		a.Version,
 		a.DeleteAfterClose,
 		a.DeleteProcessStage,
+		a.ChildPolicyTasksGenerated,
 	)
 }
