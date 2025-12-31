@@ -356,7 +356,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false, // first is not long poll
 		}).
@@ -369,7 +369,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // second is long poll
 		}).
@@ -382,7 +382,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 2,
 			WaitNewData:              true,
 		}).

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -24,7 +23,6 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
@@ -75,12 +73,10 @@ type (
 func TestScheduleFunctionalSuite(t *testing.T) {
 	t.Parallel()
 
-	// TODO: Enable CHASM tests once frontend has chasm visibility engine.
 	// CHASM tests must run as a separate suite, with a separate cluster/functional environment, because the tests
 	// assume a fully clean state. For example, TestBasics has assertions on visibility entries for workflow runs
 	// started by the scheduler, which would not be cleaned up even when the associated scheduler has been deleted.
-	// suite.Run(t, new(ScheduleCHASMFunctionalSuite))
-
+	suite.Run(t, new(ScheduleCHASMFunctionalSuite))
 	suite.Run(t, new(ScheduleV1FunctionalSuite))
 }
 
@@ -337,37 +333,6 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime], &ex0StartTime))
 	s.WithinRange(ex0StartTime, createTime, time.Now())
 	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
-
-	// list with QueryWithAnyNamespaceDivision, we should see the scheduler workflow
-
-	wfResp, err = s.FrontendClient().ListWorkflowExecutions(s.newContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  5,
-		Query:     sadefs.QueryWithAnyNamespaceDivision(`ExecutionStatus = "Running"`),
-	})
-	s.NoError(err)
-	count := 0
-	for _, ex := range wfResp.Executions {
-		if _, ok := ex.GetMemo().GetFields()["ScheduleInfo"]; ok {
-			count++
-		}
-	}
-	s.EqualValues(1, count, "should see scheduler workflow")
-
-	// list workflows with an exact match on namespace division (implementation details here, not public api)
-
-	wfResp, err = s.FrontendClient().ListWorkflowExecutions(s.newContext(), &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  5,
-		Query: fmt.Sprintf(
-			"%s IN ('%s', '%s')",
-			sadefs.TemporalNamespaceDivision,
-			scheduler.NamespaceDivision,
-			strconv.FormatUint(uint64(chasm.SchedulerArchetypeID), 10),
-		),
-	})
-	s.NoError(err)
-	s.EqualValues(1, len(wfResp.Executions), "should see scheduler workflow")
 
 	// list schedules with search attribute filter
 
@@ -693,10 +658,7 @@ func (s *scheduleFunctionalSuiteBase) TestLastCompletionAndError() {
 			s.Equal("this one succeeds", lcr)
 			return "", errors.New("this one fails")
 		case 3:
-			// TODO - CHASM scheduler only keeps a single one of these set at a time, not both. IMO, that's more correct than
-			// keeping one of each.
-			//
-			// s.Equal("this one succeeds", lcr)
+			s.Equal("this one succeeds", lcr)
 			s.ErrorContains(lastErr, "this one fails")
 			atomic.StoreInt32(&testComplete, 1)
 			return "done", nil
@@ -712,6 +674,66 @@ func (s *scheduleFunctionalSuiteBase) TestLastCompletionAndError() {
 	s.cleanup(sid)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
+}
+
+// Tests that a schedule created in the V1 stack will also be visible in the V2 stack.
+func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
+	sid := "schedule-created-on-v1"
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-",
+					WorkflowType: &commonpb.WorkflowType{Name: "action"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	// Create on V1 stack.
+	_, err := s.FrontendClient().CreateSchedule(s.newContext(), req)
+	s.NoError(err)
+
+	// Pause so that `FutureActionTimes` doesn't change between calls.
+	_, err = s.FrontendClient().PatchSchedule(s.newContext(), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			Pause: "halt",
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Sanity test, list with V1 handler.
+	v1Entry := s.getScheduleEntryFomVisibility(sid, func(sle *schedulepb.ScheduleListEntry) bool {
+		return sle.GetInfo().Paused
+	})
+	s.NotNil(v1Entry.GetInfo())
+
+	// Flip on CHASM experiment and make sure we can still list.
+	s.newContext = func() context.Context {
+		return metadata.NewOutgoingContext(testcore.NewContext(), metadata.Pairs(
+			headers.ExperimentHeaderName, "chasm-scheduler",
+		))
+	}
+	chasmEntry := s.getScheduleEntryFomVisibility(sid, nil)
+	s.NotNil(chasmEntry.GetInfo())
+	s.ProtoEqual(chasmEntry.GetInfo(), v1Entry.GetInfo())
 }
 
 // TestRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
