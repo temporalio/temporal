@@ -817,6 +817,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	var rampPercentage float32
 	var currentExists bool
 	var rampingExists bool
+	var isRamping bool
 	var unversionedCurrentShareByPriority map[int32]*taskqueuepb.TaskQueueStats
 	var unversionedRampingShareByPriority map[int32]*taskqueuepb.TaskQueueStats
 
@@ -832,10 +833,17 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
 		deploymentData := perType.GetDeploymentData()
 
-		currentVersion, _, _, rampingVersion, _, rampPercentage, _, _ =
+		currentVersion, _, _, rampingVersion, isRamping, rampPercentage, _, _ =
 			worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+
+		// Technically, one could have a current version of "unversioned" which shall make currentExists false according
+		// to the current logic. However, as of now, the user cannot query the stats of the "unversioned" version so this
+		// logic is fine. In other words, this logic is used to only attribute the unversioned backlog to the current version
+		// when current version is NOT "unversioned".
+		//
+		// When the ramping version is "unversioned", isRamping is true which shall make the attribution logic work as expected.
 		currentExists = currentVersion != nil
-		rampingExists = rampingVersion != nil && rampPercentage > 0
+		rampingExists = isRamping
 
 		// Split the unversioned queue's stats per priority so TaskQueueStatsByPriorityKey can
 		// be adjusted consistently with TaskQueueStats.
@@ -890,6 +898,11 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			isUnversionedDescribe := deploymentVersion == nil
 			isCurrentDescribe := deploymentVersion.GetDeploymentName() == currentVersion.GetDeploymentName() &&
 				deploymentVersion.GetBuildId() == currentVersion.GetBuildId()
+
+			// "Ramping to unversioned" is represented by "rampingExists==true AND rampingVersion==nil".
+			// In that case, the ramp share should remain attributed to the unversioned queue stats and
+			// there is no separate versioned queue to merge that share into.
+			isRampingToUnversioned := rampingExists && rampingVersion == nil
 			isRampingDescribe := deploymentVersion.GetDeploymentName() == rampingVersion.GetDeploymentName() &&
 				deploymentVersion.GetBuildId() == rampingVersion.GetBuildId()
 
@@ -898,7 +911,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 				if currentExists {
 					subtractStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
 				}
-				if rampingExists {
+				// Only subtract the ramping share when ramping is to a versioned deployment. If ramping is to
+				// unversioned, that share should remain part of the unversioned queue stats.
+				if rampingExists && !isRampingToUnversioned {
 					subtractStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
 				}
 			} else if isCurrentDescribe && currentExists {
