@@ -717,7 +717,7 @@ func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
 
 	// Create a non-root partition identity
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
-	s.NoError(err)
+	s.Require().NoError(err)
 	nonRootPartition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 
 	// Temporarily replace the partition to make it non-root
