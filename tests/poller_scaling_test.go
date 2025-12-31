@@ -258,7 +258,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	tq := testcore.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr("test-poller-scaling-tq")
 	feClient := s.FrontendClient()
 
 	const (
