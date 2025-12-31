@@ -274,7 +274,12 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	}
 
 	// Start a workflow poller with DeploymentOptions so the deployment version is registered
-	pollRespCh := make(chan *workflowservice.PollWorkflowTaskQueueResponse)
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+	pollResultCh := make(chan pollResult, 1)
+
 	go func() {
 		pollResp, err := feClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
@@ -285,9 +290,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 			},
 		})
-		s.NoError(err)
-		s.NotNil(pollResp)
-		pollRespCh <- pollResp
+		pollResultCh <- pollResult{resp: pollResp, err: err}
 	}()
 
 	// Also start a versioned activity poller so that the activity task queue is registered in the version
@@ -340,8 +343,12 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	// Stop the activity poller to grow the backlog and to see poller scaling decisions.
 	pollCancel()
+
 	// Wait for the workflow poller to poll and receive a task.
-	pollResp := <-pollRespCh
+	poll := <-pollResultCh
+	s.Require().NoError(poll.err)
+	s.Require().NotNil(poll.resp)
+	pollResp := poll.resp
 
 	// Start enough activities to ensure we will see scale up decisions. These are scheduled by an unversioned poller.
 	commands := make([]*commandpb.Command, 0, 10)

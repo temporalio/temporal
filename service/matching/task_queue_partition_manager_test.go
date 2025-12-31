@@ -295,7 +295,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 		SeriesName: deploymentName,
 		BuildId:    currentBuildID,
 	}, true)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// Make this a pinned task so that it goes to the current versioned queue.
 	err = currentQ.SpoolTask(&persistencespb.TaskInfo{
@@ -634,6 +634,7 @@ func (s *PartitionManagerTestSuite) TestPollScalingUpAddRateExceedsDispatchRate(
 			if err == nil && task != nil {
 				task.finish(nil, true)
 			}
+			//nolint:forbidigo
 			time.Sleep(100 * time.Millisecond) // Simulating slow polling
 		}
 	}()

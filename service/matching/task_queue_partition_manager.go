@@ -450,6 +450,7 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 		return nil
 	}
 
+	// Check for backlog-based scaling (available to all partitions)
 	if stats.ApproximateBacklogCount > 0 &&
 		stats.ApproximateBacklogAge.AsDuration() > pm.config.PollerScalingBacklogAgeScaleUp() {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
@@ -458,10 +459,13 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 	} else if !physicalQueue.QueueKey().Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
 		return nil
-	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
-		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-		// since those (currently) don't get backlogged.
-		delta = 1
+	} else {
+		// Rate-based scaling (root partitions only)
+		if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
+			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
+			// since those (currently) don't get backlogged.
+			delta = 1
+		}
 	}
 
 	if delta == 0 {
