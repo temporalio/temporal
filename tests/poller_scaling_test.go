@@ -424,5 +424,5 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	})
 	s.NoError(err)
 	s.NotNil(actResp.PollerScalingDecision)
-	s.Assert().GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.Assert().Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 }

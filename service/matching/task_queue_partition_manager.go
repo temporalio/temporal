@@ -390,10 +390,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
-		task.pollerScalingDecision, err = pm.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, dbq)
-		if err != nil {
-			return nil, false, err
-		}
+		task.pollerScalingDecision, _ = pm.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, dbq)
 	}
 
 	return task, versionSetUsed, err
@@ -437,6 +434,7 @@ func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.C
 		return nil, nil
 	}
 	stats := info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+
 	if stats.ApproximateBacklogCount > 0 &&
 		stats.ApproximateBacklogAge.AsDuration() > pm.config.PollerScalingBacklogAgeScaleUp() {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for

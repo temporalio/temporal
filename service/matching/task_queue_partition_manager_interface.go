@@ -64,6 +64,8 @@ type (
 		GetCache(key any) any
 		GetRateLimitManager() *rateLimitManager
 		GetConfig() *taskQueueConfig
+		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
+		// of the task queue and the task about to be returned.
 		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, physicalQueue physicalTaskQueueManager) (*taskqueuepb.PollerScalingDecision, error)
 	}
 )

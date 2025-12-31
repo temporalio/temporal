@@ -785,13 +785,6 @@ func (c *physicalTaskQueueManagerImpl) counterFactory() counter.Counter {
 	return counter.NewHybridCounter(c.config.FairnessCounter(), src)
 }
 
-func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
-	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
-		return aggregateStats(c.GetStatsByPriority())
-	})
-}
-
 func (c *physicalTaskQueueManagerImpl) AllowPollerScalingDecision(now time.Time) bool {
 	// Avoid spiking pollers crazy fast by limiting how frequently change decisions are issued. Be more permissive when
 	// there are more recent pollers.
@@ -804,53 +797,6 @@ func (c *physicalTaskQueueManagerImpl) AllowPollerScalingDecision(now time.Time)
 
 func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeightOverrides {
 	return c.partitionMgr.GetRateLimitManager().GetFairnessWeightOverrides()
-}
-
-func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
-	pollStartTime time.Time,
-	statsFn func() *taskqueuepb.TaskQueueStats,
-) *taskqueuepb.PollerScalingDecision {
-	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
-	// If a poller has waited around a while, we can always suggest a decrease.
-	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
-		// Decrease if any poll matched after sitting idle for some configured period
-		return &taskqueuepb.PollerScalingDecision{
-			PollRequestDeltaSuggestion: -1,
-		}
-	}
-
-	// Avoid spiking pollers crazy fast by limiting how frequently change decisions are issued. Be more permissive when
-	// there are more recent pollers.
-	numPollers := c.pollerHistory.history.Size()
-	if numPollers == 0 {
-		numPollers = 1
-	}
-	if !c.pollerScalingRateLimiter.AllowN(time.Now(), 1e6/numPollers) {
-		return nil
-	}
-
-	delta := int32(0)
-	stats := statsFn()
-	if stats.ApproximateBacklogCount > 0 &&
-		stats.ApproximateBacklogAge.AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
-		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
-		// sticky queues.
-		delta = 1
-	} else if !c.queue.Partition().IsRoot() {
-		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
-		return nil
-	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
-		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-		// since those (currently) don't get backlogged.
-		delta = 1
-	}
-
-	if delta == 0 {
-		return nil
-	}
-	return &taskqueuepb.PollerScalingDecision{
-		PollRequestDeltaSuggestion: delta,
-	}
 }
 
 func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(

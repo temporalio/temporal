@@ -584,6 +584,274 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 	})
 }
 
+// Following tests are for poller scaling decisions.
+func (s *PartitionManagerTestSuite) TestPollScalingUpOnBacklog() {
+	ctx := context.Background()
+
+	// Create tasks with timestamps in the past to simulate aged backlog
+	// Set create_time to 1 second ago so backlog age exceeds the 200ms threshold
+	taskCreateTime := timestamppb.New(time.Now().Add(-1 * time.Second))
+
+	// Spool tasks to create backlog in the real default queue
+	for i := 0; i < 100; i++ {
+		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+			CreateTime:  taskCreateTime,
+		})
+		s.Require().NoError(err)
+	}
+
+	// Wait for stats to be available
+	s.describeStatsEventually(map[string]bool{"": true}, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		uvStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		return uvStats != nil && uvStats.GetApproximateBacklogCount() >= 100
+	})
+
+	// Call the partition manager's method with the real default queue
+	decision, err := s.partitionMgr.MakePollerScalingDecision(
+		ctx,
+		time.Now(),
+		s.partitionMgr.defaultQueue,
+	)
+
+	s.NoError(err)
+	s.NotNil(decision)
+	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingUpAddRateExceedsDispatchRate() {
+	ctx := context.Background()
+
+	// Start a slow poller to dispatch tasks slowly
+	pollCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Start slow polling in the background
+	go func() {
+		for i := 0; i < 15; i++ {
+			task, err := s.partitionMgr.defaultQueue.PollTask(pollCtx, &pollMetadata{})
+			if err == nil && task != nil {
+				task.finish(nil, true)
+			}
+			time.Sleep(100 * time.Millisecond) // Simulating slow polling
+		}
+	}()
+
+	// Rapidly add many tasks via AddTask (which tracks add rate) to create high add rate
+	// AddTask will try sync match and fail (poller is slow), then spool to create backlog.
+
+	// Even though a backlog is created, MakePollerScalingDecision will not increase the poller count
+	// because there is a large backlog. This is because the backlog age will not exceed the threshold
+	// that is set in the dynamic config (default is 200ms).
+	for i := 0; i < 150; i++ {
+		_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
+			taskInfo: &persistencespb.TaskInfo{
+				NamespaceId: namespaceID,
+				RunId:       "run",
+				WorkflowId:  fmt.Sprintf("wf-addrate-%d", i),
+				CreateTime:  timestamppb.New(time.Now()), // CreateTime is set to now so that the backlog age will *not* exceed the threshold
+			},
+		})
+		s.Require().NoError(err)
+	}
+
+	// Wait for stats to reflect the rate imbalance
+	s.describeStatsEventually(map[string]bool{"": true}, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		uvStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		if uvStats == nil {
+			return false
+		}
+		// Check that add rate significantly exceeds dispatch rate
+		addRate := uvStats.GetTasksAddRate()
+		dispatchRate := uvStats.GetTasksDispatchRate()
+		if addRate <= 0 || dispatchRate <= 0 {
+			return false
+		}
+		ratio := addRate / dispatchRate
+		return ratio > 1.2
+	})
+
+	// Call MakePollerScalingDecision
+	decision, err := s.partitionMgr.MakePollerScalingDecision(
+		ctx,
+		time.Now(),
+		s.partitionMgr.defaultQueue,
+	)
+
+	s.NoError(err)
+	s.NotNil(decision)
+	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFastMatch() {
+	ctx := context.Background()
+
+	// When there's no backlog (fast sync match), no scaling decision should be made
+	// Don't add any tasks - this means there's no backlog
+
+	// Verify stats show no backlog
+	s.describeStatsEventually(map[string]bool{"": true}, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		uvStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		if uvStats == nil {
+			return false
+		}
+		// Verify no backlog
+		return uvStats.GetApproximateBacklogCount() == 0 &&
+			uvStats.GetApproximateBacklogAge().AsDuration() == 0
+	})
+
+	decision, err := s.partitionMgr.MakePollerScalingDecision(
+		ctx,
+		time.Now(),
+		s.partitionMgr.defaultQueue,
+	)
+
+	s.NoError(err)
+	s.Nil(decision) // No scaling decision when there's no backlog
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
+	// This test verifies that non-root partitions have different scaling behavior:
+	// They can only emit scaling decisions based on backlog, not on add/dispatch rate ratio
+	// (See task_queue_partition_manager.go:446-448)
+
+	ctx := context.Background()
+
+	// Create a non-root partition identity
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.NoError(err)
+	nonRootPartition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+
+	// Temporarily replace the partition to make it non-root
+	s.partitionMgr.partition = nonRootPartition
+
+	// Test 1: Non-root partitions CAN emit decisions when there's high backlog
+	taskCreateTime := timestamppb.New(time.Now().Add(-1 * time.Second))
+	for i := 0; i < 100; i++ {
+		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-nonroot-%d", i),
+			CreateTime:  taskCreateTime,
+		})
+		s.Require().NoError(err)
+	}
+
+	// Wait for stats to show backlog
+	s.describeStatsEventually(map[string]bool{"": true}, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		uvStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		return uvStats != nil && uvStats.GetApproximateBacklogCount() >= 100
+	})
+
+	// Should emit scaling decision for high backlog on non-root partition
+	decision, err := s.partitionMgr.MakePollerScalingDecision(
+		ctx,
+		time.Now(),
+		s.partitionMgr.defaultQueue,
+	)
+	s.NoError(err)
+	s.NotNil(decision)
+	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+
+	// Test 2: Non-root partitions should NOT emit decisions when backlog is cleared
+	// (even if add/dispatch rate ratio would normally trigger a decision on root partition)
+	// Poll all tasks to clear the backlog
+	for i := 0; i < 100; i++ {
+		task, err := s.partitionMgr.defaultQueue.PollTask(ctx, &pollMetadata{})
+		if err == nil && task != nil {
+			task.finish(nil, true)
+		}
+	}
+
+	// Wait for backlog to be cleared
+	s.describeStatsEventually(map[string]bool{"": true}, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		uvStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		return uvStats != nil && uvStats.GetApproximateBacklogCount() == 0
+	})
+
+	// Should NOT emit scaling decision when no backlog (non-root partition restriction)
+	decision, err = s.partitionMgr.MakePollerScalingDecision(
+		ctx,
+		time.Now(),
+		s.partitionMgr.defaultQueue,
+	)
+	s.NoError(err)
+	s.Nil(decision)
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingDownOnLongSyncMatch() {
+	ctx := context.Background()
+
+	// Call MakePollerScalingDecision with a poll start time from 2 seconds ago
+	// This is well past the default threshold of 1 second (PollerScalingWaitTime)
+	pollStartTime := time.Now().Add(-2 * time.Second)
+
+	decision, err := s.partitionMgr.MakePollerScalingDecision(
+		ctx,
+		pollStartTime,
+		s.partitionMgr.defaultQueue,
+	)
+
+	s.NoError(err)
+	s.NotNil(decision)
+	s.LessOrEqual(decision.PollRequestDeltaSuggestion, int32(-1))
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
+	ctx := context.Background()
+
+	// Create a mock physical queue manager to mock the AllowPollerScalingDecision method
+	mockPhysicalQueue := NewMockphysicalTaskQueueManager(s.controller)
+
+	// Mock QueueKey to return the default queue's key
+	mockPhysicalQueue.EXPECT().QueueKey().Return(s.partitionMgr.defaultQueue.QueueKey()).AnyTimes()
+
+	// Set up expectations: first call allowed (returns true), second call rate limited (returns false)
+	gomock.InOrder(
+		mockPhysicalQueue.EXPECT().AllowPollerScalingDecision(gomock.Any()).Return(true).Times(1),
+		mockPhysicalQueue.EXPECT().AllowPollerScalingDecision(gomock.Any()).Return(false).Times(1),
+	)
+
+	// Create aged backlog to trigger a scaling decision
+	taskCreateTime := timestamppb.New(time.Now().Add(-1 * time.Second))
+	for i := 0; i < 100; i++ {
+		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-ratelimit-%d", i),
+			CreateTime:  taskCreateTime,
+		})
+		s.Require().NoError(err)
+	}
+
+	// Wait for stats to show backlog
+	s.describeStatsEventually(map[string]bool{"": true}, false, false, false, func(resp *matchingservice.DescribeTaskQueuePartitionResponse) bool {
+		uvStats := resp.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		return uvStats != nil && uvStats.GetApproximateBacklogCount() >= 100
+	})
+
+	// First call should return a scaling decision (AllowPollerScalingDecision returns true)
+	decision1, err := s.partitionMgr.MakePollerScalingDecision(
+		ctx,
+		time.Now(),
+		mockPhysicalQueue,
+	)
+	s.NoError(err)
+	s.NotNil(decision1, "First scaling decision should be allowed")
+	s.GreaterOrEqual(decision1.PollRequestDeltaSuggestion, int32(1))
+
+	// Second call should return nil (AllowPollerScalingDecision returns false, indicating rate limit)
+	decision2, err := s.partitionMgr.MakePollerScalingDecision(
+		ctx,
+		time.Now(),
+		mockPhysicalQueue,
+	)
+	s.NoError(err)
+	s.Nil(decision2, "Second scaling decision should be rate limited")
+}
+
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)
