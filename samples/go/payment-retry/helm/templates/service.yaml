@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "payment-retry-sample.fullname" . }}
+  labels:
+    {{- include "payment-retry-sample.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http-metrics # Must match the 'name' of the port in deployment.yaml container spec
+      protocol: TCP
+      name: http-metrics
+  selector:
+    {{- include "payment-retry-sample.selectorLabels" . | nindent 4 }}
