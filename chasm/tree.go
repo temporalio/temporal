@@ -2572,6 +2572,7 @@ func (n *Node) EachPureTask(
 			// Remove the processed task.
 			// This addresses the concern where user provided task validator doesn't correctly
 			// invalidate a task even if it has been executed.
+			delete(n.taskValueCache, task.Data)
 			componentAttr.PureTasks = componentAttr.GetPureTasks()[1:]
 		}
 	}
