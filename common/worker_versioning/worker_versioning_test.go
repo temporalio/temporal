@@ -3,6 +3,7 @@ package worker_versioning
 import (
 	"context"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.uber.org/mock/gomock"
 )
@@ -38,6 +38,55 @@ var (
 		DeploymentName: "bar",
 	}
 )
+
+type testVersionMembershipCache struct {
+	mu sync.Mutex
+	m  map[versionMembershipCacheKey]bool
+}
+
+func newTestVersionMembershipCache() *testVersionMembershipCache {
+	return &testVersionMembershipCache{m: make(map[versionMembershipCacheKey]bool)}
+}
+
+var _ VersionMembershipCache = (*testVersionMembershipCache)(nil)
+
+func (c *testVersionMembershipCache) Get(
+	namespaceID string,
+	taskQueue string,
+	taskQueueType enumspb.TaskQueueType,
+	deploymentName string,
+	buildID string,
+) (isMember bool, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.m[versionMembershipCacheKey{
+		namespaceID:    namespaceID,
+		taskQueue:      taskQueue,
+		taskQueueType:  taskQueueType,
+		deploymentName: deploymentName,
+		buildID:        buildID,
+	}]
+	return v, ok
+}
+
+func (c *testVersionMembershipCache) Put(
+	namespaceID string,
+	taskQueue string,
+	taskQueueType enumspb.TaskQueueType,
+	deploymentName string,
+	buildID string,
+	isMember bool,
+) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m[versionMembershipCacheKey{
+		namespaceID:    namespaceID,
+		taskQueue:      taskQueue,
+		taskQueueType:  taskQueueType,
+		deploymentName: deploymentName,
+		buildID:        buildID,
+	}] = isMember
+}
 
 func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	t1 := timestamp.TimePtr(time.Now().Add(-2 * time.Hour))
@@ -630,7 +679,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 		name          string
 		override      *workflowpb.VersioningOverride
 		taskQueueType enumspb.TaskQueueType
-		setupCache    func(c cache.Cache)
+		setupCache    func(c *testVersionMembershipCache)
 		setupMock     func(m *matchingservicemock.MockMatchingServiceClient)
 		expectError   bool
 		errorContains string
@@ -638,7 +687,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 		{
 			name:        "nil override returns nil",
 			override:    nil,
-			setupCache:  func(c cache.Cache) {},
+			setupCache:  func(c *testVersionMembershipCache) {},
 			setupMock:   func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError: false,
 		},
@@ -647,7 +696,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			override: &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
 			},
-			setupCache: func(c cache.Cache) {},
+			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
@@ -663,14 +712,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 					},
 				},
 			},
-			setupCache: func(c cache.Cache) {
-				c.Put(versionMembershipCacheKey{
-					namespaceID:    testNamespaceID,
-					taskQueue:      testTaskQueue,
-					taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					deploymentName: testVersion.DeploymentName,
-					buildID:        testVersion.BuildId,
-				}, true)
+			setupCache: func(c *testVersionMembershipCache) {
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -687,14 +730,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 					},
 				},
 			},
-			setupCache: func(c cache.Cache) {
-				c.Put(versionMembershipCacheKey{
-					namespaceID:    testNamespaceID,
-					taskQueue:      testTaskQueue,
-					taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					deploymentName: testVersion.DeploymentName,
-					buildID:        testVersion.BuildId,
-				}, false)
+			setupCache: func(c *testVersionMembershipCache) {
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, false)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
@@ -713,14 +750,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 					},
 				},
 			},
-			setupCache: func(c cache.Cache) {
-				c.Put(versionMembershipCacheKey{
-					namespaceID:    testNamespaceID,
-					taskQueue:      testTaskQueue,
-					taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					deploymentName: testVersion.DeploymentName,
-					buildID:        testVersion.BuildId,
-				}, true)
+			setupCache: func(c *testVersionMembershipCache) {
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
@@ -742,7 +773,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 					},
 				},
 			},
-			setupCache: func(c cache.Cache) {},
+			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
@@ -764,7 +795,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 					},
 				},
 			},
-			setupCache: func(c cache.Cache) {},
+			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
@@ -785,7 +816,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 					},
 				},
 			},
-			setupCache:    func(c cache.Cache) {},
+			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
 			errorContains: "must provide version if override is pinned",
@@ -800,7 +831,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 					},
 				},
 			},
-			setupCache:    func(c cache.Cache) {},
+			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
 			errorContains: "must specify pinned override behavior if override is pinned",
@@ -811,7 +842,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			override: &workflowpb.VersioningOverride{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 			},
-			setupCache: func(c cache.Cache) {},
+			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
 			},
@@ -823,7 +854,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 				Deployment: &deploymentpb.Deployment{SeriesName: "test", BuildId: "build1"},
 			},
-			setupCache:    func(c cache.Cache) {},
+			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
 			errorContains: "only provide deployment if behavior is 'PINNED'",
@@ -834,7 +865,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 				PinnedVersion: "test-deployment.test-build-id",
 			},
-			setupCache:    func(c cache.Cache) {},
+			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
 			errorContains: "only provide pinned version if behavior is 'PINNED'",
@@ -845,14 +876,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "test-deployment.test-build-id",
 			},
-			setupCache: func(c cache.Cache) {
-				c.Put(versionMembershipCacheKey{
-					namespaceID:    testNamespaceID,
-					taskQueue:      testTaskQueue,
-					taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					deploymentName: "test-deployment",
-					buildID:        "test-build-id",
-				}, true)
+			setupCache: func(c *testVersionMembershipCache) {
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", true)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -865,14 +890,8 @@ func TestValidateVersioningOverride(t *testing.T) {
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "test-deployment.test-build-id",
 			},
-			setupCache: func(c cache.Cache) {
-				c.Put(versionMembershipCacheKey{
-					namespaceID:    testNamespaceID,
-					taskQueue:      testTaskQueue,
-					taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					deploymentName: "test-deployment",
-					buildID:        "test-build-id",
-				}, false)
+			setupCache: func(c *testVersionMembershipCache) {
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, "test-deployment", "test-build-id", false)
 			},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
@@ -886,7 +905,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "test-deployment.test-build-id",
 			},
-			setupCache: func(c cache.Cache) {},
+			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
@@ -904,7 +923,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "test-deployment.test-build-id",
 			},
-			setupCache: func(c cache.Cache) {},
+			setupCache: func(c *testVersionMembershipCache) {},
 			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
 				m.EXPECT().CheckTaskQueueVersionMembership(
 					gomock.Any(),
@@ -920,7 +939,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			override: &workflowpb.VersioningOverride{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
 			},
-			setupCache:    func(c cache.Cache) {},
+			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
 			errorContains: "must provide deployment (deprecated) or pinned version if behavior is 'PINNED'",
@@ -931,7 +950,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 				Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
 				PinnedVersion: "invalid-no-dot",
 			},
-			setupCache:    func(c cache.Cache) {},
+			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
 			errorContains: "invalid version string",
@@ -941,7 +960,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			override: &workflowpb.VersioningOverride{
 				Behavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
 			},
-			setupCache:    func(c cache.Cache) {},
+			setupCache:    func(c *testVersionMembershipCache) {},
 			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
 			expectError:   true,
 			errorContains: "override behavior is required",
@@ -956,9 +975,7 @@ func TestValidateVersioningOverride(t *testing.T) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 			tt.setupMock(mockMatchingClient)
 
-			testCache := cache.New(100, &cache.Options{
-				TTL: time.Minute,
-			})
+			testCache := newTestVersionMembershipCache()
 			tt.setupCache(testCache)
 
 			tqType := tt.taskQueueType
