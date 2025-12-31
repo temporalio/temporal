@@ -2918,7 +2918,7 @@ func (n *Node) ValidateSideEffectTask(
 	}
 
 	// Component must be hydrated before the task's validator is called.
-	validateCtx := NewContext(ctx, n)
+	validateCtx := NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
 		return false, err
 	}
@@ -2944,7 +2944,8 @@ func (n *Node) ValidateSideEffectTask(
 	}
 
 	return node.validateTask(
-		validateCtx, TaskAttributes{
+		validateCtx,
+		TaskAttributes{
 			ScheduledTime: chasmTask.GetVisibilityTime(),
 			Destination:   chasmTask.Destination,
 		},
