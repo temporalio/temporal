@@ -274,7 +274,6 @@ func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegist
 	}
 
 	act := func(ctx context.Context) (string, error) {
-		fmt.Println("THIS IS THE ACTIVITY TASK QUEUE", activity.GetInfo(ctx).TaskQueue)
 		return activity.GetInfo(ctx).TaskQueue, nil
 	}
 
@@ -306,7 +305,7 @@ func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegist
 	// Sanity: for sessions this should be a resource-specific activity task queue, not the base TQ.
 	s.NotEqual(tv.TaskQueue().GetName(), sessionTaskQueue)
 
-	// The session resource-specific task queue must NOT be treated as a task queue "registered in the version".
+	// The session resource-specific task queue must NOT be registered in the version
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -316,7 +315,7 @@ func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegist
 		a.NoError(err)
 
 		for _, tq := range resp.GetVersionTaskQueues() {
-			// Only check activity queues; the session resource-specific queue is an activity TQ.
+			// Only check activity queues since the session resource-specific queue is an activity TQ
 			if tq.GetType() == tqTypeAct {
 				a.NotEqual(sessionTaskQueue, tq.GetName(), "session resource-specific task queue should not be registered in the version")
 			}
