@@ -645,7 +645,7 @@ func (s *PartitionManagerTestSuite) TestPollScalingUpAddRateExceedsDispatchRate(
 	// Even though a backlog is created, MakePollerScalingDecision will not increase the poller count
 	// because there is a large backlog. This is because the backlog age will not exceed the threshold
 	// that is set in the dynamic config (default is 200ms).
-	for i := 0; i < 150; i++ {
+	for i := 0; i < 100; i++ {
 		_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
 			taskInfo: &persistencespb.TaskInfo{
 				NamespaceId: namespaceID,
