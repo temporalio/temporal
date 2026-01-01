@@ -11,6 +11,8 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -159,7 +161,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 
 	outcome, err := updateWorkflow(
 		ctx,
-		a.historyClient,
+		a.HistoryClient,
 		a.namespace,
 		workflowID,
 		&updatepb.Request{
