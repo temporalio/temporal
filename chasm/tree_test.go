@@ -2896,6 +2896,7 @@ func (s *nodeSuite) TestValidatePureTask() {
 	// Close the root component.
 	mutableCtx := NewMutableContext(ctx, root)
 	rootComponent, err := root.ComponentByPath(mutableCtx, rootPath)
+	s.NoError(err)
 	rootComponent.(*TestComponent).Complete(mutableCtx)
 	_, err = root.CloseTransaction()
 	s.NoError(err)
@@ -3130,6 +3131,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	// Succeed validation as invalid since parent is closed.
 	mutableCtx := NewMutableContext(ctx, root)
 	rootComponent, err := root.ComponentByPath(mutableCtx, rootPath)
+	s.NoError(err)
 	rootComponent.(*TestComponent).Complete(mutableCtx)
 	// Note there's also no mock for task validator here in this case.
 	// Access rule is checked first.
