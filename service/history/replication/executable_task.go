@@ -662,6 +662,20 @@ func (e *ExecutableTaskImpl) SyncState(
 			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
 			return false, nil
 		}
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			logger.Error(
+				"workflow not found in source cluster, proceed to cleanup")
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return false, e.DeleteWorkflow(
+				ctx,
+				definition.NewWorkflowKey(
+					syncStateErr.NamespaceId,
+					syncStateErr.WorkflowId,
+					syncStateErr.RunId,
+				),
+			)
+		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		if !errors.As(err, &failedPreconditionErr) {
 			return false, err

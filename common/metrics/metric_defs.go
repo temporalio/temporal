@@ -43,6 +43,7 @@ const (
 
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
+	VersionMembershipCacheTypeTagValue                = "version_membership"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -450,6 +451,10 @@ const (
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
 	// OperationOutboundQueueProcessorScope is a scope for the outbound queue processor.
 	OperationOutboundQueueProcessorScope = "OutboundQueueProcessor"
+	// VersionMembershipCacheGetScope is the scope used by version membership cache
+	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
+	// VersionMembershipCachePutScope is the scope used by version membership cache
+	VersionMembershipCachePutScope = "VersionMembershipCachePut"
 )
 
 // Matching Scope
@@ -1290,6 +1295,8 @@ var (
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
+	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
+	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
 
 	WorkflowResetCount        = NewCounterDef("workflow_reset_count")
 	WorkflowQuerySuccessCount = NewCounterDef("workflow_query_success_count")

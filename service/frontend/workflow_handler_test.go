@@ -3537,7 +3537,6 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
 	ctx := context.Background()
 	config := s.newConfig()
-	config.EnableExecuteMultiOperation = func(string) bool { return true }
 	wh := s.getWorkflowHandler(config)
 
 	s.mockResource.NamespaceCache.EXPECT().
