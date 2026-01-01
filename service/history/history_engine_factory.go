@@ -2,6 +2,7 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -9,6 +10,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
@@ -46,6 +48,8 @@ type (
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
+		ChasmEngine                     chasm.Engine
+		VersionMembershipCache          worker_versioning.VersionMembershipCache
 	}
 
 	historyEngineFactory struct {
@@ -63,6 +67,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.SdkClientFactory,
 		f.EventNotifier,
 		f.Config,
+		f.VersionMembershipCache,
 		f.RawMatchingClient,
 		f.WorkflowCache,
 		f.ReplicationProgressCache,
@@ -80,5 +85,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.OutboundQueueCBPool,
 		f.PersistenceRateLimiter,
 		f.TestHooks,
+		f.ChasmEngine,
 	)
 }

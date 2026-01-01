@@ -126,17 +126,14 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 
 	versionActivities := &VersionActivities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
+		activityDeps: s.activityDeps,
+		namespace:    ns,
 	}
 	registry.RegisterActivity(versionActivities)
 
 	activities := &Activities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
-		historyClient:    s.activityDeps.HistoryClient,
+		activityDeps: s.activityDeps,
+		namespace:    ns,
 	}
 	registry.RegisterActivity(activities)
 	return nil
