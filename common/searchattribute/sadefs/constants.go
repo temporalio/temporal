@@ -79,6 +79,8 @@ const (
 
 	// BuildIds is a KeywordList that holds information about current and past build ids
 	// used by the workflow. Used for Worker Versioning
+	// This SA is deprecated as of Versioning GA. Instead, users should use one of the following SAs for different purposes:
+	// TemporalWorkflowVersioningBehavior, TemporalWorkerDeployment, TemporalWorkerDeploymentVersion, TemporalUsedWorkerDeploymentVersions.
 	BuildIds = "BuildIds"
 
 	// TemporalWorkerDeploymentVersion stores the current Worker Deployment Version
@@ -158,8 +160,10 @@ var (
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
 	// Attributes listed here but not in predefinedWhiteList are considered internal-only and are banned from user-facing usage.
 	predefined = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion:                enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		BinaryChecksums:                      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		// This SA is deprecated as of Versioning GA. Instead, users should use one of the following SAs for different purposes:
+		// TemporalWorkflowVersioningBehavior, TemporalWorkerDeployment, TemporalWorkerDeploymentVersion, TemporalUsedWorkerDeploymentVersions.
 		BuildIds:                             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BatcherNamespace:                     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherUser:                          enumspb.INDEXED_VALUE_TYPE_KEYWORD,

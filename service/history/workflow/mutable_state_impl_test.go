@@ -3038,7 +3038,7 @@ func (s *mutableStateSuite) TestUpdateUsedDeploymentVersionsSearchAttribute() {
 	s.NoError(err)
 	// Should have removed oldest entries to fit within size limit
 	versions := s.getUsedDeploymentVersionsFromMutableState()
-	s.True(len(versions) > 0, "Should have at least one version")
+	s.Positive(len(versions), "Should have at least one version")
 	// The newest one should be present
 	s.Contains(versions, "deployment-c:build-1")
 

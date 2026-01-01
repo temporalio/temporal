@@ -1265,6 +1265,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	// search attribute here because the reachability deployment may have just been changed by CompleteDeploymentTransition.
 	// This is also useful for unversioned workers.
 	// For v1 and v2 versioned workflows the search attributes should be already up-to-date based on the task started events.
+	//nolint:staticcheck // SA1019
 	if err := m.ms.updateBuildIdsAndDeploymentSearchAttributes(attrs.GetWorkerVersion(), worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
