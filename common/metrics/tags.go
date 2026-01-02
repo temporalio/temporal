@@ -39,25 +39,30 @@ const (
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
-	replicationTaskType     = "replicationTaskType"
-	replicationTaskPriority = "replicationTaskPriority"
-	taskExpireStage         = "task_expire_stage"
-	versioningBehavior      = "versioning_behavior"
-	isFirstAttempt          = "first-attempt"
-	workflowStatus          = "workflow_status"
-	behaviorBefore          = "behavior_before"
-	behaviorAfter           = "behavior_after"
-	runInitiator            = "run_initiator"
-	fromUnversioned         = "from_unversioned"
-	toUnversioned           = "to_unversioned"
-	queryTypeTag            = "query_type"
-	namespaceAllValue       = "all"
-	unknownValue            = "_unknown_"
-	totalMetricSuffix       = "_total"
-	tagExcludedValue        = "_tag_excluded_"
-	falseValue              = "false"
-	trueValue               = "true"
-	errorPrefix             = "*"
+	replicationTaskType                            = "replicationTaskType"
+	replicationTaskPriority                        = "replicationTaskPriority"
+	taskExpireStage                                = "task_expire_stage"
+	versioningBehavior                             = "versioning_behavior"
+	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
+	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
+	suggestContinueAsNewReasonTooManyHistoryEvents = "suggest_continue_as_new_reason_too_many_history_events"
+	suggestContinueAsNewReasonHistorySizeTooLarge  = "suggest_continue_as_new_reason_history_size_too_large"
+	suggestContinueAsNewReasonTargetVersionChanged = "suggest_continue_as_new_reason_target_version_changed"
+	isFirstAttempt                                 = "first-attempt"
+	workflowStatus                                 = "workflow_status"
+	behaviorBefore                                 = "behavior_before"
+	behaviorAfter                                  = "behavior_after"
+	runInitiator                                   = "run_initiator"
+	fromUnversioned                                = "from_unversioned"
+	toUnversioned                                  = "to_unversioned"
+	queryTypeTag                                   = "query_type"
+	namespaceAllValue                              = "all"
+	unknownValue                                   = "_unknown_"
+	totalMetricSuffix                              = "_total"
+	tagExcludedValue                               = "_tag_excluded_"
+	falseValue                                     = "false"
+	trueValue                                      = "true"
+	errorPrefix                                    = "*"
 
 	queryTypeStackTrace       = "__stack_trace"
 	queryTypeOpenSessions     = "__open_sessions"
@@ -403,6 +408,42 @@ func DestinationTag(value string) Tag {
 
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
 	return Tag{Key: versioningBehavior, Value: behavior.String()}
+}
+
+func ContinueAsNewVersioningBehaviorTag(canBehavior enumspb.ContinueAsNewVersioningBehavior) Tag {
+	return Tag{Key: continueAsNewVersioningBehavior, Value: canBehavior.String()}
+}
+
+func SuggestContinueAsNewReasonTargetVersionChangedTag(present bool) Tag {
+	v := falseValue
+	if present {
+		v = trueValue
+	}
+	return Tag{Key: suggestContinueAsNewReasonTargetVersionChanged, Value: v}
+}
+
+func SuggestContinueAsNewReasonTooManyUpdatesTag(present bool) Tag {
+	v := falseValue
+	if present {
+		v = trueValue
+	}
+	return Tag{Key: suggestContinueAsNewReasonTooManyUpdates, Value: v}
+}
+
+func SuggestContinueAsNewReasonTooManyHistoryEventsTag(present bool) Tag {
+	v := falseValue
+	if present {
+		v = trueValue
+	}
+	return Tag{Key: suggestContinueAsNewReasonTooManyHistoryEvents, Value: v}
+}
+
+func SuggestContinueAsNewReasonHistorySizeTooLargeTag(present bool) Tag {
+	v := falseValue
+	if present {
+		v = trueValue
+	}
+	return Tag{Key: suggestContinueAsNewReasonHistorySizeTooLarge, Value: v}
 }
 
 func WorkflowStatusTag(status string) Tag {
