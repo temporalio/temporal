@@ -2,6 +2,8 @@ package dynamicconfig
 
 import (
 	"fmt"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -310,9 +312,9 @@ func TestSubscribeGradualChange_TimerFiresAtTransitionTime(t *testing.T) {
 	}
 
 	key := []byte("test_key")
-	var callbackVals []bool
+	var callbackVals syncSlice[bool]
 	initial, cancel := SubscribeGradualChange(subscribable, key, func(v bool) {
-		callbackVals = append(callbackVals, v)
+		callbackVals.append(v)
 	}, ts)
 	defer cancel()
 
@@ -320,17 +322,17 @@ func TestSubscribeGradualChange_TimerFiresAtTransitionTime(t *testing.T) {
 
 	ts.Update(gc.When(key).Add(-time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, callbackVals)
+		assert.Empty(c, callbackVals.get())
 	}, time.Second, time.Millisecond)
 
 	ts.Update(gc.When(key).Add(time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, []bool{true}, callbackVals)
+		assert.Equal(t, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 
 	ts.Update(end.Add(time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, []bool{true}, callbackVals)
+		assert.Equal(t, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 }
 
@@ -343,23 +345,22 @@ func TestSubscribeGradualChange_CancelStopsUpdates(t *testing.T) {
 	ts.Update(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	gc := GradualChange[string]{Old: "old", New: "new", Start: start, End: end}
-	var subCancelCalled bool
-
+	var subCancelCalled atomic.Bool
 	subscribable := func(cb func(GradualChange[string])) (GradualChange[string], func()) {
-		return gc, func() { subCancelCalled = true }
+		return gc, func() { subCancelCalled.Store(true) }
 	}
 
-	var callbackCalls atomic.Int32
+	var callbackVals syncSlice[string]
 	_, cancel := SubscribeGradualChange(subscribable, []byte("key"), func(v string) {
-		callbackCalls.Add(1)
+		callbackVals.append(v)
 	}, ts)
 
 	cancel()
-	assert.True(t, subCancelCalled)
+	assert.True(t, subCancelCalled.Load())
 
 	ts.Update(end.Add(time.Hour))
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo // check for lack of async call
-	assert.Zero(t, callbackCalls.Load(), "callback should not be called after cancel")
+	assert.Empty(t, callbackVals.get(), "callback should not be called after cancel")
 }
 
 func TestSubscribeGradualChange_ConstantValueNoTimer(t *testing.T) {
@@ -379,4 +380,21 @@ func TestSubscribeGradualChange_ConstantValueNoTimer(t *testing.T) {
 
 	assert.Equal(t, "constant", initial)
 	assert.Equal(t, 0, ts.NumTimers())
+}
+
+type syncSlice[T any] struct {
+	lock sync.Mutex
+	s    []T
+}
+
+func (ss *syncSlice[T]) append(v T) {
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+	ss.s = append(ss.s, v)
+}
+
+func (ss *syncSlice[T]) get() []T {
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+	return slices.Clone(ss.s)
 }
