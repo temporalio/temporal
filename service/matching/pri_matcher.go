@@ -192,7 +192,11 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 	if task.forwardCtx != nil {
 		// Use sync match context if we have it (for deadline, headers, etc.)
 		// TODO(pri): does it make sense to subtract 1s from the context deadline here?
-		ctx = task.forwardCtx
+		// Also arrange for this to be canceled on tqCtx closing.
+		ctx, cancel = context.WithCancel(task.forwardCtx)
+		stop := context.AfterFunc(tm.tqCtx, cancel)
+		defer cancel()
+		defer stop()
 	} else {
 		// Task is from local backlog.
 
