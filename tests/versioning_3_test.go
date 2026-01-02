@@ -306,21 +306,23 @@ func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegist
 	s.NotEqual(tv.TaskQueue().GetName(), sessionTaskQueue)
 
 	// The session resource-specific task queue must NOT be registered in the version
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv.DeploymentVersionString(),
-		})
-		a.NoError(err)
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		Version:   tv.DeploymentVersionString(),
+	})
+	s.Require().NoError(err)
 
-		for _, tq := range resp.GetVersionTaskQueues() {
-			// Only check activity queues since the session resource-specific queue is an activity TQ
-			if tq.GetType() == tqTypeAct {
-				a.NotEqual(sessionTaskQueue, tq.GetName(), "session resource-specific task queue should not be registered in the version")
-			}
+	totalActTQ := 0
+	for _, tq := range resp.GetVersionTaskQueues() {
+		// Only check activity queues since the session resource-specific queue is an activity TQ
+		if tq.GetType() == tqTypeAct {
+			totalActTQ++
+			s.NotEqual(sessionTaskQueue, tq.GetName(), "session resource-specific task queue should not be registered in the version")
 		}
-	}, 10*time.Second, 200*time.Millisecond)
+	}
+	// Ensure that there are only two activity task queues present.
+	s.Equal(2, totalActTQ)
+
 }
 
 func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_Sticky() {
