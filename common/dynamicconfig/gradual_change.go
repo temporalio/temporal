@@ -4,9 +4,11 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"go.temporal.io/server/common/clock"
 )
 
 // GradualChange represents a setting that can change its value over time in a controlled way.
@@ -42,7 +44,8 @@ func (c *GradualChange[T]) Value(key []byte, now time.Time) T {
 	return c.Old
 }
 
-// When returns the time when the value for key will switch from old to new.
+// When returns the time when the value for key will switch from old to new. It may be the zero
+// time for a constant GradualChange.
 func (c *GradualChange[T]) When(key []byte) time.Time {
 	fraction := float64(farm.Fingerprint32(key)) / float64(math.MaxUint32)
 	when := time.Duration(fraction * float64(c.Start.Sub(c.End)))
@@ -104,7 +107,7 @@ func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
 	default:
 		valueConverter := ConvertStructure(def)
 		return func(v any) (GradualChange[T], error) {
-			// both valueConverter and structConverter will probably return success here, so
+			// both valueConverter and changeConverter will probably return success here, so
 			// we can't rely on the error. check if the input has "new" (the only required
 			// key in a GradualChange).
 			if vmap, ok := v.(map[string]any); ok {
@@ -118,4 +121,81 @@ func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
 			return ConstantGradualChange(nv), err
 		}
 	}
+}
+
+// SubscribeGradualChange is a helper that allows subscribing to a GradualChange[T] as if it
+// was a T. It handles setting a timer for when the setting may change in the future.
+func SubscribeGradualChange[T any](
+	subscribable TypedSubscribable[GradualChange[T]],
+	changeKey []byte,
+	callback func(T),
+	clock clock.TimeSource,
+) (T, func()) {
+	w := &gradualChangeSubscribeWrapper[T]{changeKey: changeKey, callback: callback, clock: clock}
+
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	w.change, w.cancelSub = subscribable(w.changeCallback)
+	w.reevalLocked(true)
+	return w.val, w.cancel
+}
+
+type gradualChangeSubscribeWrapper[T any] struct {
+	lock      sync.Mutex
+	changeKey []byte
+	callback  func(T)
+	clock     clock.TimeSource
+	cancelSub func()
+	change    GradualChange[T]
+	val       T
+	tmr       clock.Timer
+}
+
+func (w *gradualChangeSubscribeWrapper[T]) changeCallback(change GradualChange[T]) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	w.change = change
+	w.reevalLocked(false)
+}
+
+func (w *gradualChangeSubscribeWrapper[T]) timerCallback() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	w.reevalLocked(false)
+}
+
+func (w *gradualChangeSubscribeWrapper[T]) cancel() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	w.cancelSub()
+	w.setTimerLocked(nil)
+}
+
+func (w *gradualChangeSubscribeWrapper[T]) reevalLocked(firstCall bool) {
+	now := w.clock.Now()
+
+	var newTmr clock.Timer
+	if at := w.change.When(w.changeKey); at.After(now) {
+		newTmr = w.clock.AfterFunc(at.Sub(now), w.timerCallback)
+	}
+	w.setTimerLocked(newTmr)
+
+	newVal := w.change.Value(w.changeKey, now)
+	if firstCall {
+		w.val = newVal
+	} else if !reflect.DeepEqual(w.val, newVal) {
+		w.val = newVal
+		w.callback(newVal)
+	}
+}
+
+func (w *gradualChangeSubscribeWrapper[T]) setTimerLocked(newTmr clock.Timer) {
+	if w.tmr != nil {
+		w.tmr.Stop()
+	}
+	w.tmr = newTmr
 }
