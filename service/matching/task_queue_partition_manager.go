@@ -1269,7 +1269,6 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// The task belongs to an unversioned execution. Keep using unversioned. But also return
 		// userDataChanged so if current deployment is set, the task redirects to that deployment.
 		return dbq, dbq, userDataChanged, taskDispatchRevisionNumber, targetDeploymentVersion, nil
-		return pm.defaultQueue, pm.defaultQueue, userDataChanged, taskDispatchRevisionNumber, targetDeploymentVersion, nil
 	}
 
 	userData, userDataChanged, err := pm.userDataManager.GetUserData()
@@ -1334,7 +1333,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if versionSet != "" {
 		spoolQueue = pm.defaultQueue()
 		if spoolQueue == nil {
-			return nil, nil, nil, 0, errDefaultQueueNotInit
+			return nil, nil, nil, 0, nil, errDefaultQueueNotInit
 		}
 		syncMatchQueue, err = pm.getVersionedQueue(ctx, versionSet, "", nil, true)
 		if err != nil {
