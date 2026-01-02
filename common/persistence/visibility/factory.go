@@ -273,6 +273,24 @@ func newVisibilityStoreFromDataStoreConfig(
 			metricsHandler,
 			logger,
 		)
+	} else if dsConfig.MongoDB != nil {
+		if customVisibilityStoreFactory == nil {
+			logger.Fatal("mongodb visibility store factory must be defined")
+			return nil, nil
+		}
+		visStore, err = customVisibilityStoreFactory.NewVisibilityStore(
+			config.CustomDatastoreConfig{
+				Name:      "mongodb",
+				IndexName: dsConfig.MongoDB.DatabaseName,
+			},
+			searchAttributesProvider,
+			searchAttributesMapperProvider,
+			namespaceRegistry,
+			chasmRegistry,
+			persistenceResolver,
+			logger,
+			metricsHandler,
+		)
 	} else if dsConfig.CustomDataStoreConfig != nil {
 		if customVisibilityStoreFactory == nil {
 			logger.Fatal("custom visibility store factory must be defined")

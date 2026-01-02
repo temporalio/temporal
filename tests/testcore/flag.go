@@ -18,7 +18,7 @@ var cliFlags struct {
 
 func init() {
 	flag.StringVar(&cliFlags.persistenceType, "persistenceType", "sql", "type of persistence - [nosql or sql]")
-	flag.StringVar(&cliFlags.persistenceDriver, "persistenceDriver", "sqlite", "driver of nosql/sql - [cassandra, mysql8, postgres12, sqlite]")
+	flag.StringVar(&cliFlags.persistenceDriver, "persistenceDriver", "sqlite", "driver of nosql/sql - [cassandra, mongodb, mysql8, postgres12, sqlite]")
 	flag.StringVar(&cliFlags.enableFaultInjection, "enableFaultInjection", "", "enable global fault injection")
 }
 
@@ -34,4 +34,12 @@ func UseSQLVisibility() bool {
 
 func UseCassandraPersistence() bool {
 	return cliFlags.persistenceType == config.StoreTypeNoSQL && cliFlags.persistenceDriver == "cassandra"
+}
+
+func UseMongoPersistence() bool {
+	return cliFlags.persistenceType == config.StoreTypeNoSQL && cliFlags.persistenceDriver == "mongodb"
+}
+
+func UseMongoDBVisibility() bool {
+	return UseMongoPersistence()
 }

@@ -1,0 +1,19 @@
+groups:
+  - name: temporal-mongodb
+    rules:
+      - alert: TemporalMongoTransactionFailures
+        expr: increase(persistence_mongo_transactions_failed[5m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Temporal MongoDB transactions failing
+          description: Temporal persistence reported {{ $value }} transaction failures across the last 5 minutes. Investigate MongoDB logs and the Temporal server metrics for errors.
+      - alert: TemporalMongoSessionExhaustion
+        expr: sum(persistence_mongo_sessions_in_progress{}) / clamp_min(max(persistence_mongo_max_pool_size{}), 1) > 0.8
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Temporal MongoDB connection pool saturation
+          description: Active MongoDB sessions exceed 80% of the configured pool size. Consider scaling MongoDB or increasing pool size.
