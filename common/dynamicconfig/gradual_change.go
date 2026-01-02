@@ -31,10 +31,10 @@ func ConstantGradualChange[T any](def T) GradualChange[T] {
 
 // Value returns the value for the given key at the given time.
 func (c *GradualChange[T]) Value(key []byte, now time.Time) T {
-	if !now.After(c.Start) {
-		return c.Old
-	} else if !now.Before(c.End) {
+	if !now.Before(c.End) {
 		return c.New
+	} else if !now.After(c.Start) {
+		return c.Old
 	}
 	fraction := float64(now.Sub(c.Start)) / float64(c.End.Sub(c.Start))
 	threshold := uint32(fraction * float64(math.MaxUint32))
@@ -58,6 +58,9 @@ func (c *GradualChange[T]) When(key []byte) time.Time {
 // nolint:revive // cognitive-complexity // this looks complicated but each case is fairly simple
 func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
 	changeConverter := ConvertStructure(ConstantGradualChange(def))
+
+	// Call this once so that if it's going to panic, it panics at static init time.
+	_, _ = changeConverter(nil)
 
 	switch reflect.TypeFor[T]() {
 	case reflect.TypeFor[bool]():
