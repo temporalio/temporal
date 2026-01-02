@@ -721,11 +721,11 @@ func mapstructureHookTimestamp(f, t reflect.Type, data any) (any, error) {
 	case time.Time:
 		return v, nil
 	case string:
-		timestamp, err := time.Parse(time.RFC3339, v)
+		ts, err := time.Parse(time.RFC3339, v)
 		if err != nil {
 			return 0, fmt.Errorf("failed to parse time: %v", err)
 		}
-		return timestamp, nil
+		return ts, nil
 	}
 	// treat numeric values as seconds
 	if ival, err := convertInt(data); err == nil {

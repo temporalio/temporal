@@ -55,6 +55,7 @@ func (c *GradualChange[T]) When(key []byte) time.Time {
 // ConvertGradualChange is a conversion function that can handle a plain T (which represents a
 // constant value) as well as a GradualChange[T]. It can be used to turn settings that were not
 // of type GradualChange into a GradualChange.
+// nolint:revive // cognitive-complexity // this looks complicated but each case is fairly simple
 func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
 	changeConverter := ConvertStructure(ConstantGradualChange(def))
 
@@ -129,9 +130,9 @@ func SubscribeGradualChange[T any](
 	subscribable TypedSubscribable[GradualChange[T]],
 	changeKey []byte,
 	callback func(T),
-	clock clock.TimeSource,
+	timeSource clock.TimeSource,
 ) (T, func()) {
-	w := &gradualChangeSubscribeWrapper[T]{changeKey: changeKey, callback: callback, clock: clock}
+	w := &gradualChangeSubscribeWrapper[T]{changeKey: changeKey, callback: callback, clock: timeSource}
 
 	w.lock.Lock()
 	w.change, w.cancelSub = subscribable(w.changeCallback)
