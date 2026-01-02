@@ -75,7 +75,7 @@ func NewPayloadStoreHandler(
 	ctx context.Context,
 	request NewPayloadStoreRequest,
 ) (NewPayloadStoreResponse, error) {
-	_, result, err := chasm.NewExecution(
+	result, err := chasm.NewExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: request.NamespaceID.String(),

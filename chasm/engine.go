@@ -17,7 +17,7 @@ type Engine interface {
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
-	) (NewExecutionResult, error)
+	) (NewEngineExecutionResult, error)
 	UpdateWithNewExecution(
 		context.Context,
 		ComponentRef,
@@ -92,11 +92,17 @@ type TransitionOption func(*TransitionOptions)
 //     the execution already existed (based on the [BusinessIDReusePolicy] and
 //     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
 //     existing execution was returned instead.
-type NewExecutionResult struct {
+//   - Output: The output value returned by the factory function.
+type NewExecutionResult[O any] struct {
 	ExecutionKey    ExecutionKey
 	NewExecutionRef []byte
 	Created         bool
+	Output          O
 }
+
+// NewEngineExecutionResult is a type alias for the result type returned by the Engine implementation.
+// This avoids repeating [struct{}] everywhere in the engine implementation.
+type NewEngineExecutionResult = NewExecutionResult[struct{}]
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -172,7 +178,7 @@ func NewExecution[C Component, I any, O any](
 	newFn func(MutableContext, I) (C, O, error),
 	input I,
 	opts ...TransitionOption,
-) (O, NewExecutionResult, error) {
+) (NewExecutionResult[O], error) {
 	var output O
 	result, err := engineFromContext(ctx).NewExecution(
 		ctx,
@@ -186,9 +192,17 @@ func NewExecution[C Component, I any, O any](
 		opts...,
 	)
 	if err != nil {
-		return output, NewExecutionResult{}, err
+		return NewExecutionResult[O]{
+			Output: output,
+		}, err
 	}
-	return output, result, nil
+
+	return NewExecutionResult[O]{
+		ExecutionKey:    result.ExecutionKey,
+		NewExecutionRef: result.NewExecutionRef,
+		Created:         result.Created,
+		Output:          output,
+	}, nil
 }
 
 func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](

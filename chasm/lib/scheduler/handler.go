@@ -23,7 +23,7 @@ func newHandler(logger log.Logger) *handler {
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	resp, _, err = chasm.NewExecution(
+	result, err := chasm.NewExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
@@ -33,7 +33,7 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 		req,
 		chasm.WithRequestID(req.FrontendRequest.RequestId),
 	)
-	return resp, err
+	return result.Output, err
 }
 
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {

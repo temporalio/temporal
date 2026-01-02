@@ -66,7 +66,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy()))
 	}
 
-	response, result, err := chasm.NewExecution(
+	result, err := chasm.NewExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
@@ -115,11 +115,11 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
-	response.RunId = result.ExecutionKey.RunID
-	response.Started = result.Created
+	result.Output.RunId = result.ExecutionKey.RunID
+	result.Output.Started = result.Created
 
 	return &activitypb.StartActivityExecutionResponse{
-		FrontendResponse: response,
+		FrontendResponse: result.Output,
 	}, nil
 }
 
