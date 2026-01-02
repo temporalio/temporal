@@ -43,6 +43,7 @@ const (
 
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
+	VersionMembershipCacheTypeTagValue                = "version_membership"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -450,6 +451,10 @@ const (
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
 	// OperationOutboundQueueProcessorScope is a scope for the outbound queue processor.
 	OperationOutboundQueueProcessorScope = "OutboundQueueProcessor"
+	// VersionMembershipCacheGetScope is the scope used by version membership cache
+	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
+	// VersionMembershipCachePutScope is the scope used by version membership cache
+	VersionMembershipCachePutScope = "VersionMembershipCachePut"
 )
 
 // Matching Scope
