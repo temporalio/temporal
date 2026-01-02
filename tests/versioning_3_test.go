@@ -242,6 +242,90 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 	}
 }
 
+func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegisteredInVersion() {
+	tv := testvars.New(s)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	const (
+		wfName  = "session-wf"
+		actName = "session-act"
+	)
+
+	wf := func(ctx workflow.Context) (string, error) {
+		ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute,
+		})
+
+		sessionCtx, err := workflow.CreateSession(ctx, &workflow.SessionOptions{
+			CreationTimeout:  30 * time.Second,
+			ExecutionTimeout: 30 * time.Second,
+		})
+		if err != nil {
+			return "", err
+		}
+		defer workflow.CompleteSession(sessionCtx)
+
+		var taskQueueName string
+		if err := workflow.ExecuteActivity(sessionCtx, actName).Get(sessionCtx, &taskQueueName); err != nil {
+			return "", err
+		}
+		return taskQueueName, nil
+	}
+
+	act := func(ctx context.Context) (string, error) {
+		return activity.GetInfo(ctx).TaskQueue, nil
+	}
+
+	w := worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:                   tv.SDKDeploymentVersion(),
+			UseVersioning:             true,
+			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+		},
+		EnableSessionWorker: true,
+	})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfName})
+	w.RegisterActivityWithOptions(act, activity.RegisterOptions{Name: actName})
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	// Ensure the version is current and propagated before starting the workflow.
+	s.setCurrentDeployment(tv)
+	s.waitForDeploymentDataPropagation(tv, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue: tv.TaskQueue().GetName(),
+	}, wfName)
+	s.NoError(err)
+
+	var sessionTaskQueue string
+	s.NoError(run.Get(ctx, &sessionTaskQueue))
+	s.NotEmpty(sessionTaskQueue)
+	// Sanity: for sessions this should be a resource-specific activity task queue, not the base TQ.
+	s.NotEqual(tv.TaskQueue().GetName(), sessionTaskQueue)
+
+	// The session resource-specific task queue must NOT be registered in the version
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		Version:   tv.DeploymentVersionString(),
+	})
+	s.Require().NoError(err)
+
+	totalActTQ := 0
+	for _, tq := range resp.GetVersionTaskQueues() {
+		// Only check activity queues since the session resource-specific queue is an activity TQ
+		if tq.GetType() == tqTypeAct {
+			totalActTQ++
+			s.NotEqual(sessionTaskQueue, tq.GetName(), "session resource-specific task queue should not be registered in the version")
+		}
+	}
+	// Ensure that there are only two activity task queues present.
+	s.Equal(2, totalActTQ)
+
+}
+
 func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_Sticky() {
 	s.RunTestWithMatchingBehavior(
 		func() {
@@ -2727,7 +2811,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 		startOpts.VersioningOverride = &sdkclient.PinnedVersioningOverride{
 			Version: worker.WorkerDeploymentVersion{
 				DeploymentName: override.GetPinned().GetVersion().GetDeploymentName(),
-				BuildId:        override.GetPinned().GetVersion().GetBuildId(),
+				BuildID:        override.GetPinned().GetVersion().GetBuildId(),
 			},
 		}
 	}
@@ -5170,11 +5254,5 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
 	if s.deploymentWorkflowVersion < version {
 		s.T().Skipf("test supports workflow version %v and newer", version)
-	}
-}
-
-func (s *Versioning3Suite) skipFromVersion(version workerdeployment.DeploymentWorkflowVersion) {
-	if s.deploymentWorkflowVersion >= version {
-		s.T().Skipf("test supports workflow version older than %v", version)
 	}
 }
