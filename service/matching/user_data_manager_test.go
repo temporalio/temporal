@@ -105,6 +105,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_LoadOnInit_Refresh(t *testing.T) {
@@ -175,6 +176,7 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	}, time.Second, time.Millisecond)
 
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
@@ -278,6 +280,7 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 	require.Equal(t, 1, tm.getGetUserDataCount(dbq))
 
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesOnInit(t *testing.T) {
@@ -329,6 +332,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
@@ -355,7 +359,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false, // first is not long poll
 		}).
@@ -368,7 +372,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // second is long poll
 		}).
@@ -381,7 +385,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId,
 			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 			LastKnownUserDataVersion: 2,
 			WaitNewData:              true,
 		}).
@@ -396,6 +400,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
@@ -482,6 +487,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
@@ -570,6 +576,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesUpTree(t *testing.T) {
@@ -622,6 +629,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
@@ -673,6 +681,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesStickyToNormal(t *testing.T) {
@@ -694,12 +703,12 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		Data:    mkUserData(1),
 	}
 
-	matchGetTaskQueueUserDataRequest := func(expectedReq *matchingservice.GetTaskQueueUserDataRequest, out *string) gomock.Matcher {
+	matchGetTaskQueueUserDataRequest := func(expectedReq *matchingservice.GetTaskQueueUserDataRequest, saveTq func(any)) gomock.Matcher {
 		expectedReq = common.CloneProto(expectedReq)
 		expectedTQ := expectedReq.TaskQueue
 		expectedReq.TaskQueue = ""
 		return gomock.Cond(func(req *matchingservice.GetTaskQueueUserDataRequest) bool {
-			*out = req.TaskQueue
+			saveTq(req.TaskQueue)
 			// must be some partition of expected name, just use substring match
 			if !strings.Contains(req.TaskQueue, expectedTQ) {
 				return false
@@ -711,7 +720,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		})
 	}
 
-	var firstPartition, secondPartition string
+	var firstPartition, secondPartition atomic.Value
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
 		matchGetTaskQueueUserDataRequest(&matchingservice.GetTaskQueueUserDataRequest{
@@ -720,7 +729,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
-		}, &firstPartition)).
+		}, firstPartition.Store)).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
 		}, nil)
@@ -733,7 +742,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // after first successful poll, there would be long polls
-		}, &secondPartition)).
+		}, secondPartition.Store)).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
 		}, nil).MaxTimes(maxFastUserDataFetches + 1)
@@ -745,8 +754,9 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	require.Equal(t, firstPartition, secondPartition)
+	require.Eventually(t, func() bool { return firstPartition.Load() == secondPartition.Load() }, 5*time.Second, time.Millisecond)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_UpdateOnNonRootFails(t *testing.T) {
