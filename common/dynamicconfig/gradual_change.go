@@ -134,18 +134,20 @@ func SubscribeGradualChange[T any](
 	w := &gradualChangeSubscribeWrapper[T]{changeKey: changeKey, callback: callback, clock: clock}
 
 	w.lock.Lock()
-	defer w.lock.Unlock()
-
 	w.change, w.cancelSub = subscribable(w.changeCallback)
-	w.reevalLocked(true)
-	return w.val, w.cancel
+	val, _ := w.reevalLocked()
+	w.lock.Unlock()
+
+	return val, w.cancel
 }
 
 type gradualChangeSubscribeWrapper[T any] struct {
-	lock      sync.Mutex
+	// constant:
 	changeKey []byte
 	callback  func(T)
 	clock     clock.TimeSource
+	// mutable, protected by lock:
+	lock      sync.Mutex
 	cancelSub func()
 	change    GradualChange[T]
 	val       T
@@ -154,17 +156,23 @@ type gradualChangeSubscribeWrapper[T any] struct {
 
 func (w *gradualChangeSubscribeWrapper[T]) changeCallback(change GradualChange[T]) {
 	w.lock.Lock()
-	defer w.lock.Unlock()
-
 	w.change = change
-	w.reevalLocked(false)
+	val, changed := w.reevalLocked()
+	w.lock.Unlock()
+
+	if changed {
+		w.callback(val)
+	}
 }
 
 func (w *gradualChangeSubscribeWrapper[T]) timerCallback() {
 	w.lock.Lock()
-	defer w.lock.Unlock()
+	val, changed := w.reevalLocked()
+	w.lock.Unlock()
 
-	w.reevalLocked(false)
+	if changed {
+		w.callback(val)
+	}
 }
 
 func (w *gradualChangeSubscribeWrapper[T]) cancel() {
@@ -175,7 +183,7 @@ func (w *gradualChangeSubscribeWrapper[T]) cancel() {
 	w.setTimerLocked(nil)
 }
 
-func (w *gradualChangeSubscribeWrapper[T]) reevalLocked(firstCall bool) {
+func (w *gradualChangeSubscribeWrapper[T]) reevalLocked() (T, bool) {
 	now := w.clock.Now()
 
 	var newTmr clock.Timer
@@ -185,12 +193,9 @@ func (w *gradualChangeSubscribeWrapper[T]) reevalLocked(firstCall bool) {
 	w.setTimerLocked(newTmr)
 
 	newVal := w.change.Value(w.changeKey, now)
-	if firstCall {
-		w.val = newVal
-	} else if !reflect.DeepEqual(w.val, newVal) {
-		w.val = newVal
-		w.callback(newVal)
-	}
+	changed := !reflect.DeepEqual(w.val, newVal)
+	w.val = newVal
+	return w.val, changed
 }
 
 func (w *gradualChangeSubscribeWrapper[T]) setTimerLocked(newTmr clock.Timer) {
