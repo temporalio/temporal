@@ -14,11 +14,6 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
-const (
-	// Maximum value for priority levels.
-	maxPriorityLevels = 100
-)
-
 type (
 	// Config represents configuration for matching service
 	Config struct {
@@ -81,6 +76,7 @@ type (
 		TaskQueueLimitPerBuildId                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout               dynamicconfig.DurationPropertyFn
 		GetUserDataRefresh                       dynamicconfig.DurationPropertyFn
+		EphemeralDataUpdateInterval              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		BacklogNegligibleAge                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxWaitForPollerBeforeFwd                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		QueryPollerUnavailableWindow             dynamicconfig.DurationPropertyFn
@@ -143,6 +139,7 @@ type (
 	taskQueueConfig struct {
 		forwarderConfig
 		SyncMatchWaitDuration        func() time.Duration
+		EphemeralDataUpdateInterval  func() time.Duration
 		BacklogNegligibleAge         func() time.Duration
 		MaxWaitForPollerBeforeFwd    func() time.Duration
 		QueryPollerUnavailableWindow func() time.Duration
@@ -310,6 +307,7 @@ func NewConfig(
 		TaskQueueLimitPerBuildId:                 dynamicconfig.TaskQueuesPerBuildIdLimit.Get(dc),
 		GetUserDataLongPollTimeout:               dynamicconfig.MatchingGetUserDataLongPollTimeout.Get(dc), // Use -10 seconds so that we send back empty response instead of timeout
 		GetUserDataRefresh:                       dynamicconfig.MatchingGetUserDataRefresh.Get(dc),
+		EphemeralDataUpdateInterval:              dynamicconfig.MatchingEphemeralDataUpdateInterval.Get(dc),
 		BacklogNegligibleAge:                     dynamicconfig.MatchingBacklogNegligibleAge.Get(dc),
 		MaxWaitForPollerBeforeFwd:                dynamicconfig.MatchingMaxWaitForPollerBeforeFwd.Get(dc),
 		QueryPollerUnavailableWindow:             dynamicconfig.QueryPollerUnavailableWindow.Get(dc),
@@ -385,6 +383,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		SyncMatchWaitDuration: func() time.Duration {
 			return config.SyncMatchWaitDuration(ns.String(), taskQueueName, taskType)
+		},
+		EphemeralDataUpdateInterval: func() time.Duration {
+			return config.EphemeralDataUpdateInterval(ns.String(), taskQueueName, taskType)
 		},
 		BacklogNegligibleAge: func() time.Duration {
 			return config.BacklogNegligibleAge(ns.String(), taskQueueName, taskType)
@@ -503,6 +504,6 @@ func (c *taskQueueConfig) clipPriority(priority priorityKey) priorityKey {
 
 func (c *taskQueueConfig) setDefaultPriority(task *internalTask) {
 	if task.effectivePriority == 0 {
-		task.effectivePriority = c.DefaultPriorityKey
+		task.effectivePriority = effectivePriorityFactor * c.DefaultPriorityKey
 	}
 }
