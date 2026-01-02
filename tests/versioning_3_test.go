@@ -2811,7 +2811,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 		startOpts.VersioningOverride = &sdkclient.PinnedVersioningOverride{
 			Version: worker.WorkerDeploymentVersion{
 				DeploymentName: override.GetPinned().GetVersion().GetDeploymentName(),
-				BuildId:        override.GetPinned().GetVersion().GetBuildId(),
+				BuildID:        override.GetPinned().GetVersion().GetBuildId(),
 			},
 		}
 	}
