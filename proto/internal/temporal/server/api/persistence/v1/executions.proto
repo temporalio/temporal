@@ -292,9 +292,11 @@ message WorkflowExecutionInfo {
 
 message ExecutionStats {
     int64 history_size = 1;
-    // Total size in bytes of all external payloads referenced in the workflow history.
+    // Total size in bytes of all external payloads referenced in the entire history tree of the execution, not just the current branch.
+    // This number doesn't include payloads in buffered events.
     int64 external_payload_size = 2;
-    // Total count of external payloads referenced in the workflow history.
+    // Total count of external payloads referenced in the entire history tree of the execution, not just the current branch.
+    // This number doesn't include payloads in buffered events.
     int64 external_payload_count = 3;
 }
 

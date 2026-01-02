@@ -6400,7 +6400,7 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 }
 
 func (ms *MutableStateImpl) GetExternalPayloadSize() int64 {
-	return ms.executionInfo.ExecutionStats.ExternalPayloadSize
+	return ms.executionInfo.GetExecutionStats().GetExternalPayloadSize()
 }
 
 func (ms *MutableStateImpl) AddExternalPayloadSize(size int64) {
@@ -6411,7 +6411,7 @@ func (ms *MutableStateImpl) AddExternalPayloadSize(size int64) {
 }
 
 func (ms *MutableStateImpl) GetExternalPayloadCount() int64 {
-	return ms.executionInfo.ExecutionStats.ExternalPayloadCount
+	return ms.executionInfo.GetExecutionStats().GetExternalPayloadCount()
 }
 
 func (ms *MutableStateImpl) AddExternalPayloadCount(count int64) {
