@@ -121,7 +121,7 @@ func newTaskQueuePartitionManager(
 	}
 
 	var fairness bool
-	changeKey := []byte(pm.partition.RoutingKey())
+	changeKey := pm.partition.GradualChangeKey()
 	fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
 		tqConfig.EnableFairnessSub, changeKey, unload, e.timeSource)
 
