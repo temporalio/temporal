@@ -1102,6 +1102,9 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		targetDeploymentQueue, taskDispatchRevisionNumber, err = pm.chooseTargetQueueByFlag(
 			ctx, deployment, targetDeployment, targetDeploymentRevisionNumber, taskDirectiveRevisionNumber,
 		)
+		if err != nil {
+			return nil, nil, nil, 0, nil, err
+		}
 		targetDeploymentVersion = worker_versioning.DeploymentVersionFromDeployment(targetDeploymentQueue.QueueKey().Version().Deployment())
 
 		if forwardInfo == nil {
