@@ -48,7 +48,7 @@ func (c *GradualChange[T]) Value(key []byte, now time.Time) T {
 // time for a constant GradualChange.
 func (c *GradualChange[T]) When(key []byte) time.Time {
 	fraction := float64(farm.Fingerprint32(key)) / float64(math.MaxUint32)
-	when := time.Duration(fraction * float64(c.Start.Sub(c.End)))
+	when := time.Duration(fraction * float64(c.End.Sub(c.Start)))
 	return c.Start.Add(when)
 }
 
