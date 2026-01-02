@@ -769,7 +769,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		//
 		// When the ramping version is "unversioned", isRamping is true which shall make the attribution logic work as expected.
 		currentExists = currentVersion != nil
-		rampingExists = isRamping
+		rampingExists = isRamping && rampPercentage > 0
 
 		// Split the unversioned queue's stats per priority so TaskQueueStatsByPriorityKey can
 		// be adjusted consistently with TaskQueueStats.
@@ -899,7 +899,6 @@ func cloneStatsByPriority(in map[int32]*taskqueuepb.TaskQueueStats) map[int32]*t
 
 // splitTaskQueueStatsByRampPercentage splits a task queue stats record into "current" and "ramping" shares.
 // This split is applied independently per priority bucket (see splitStatsByPriorityByRampPercentage).
-// TODO (Shivam): Handle the special case of ramp to unversioned.
 func splitTaskQueueStatsByRampPercentage(
 	in *taskqueuepb.TaskQueueStats,
 	rampPct float32,
