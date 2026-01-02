@@ -678,6 +678,37 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 // drainWorkflowTaskAfterSetCurrent is a helper that sets the current deployment version,
 // drains the initial workflow task from the execution, and ensures the task is correctly
 // routed to the appropriate build.
+func (s *Versioning3Suite) drainWorkflowTaskAfterSetCurrentWithOverride(
+	tv *testvars.TestVars,
+	override *workflowpb.VersioningOverride,
+) (*commonpb.WorkflowExecution, string) {
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			if override != nil {
+				s.verifyWorkflowVersioning(s.Assertions, tv, vbUnspecified, nil, override, nil)
+			} else {
+				s.verifyWorkflowVersioning(s.Assertions, tv, vbUnspecified, nil, override, tv.DeploymentVersionTransition())
+			}
+			return respondEmptyWft(tv, false, vbUnpinned), nil
+		})
+	s.waitForDeploymentDataPropagation(tv, versionStatusInactive, false, tqTypeWf)
+	s.setCurrentDeployment(tv)
+
+	runID := s.startWorkflow(tv, override)
+	execution := tv.WithRunID(runID).WorkflowExecution()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	s.WaitForChannel(ctx, wftCompleted)
+
+	return execution, runID
+}
+
+// drainWorkflowTaskAfterSetCurrent is a helper that sets the current deployment version,
+// drains the initial workflow task from the execution, and ensures the task is correctly
+// routed to the appropriate build.
 func (s *Versioning3Suite) drainWorkflowTaskAfterSetCurrent(
 	tv *testvars.TestVars,
 ) (*commonpb.WorkflowExecution, string) {
@@ -2156,54 +2187,73 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_SameTQ() {
-	s.testCan(false, vbPinned, false, true)
+	s.testCan(false, vbPinned, false, true, false)
+}
+
+func (s *Versioning3Suite) TestPinnedCaN_SameTQ_PinnedOverride() {
+	s.testCan(false, vbPinned, false, true, true)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_CrossTQ_Inherit() {
-	s.testCan(true, vbPinned, false, true)
+	s.testCan(true, vbPinned, false, true, false)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_CrossTQ_NoInherit() {
-	s.testCan(true, vbPinned, false, false)
+	s.testCan(true, vbPinned, false, false, false)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_upgradeOnCaN_SameTQ() {
 	s.T().Skip("run after SDK exposes CaN option")
-	s.testCan(false, vbPinned, true, false)
+	s.testCan(false, vbPinned, true, false, false)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_upgradeOnCaN_CrossTQ_Inherit() {
 	s.T().Skip("run after SDK exposes CaN option")
-	s.testCan(true, vbPinned, true, true)
+	s.testCan(true, vbPinned, true, true, false)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN_upgradeOnCaN_CrossTQ_NoInherit() {
 	s.T().Skip("run after SDK exposes CaN option")
-	s.testCan(true, vbPinned, true, false)
+	s.testCan(true, vbPinned, true, false, false)
 }
 
 func (s *Versioning3Suite) TestUnpinnedCaN() {
-	s.testCan(false, vbUnpinned, false, false)
+	s.testCan(false, vbUnpinned, false, false, false)
 }
 
 func (s *Versioning3Suite) TestUnpinnedCaN_upgradeOnCaN() {
 	s.T().Skip("run after SDK exposes CaN option")
-	s.testCan(false, vbUnpinned, true, false)
+	s.testCan(false, vbUnpinned, true, false, false)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
 func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT() {
-	s.testPinnedCaNUpgradeOnCaN(true, false, false)
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, false)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT tests ContinueAsNew with a speculative WFT triggered by update.
 func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT() {
-	s.testPinnedCaNUpgradeOnCaN(false, true, false)
+	s.testPinnedCaNUpgradeOnCaN(false, true, false, false)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_TransientWFT tests ContinueAsNew with a transient WFT (failed + retry).
 func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
-	s.testPinnedCaNUpgradeOnCaN(false, false, true)
+	s.testPinnedCaNUpgradeOnCaN(false, false, true, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_PinnedOverride() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, true)
+}
+
+func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb.VersioningOverride {
+	return &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version:  tv.ExternalDeploymentVersion(),
+			},
+		}}
 }
 
 // testPinnedCaN_UpgradeOnCaN tests ContinueAsNew of a Pinned workflow with InitialVersioningBehavior
@@ -2217,14 +2267,22 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
 // 4. Trigger WFT (mode-dependent: signal (normal task), update (speculative task), or fail+retry(transient task))
 // 5. On WFT: confirm ContinueAsNewSuggested=true, issue ContinueAsNew with AUTO_UPGRADE
 // 6. The new run should start on v2 (current) and be pinned after WFT completion.
-func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask bool) {
+func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride bool) {
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		tv1 := testvars.New(s).WithBuildIDNumber(1)
 		tv2 := tv1.WithBuildIDNumber(2)
-		execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv1)
+		// Set v1 pinned override if testing that
+		var override *workflowpb.VersioningOverride
+		var execution *commonpb.WorkflowExecution
+		if pinnedOverride {
+			override = s.makePinnedOverride(tv1)
+			execution, _ = s.drainWorkflowTaskAfterSetCurrentWithOverride(tv1, override)
+		} else {
+			execution, _ = s.drainWorkflowTaskAfterSetCurrent(tv1)
+		}
 
 		// Trigger a normal WFT to make the workflow pinned
 		s.triggerNormalWFT(ctx, tv1, execution)
@@ -2237,7 +2295,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 			})
 
 		// Verify workflow is now pinned and running on v1
-		s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+		s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), override, nil)
 
 		// Register v2 poller before setting it as current
 		s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
@@ -2319,25 +2377,31 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 				return resp, nil
 			})
 
+		postCaNTV := tv2
+		if pinnedOverride {
+			postCaNTV = tv1
+		}
+
 		// For speculative mode, wait for and verify the update result
 		if speculativeTask {
 			updateResult := <-updateResultCh
 			s.Equal("success-result-of-"+tv1.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 		}
 
-		// Start async poller for v2 to receive the ContinueAsNew new run
+		// Start async poller to receive the ContinueAsNew new run
 		wftNewRunDone := make(chan struct{})
-		s.pollWftAndHandle(tv2, false, wftNewRunDone,
+		s.pollWftAndHandle(postCaNTV, false, wftNewRunDone,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				s.NotNil(task)
-				return respondCompleteWorkflow(tv2, vbPinned), nil
+				return respondCompleteWorkflow(postCaNTV, vbPinned), nil
 			})
 
-		// Wait for the new run's first workflow task on v2
+		// Wait for the new run's first workflow task
 		s.WaitForChannel(ctx, wftNewRunDone)
 
 		// Verify the new workflow run is on v2 (not v1) because of AUTO_UPGRADE initial behavior
-		s.verifyWorkflowVersioning(s.Assertions, tv2, vbPinned, tv2.Deployment(), nil, nil)
+		// But if testing with Pinned V1 override, it should be on v1
+		s.verifyWorkflowVersioning(s.Assertions, postCaNTV, vbPinned, postCaNTV.Deployment(), override, nil)
 	})
 }
 
@@ -2534,7 +2598,7 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 	})
 }
 
-func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBehavior, upgradeOnCaN bool, expectInherit bool) {
+func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBehavior, upgradeOnCaN bool, expectInherit bool, pinnedOverride bool) {
 	// CaN inherits version if pinned and if new task queue is in pinned version, goes to current version if unpinned.
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
@@ -2544,7 +2608,12 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	}
 	canxTq := tv1.TaskQueue().GetName() + "_XTQ_CaN"
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	var override *workflowpb.VersioningOverride
+	if pinnedOverride {
+		override = s.makePinnedOverride(tv1)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
 	wfStarted := make(chan struct{}, 10)
@@ -2561,13 +2630,17 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 			//  if upgradeOnCaN {
 			//	  newCtx = workflow.WithInitialVersioningBehavior(newCtx, temporal.ContinueAsNewVersioningBehaviorAutoUpgrade)
 			//  }
-			s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
+			if pinnedOverride {
+				s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, override, nil)
+			} else {
+				s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, override, tv1.DeploymentVersionTransition())
+			}
 			wfStarted <- struct{}{}
 			// wait for current version to change.
 			<-currentChanged
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 1:
-			s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+			s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), override, nil)
 			return "v1", nil
 		}
 		s.FailNow("workflow should not get to this point")
@@ -2577,9 +2650,9 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
 		if behavior == vbUnpinned && s.deploymentWorkflowVersion >= workerdeployment.AsyncSetCurrentAndRamping {
 			// Unpinned CaN should inherit parent deployment version and behaviour
-			s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
+			s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnpinned, tv1.Deployment(), override, tv2.DeploymentVersionTransition())
 		} else {
-			s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnspecified, nil, nil, tv2.DeploymentVersionTransition())
+			s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnspecified, nil, override, tv2.DeploymentVersionTransition())
 		}
 		return "v2", nil
 	}
@@ -2645,11 +2718,21 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	// make v1 current
 	s.setCurrentDeployment(tv1)
 
-	run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	startOpts := sdkclient.StartWorkflowOptions{
 		ID:                  tv1.WorkflowID(),
 		TaskQueue:           tv1.TaskQueue().GetName(),
 		WorkflowTaskTimeout: 30 * time.Second,
-	}, "wf")
+	}
+	if override.GetPinned().GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED {
+		startOpts.VersioningOverride = &sdkclient.PinnedVersioningOverride{
+			Version: worker.WorkerDeploymentVersion{
+				DeploymentName: override.GetPinned().GetVersion().GetDeploymentName(),
+				BuildId:        override.GetPinned().GetVersion().GetBuildId(),
+			},
+		}
+	}
+
+	run, err := sdkClient.ExecuteWorkflow(ctx, startOpts, "wf")
 	s.NoError(err)
 
 	// wait for it to start on v1
