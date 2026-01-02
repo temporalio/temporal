@@ -105,6 +105,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_LoadOnInit_Refresh(t *testing.T) {
@@ -175,6 +176,7 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	}, time.Second, time.Millisecond)
 
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
@@ -278,6 +280,7 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 	require.Equal(t, 1, tm.getGetUserDataCount(dbq))
 
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesOnInit(t *testing.T) {
@@ -329,6 +332,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
@@ -396,6 +400,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
@@ -482,6 +487,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
@@ -570,6 +576,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesUpTree(t *testing.T) {
@@ -622,6 +629,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
@@ -673,6 +681,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_FetchesStickyToNormal(t *testing.T) {
@@ -747,6 +756,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	require.Equal(t, data1, userData)
 	require.Eventually(t, func() bool { return firstPartition.Load() == secondPartition.Load() }, 5*time.Second, time.Millisecond)
 	m.Stop()
+	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
 
 func TestUserData_UpdateOnNonRootFails(t *testing.T) {

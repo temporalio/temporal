@@ -151,8 +151,6 @@ func (m *userDataManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 
 func (m *userDataManagerImpl) Stop() {
 	m.goroGroup.Cancel()
-	// ensure fetch/loadUserData are not running so we can safely call setUserDataState
-	m.goroGroup.Wait()
 	// Set user data state on stop to wake up anyone blocked on the user data changed channel.
 	m.setUserDataState(userDataClosed, nil)
 }
@@ -191,8 +189,6 @@ func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.Version
 // userDataState controls whether GetUserData return an error, and which error.
 // futureError is the error to set on the ready future. If this is non-nil, the task queue will
 // be unloaded.
-// setUserDataState must not be called concurrently since the Ready/Set sequence is potentially
-// racy otherwise.
 func (m *userDataManagerImpl) setUserDataState(userDataState userDataState, futureError error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -203,9 +199,7 @@ func (m *userDataManagerImpl) setUserDataState(userDataState userDataState, futu
 		m.userDataChanged = make(chan struct{})
 	}
 
-	if !m.userDataReady.Ready() {
-		m.userDataReady.Set(struct{}{}, futureError)
-	}
+	_ = m.userDataReady.SetIfNotReady(struct{}{}, futureError)
 }
 
 func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
@@ -220,7 +214,7 @@ func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		if err = m.refreshUserDataFromDB(ctx); errors.Is(err, errUserDataVersionMismatch) {
-			go m.onFatalErr(unloadCauseConflict)
+			m.onFatalErr(unloadCauseConflict)
 			return err
 		}
 		util.InterruptibleSleep(ctx, backoff.Jitter(m.config.GetUserDataRefresh(), 0.2))
