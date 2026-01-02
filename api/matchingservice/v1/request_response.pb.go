@@ -45,9 +45,10 @@ type PollWorkflowTaskQueueRequest struct {
 	PollerId        string                           `protobuf:"bytes,2,opt,name=poller_id,json=pollerId,proto3" json:"poller_id,omitempty"`
 	PollRequest     *v1.PollWorkflowTaskQueueRequest `protobuf:"bytes,3,opt,name=poll_request,json=pollRequest,proto3" json:"poll_request,omitempty"`
 	ForwardedSource string                           `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
-	Conditions      *PollConditions                  `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Extra conditions on this poll request. Only supported with new matcher.
+	Conditions    *PollConditions `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PollWorkflowTaskQueueRequest) Reset() {
@@ -320,9 +321,10 @@ type PollActivityTaskQueueRequest struct {
 	PollerId        string                           `protobuf:"bytes,2,opt,name=poller_id,json=pollerId,proto3" json:"poller_id,omitempty"`
 	PollRequest     *v1.PollActivityTaskQueueRequest `protobuf:"bytes,3,opt,name=poll_request,json=pollRequest,proto3" json:"poll_request,omitempty"`
 	ForwardedSource string                           `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
-	Conditions      *PollConditions                  `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Extra conditions on this poll request. Only supported with new matcher.
+	Conditions    *PollConditions `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PollActivityTaskQueueRequest) Reset() {
@@ -3596,7 +3598,7 @@ type PollNexusTaskQueueRequest struct {
 	Request *v1.PollNexusTaskQueueRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	// Non-empty if this poll was forwarded from a child partition.
 	ForwardedSource string `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
-	// Extra conditions on this poll request.
+	// Extra conditions on this poll request. Only supported with new matcher.
 	Conditions    *PollConditions `protobuf:"bytes,5,opt,name=conditions,proto3" json:"conditions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4872,10 +4874,12 @@ func (x *CheckTaskQueueVersionMembershipResponse) GetIsMember() bool {
 	return false
 }
 
+// PollConditions are extra conditions to set on the poll. Only supported with new matcher.
 type PollConditions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// If set (non-zero), this poll will not match a task with lower priority than this value.
-	// Note that "min" priority is "max" numeric value.
+	// Note that "min" priority is "max" numeric value, e.g. "min_priority: 3" means to match
+	// tasks with priority 1, 2, or 3.
 	MinPriority int32 `protobuf:"varint,1,opt,name=min_priority,json=minPriority,proto3" json:"min_priority,omitempty"`
 	// If true, don't block waiting for a task, just return a task immediately or an empty
 	// response. This is most useful combined with min_priority, to poll for task at a specific
