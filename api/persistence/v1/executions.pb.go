@@ -1111,9 +1111,11 @@ func (*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType) isWorkflowExecutionIn
 type ExecutionStats struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	HistorySize int64                  `protobuf:"varint,1,opt,name=history_size,json=historySize,proto3" json:"history_size,omitempty"`
-	// Total size in bytes of all external payloads referenced in the workflow history.
+	// Total size in bytes of all external payloads referenced in the entire history tree of the execution, not just the current branch.
+	// This number doesn't include payloads in buffered events.
 	ExternalPayloadSize int64 `protobuf:"varint,2,opt,name=external_payload_size,json=externalPayloadSize,proto3" json:"external_payload_size,omitempty"`
-	// Total count of external payloads referenced in the workflow history.
+	// Total count of external payloads referenced in the entire history tree of the execution, not just the current branch.
+	// This number doesn't include payloads in buffered events.
 	ExternalPayloadCount int64 `protobuf:"varint,3,opt,name=external_payload_count,json=externalPayloadCount,proto3" json:"external_payload_count,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
