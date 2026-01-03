@@ -102,7 +102,7 @@ type NewExecutionResult[O any] struct {
 
 // NewEngineExecutionResult is a type alias for the result type returned by the Engine implementation.
 // This avoids repeating [struct{}] everywhere in the engine implementation.
-type NewEngineExecutionResult = NewExecutionResult[struct{}]
+type EngineNewExecutionResult = NewExecutionResult[struct{}]
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
