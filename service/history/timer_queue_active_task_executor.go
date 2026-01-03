@@ -288,6 +288,18 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		shouldScheduleWorkflowTask: false,
 	}
 
+	// PROTOTYPE: blindly ignore heartbeat timeouts - we're only measuring the persistence overhead of heartbeat timers.
+	if timerSequenceID.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+		t.logger.Info("Prototype: Ignoring heartbeat timeout",
+			tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
+			tag.ActivityID(ai.ActivityId),
+			tag.Attempt(ai.Attempt),
+		)
+		return result, nil
+	}
+
 	if timerSequenceID.Attempt < ai.Attempt {
 		//  The RetryActivity call below could update activity attempt, in which case we do not want to apply a timeout for the previous attempt.
 		return result, nil
