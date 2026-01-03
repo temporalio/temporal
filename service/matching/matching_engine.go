@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"strings"
 	"sync"
@@ -60,6 +59,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -163,6 +163,8 @@ type (
 		reachabilityCache reachabilityCache
 		// Rate limiter to limit the task dispatch
 		rateLimiter TaskDispatchRateLimiter
+		// Limiter for unloads on config change
+		configChangeRateLimit quotas.RateLimiter
 	}
 )
 
@@ -254,6 +256,10 @@ func NewEngine(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
+		configChangeRateLimit: quotas.NewDynamicRateLimiter(
+			quotas.NewRateBurst(quotas.RateFn(config.ConfigChangeRateLimit), quotas.NoBurst),
+			time.Minute,
+		),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -290,7 +296,12 @@ func (e *matchingEngineImpl) Stop() {
 
 	e.nexusEndpointClient.notifyOwnershipChanged(false)
 
-	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
+	e.partitionsLock.Lock()
+	partitions := expmaps.Values(e.partitions)
+	clear(e.partitions)
+	e.partitionsLock.Unlock()
+
+	for _, l := range partitions {
 		l.Stop(unloadCauseShuttingDown)
 	}
 }
@@ -2717,14 +2728,18 @@ func (e *matchingEngineImpl) pollTask(
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded
 // partitions map), then does nothing.
-// partitions map), unloadPM.Stop(...) is still called.
 func (e *matchingEngineImpl) unloadTaskQueuePartition(unloadPM taskQueuePartitionManager, unloadCause unloadCause) {
+	if unloadCause == unloadCauseConfigChange {
+		// For config change, rate-limit unloads. Note that calls to unloadTaskQueuePartition
+		// with unloadCauseConfigChange must be okay to block, i.e. they should probably be in
+		// separate goroutines.
+		_ = e.configChangeRateLimit.Wait(context.Background())
+	}
 	e.unloadTaskQueuePartitionByKey(unloadPM.Partition(), unloadPM, unloadCause)
 }
 
 // Unloads a task queue partition by id. If unloadPM is given and the loaded partition for queueID does not match
-// unloadPM, then nothing is unloaded from matching engine (but unloadPM will be stopped).
-// Returns true if it unloaded a partition and false if not.
+// unloadPM, then nothing is unloaded. Returns true if it unloaded a partition and false if not.
 func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 	partition tqid.Partition,
 	unloadPM taskQueuePartitionManager,
