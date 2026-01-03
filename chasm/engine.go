@@ -17,7 +17,7 @@ type Engine interface {
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
-	) (NewEngineExecutionResult, error)
+	) (EngineNewExecutionResult, error)
 	UpdateWithNewExecution(
 		context.Context,
 		ComponentRef,
@@ -100,7 +100,7 @@ type NewExecutionResult[O any] struct {
 	Output          O
 }
 
-// NewEngineExecutionResult is a type alias for the result type returned by the Engine implementation.
+// EngineNewExecutionResult is a type alias for the result type returned by the Engine implementation.
 // This avoids repeating [struct{}] everywhere in the engine implementation.
 type EngineNewExecutionResult = NewExecutionResult[struct{}]
 

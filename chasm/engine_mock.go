@@ -41,14 +41,14 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 }
 
 // NewExecution mocks base method.
-func (m *MockEngine) NewExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (NewEngineExecutionResult, error) {
+func (m *MockEngine) NewExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (EngineNewExecutionResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "NewExecution", varargs...)
-	ret0, _ := ret[0].(NewEngineExecutionResult)
+	ret0, _ := ret[0].(EngineNewExecutionResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
