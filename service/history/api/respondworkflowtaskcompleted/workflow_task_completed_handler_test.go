@@ -66,7 +66,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		out.ms = historyi.NewMockMutableState(gomock.NewController(t))
 		out.ms.EXPECT().VisitUpdates(gomock.Any())
 		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
-		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion())
+		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID))
 
 		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer

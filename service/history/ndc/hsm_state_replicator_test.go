@@ -104,7 +104,7 @@ func (s *hsmStateReplicatorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(cluster.TestCurrentClusterInitialFailoverVersion, s.namespaceEntry.FailoverVersion()).Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(cluster.TestCurrentClusterInitialFailoverVersion, s.namespaceEntry.FailoverVersion(tests.WorkflowID)).Return(true).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -140,7 +140,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_WorkflowNotFound() {
 		WorkflowKey: nonExistKey,
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
-				{EventId: lastEventID, Version: s.namespaceEntry.FailoverVersion()},
+				{EventId: lastEventID, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID)},
 			},
 		},
 	})
@@ -153,7 +153,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_WorkflowNotFound() {
 	s.Equal(common.EmptyEventID, retryReplicationErr.StartEventId)
 	s.Equal(common.EmptyVersion, retryReplicationErr.StartEventVersion)
 	s.Equal(lastEventID+1, retryReplicationErr.EndEventId)
-	s.Equal(s.namespaceEntry.FailoverVersion(), retryReplicationErr.EndEventVersion)
+	s.Equal(s.namespaceEntry.FailoverVersion(tests.WorkflowID), retryReplicationErr.EndEventVersion)
 }
 
 func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_LocalEventVersionLarger() {
@@ -175,7 +175,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_LocalEventVersionLarger() 
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
 				// incoming version smaller, should not sync
-				{EventId: 102, Version: s.namespaceEntry.FailoverVersion() - 100},
+				{EventId: 102, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID) - 100},
 			},
 		},
 	})
@@ -201,8 +201,8 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_IncomingEventVersionLarger
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
 				// incoming version large, should resend history
-				{EventId: 80, Version: s.namespaceEntry.FailoverVersion() - 100},
-				{EventId: 202, Version: s.namespaceEntry.FailoverVersion() + 100},
+				{EventId: 80, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID) - 100},
+				{EventId: 202, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100},
 			},
 		},
 	})
@@ -213,9 +213,9 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_IncomingEventVersionLarger
 	s.Equal(s.workflowKey.WorkflowID, retryReplicationErr.WorkflowId)
 	s.Equal(s.workflowKey.RunID, retryReplicationErr.RunId)
 	s.Equal(int64(50), retryReplicationErr.StartEventId) // LCA
-	s.Equal(s.namespaceEntry.FailoverVersion()-100, retryReplicationErr.StartEventVersion)
+	s.Equal(s.namespaceEntry.FailoverVersion(tests.WorkflowID)-100, retryReplicationErr.StartEventVersion)
 	s.Equal(int64(203), retryReplicationErr.EndEventId)
-	s.Equal(s.namespaceEntry.FailoverVersion()+100, retryReplicationErr.EndEventVersion)
+	s.Equal(s.namespaceEntry.FailoverVersion(tests.WorkflowID)+100, retryReplicationErr.EndEventVersion)
 }
 
 func (s *hsmStateReplicatorSuite) TestSyncHSM_LocalEventVersionSuperSet() {
@@ -241,7 +241,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_LocalEventVersionSuperSet() {
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
 				// incoming is a subset of local version history, should sync
-				{EventId: 50, Version: s.namespaceEntry.FailoverVersion() - 100},
+				{EventId: 50, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID) - 100},
 			},
 		},
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -253,10 +253,10 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_LocalEventVersionSuperSet() {
 							// and state should be synced
 							Data: []byte(hsmtest.State3),
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
 							},
 							TransitionCount: 50,
 						},
@@ -287,9 +287,9 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingEventVersionSuperSet() {
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
 				// incoming version large, should resend history
-				{EventId: 50, Version: s.namespaceEntry.FailoverVersion() - 100},
-				{EventId: 202, Version: s.namespaceEntry.FailoverVersion()},
-				{EventId: 302, Version: s.namespaceEntry.FailoverVersion() + 100},
+				{EventId: 50, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID) - 100},
+				{EventId: 202, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID)},
+				{EventId: 302, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100},
 			},
 		},
 	})
@@ -300,9 +300,9 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingEventVersionSuperSet() {
 	s.Equal(s.workflowKey.WorkflowID, retryReplicationErr.WorkflowId)
 	s.Equal(s.workflowKey.RunID, retryReplicationErr.RunId)
 	s.Equal(int64(102), retryReplicationErr.StartEventId)
-	s.Equal(s.namespaceEntry.FailoverVersion(), retryReplicationErr.StartEventVersion)
+	s.Equal(s.namespaceEntry.FailoverVersion(tests.WorkflowID), retryReplicationErr.StartEventVersion)
 	s.Equal(int64(303), retryReplicationErr.EndEventId)
-	s.Equal(s.namespaceEntry.FailoverVersion()+100, retryReplicationErr.EndEventVersion)
+	s.Equal(s.namespaceEntry.FailoverVersion(tests.WorkflowID)+100, retryReplicationErr.EndEventVersion)
 }
 
 func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateStale() {
@@ -329,10 +329,10 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateStale() {
 						"child1": {
 							Data: []byte(hsmtest.State1), // stale state
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
 							},
 							TransitionCount: 50,
 						},
@@ -368,11 +368,11 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionStale() {
 						"child1": {
 							Data: []byte(hsmtest.State3), // newer state
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 								// smaller than current node last updated version
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 50,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 50,
 							},
 							TransitionCount: 50,
 						},
@@ -408,10 +408,10 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransit
 						"child1": {
 							Data: []byte(hsmtest.State3), // newer state
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
 								// smaller than current node last update transition count
 								TransitionCount: 49,
 							},
@@ -451,12 +451,12 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionNewer() {
 						"child1": {
 							Data: []byte(hsmtest.State1), // state stale
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
 								// newer than current node last update version
 								// should sync despite state is older than the current node
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 200,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 200,
 							},
 							TransitionCount: 50,
 						},
@@ -494,10 +494,10 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransit
 						"child1": {
 							Data: []byte(hsmtest.State3),
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
 								// higher transition count
 								TransitionCount: 51,
 							},
@@ -555,10 +555,10 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowOpen() 
 						"child1": {
 							Data: []byte(hsmtest.State3),
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
 							},
 							TransitionCount: 50,
 						},
@@ -604,10 +604,10 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowZombie(
 						"child1": {
 							Data: []byte(hsmtest.State3),
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
 							},
 							TransitionCount: 50,
 						},
@@ -661,10 +661,10 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 						"child1": {
 							Data: []byte(hsmtest.State3),
 							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							},
 							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
 							},
 							TransitionCount: 50,
 						},
@@ -682,7 +682,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 		initialCount     = 50
 	)
 
-	baseVersion := s.namespaceEntry.FailoverVersion()
+	baseVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
 	persistedState := s.buildWorkflowMutableState()
 
 	// Remove the state machine to simulate deletion
@@ -777,8 +777,8 @@ func (s *hsmStateReplicatorSuite) buildWorkflowMutableState() *persistencespb.Wo
 				{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: 50, Version: s.namespaceEntry.FailoverVersion() - 100},
-						{EventId: 102, Version: s.namespaceEntry.FailoverVersion()},
+						{EventId: 50, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID) - 100},
+						{EventId: 102, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID)},
 					},
 				},
 			},
@@ -789,11 +789,11 @@ func (s *hsmStateReplicatorSuite) buildWorkflowMutableState() *persistencespb.Wo
 					"child1": {
 						Data: []byte(hsmtest.State2),
 						InitialVersionedTransition: &persistencespb.VersionedTransition{
-							NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
 							TransitionCount:          10,
 						},
 						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-							NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+							NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
 							TransitionCount:          50,
 						},
 						TransitionCount: 23,
