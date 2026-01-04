@@ -19,6 +19,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -71,7 +73,6 @@ func (s *WorkerDeploymentSuite) SetupSuite() {
 
 		dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Key(): 1000,
 		dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Key():  60 * time.Second,
-		dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Key():      1000,
 	}))
 }
 
@@ -2002,8 +2003,8 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	// start 10 different pollers each polling on a different task queue but belonging to the same version
 	tv := testvars.New(s)
 
-	versions := 10
-	for i := 0; i < versions; i++ {
+	tqs := 10
+	for i := 0; i < tqs; i++ {
 		go s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
 	}
 
@@ -2011,7 +2012,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	s.setCurrentVersion(ctx, tv, false, "")
 
 	// verify that the task queues, eventually, have this version as the current version in their versioning info
-	for i := 0; i < versions; i++ {
+	for i := 0; i < tqs; i++ {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
 	}
 }
@@ -2115,6 +2116,166 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion_NoU
 	})
 	s.NoError(err)
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+}
+
+// TODO: this test reliably produces a rare error seemingly about speculative tasks. use it for debugging the error
+// ex: "history_events: premature end of stream, expectedLastEventID=13 but no more events after eventID=11"
+// (error does not seems to be related to versioning)
+func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutingUpdates_RevisionConsistency() {
+	s.T().Skip("Skipping until we can figure out why this test is flaky in sqlite")
+
+	// This test should work for InitialVersion, but it takes much longer (4m vs 1m15s vs 55s, in order, for 50 TQs).
+	// Also skipping for AsyncSetCurrentAndRampingVersion, to reduce flake chance.
+	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
+
+	// Start pollers on many task queues across 3 versions
+	numTaskQueues := 50
+	numVersions := 3
+	syncBatchSize := 2 // reducing batch size to cause more delay
+	numOperations := 20
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, numTaskQueues)
+	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, syncBatchSize)
+	s.InjectHook(testhooks.MatchingDeploymentRegisterErrorBackoff, time.Millisecond*500)
+
+	// Need to increase max pending activities because it is set only to 10 for functional tests. it's 2000 by default.
+	s.OverrideDynamicConfig(dynamicconfig.NumPendingActivitiesLimitError, numOperations)
+
+	tv := testvars.New(s)
+	dn := tv.DeploymentVersion().GetDeploymentName()
+	start := time.Now()
+
+	// For each version send pollers regularly until all TQs are registered from DescribeVersion POV
+	for i := 0; i < numVersions; i++ {
+		pollCtx, cancelPollers := context.WithTimeout(context.Background(), 5*time.Minute)
+
+		sendPollers := func() {
+			for j := 0; j < numTaskQueues; j++ {
+				go s.pollFromDeployment(pollCtx, tv.WithBuildIDNumber(i).WithTaskQueueNumber(j))
+			}
+		}
+
+		sendPollers()
+
+		// Send new pollers regularly, this is needed because the registration might take more time than initial pollers
+		t := time.NewTicker(10 * time.Second)
+		go func() {
+			for {
+				select {
+				case <-t.C:
+					sendPollers()
+				case <-pollCtx.Done():
+					return
+				}
+			}
+		}()
+
+		// Wait for all task queues to be added to versions
+
+		// Wait for the versions to be created
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(pollCtx, &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: dn,
+			})
+			a.NoError(err)
+			a.NotNil(resp.GetWorkerDeploymentInfo())
+			a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), i+1)
+		}, 3*time.Minute, 500*time.Millisecond)
+
+		fmt.Printf(">>> Time taken version %d added: %v\n", i, time.Since(start))
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(pollCtx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace:         s.Namespace().String(),
+				DeploymentVersion: tv.WithBuildIDNumber(i).ExternalDeploymentVersion(),
+			})
+			a.NoError(err)
+			a.Len(resp.GetVersionTaskQueues(), numTaskQueues)
+		}, 5*time.Minute, 1000*time.Millisecond)
+
+		t.Stop()
+		cancelPollers()
+
+		fmt.Printf(">>> Time taken registration for version %d: %v\n", i, time.Since(start))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// Rapidly perform 20 setCurrent and setRamping operations, each targeting one of the 3 versions
+	for i := 0; i < numOperations; i++ {
+		// Alternate between setCurrent and setRamping
+		targetVersion := i % numVersions
+		versionTV := tv.WithBuildIDNumber(targetVersion)
+		for {
+			var err error
+			if i%2 == 0 {
+				// setCurrent operation
+				_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+					Namespace:               s.Namespace().String(),
+					DeploymentName:          dn,
+					BuildId:                 versionTV.DeploymentVersion().GetBuildId(),
+					IgnoreMissingTaskQueues: true,
+					Identity:                tv.ClientIdentity(),
+				})
+			} else {
+				// setRamping operation
+				_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+					Namespace:               s.Namespace().String(),
+					DeploymentName:          dn,
+					BuildId:                 versionTV.DeploymentVersion().GetBuildId(),
+					IgnoreMissingTaskQueues: true,
+					Identity:                tv.ClientIdentity(),
+					Percentage:              float32(50 + (i % 50)),
+				})
+			}
+			if common.IsResourceExhausted(err) {
+				fmt.Printf("ResourceExhausted error, retrying operation %d\n", i)
+				time.Sleep(100 * time.Millisecond) //nolint:forbidigo // throttling requests
+				continue
+			}
+			s.NoError(err)
+			break
+		}
+		fmt.Printf(">>> Time taken operation %d: %v\n", i, time.Since(start))
+	}
+
+	fmt.Printf(">>> Time taken operations: %v\n", time.Since(start))
+
+	// Wait for the routing update status to be completed
+	var latestRoutingConfig *deploymentpb.RoutingConfig
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: dn,
+		})
+		a.NoError(err)
+		a.NotNil(resp.GetWorkerDeploymentInfo())
+		a.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
+		latestRoutingConfig = resp.GetWorkerDeploymentInfo().GetRoutingConfig()
+	}, 120*time.Second, 1*time.Second)
+
+	fmt.Printf(">>> Time taken propagation: %v\n", time.Since(start))
+
+	// Verify that the routing info revision number in each of the task queues matches the latest revision number
+	// Note: The public API doesn't expose revision numbers at the task queue level, so we verify that the
+	// versioning info has been propagated correctly by checking the current/ramping versions
+	for j := 0; j < numTaskQueues; j++ {
+		tqTV := tv.WithTaskQueueNumber(j)
+		tqUD, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueueType: tqTypeWf,
+			TaskQueue:     tqTV.TaskQueue().GetName(),
+		})
+		s.NoError(err)
+		s.Len(tqUD.GetUserData().GetData().GetPerType(), 1)
+		s.Len(tqUD.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData().GetDeploymentsData(), 1)
+		s.ProtoEqual(latestRoutingConfig, tqUD.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData().GetDeploymentsData()[dn].GetRoutingConfig())
+	}
 }
 
 func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_ReadableMessage() {
@@ -3535,4 +3696,16 @@ func (s *WorkerDeploymentSuite) Name() string {
 		farm.Fingerprint32([]byte(fullName)),
 	)
 	return strings.Replace(short, ".", "|", -1)
+}
+
+func (s *WorkerDeploymentSuite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.workflowVersion < version {
+		s.T().Skipf("test supports version %v and newer", version)
+	}
+}
+
+func (s *WorkerDeploymentSuite) skipFromVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.workflowVersion >= version {
+		s.T().Skipf("test supports version older than %v", version)
+	}
 }

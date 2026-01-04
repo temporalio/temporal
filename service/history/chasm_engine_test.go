@@ -158,7 +158,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 		},
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -173,8 +173,9 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
@@ -199,7 +200,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		),
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -212,8 +213,9 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       tv.RunID(),
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
@@ -250,7 +252,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 		},
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -266,8 +268,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
@@ -304,7 +307,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 		},
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -320,8 +323,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
@@ -346,7 +350,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 		),
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -356,6 +360,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 		),
 	)
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
@@ -380,7 +385,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 		),
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -390,6 +395,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 		),
 	)
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
@@ -416,7 +422,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -432,8 +438,9 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       tv.RunID(),
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
@@ -460,7 +467,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -470,6 +477,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 		),
 	)
 	s.ErrorAs(err, new(*serviceerror.Unimplemented))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) newTestExecutionFn(

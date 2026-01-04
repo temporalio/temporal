@@ -295,7 +295,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 		SeriesName: deploymentName,
 		BuildId:    currentBuildID,
 	}, true)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	// Make this a pinned task so that it goes to the current versioned queue.
 	err = currentQ.SpoolTask(&persistencespb.TaskInfo{

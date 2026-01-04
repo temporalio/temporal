@@ -185,12 +185,10 @@ func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.Version
 	}
 }
 
-// Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
-// userDataState controls whether GetUserData return an error, and which.
+// setUserDataState sets user data enabled/disabled and marks the future ready (if it's not ready yet).
+// userDataState controls whether GetUserData return an error, and which error.
 // futureError is the error to set on the ready future. If this is non-nil, the task queue will
 // be unloaded.
-// Note that this must only be called from a single goroutine since the Ready/Set sequence is
-// potentially racy otherwise.
 func (m *userDataManagerImpl) setUserDataState(userDataState userDataState, futureError error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -201,9 +199,7 @@ func (m *userDataManagerImpl) setUserDataState(userDataState userDataState, futu
 		m.userDataChanged = make(chan struct{})
 	}
 
-	if !m.userDataReady.Ready() {
-		m.userDataReady.Set(struct{}{}, futureError)
-	}
+	_ = m.userDataReady.SetIfNotReady(struct{}{}, futureError)
 }
 
 func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
@@ -219,6 +215,7 @@ func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 	for ctx.Err() == nil {
 		if err = m.refreshUserDataFromDB(ctx); errors.Is(err, errUserDataVersionMismatch) {
 			m.onFatalErr(unloadCauseConflict)
+			return err
 		}
 		util.InterruptibleSleep(ctx, backoff.Jitter(m.config.GetUserDataRefresh(), 0.2))
 	}
