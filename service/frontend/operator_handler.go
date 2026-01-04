@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/common"
 	clustermetadata "go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -212,11 +211,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		if !currentSearchAttributes.IsDefined(saName) {
 			customAttributesToAdd[saName] = saType
 		} else {
-			h.logger.Warn(
-				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(visibilityIndexNameTagName, indexName),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
-			)
+			return serviceerror.NewAlreadyExist(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
 		}
 	}
 
@@ -279,12 +274,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
 		if _, ok := aliasToFieldMap[saName]; ok {
-			h.logger.Warn(
-				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(namespaceTagName, nsName),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
-			)
-			continue
+			return serviceerror.NewAlreadyExists(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
 		}
 		// find the first available field for the given type
 		targetFieldName := ""
