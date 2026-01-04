@@ -2880,13 +2880,25 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	}
 
+	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
+	if event.GetInheritedAutoUpgradeInfo() != nil {
+		ms.SetVersioningRevisionNumber(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
+		// TODO (Shivam): Remove this once you make SetDeploymentVersion and SetVersioningBehavior methods with nil checks
+		if ms.executionInfo.VersioningInfo == nil {
+			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		}
+		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
+		// Assume AutoUpgrade behavior for the first workflow task.
+		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	}
+
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
 		ms.executionInfo.InheritedBuildId = inheritedBuildId
 		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
 			return err
 		}
 	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" ||
-		ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
 		// Passing nil for usedVersion because starting with pinned override does not add the version to used versions SA until the version is actaully used.
@@ -2911,18 +2923,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.approximateSize += ms.executionInfo.Size()
 	ms.approximateSize += ms.executionState.Size()
-
-	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
-	if event.GetInheritedAutoUpgradeInfo() != nil {
-		ms.SetVersioningRevisionNumber(event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentRevisionNumber())
-		// TODO (Shivam): Remove this once you make SetDeploymentVersion and SetVersioningBehavior methods with nil checks
-		if ms.executionInfo.VersioningInfo == nil {
-			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
-		}
-		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedAutoUpgradeInfo().GetSourceDeploymentVersion()
-		// Assume AutoUpgrade behavior for the first workflow task.
-		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	}
 
 	ms.writeEventToCache(startEvent)
 	return nil
@@ -3641,26 +3641,39 @@ func (ms *MutableStateImpl) saveUsedDeploymentVersions(usedDeploymentVersions []
 // so that we can merge the SearchAttributes map only once instead of three times.
 func (ms *MutableStateImpl) saveDeploymentSearchAttributes(deployment, version, behavior string, maxSearchAttributeValueSize int) error {
 	saPayloads := make(map[string]*commonpb.Payload)
-	deploymentPayload, err := searchattribute.EncodeValue(deployment, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	if err != nil {
-		return err
+	if deployment == "" {
+		saPayloads[sadefs.TemporalWorkerDeployment] = nil
+	} else {
+		deploymentPayload, err := searchattribute.EncodeValue(deployment, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		if err != nil {
+			return err
+		}
+		if len(deploymentPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
+			saPayloads[sadefs.TemporalWorkerDeployment] = deploymentPayload
+		}
 	}
-	if len(deploymentPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[sadefs.TemporalWorkerDeployment] = deploymentPayload
+	if version == "" {
+		saPayloads[sadefs.TemporalWorkerDeploymentVersion] = nil
+	} else {
+		saPayloads[sadefs.TemporalWorkerDeploymentVersion] = nil
+		versionPayload, err := searchattribute.EncodeValue(version, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		if err != nil {
+			return err
+		}
+		if len(versionPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
+			saPayloads[sadefs.TemporalWorkerDeploymentVersion] = versionPayload
+		}
 	}
-	versionPayload, err := searchattribute.EncodeValue(version, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	if err != nil {
-		return err
-	}
-	if len(versionPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[sadefs.TemporalWorkerDeploymentVersion] = versionPayload
-	}
-	behaviorPayload, err := searchattribute.EncodeValue(behavior, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	if err != nil {
-		return err
-	}
-	if len(behaviorPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
-		saPayloads[sadefs.TemporalWorkflowVersioningBehavior] = behaviorPayload
+	if behavior == "" {
+		saPayloads[sadefs.TemporalWorkflowVersioningBehavior] = nil
+	} else {
+		behaviorPayload, err := searchattribute.EncodeValue(behavior, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		if err != nil {
+			return err
+		}
+		if len(behaviorPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
+			saPayloads[sadefs.TemporalWorkflowVersioningBehavior] = behaviorPayload
+		}
 	}
 	ms.updateSearchAttributes(saPayloads)
 	return nil
@@ -8758,7 +8771,8 @@ func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 }
 
 func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
-	if override := ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); override != nil &&
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if override := versioningInfo.GetVersioningOverride(); override != nil &&
 		worker_versioning.OverrideIsPinned(override) {
 		if v := override.GetPinned().GetVersion(); v != nil {
 			return v.GetDeploymentName()
@@ -8770,6 +8784,9 @@ func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.30
 		return override.GetDeployment().GetSeriesName()
+	}
+	if v := versioningInfo.GetDeploymentVersion(); v != nil {
+		return v.GetDeploymentName()
 	}
 	return ms.GetExecutionInfo().GetWorkerDeploymentName()
 }

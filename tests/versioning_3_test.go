@@ -1307,7 +1307,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool
 				return respondCompleteWorkflow(tv2, vbUnpinned), nil
 			})
 		s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnpinned, tv2.Deployment(), nil, nil)
-		s.verifyVersioningSAs(tv1, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1, tv2)
+		s.verifyVersioningSAs(tv2, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1, tv2)
 	}
 }
 
@@ -2173,7 +2173,7 @@ func (s *Versioning3Suite) TestUnpinnedCaN() {
 	s.testCan(false, vbUnpinned, false)
 }
 
-func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBehavior, expectInherit bool) {
+func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBehavior, expectPinnedInherit bool) {
 	// CaN inherits version if pinned and if new task queue is in pinned version, goes to current version if unpinned.
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
@@ -2203,7 +2203,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 1:
 			s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
-			s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv1)
+			s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 			return "v1", nil
 		}
 		s.FailNow("workflow should not get to this point")
@@ -2214,10 +2214,10 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 		if behavior == vbUnpinned && s.deploymentWorkflowVersion >= workerdeployment.AsyncSetCurrentAndRamping {
 			// Unpinned CaN should inherit parent deployment version and behaviour
 			s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
-			s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv1)
+			s.verifyVersioningSAs(tv1, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 		} else {
 			s.verifyWorkflowVersioning(s.Assertions, tv2, vbUnspecified, nil, nil, tv2.DeploymentVersionTransition())
-			s.verifyVersioningSAs(tv2, vbUnspecified, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv2)
+			s.verifyVersioningSAs(tv2, vbUnspecified, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 		}
 		return "v2", nil
 	}
@@ -2228,7 +2228,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	})
 	s.NoError(err)
 
-	if crossTq && expectInherit {
+	if crossTq && expectPinnedInherit {
 		w1xtq := worker.New(sdkClient, canxTq, worker.Options{
 			DeploymentOptions: worker.DeploymentOptions{
 				Version:                   tv1.SDKDeploymentVersion(),
@@ -2300,10 +2300,12 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
-	if expectInherit {
+	if expectPinnedInherit {
 		s.Equal("v1", out)
+		s.verifyVersioningSAs(tv2, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1)
 	} else {
 		s.Equal("v2", out)
+		s.verifyVersioningSAs(tv2, behavior, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv2)
 	}
 }
 
@@ -3657,7 +3659,8 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s' AND ExecutionStatus = '%s'",
 				tv.WorkflowID(), tv.DeploymentSeries(), tv.DeploymentVersionStringV32(), behavior.String(), executionStatus)
 		} else {
-			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeploymentVersion= '' AND TemporalWorkflowVersioningBehavior = '' AND ExecutionStatus = '%s'",
+			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeploymentVersion is null AND TemporalWorkflowVersioningBehavior is null AND ExecutionStatus = '%s'",
+				//query = fmt.Sprintf("WorkflowId = '%s'  AND ExecutionStatus = '%s'",
 				tv.WorkflowID(), executionStatus)
 		}
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
@@ -3669,19 +3672,18 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 		a.Greater(len(resp.GetExecutions()), 0)
 		if a.NotEmpty(resp.GetExecutions()) {
 			w := resp.GetExecutions()[0]
-			payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
-			a.True(ok)
-			searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-			a.NoError(err)
-			var searchAttr []string
-			if searchAttrAny != nil {
-				searchAttr = searchAttrAny.([]string)
-			}
-			if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-				a.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionStringV32()))
-			}
-			for _, b := range usedBuilds {
-				a.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(b.BuildID()))
+			if behavior == vbPinned {
+				payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
+				a.True(ok)
+				searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				a.NoError(err)
+				var searchAttr []string
+				if searchAttrAny != nil {
+					searchAttr = searchAttrAny.([]string)
+				}
+				if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+					a.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionStringV32()))
+				}
 			}
 
 			if len(usedBuilds) > 0 {
