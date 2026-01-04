@@ -736,8 +736,9 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			return err
 		}
 		var errResourceExhausted *serviceerror.ResourceExhausted
-		if !errors.As(err, &errResourceExhausted) {
+		if !errors.As(err, &errResourceExhausted) || errResourceExhausted.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS {
 			// Do not surface low level error to user
+			// Also, we don't surface resource exhausted errors that are not about deployment limits as they are caused by our workflow-based implementation.
 			c.logger.Error("error while registering version", tag.Error(err))
 			err = errDeploymentVersionNotReady
 		}
