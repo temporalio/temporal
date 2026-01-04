@@ -45,8 +45,8 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
-		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
-		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
+		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
+		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		EnableMigration                          dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -151,9 +151,9 @@ type (
 		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
 		NewMatcher                 bool
-		NewMatcherSub              func(func(bool)) (bool, func())
+		NewMatcherSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		EnableFairness             bool
-		EnableFairnessSub          func(func(bool)) (bool, func())
+		EnableFairnessSub          func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		EnableMigration            func() bool
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
@@ -359,10 +359,10 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
-		NewMatcherSub: func(cb func(bool)) (bool, func()) {
+		NewMatcherSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 			return config.NewMatcherSub(ns.String(), taskQueueName, taskType, cb)
 		},
-		EnableFairnessSub: func(cb func(bool)) (bool, func()) {
+		EnableFairnessSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 			return config.EnableFairnessSub(ns.String(), taskQueueName, taskType, cb)
 		},
 		EnableMigration: func() bool {
