@@ -161,4 +161,8 @@ service AdminService {
     rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {}
 
     rpc ForceUnloadTaskQueuePartition (ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {}
+
+    // GetDynamicConfig returns all registered dynamic config settings along with their
+    // currently configured override values.
+    rpc GetDynamicConfig (GetDynamicConfigRequest) returns (GetDynamicConfigResponse) {}
 }

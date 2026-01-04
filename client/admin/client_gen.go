@@ -179,6 +179,16 @@ func (c *clientImpl) GetDLQTasks(
 	return c.client.GetDLQTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetDynamicConfig(
+	ctx context.Context,
+	request *adminservice.GetDynamicConfigRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetDynamicConfigResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetDynamicConfig(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetNamespace(
 	ctx context.Context,
 	request *adminservice.GetNamespaceRequest,

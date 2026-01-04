@@ -604,3 +604,38 @@ message ForceUnloadTaskQueuePartitionRequest {
 message ForceUnloadTaskQueuePartitionResponse {
   bool was_loaded = 1;
 }
+
+message GetDynamicConfigRequest {
+  // Optional filter to return only settings whose key starts with this prefix.
+  string key_filter = 1;
+}
+
+message GetDynamicConfigResponse {
+  repeated DynamicConfigEntry entries = 1;
+}
+
+message DynamicConfigEntry {
+  // The key name of the setting.
+  string key = 1;
+  // Documentation for this setting.
+  string description = 2;
+  // The precedence level (Global, Namespace, TaskQueue, etc.).
+  string precedence = 3;
+  // The default value as a string representation. Empty for settings with constrained defaults.
+  string default_value = 4;
+  // Currently configured override values from the dynamic config source.
+  repeated DynamicConfigValue configured_values = 5;
+}
+
+message DynamicConfigValue {
+  // Constraint fields - only populated fields are used for matching.
+  string namespace = 1;
+  string namespace_id = 2;
+  string task_queue_name = 3;
+  temporal.api.enums.v1.TaskQueueType task_queue_type = 4;
+  int32 shard_id = 5;
+  temporal.server.api.enums.v1.TaskType task_type = 6;
+  string destination = 7;
+  // The configured value as a string representation.
+  string value = 8;
+}

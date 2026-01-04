@@ -34,6 +34,11 @@ type (
 		Key() Key
 		Precedence() Precedence
 		Validate(v any) error
+		// Description returns the documentation string for this setting.
+		Description() string
+		// DefaultValue returns the default value for this setting, or nil if this setting
+		// has constrained defaults (multiple defaults based on constraints).
+		DefaultValue() any
 
 		// for internal use:
 		dispatchUpdate(*Collection, any, []ConstrainedValue)

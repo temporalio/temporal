@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -107,6 +108,7 @@ type (
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
+		dynamicConfigCollection    *dynamicconfig.Collection
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -142,6 +144,7 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
+		DynamicConfigCollection             *dynamicconfig.Collection
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -226,7 +229,8 @@ func NewAdminHandler(
 		historyHealthChecker: historyHealthChecker,
 		taskCategoryRegistry: args.CategoryRegistry,
 		matchingClient:       args.matchingClient,
-		chasmRegistry:        args.ChasmRegistry,
+		chasmRegistry:           args.ChasmRegistry,
+		dynamicConfigCollection: args.DynamicConfigCollection,
 	}
 }
 
@@ -2269,4 +2273,82 @@ func convertFailoverHistoryToReplicationProto(
 	}
 
 	return replicationProto
+}
+
+// GetDynamicConfig returns all registered dynamic config settings along with their
+// currently configured override values.
+func (adh *AdminHandler) GetDynamicConfig(
+	ctx context.Context,
+	request *adminservice.GetDynamicConfigRequest,
+) (*adminservice.GetDynamicConfigResponse, error) {
+	defer log.CapturePanic(adh.logger, &serviceerror.NewInternal("").Message)
+
+	settings := dynamicconfig.ListSettings()
+	entries := make([]*adminservice.DynamicConfigEntry, 0, len(settings))
+
+	for _, s := range settings {
+		keyStr := s.Key().String()
+
+		// Apply key filter if provided
+		if request.GetKeyFilter() != "" && !strings.HasPrefix(keyStr, request.GetKeyFilter()) {
+			continue
+		}
+
+		entry := &adminservice.DynamicConfigEntry{
+			Key:         keyStr,
+			Description: s.Description(),
+			Precedence:  precedenceToString(s.Precedence()),
+		}
+
+		// Default value - only for non-constrained settings
+		if def := s.DefaultValue(); def != nil {
+			entry.DefaultValue = fmt.Sprintf("%v", def)
+		}
+
+		// Get configured overrides from collection
+		if adh.dynamicConfigCollection != nil {
+			for _, cv := range adh.dynamicConfigCollection.GetConfiguredValues(s.Key()) {
+				entry.ConfiguredValues = append(entry.ConfiguredValues,
+					constrainedValueToProto(cv))
+			}
+		}
+
+		entries = append(entries, entry)
+	}
+
+	return &adminservice.GetDynamicConfigResponse{Entries: entries}, nil
+}
+
+func precedenceToString(p dynamicconfig.Precedence) string {
+	switch p {
+	case dynamicconfig.PrecedenceGlobal:
+		return "Global"
+	case dynamicconfig.PrecedenceNamespace:
+		return "Namespace"
+	case dynamicconfig.PrecedenceNamespaceID:
+		return "NamespaceID"
+	case dynamicconfig.PrecedenceTaskQueue:
+		return "TaskQueue"
+	case dynamicconfig.PrecedenceShardID:
+		return "ShardID"
+	case dynamicconfig.PrecedenceTaskType:
+		return "TaskType"
+	case dynamicconfig.PrecedenceDestination:
+		return "Destination"
+	default:
+		return "Unknown"
+	}
+}
+
+func constrainedValueToProto(cv dynamicconfig.ConstrainedValue) *adminservice.DynamicConfigValue {
+	return &adminservice.DynamicConfigValue{
+		Namespace:     cv.Constraints.Namespace,
+		NamespaceId:   cv.Constraints.NamespaceID,
+		TaskQueueName: cv.Constraints.TaskQueueName,
+		TaskQueueType: cv.Constraints.TaskQueueType,
+		ShardId:       cv.Constraints.ShardID,
+		TaskType:      cv.Constraints.TaskType,
+		Destination:   cv.Constraints.Destination,
+		Value:         fmt.Sprintf("%v", cv.Value),
+	}
 }
