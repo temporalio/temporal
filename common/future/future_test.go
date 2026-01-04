@@ -181,3 +181,13 @@ func (s *futureSuite) TestGetWhenContextCanceled() {
 	s.NoError(err, "When .Ready(), .Get() should return the value even if the context is canceled")
 	s.Equal(s.value, value)
 }
+
+func (s *futureSuite) TestGetIfReady_Sequential() {
+	s.False(s.future.Ready())
+	_, err := s.future.GetIfReady()
+	s.Equal(err, errorFutureNotReady)
+	s.future.Set(s.value, s.err)
+	value, err := s.future.GetIfReady()
+	s.Equal(s.value, value)
+	s.Equal(s.err, err)
+}

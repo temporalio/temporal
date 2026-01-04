@@ -57,6 +57,7 @@ const (
 	MatchingService_ListWorkers_FullMethodName                            = "/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers"
 	MatchingService_UpdateTaskQueueConfig_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueConfig"
 	MatchingService_DescribeWorker_FullMethodName                         = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeWorker"
+	MatchingService_UpdateFairnessState_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateFairnessState"
 	MatchingService_CheckTaskQueueVersionMembership_FullMethodName        = "/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueVersionMembership"
 )
 
@@ -222,6 +223,20 @@ type MatchingServiceClient interface {
 	// DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
 	// Returns an error if the namespace or worker doesn't exist.
 	DescribeWorker(ctx context.Context, in *DescribeWorkerRequest, opts ...grpc.CallOption) (*DescribeWorkerResponse, error)
+	// UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
+	// priority and fairness.
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error)
 	// CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
 	CheckTaskQueueVersionMembership(ctx context.Context, in *CheckTaskQueueVersionMembershipRequest, opts ...grpc.CallOption) (*CheckTaskQueueVersionMembershipResponse, error)
 }
@@ -567,6 +582,15 @@ func (c *matchingServiceClient) DescribeWorker(ctx context.Context, in *Describe
 	return out, nil
 }
 
+func (c *matchingServiceClient) UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error) {
+	out := new(UpdateFairnessStateResponse)
+	err := c.cc.Invoke(ctx, MatchingService_UpdateFairnessState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchingServiceClient) CheckTaskQueueVersionMembership(ctx context.Context, in *CheckTaskQueueVersionMembershipRequest, opts ...grpc.CallOption) (*CheckTaskQueueVersionMembershipResponse, error) {
 	out := new(CheckTaskQueueVersionMembershipResponse)
 	err := c.cc.Invoke(ctx, MatchingService_CheckTaskQueueVersionMembership_FullMethodName, in, out, opts...)
@@ -738,6 +762,20 @@ type MatchingServiceServer interface {
 	// DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
 	// Returns an error if the namespace or worker doesn't exist.
 	DescribeWorker(context.Context, *DescribeWorkerRequest) (*DescribeWorkerResponse, error)
+	// UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
+	// priority and fairness.
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	//
+	// (-- api-linter: core::0134::request-resource-required=disabled
+	//
+	//	aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+	UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error)
 	// CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
 	CheckTaskQueueVersionMembership(context.Context, *CheckTaskQueueVersionMembershipRequest) (*CheckTaskQueueVersionMembershipResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
@@ -857,6 +895,9 @@ func (UnimplementedMatchingServiceServer) UpdateTaskQueueConfig(context.Context,
 }
 func (UnimplementedMatchingServiceServer) DescribeWorker(context.Context, *DescribeWorkerRequest) (*DescribeWorkerResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeWorker not implemented")
+}
+func (UnimplementedMatchingServiceServer) UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateFairnessState not implemented")
 }
 func (UnimplementedMatchingServiceServer) CheckTaskQueueVersionMembership(context.Context, *CheckTaskQueueVersionMembershipRequest) (*CheckTaskQueueVersionMembershipResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckTaskQueueVersionMembership not implemented")
@@ -1540,6 +1581,24 @@ func _MatchingService_DescribeWorker_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_UpdateFairnessState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateFairnessStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).UpdateFairnessState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_UpdateFairnessState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).UpdateFairnessState(ctx, req.(*UpdateFairnessStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchingService_CheckTaskQueueVersionMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckTaskQueueVersionMembershipRequest)
 	if err := dec(in); err != nil {
@@ -1712,6 +1771,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeWorker",
 			Handler:    _MatchingService_DescribeWorker_Handler,
+		},
+		{
+			MethodName: "UpdateFairnessState",
+			Handler:    _MatchingService_UpdateFairnessState_Handler,
 		},
 		{
 			MethodName: "CheckTaskQueueVersionMembership",
