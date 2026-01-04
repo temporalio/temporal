@@ -71,20 +71,6 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTaskToMatcher(task
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTaskToMatcher", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTaskToMatcher), task)
 }
 
-// AllowPollerScalingDecision mocks base method.
-func (m *MockphysicalTaskQueueManager) AllowPollerScalingDecision(now time.Time) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllowPollerScalingDecision", now)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// AllowPollerScalingDecision indicates an expected call of AllowPollerScalingDecision.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) AllowPollerScalingDecision(now any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllowPollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AllowPollerScalingDecision), now)
-}
-
 // DispatchNexusTask mocks base method.
 func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()

@@ -784,16 +784,6 @@ func (c *physicalTaskQueueManagerImpl) counterFactory() counter.Counter {
 	return counter.NewHybridCounter(c.config.FairnessCounter(), src)
 }
 
-func (c *physicalTaskQueueManagerImpl) AllowPollerScalingDecision(now time.Time) bool {
-	// Avoid spiking pollers crazy fast by limiting how frequently change decisions are issued. Be more permissive when
-	// there are more recent pollers.
-	numPollers := c.pollerHistory.history.Size()
-	if numPollers == 0 {
-		numPollers = 1
-	}
-	return c.pollerScalingRateLimiter.AllowN(now, 1e6/numPollers)
-}
-
 func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeightOverrides {
 	return c.partitionMgr.GetRateLimitManager().GetFairnessWeightOverrides()
 }
@@ -839,10 +829,12 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	} else if !c.queue.Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
 		return nil
-	} else if (stats.GetTasksAddRate() / stats.GetTasksDispatchRate()) > 1.2 {
-		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-		// since those (currently) don't get backlogged.
-		delta = 1
+	} else {
+		if (stats.GetTasksAddRate() / stats.GetTasksDispatchRate()) > 1.2 {
+			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
+			// since those (currently) don't get backlogged.
+			delta = 1
+		}
 	}
 
 	if delta == 0 {
