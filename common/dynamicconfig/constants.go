@@ -15,16 +15,6 @@ import (
 
 var (
 	// keys for dynamic config itself
-	DynamicConfigSubscriptionCallback = NewGlobalTypedSetting(
-		"dynamicconfig.subscriptionCallback",
-		subscriptionCallbackSettings{
-			MinWorkers:   10,
-			MaxWorkers:   1e9, // effectively unlimited
-			TargetDelay:  10 * time.Millisecond,
-			ShrinkFactor: 1000, // 10 seconds
-		},
-		`Settings for dynamic config subscription dispatch. Requires server restart.`,
-	)
 	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
 		"dynamicconfig.subscriptionPollInterval",
 		time.Minute,
@@ -996,13 +986,6 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"frontend.enableUpdateWorkflowExecution",
 		true,
 		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
-	)
-
-	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
-		"frontend.enableExecuteMultiOperation",
-		true,
-		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
-The API is under active development.`,
 	)
 
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(

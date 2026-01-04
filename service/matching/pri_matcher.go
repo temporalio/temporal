@@ -487,21 +487,30 @@ func (tm *priTaskMatcher) poll(
 		}
 	}()
 
-	ctxs := []context.Context{ctx, tm.tqCtx}
 	poller := &waitingPoller{
 		startTime:    start,
 		queryOnly:    queryOnly,
 		forwardCtx:   ctx,
 		pollMetadata: pollMetadata,
 	}
-	res := tm.data.EnqueuePollerAndWait(ctxs, poller)
 
-	if res.ctxErr != nil {
+	var res *matchResult
+	if pollMetadata.conditions.GetNoWait() {
+		res = tm.data.MatchPollerImmediately(poller)
+	} else {
+		ctxs := []context.Context{ctx, tm.tqCtx}
+		res = tm.data.EnqueuePollerAndWait(ctxs, poller)
+	}
+
+	if res == nil {
+		return nil, errNoTasks // only possible for MatchPollerImmediately
+	} else if res.ctxErr != nil {
 		if res.ctxErrIdx == 0 {
 			metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
 		return nil, errNoTasks
 	}
+
 	if !softassert.That(tm.logger, res.task != nil, "expected task from match") {
 		return nil, errInternalMatchError
 	}
@@ -553,4 +562,11 @@ func getInvalidTaskTag(task *internalTask) metrics.Tag {
 		return metrics.TaskExpireStageMemoryTag
 	}
 	return metrics.TaskInvalidTag
+}
+
+func (p *waitingPoller) minPriority() priorityKey {
+	if p.pollMetadata == nil || p.pollMetadata.conditions == nil {
+		return 0
+	}
+	return priorityKey(p.pollMetadata.conditions.MinPriority)
 }

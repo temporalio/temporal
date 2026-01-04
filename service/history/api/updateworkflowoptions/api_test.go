@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/locks"
@@ -31,6 +30,28 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
+
+type noopVersionMembershipCache struct{}
+
+func (noopVersionMembershipCache) Get(
+	_ string,
+	_ string,
+	_ enumspb.TaskQueueType,
+	_ string,
+	_ string,
+) (isMember bool, ok bool) {
+	return false, false
+}
+
+func (noopVersionMembershipCache) Put(
+	_ string,
+	_ string,
+	_ enumspb.TaskQueueType,
+	_ string,
+	_ string,
+	_ bool,
+) {
+}
 
 var (
 	emptyOptions            = &workflowpb.WorkflowExecutionOptions{}
@@ -242,7 +263,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.shardContext,
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
-		cache.NewSimple(&cache.SimpleOptions{}), // cache.Cache is not meant to be used in the test which is why we are passing an empty dummy cache here.
+		noopVersionMembershipCache{}, // cache not meant to be used in this test
 	)
 	s.NoError(err)
 	s.NotNil(resp)
