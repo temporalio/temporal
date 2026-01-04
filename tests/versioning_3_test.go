@@ -765,7 +765,7 @@ func (s *Versioning3Suite) TestSearchByUsedVersion() {
 				Query:     fmt.Sprintf("TemporalUsedWorkerDeploymentVersions = '%s'", tv.DeploymentVersionStringV32()),
 			})
 			s.NoError(err)
-			s.Equal(0, len(wfs.Executions))
+			s.Empty(wfs.Executions)
 			return respondCompleteWorkflow(tv, vbPinned), nil
 		})
 
@@ -782,7 +782,7 @@ func (s *Versioning3Suite) TestSearchByUsedVersion() {
 			Query:     fmt.Sprintf("TemporalUsedWorkerDeploymentVersions = '%s'", tv.DeploymentVersionStringV32()),
 		})
 		a.NoError(err)
-		a.Equal(1, len(wfs.Executions))
+		a.Len(wfs.Executions, 1)
 	}, 5*time.Second, 200*time.Millisecond)
 }
 
