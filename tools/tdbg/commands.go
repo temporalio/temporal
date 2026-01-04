@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -312,6 +313,65 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 		return nil, fmt.Errorf("unable to get Workflow Mutable State: %s", err)
 	}
 	return resp, nil
+}
+
+// AdminDescribeChasmTree describe a CHASM tree for admin
+func AdminDescribeChasmTree(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	ns, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	businessID, err := getRequiredOption(c, FlagBusinessID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: businessID,
+			RunId:      rid,
+		},
+		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
+	})
+	if err != nil {
+		return fmt.Errorf("unable to get CHASM tree mutable state: %s", err)
+	}
+
+	if resp == nil || resp.GetDatabaseMutableState() == nil {
+		return errors.New("no mutable state returned")
+	}
+
+	logger := log.NewNoopLogger()
+	registry, err := newChasmRegistry(logger)
+	if err != nil {
+		return fmt.Errorf("failed to create CHASM registry: %w", err)
+	}
+
+	chasmNodes := resp.GetDatabaseMutableState().GetChasmNodes()
+	if len(chasmNodes) == 0 {
+		fmt.Fprintln(c.App.Writer, "No CHASM nodes found") // nolint:errcheck // assuming that write will succeed.
+		return nil
+	}
+
+	decodedNodes, err := decodeChasmNodes(chasmNodes, registry)
+	if err != nil {
+		return fmt.Errorf("failed to decode CHASM nodes: %w", err)
+	}
+
+	fmt.Fprintln(c.App.Writer, "CHASM Tree Nodes:") // nolint:errcheck // assuming that write will succeed.
+	prettyPrintJSONObject(c, decodedNodes)
+
+	fmt.Fprintln(c.App.Writer, "\nExecution Info:") // nolint:errcheck // assuming that write will succeed.
+	prettyPrintJSONObject(c, resp.GetDatabaseMutableState().GetExecutionInfo())
+
+	return nil
 }
 
 // AdminDeleteWorkflow force deletes a workflow's mutable state (both concrete and current), history, and visibility

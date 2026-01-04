@@ -94,6 +94,11 @@ func (rt *RegistrableTask) registerToLibrary(
 	return fqn, rt.taskTypeID, nil
 }
 
+// GoType returns the reflect.Type of the task's Go struct.
+func (rt *RegistrableTask) GoType() reflect.Type {
+	return rt.goType
+}
+
 // fqType returns the fully qualified name of the task, which is a combination of
 // the library name and the task type. This is used to uniquely identify
 // the task in the registry.
