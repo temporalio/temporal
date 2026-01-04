@@ -593,6 +593,7 @@ func VisibilityManagerProvider(
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
 	chasmRegistry *chasm.Registry,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -615,6 +616,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 }
 

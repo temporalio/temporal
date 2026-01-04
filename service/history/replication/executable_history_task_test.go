@@ -123,7 +123,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-		EventSerializer:         s.eventSerializer,
+		Serializer:              s.eventSerializer,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  tests.NewDynamicConfig(),
 		HistoryEventsHandler:    s.mockEventHandler,

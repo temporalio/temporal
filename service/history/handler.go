@@ -1,6 +1,7 @@
 package history
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"math"
@@ -1768,9 +1769,10 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	}
 
 	// deserialize history event object
+	eventsBlob := request.GetRequest().GetEvents()
 	historyEvents, err := h.payloadSerializer.DeserializeEvents(&commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         request.GetRequest().GetEvents().GetData(),
+		EncodingType: cmp.Or(eventsBlob.GetEncodingType(), enumspb.ENCODING_TYPE_PROTO3),
+		Data:         eventsBlob.GetData(),
 	})
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2101,7 +2103,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 			engine,
 			shardContext,
 			clientClusterName,
-			serialization.NewSerializer(),
+			h.payloadSerializer,
 		),
 		clientClusterName,
 		clientShardCount,
