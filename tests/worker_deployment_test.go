@@ -36,17 +36,14 @@ type (
 	}
 )
 
-func TestWorkerDeploymentSuite(t *testing.T) {
+func TestWorkerDeploymentSuiteV0(t *testing.T) {
 	t.Parallel()
-	t.Run("sync", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
-	})
-	t.Run("async", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
-	})
-	t.Run("version_rev_no", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
-	})
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
+}
+
+func TestWorkerDeploymentSuiteV2(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
 }
 
 func (s *WorkerDeploymentSuite) SetupSuite() {

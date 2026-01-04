@@ -2993,29 +2993,81 @@ func (s *mutableStateSuite) TestupdateBuildIdsAndDeploymentSearchAttributes() {
 			s.NoError(err)
 
 			// Max 0
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 0)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), nil, 0)
 			s.NoError(err)
 			s.Equal([]string{}, s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), nil, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
 			// Add the same build ID
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), nil, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.2"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.2"), nil, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
 
 			// Limit applies
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.3"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.3"), nil, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
 		})
 	}
+}
+
+func (s *mutableStateSuite) TestUpdateUsedDeploymentVersionsSearchAttribute() {
+	deploymentVersion := func(deploymentName, buildId string) *deploymentpb.WorkerDeploymentVersion {
+		return &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildId,
+		}
+	}
+
+	// Set up initial state with a deployment version
+	dbState := s.buildWorkflowMutableState()
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// Test 1: First deployment version added
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-a", "build-1"), 1000)
+	s.NoError(err)
+	s.Equal([]string{"deployment-a:build-1"}, s.getUsedDeploymentVersionsFromMutableState())
+
+	// Test 2: Same deployment version (no change, deduplication)
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-a", "build-1"), 1000)
+	s.NoError(err)
+	s.Equal([]string{"deployment-a:build-1"}, s.getUsedDeploymentVersionsFromMutableState())
+
+	// Test 3: New deployment version added to list
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-a", "build-2"), 1000)
+	s.NoError(err)
+	s.Equal([]string{"deployment-a:build-1", "deployment-a:build-2"}, s.getUsedDeploymentVersionsFromMutableState())
+
+	// Test 4: Another deployment version added
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-b", "build-1"), 1000)
+	s.NoError(err)
+	s.Equal([]string{"deployment-a:build-1", "deployment-a:build-2", "deployment-b:build-1"}, s.getUsedDeploymentVersionsFromMutableState())
+
+	// Test 5: Size limit handling (oldest removed)
+	// Set a very small limit to trigger size constraint
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-c", "build-1"), 40)
+	s.NoError(err)
+	// Should have removed oldest entries to fit within size limit
+	versions := s.getUsedDeploymentVersionsFromMutableState()
+	s.NotEmpty(versions, "Should have at least one version")
+	// The newest one should be present
+	s.Contains(versions, "deployment-c:build-1")
+
+	// Test 6: Empty deployment version (unversioned workflows not tracked)
+	beforeVersions := s.getUsedDeploymentVersionsFromMutableState()
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, nil, 1000)
+	s.NoError(err)
+	// Should not have added any new version (unversioned is skipped)
+	s.Equal(beforeVersions, s.getUsedDeploymentVersionsFromMutableState())
 }
 
 func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
@@ -3867,6 +3919,18 @@ func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
 	buildIDs, ok := decoded.([]string)
 	s.True(ok)
 	return buildIDs
+}
+
+func (s *mutableStateSuite) getUsedDeploymentVersionsFromMutableState() []string {
+	payload, found := s.mutableState.executionInfo.SearchAttributes[sadefs.TemporalUsedWorkerDeploymentVersions]
+	if !found {
+		return []string{}
+	}
+	decoded, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	s.NoError(err)
+	usedDeploymentVersions, ok := decoded.([]string)
+	s.True(ok)
+	return usedDeploymentVersions
 }
 
 // return reset points minus a few fields that are hard to check for equality
