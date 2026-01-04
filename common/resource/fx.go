@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
@@ -92,6 +94,7 @@ var Module = fx.Options(
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
+	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
@@ -270,6 +273,18 @@ func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServ
 		common.CreateFrontendClientRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)
+}
+
+func AdminClientProvider(clientBean client.Bean, clusterMetadata cluster.Metadata) (adminservice.AdminServiceClient, error) {
+	adminRawClient, err := clientBean.GetRemoteAdminClient(clusterMetadata.GetCurrentClusterName())
+	if err != nil {
+		return nil, err
+	}
+	return admin.NewRetryableClient(
+		adminRawClient,
+		common.CreateFrontendClientRetryPolicy(),
+		common.IsServiceClientTransientError,
+	), nil
 }
 
 func RuntimeMetricsReporterProvider(
