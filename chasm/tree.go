@@ -429,7 +429,7 @@ func (n *Node) validateAccess(ctx Context) error {
 	}
 
 	// Only Component nodes need to be validated.
-	if n.serializedNode.Metadata.GetComponentAttributes() == nil {
+	if !n.isComponent() {
 		return nil
 	}
 
@@ -1610,7 +1610,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	taskOffset := int64(1)
-	validateContext := NewContext(context.Background(), n)
+	taskValidationContext := NewContext(newContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
 
 	archetypeID := n.ArchetypeID()
 
@@ -1636,13 +1636,15 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			node.serializedNode.GetMetadata().LastUpdateVersionedTransition,
 			nextVersionedTransition,
 		) == 0 && node.valueState != valueStateNeedDeserialize {
-			if err := node.closeTransactionCleanupInvalidTasks(validateContext); err != nil {
+			// TODO: If node is closed, remove all tasks for non-detached child components as well.
+			// Those tasks are invalid due to access rules.
+			if err := node.closeTransactionCleanupInvalidTasks(taskValidationContext); err != nil {
 				return err
 			}
 
 			if err := node.closeTransactionHandleNewTasks(
 				nextVersionedTransition,
-				validateContext,
+				taskValidationContext,
 				&taskOffset,
 			); err != nil {
 				return err
@@ -1710,6 +1712,7 @@ func (n *Node) deserializeComponentTask(
 }
 
 // validateTask runs taskInstance's registered validation handler.
+// This method assumes component value is already hydrated.
 func (n *Node) validateTask(
 	validateContext Context,
 	taskAttributes TaskAttributes,
@@ -1721,6 +1724,18 @@ func (n *Node) validateTask(
 			n.logger,
 			"task type for goType is not registered",
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
+	}
+
+	// TODO: visibility component should be an (implicitly) detached component.
+	// Remove this special case when detached node is implemented.
+	if registableTask.taskTypeID != visibilityTaskTypeID && n.parent != nil {
+		err := n.parent.validateAccess(validateContext)
+		if errors.Is(err, errAccessCheckFailed) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
 	}
 
 	retValues := registableTask.validateFn.Call([]reflect.Value{
@@ -2802,14 +2817,8 @@ func (n *Node) ExecutePureTask(
 	progressIntentCtx := newContextWithOperationIntent(baseCtx, OperationIntentProgress)
 	validationContext := NewContext(progressIntentCtx, n)
 
-	// Ensure this node's component value is hydrated before execution. Component
-	// will also check access rules.
-	_, err := n.Component(validationContext, ComponentRef{})
-	if err != nil {
-		// NotFound errors are expected here and we can safely skip the task execution.
-		if errors.As(err, new(*serviceerror.NotFound)) {
-			return false, nil
-		}
+	// Ensure this node's component value is hydrated before execution.
+	if err := n.prepareComponentValue(validationContext); err != nil {
 		return false, err
 	}
 
@@ -2858,8 +2867,11 @@ func (n *Node) ValidatePureTask(
 	taskAttributes TaskAttributes,
 	taskInstance any,
 ) (bool, error) {
-	validateCtx := NewContext(ctx, n)
-	return n.validateTask(validateCtx, taskAttributes, taskInstance)
+	return n.validateTask(
+		NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n),
+		taskAttributes,
+		taskInstance,
+	)
 }
 
 // ValidateSideEffectTask runs a side effect task's associated validator,
@@ -2906,7 +2918,7 @@ func (n *Node) ValidateSideEffectTask(
 	}
 
 	// Component must be hydrated before the task's validator is called.
-	validateCtx := NewContext(ctx, n)
+	validateCtx := NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
 		return false, err
 	}
@@ -2932,7 +2944,8 @@ func (n *Node) ValidateSideEffectTask(
 	}
 
 	return node.validateTask(
-		validateCtx, TaskAttributes{
+		validateCtx,
+		TaskAttributes{
 			ScheduledTime: chasmTask.GetVisibilityTime(),
 			Destination:   chasmTask.Destination,
 		},
