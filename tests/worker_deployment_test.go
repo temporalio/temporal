@@ -2122,6 +2122,8 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion_NoU
 // ex: "history_events: premature end of stream, expectedLastEventID=13 but no more events after eventID=11"
 // (error does not seems to be related to versioning)
 func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutingUpdates_RevisionConsistency() {
+	s.T().Skip("Skipping until we can figure out why this test is flaky in sqlite")
+
 	// This test should work for InitialVersion, but it takes much longer (4m vs 1m15s vs 55s, in order, for 50 TQs).
 	// Also skipping for AsyncSetCurrentAndRampingVersion, to reduce flake chance.
 	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
