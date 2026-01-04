@@ -749,6 +749,43 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	s.verifyWorkflowVersioning(s.Assertions, tv, vbUnpinned, tv.Deployment(), nil, nil)
 }
 
+func (s *Versioning3Suite) TestSearchByUsedVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// Although pinned to the version by override, the query should not return a workflow because the workflow task is not completed yet.
+			wfs, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("TemporalUsedWorkerDeploymentVersions = '%s'", tv.DeploymentVersionStringV32()),
+			})
+			s.NoError(err)
+			s.Equal(0, len(wfs.Executions))
+			return respondCompleteWorkflow(tv, vbPinned), nil
+		})
+
+	s.waitForDeploymentDataPropagation(tv, versionStatusInactive, false, tqTypeWf)
+	s.startWorkflow(tv, tv.VersioningOverridePinned(s.useV32))
+	<-wftCompleted
+
+	s.verifyVersioningSAs(tv, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		wfs, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TemporalUsedWorkerDeploymentVersions = '%s'", tv.DeploymentVersionStringV32()),
+		})
+		a.NoError(err)
+		a.Equal(1, len(wfs.Executions))
+	}, 5*time.Second, 200*time.Millisecond)
+}
+
 // drainWorkflowTaskAfterSetCurrent is a helper that sets the current deployment version,
 // drains the initial workflow task from the execution, and ensures the task is correctly
 // routed to the appropriate build.
@@ -2720,7 +2757,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 1:
 			s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), override, nil)
-			//s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+			s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 			return "v1", nil
 		}
 		s.FailNow("workflow should not get to this point")
@@ -4185,11 +4222,8 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 		if behavior != vbUnspecified {
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s' AND ExecutionStatus = '%s'",
 				tv.WorkflowID(), tv.DeploymentSeries(), tv.DeploymentVersionStringV32(), behavior.String(), executionStatus)
-			//query = fmt.Sprintf("WorkflowId = '%s'  AND ExecutionStatus = '%s'",
-			//	tv.WorkflowID(), executionStatus)
 		} else {
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeploymentVersion is null AND TemporalWorkflowVersioningBehavior is null AND ExecutionStatus = '%s'",
-				//query = fmt.Sprintf("WorkflowId = '%s'  AND ExecutionStatus = '%s'",
 				tv.WorkflowID(), executionStatus)
 		}
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
