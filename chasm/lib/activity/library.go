@@ -26,6 +26,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				StatusSearchAttribute,
 				TaskQueueSearchAttribute,
 			),
+			chasm.WithBusinessIDAlias("ActivityId"),
 		),
 	}
 }
