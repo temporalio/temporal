@@ -123,6 +123,12 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	}
 }
 
+// GetConfiguredValues returns the raw configured values for a key from the underlying client.
+// This is intended for admin/debugging purposes to inspect what overrides are configured.
+func (c *Collection) GetConfiguredValues(key Key) []ConstrainedValue {
+	return c.client.GetValue(key)
+}
+
 func (c *Collection) Start() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()

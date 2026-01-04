@@ -37,6 +37,17 @@ func queryRegistry(k Key) GenericSetting {
 	return globalRegistry.settings[k]
 }
 
+// ListSettings returns all registered settings. This is intended for admin/debugging
+// purposes such as dumping configuration or generating documentation.
+func ListSettings() []GenericSetting {
+	globalRegistry.queried.Store(true)
+	settings := make([]GenericSetting, 0, len(globalRegistry.settings))
+	for _, s := range globalRegistry.settings {
+		settings = append(settings, s)
+	}
+	return settings
+}
+
 // For testing only; do not call from regular code!
 func ResetRegistryForTest() {
 	globalRegistry.settings = nil

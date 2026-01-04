@@ -604,3 +604,34 @@ message ForceUnloadTaskQueuePartitionRequest {
 message ForceUnloadTaskQueuePartitionResponse {
   bool was_loaded = 1;
 }
+
+message GetDynamicConfigRequest {
+  // Optional filter to return only settings whose key starts with this prefix.
+  string key_filter = 1;
+}
+
+message GetDynamicConfigResponse {
+  repeated DynamicConfigEntry entries = 1;
+}
+
+message DynamicConfigEntry {
+  // The key name of the setting.
+  string key = 1;
+  // Documentation for this setting.
+  string description = 2;
+  // The precedence level (Global, Namespace, TaskQueue, etc.).
+  string precedence = 3;
+  // The default value as a string representation. Empty for settings with constrained defaults.
+  string default_value = 4;
+  // Currently configured override values from the dynamic config source.
+  repeated DynamicConfigValue configured_values = 5;
+}
+
+message DynamicConfigValue {
+  // Constraints that determine when this value applies.
+  // Keys are constraint names (e.g., "namespace", "task_queue_name", "shard_id").
+  // Values are string representations of the constraint values.
+  map<string, string> constraints = 1;
+  // The configured value as a string representation.
+  string value = 2;
+}

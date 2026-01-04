@@ -69,6 +69,12 @@ func getCommands(
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
 		},
+		{
+			Name:    "config",
+			Aliases: []string{"cfg"},
+			Usage:   "Inspect dynamic configuration settings",
+			Subcommands: newAdminConfigCommands(clientFactory),
+		},
 	}
 }
 

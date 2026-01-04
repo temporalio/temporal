@@ -666,6 +666,7 @@ func AdminHandlerProvider(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	matchingClient resource.MatchingClient,
 	chasmRegistry *chasm.Registry,
+	dc *dynamicconfig.Collection,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -695,6 +696,7 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		chasmRegistry,
+		dc,
 		taskCategoryRegistry,
 		matchingClient,
 	}
