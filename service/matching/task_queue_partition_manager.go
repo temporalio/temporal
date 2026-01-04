@@ -390,15 +390,15 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
-		task.pollerScalingDecision = pm.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, dbq)
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
 	}
 
 	return task, versionSetUsed, err
 }
 
-// getPhysicalQueueStats retrieves task queue stats for the given physical queue.
+// GetPhysicalQueueAdjustedStats retrieves task queue stats for the given physical queue.
 // Returns nil if stats cannot be retrieved or are not available.
-func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueStats(
+func (pm *taskQueuePartitionManagerImpl) GetPhysicalQueueAdjustedStats(
 	ctx context.Context,
 	physicalQueue physicalTaskQueueManager,
 ) *taskqueuepb.TaskQueueStats {
@@ -421,59 +421,6 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueueStats(
 		return nil
 	}
 	return info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
-}
-
-func (pm *taskQueuePartitionManagerImpl) MakePollerScalingDecision(ctx context.Context,
-	pollStartTime time.Time,
-	physicalQueue physicalTaskQueueManager,
-) *taskqueuepb.PollerScalingDecision {
-
-	// If a poller has waited around a while, we can always suggest a decrease.
-	pollWaitTime := pm.engine.timeSource.Since(pollStartTime)
-	if pollWaitTime >= pm.config.PollerScalingWaitTime() {
-		// Decrease if any poll matched after sitting idle for some configured period
-		return &taskqueuepb.PollerScalingDecision{
-			PollRequestDeltaSuggestion: -1,
-		}
-	}
-
-	// If the poller is not allowed to make a scaling decision, based on the rate limiter, no scaling decision is made
-	delta := int32(0)
-	now := pm.engine.timeSource.Now()
-	if !physicalQueue.AllowPollerScalingDecision(now) {
-		return nil
-	}
-
-	// Scaling decision is now made based on the overall backlog of the task queue:
-	stats := pm.getPhysicalQueueStats(ctx, physicalQueue)
-	if stats == nil {
-		return nil
-	}
-
-	// Check for backlog-based scaling (available to all partitions)
-	if stats.ApproximateBacklogCount > 0 &&
-		stats.ApproximateBacklogAge.AsDuration() > pm.config.PollerScalingBacklogAgeScaleUp() {
-		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
-		// sticky queues.
-		delta = 1
-	} else if !physicalQueue.QueueKey().Partition().IsRoot() {
-		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
-		return nil
-	} else {
-		// Rate-based scaling (root partitions only)
-		if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
-			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-			// since those (currently) don't get backlogged.
-			delta = 1
-		}
-	}
-
-	if delta == 0 {
-		return nil
-	}
-	return &taskqueuepb.PollerScalingDecision{
-		PollRequestDeltaSuggestion: delta,
-	}
 }
 
 // TODO(pri): old matcher cleanup
