@@ -2280,8 +2280,8 @@ func convertFailoverHistoryToReplicationProto(
 func (adh *AdminHandler) GetDynamicConfig(
 	ctx context.Context,
 	request *adminservice.GetDynamicConfigRequest,
-) (*adminservice.GetDynamicConfigResponse, error) {
-	defer log.CapturePanic(adh.logger, &serviceerror.NewInternal("").Message)
+) (_ *adminservice.GetDynamicConfigResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
 
 	settings := dynamicconfig.ListSettings()
 	entries := make([]*adminservice.DynamicConfigEntry, 0, len(settings))
@@ -2302,7 +2302,7 @@ func (adh *AdminHandler) GetDynamicConfig(
 
 		// Default value - only for non-constrained settings
 		if def := s.DefaultValue(); def != nil {
-			entry.DefaultValue = fmt.Sprintf("%v", def)
+			entry.DefaultValue = fmt.Sprintf("%+v", def)
 		}
 
 		// Get configured overrides from collection
@@ -2349,6 +2349,6 @@ func constrainedValueToProto(cv dynamicconfig.ConstrainedValue) *adminservice.Dy
 		ShardId:       cv.Constraints.ShardID,
 		TaskType:      cv.Constraints.TaskType,
 		Destination:   cv.Constraints.Destination,
-		Value:         fmt.Sprintf("%v", cv.Value),
+		Value:         fmt.Sprintf("%+v", cv.Value),
 	}
 }
