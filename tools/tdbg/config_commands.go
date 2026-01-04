@@ -21,8 +21,8 @@ type configEntryJSON struct {
 }
 
 type configValue struct {
-	Constraint string `json:"constraint"`
-	Value      string `json:"value"`
+	Constraints map[string]string `json:"constraints,omitempty"`
+	Value       string            `json:"value"`
 }
 
 const (
@@ -150,14 +150,11 @@ func printJSONConfig(c *cli.Context, entries []*adminservice.DynamicConfigEntry)
 			Values:      make([]configValue, 0),
 		}
 		for _, cv := range entry.GetConfiguredValues() {
-			constraint := formatConstraints(cv)
-			if constraint == "" {
-				constraint = "global"
+			v := configValue{
+				Constraints: cv.GetConstraints(),
+				Value:       cv.GetValue(),
 			}
-			e.Values = append(e.Values, configValue{
-				Constraint: constraint,
-				Value:      cv.GetValue(),
-			})
+			e.Values = append(e.Values, v)
 		}
 		result = append(result, e)
 	}
@@ -213,29 +210,15 @@ func printConfigEntry(c *cli.Context, entry *adminservice.DynamicConfigEntry) {
 }
 
 func formatConstraints(cv *adminservice.DynamicConfigValue) string {
+	constraints := cv.GetConstraints()
+	if len(constraints) == 0 {
+		return ""
+	}
+
 	var parts []string
-
-	if cv.GetNamespace() != "" {
-		parts = append(parts, fmt.Sprintf("namespace=%s", cv.GetNamespace()))
+	for k, v := range constraints {
+		parts = append(parts, fmt.Sprintf("%s:%s", k, v))
 	}
-	if cv.GetNamespaceId() != "" {
-		parts = append(parts, fmt.Sprintf("namespaceID=%s", cv.GetNamespaceId()))
-	}
-	if cv.GetTaskQueueName() != "" {
-		parts = append(parts, fmt.Sprintf("taskQueue=%s", cv.GetTaskQueueName()))
-	}
-	if cv.GetTaskQueueType() != 0 {
-		parts = append(parts, fmt.Sprintf("taskQueueType=%s", cv.GetTaskQueueType().String()))
-	}
-	if cv.GetShardId() != 0 {
-		parts = append(parts, fmt.Sprintf("shardID=%d", cv.GetShardId()))
-	}
-	if cv.GetTaskType() != 0 {
-		parts = append(parts, fmt.Sprintf("taskType=%s", cv.GetTaskType().String()))
-	}
-	if cv.GetDestination() != "" {
-		parts = append(parts, fmt.Sprintf("destination=%s", cv.GetDestination()))
-	}
-
-	return strings.Join(parts, ", ")
+	sort.Strings(parts)
+	return "{" + strings.Join(parts, ", ") + "}"
 }

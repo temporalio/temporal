@@ -2341,14 +2341,30 @@ func precedenceToString(p dynamicconfig.Precedence) string {
 }
 
 func constrainedValueToProto(cv dynamicconfig.ConstrainedValue) *adminservice.DynamicConfigValue {
+	constraints := make(map[string]string)
+	if cv.Constraints.Namespace != "" {
+		constraints["namespace"] = cv.Constraints.Namespace
+	}
+	if cv.Constraints.NamespaceID != "" {
+		constraints["namespace_id"] = cv.Constraints.NamespaceID
+	}
+	if cv.Constraints.TaskQueueName != "" {
+		constraints["task_queue_name"] = cv.Constraints.TaskQueueName
+	}
+	if cv.Constraints.TaskQueueType != 0 {
+		constraints["task_queue_type"] = cv.Constraints.TaskQueueType.String()
+	}
+	if cv.Constraints.ShardID != 0 {
+		constraints["shard_id"] = fmt.Sprintf("%d", cv.Constraints.ShardID)
+	}
+	if cv.Constraints.TaskType != 0 {
+		constraints["task_type"] = cv.Constraints.TaskType.String()
+	}
+	if cv.Constraints.Destination != "" {
+		constraints["destination"] = cv.Constraints.Destination
+	}
 	return &adminservice.DynamicConfigValue{
-		Namespace:     cv.Constraints.Namespace,
-		NamespaceId:   cv.Constraints.NamespaceID,
-		TaskQueueName: cv.Constraints.TaskQueueName,
-		TaskQueueType: cv.Constraints.TaskQueueType,
-		ShardId:       cv.Constraints.ShardID,
-		TaskType:      cv.Constraints.TaskType,
-		Destination:   cv.Constraints.Destination,
-		Value:         fmt.Sprintf("%+v", cv.Value),
+		Constraints: constraints,
+		Value:       fmt.Sprintf("%+v", cv.Value),
 	}
 }

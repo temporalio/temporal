@@ -628,14 +628,10 @@ message DynamicConfigEntry {
 }
 
 message DynamicConfigValue {
-  // Constraint fields - only populated fields are used for matching.
-  string namespace = 1;
-  string namespace_id = 2;
-  string task_queue_name = 3;
-  temporal.api.enums.v1.TaskQueueType task_queue_type = 4;
-  int32 shard_id = 5;
-  temporal.server.api.enums.v1.TaskType task_type = 6;
-  string destination = 7;
+  // Constraints that determine when this value applies.
+  // Keys are constraint names (e.g., "namespace", "task_queue_name", "shard_id").
+  // Values are string representations of the constraint values.
+  map<string, string> constraints = 1;
   // The configured value as a string representation.
-  string value = 8;
+  string value = 2;
 }
