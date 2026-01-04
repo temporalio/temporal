@@ -37,6 +37,15 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startTime)
 	req := request.StartRequest
+
+	// Versioning override might be set on the workflow service request if a user passes it to
+	// StartWorkflow options, or it might be set on the history service request if a workflow is
+	// continuing-as-new and inheriting a Pinned override. Use whichever of the two is non-nil.
+	nonNilVersioningOverride := req.GetVersioningOverride() // From user.
+	if nonNilVersioningOverride == nil {
+		nonNilVersioningOverride = request.GetVersioningOverride() // From server during continue-as-new.
+	}
+
 	attributes := &historypb.WorkflowExecutionStartedEventAttributes{
 		WorkflowType:                    req.WorkflowType,
 		TaskQueue:                       req.TaskQueue,
@@ -65,7 +74,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		CompletionCallbacks:             req.CompletionCallbacks,
 		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 		InheritedBuildId:                request.InheritedBuildId,
-		VersioningOverride:              worker_versioning.ConvertOverrideToV32(request.VersioningOverride),
+		VersioningOverride:              worker_versioning.ConvertOverrideToV32(nonNilVersioningOverride),
 		Priority:                        req.GetPriority(),
 		InheritedPinnedVersion:          request.InheritedPinnedVersion,
 		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
@@ -115,17 +124,19 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
+	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-			ScheduledEventId:       scheduledEventID,
-			Identity:               identity,
-			RequestId:              requestID,
-			SuggestContinueAsNew:   suggestContinueAsNew,
-			HistorySizeBytes:       historySizeBytes,
-			WorkerVersion:          versioningStamp,
-			BuildIdRedirectCounter: buildIdRedirectCounter,
+			ScheduledEventId:            scheduledEventID,
+			Identity:                    identity,
+			RequestId:                   requestID,
+			SuggestContinueAsNew:        suggestContinueAsNew,
+			SuggestContinueAsNewReasons: suggestContinueAsNewReasons,
+			HistorySizeBytes:            historySizeBytes,
+			WorkerVersion:               versioningStamp,
+			BuildIdRedirectCounter:      buildIdRedirectCounter,
 		},
 	}
 	return event

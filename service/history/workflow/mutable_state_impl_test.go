@@ -328,6 +328,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("b2", wft.BuildId)
@@ -352,6 +353,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b0"},
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -374,6 +376,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -396,6 +399,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -420,6 +424,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("", wft.BuildId)
@@ -446,6 +451,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -469,6 +475,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -530,6 +537,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 
@@ -583,6 +591,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 
@@ -651,6 +660,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("b1", wft.BuildId)
@@ -933,6 +943,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
@@ -983,6 +994,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1022,6 +1034,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1064,6 +1077,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1258,6 +1272,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
@@ -1712,6 +1727,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -1774,6 +1790,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -1996,6 +2013,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -2209,6 +2227,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		123678,
 		nil,
 		int64(0),
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -2266,6 +2285,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		123678,
 		nil,
 		int64(0),
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -5066,6 +5086,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.Equal(origin.WorkflowTaskOriginalScheduledTime, current.WorkflowTaskOriginalScheduledTime, "WorkflowTaskOriginalScheduledTime mismatch")
 	s.Equal(origin.WorkflowTaskType, current.WorkflowTaskType, "WorkflowTaskType mismatch")
 	s.Equal(origin.WorkflowTaskSuggestContinueAsNew, current.WorkflowTaskSuggestContinueAsNew, "WorkflowTaskSuggestContinueAsNew mismatch")
+	s.Equal(origin.WorkflowTaskSuggestContinueAsNewReasons, current.WorkflowTaskSuggestContinueAsNewReasons, "WorkflowTaskSuggestContinueAsNewReasons mismatch")
 	s.Equal(origin.WorkflowTaskHistorySizeBytes, current.WorkflowTaskHistorySizeBytes, "WorkflowTaskHistorySizeBytes mismatch")
 	s.Equal(origin.WorkflowTaskBuildId, current.WorkflowTaskBuildId, "WorkflowTaskBuildId mismatch")
 	s.Equal(origin.WorkflowTaskBuildIdRedirectCounter, current.WorkflowTaskBuildIdRedirectCounter, "WorkflowTaskBuildIdRedirectCounter mismatch")
