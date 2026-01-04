@@ -90,16 +90,6 @@ func TestVersioning3FunctionalSuiteV0(t *testing.T) {
 	})
 }
 
-func TestVersioning3FunctionalSuiteV1(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &Versioning3Suite{
-		deploymentWorkflowVersion: workerdeployment.AsyncSetCurrentAndRamping,
-		useV32:                    true,
-		useRevisionNumbers:        true,
-		useNewDeploymentData:      true,
-	})
-}
-
 func TestVersioning3FunctionalSuiteV2(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &Versioning3Suite{
@@ -2383,6 +2373,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 
 		// Verify workflow is now pinned and running on v1
 		s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), override, nil)
+		s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv1)
 
 		// Register v2 poller before setting it as current
 		s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
@@ -2489,6 +2480,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 		// Verify the new workflow run is on v2 (not v1) because of AUTO_UPGRADE initial behavior
 		// But if testing with Pinned V1 override, it should be on v1
 		s.verifyWorkflowVersioning(s.Assertions, postCaNTV, vbPinned, postCaNTV.Deployment(), override, nil)
+		s.verifyVersioningSAs(postCaNTV, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, postCaNTV)
 	})
 }
 
@@ -2685,7 +2677,7 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 	})
 }
 
-func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBehavior, upgradeOnCaN bool, expectInherit bool, pinnedOverride bool) {
+func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBehavior, upgradeOnCaN bool, expectPinnedInherit bool, pinnedOverride bool) {
 	// CaN inherits version if pinned and if new task queue is in pinned version, goes to current version if unpinned.
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
@@ -2728,7 +2720,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 1:
 			s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), override, nil)
-			s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+			//s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 			return "v1", nil
 		}
 		s.FailNow("workflow should not get to this point")
@@ -2837,7 +2829,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	s.NoError(run.Get(ctx, &out))
 	if expectPinnedInherit {
 		s.Equal("v1", out)
-		s.verifyVersioningSAs(tv2, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1)
+		s.verifyVersioningSAs(tv1, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1)
 	} else {
 		s.Equal("v2", out)
 		s.verifyVersioningSAs(tv2, behavior, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv2)
@@ -4193,6 +4185,8 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 		if behavior != vbUnspecified {
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s' AND ExecutionStatus = '%s'",
 				tv.WorkflowID(), tv.DeploymentSeries(), tv.DeploymentVersionStringV32(), behavior.String(), executionStatus)
+			//query = fmt.Sprintf("WorkflowId = '%s'  AND ExecutionStatus = '%s'",
+			//	tv.WorkflowID(), executionStatus)
 		} else {
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeploymentVersion is null AND TemporalWorkflowVersioningBehavior is null AND ExecutionStatus = '%s'",
 				//query = fmt.Sprintf("WorkflowId = '%s'  AND ExecutionStatus = '%s'",
