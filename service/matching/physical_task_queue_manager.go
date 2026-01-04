@@ -893,6 +893,14 @@ func mergeStats(into, from *taskqueuepb.TaskQueueStats) {
 }
 
 func oldestBacklogAge(left, right *durationpb.Duration) *durationpb.Duration {
+	// Treat nil as zero to keep stats aggregation defensive. It is okay here to reassign the pointer values when
+	// they are nil since a nil Duration proto is equivalent to a zero duration.
+	if left == nil {
+		left = durationpb.New(0)
+	}
+	if right == nil {
+		right = durationpb.New(0)
+	}
 	if left.AsDuration() > right.AsDuration() {
 		return left
 	}
