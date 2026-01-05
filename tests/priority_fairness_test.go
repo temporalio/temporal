@@ -276,8 +276,8 @@ func (s *FairnessSuite) SetupSuite() {
 }
 
 func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
-	// We need to trigger both a worklow and activity reload.
-	// We gurantee that a successfull call triggers the reload
+	// We need to trigger both a workflow and activity reload.
+	// We guarantee that a successful call triggers the reload
 	// however we need to loop multiple times to ensure that a workflow
 	// gets enqueued for us to create an activity on.
 	for range 15 {
@@ -290,6 +290,8 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 				PriorityKey: 3,
 			},
 		})
+		// Can fail if we're waiting on the reload, log for tracing what happens on failure
+		// We should only see shutdown errors in expected operation
 		s.T().Log("AutoEnable StartWorkflowExecution:", err)
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
@@ -312,12 +314,13 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 			},
 			taskpoller.WithContext(ctx),
 		)
+		cancel()
+		// No error, we triggered the reload
 		if err == nil {
-			cancel()
 			return
 		}
+		// The workflow was likely not enqueued, loop and try again with another one
 		s.T().Log("AutoEnable PollAndHandleWorkflowTask:", err)
-		cancel()
 	}
 	s.T().Fatal("Could not trigger auto enable")
 }
@@ -743,7 +746,7 @@ func (s *FairnessSuite) TestFairness_UpdateWorkflowExecutionOptions_InvalidatesP
 			}
 		}
 	}
-	s.Equal(1, obsoleteWorkflowTaskCount, "Expected 1 worklow task to be obsolete")
+	s.Equal(1, obsoleteWorkflowTaskCount, "Expected 1 workflow task to be obsolete")
 
 	// Wait for activity task to be backlogged
 	s.Eventually(func() bool {
