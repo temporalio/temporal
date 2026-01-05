@@ -23,9 +23,9 @@ type GradualChange[T any] struct {
 	Start, End time.Time
 }
 
-// ConstantGradualChange returns a GradualChange whose Value always returns def and whose When
+// StaticGradualChange returns a GradualChange whose Value always returns def and whose When
 // always returns a time in the past.
-func ConstantGradualChange[T any](def T) GradualChange[T] {
+func StaticGradualChange[T any](def T) GradualChange[T] {
 	return GradualChange[T]{New: def}
 }
 
@@ -45,7 +45,7 @@ func (c *GradualChange[T]) Value(key []byte, now time.Time) T {
 }
 
 // When returns the time when the value for key will switch from old to new. It may be the zero
-// time for a constant GradualChange.
+// time for a static GradualChange.
 func (c *GradualChange[T]) When(key []byte) time.Time {
 	fraction := float64(farm.Fingerprint32(key)) / float64(math.MaxUint32)
 	when := time.Duration(fraction * float64(c.End.Sub(c.Start)))
@@ -53,11 +53,11 @@ func (c *GradualChange[T]) When(key []byte) time.Time {
 }
 
 // ConvertGradualChange is a conversion function that can handle a plain T (which represents a
-// constant value) as well as a GradualChange[T]. It can be used to turn settings that were not
+// static value) as well as a GradualChange[T]. It can be used to turn settings that were not
 // of type GradualChange into a GradualChange.
 // nolint:revive // cognitive-complexity // this looks complicated but each case is fairly simple
 func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
-	changeConverter := ConvertStructure(ConstantGradualChange(def))
+	changeConverter := ConvertStructure(StaticGradualChange(def))
 
 	// Call this once so that if it's going to panic, it panics at static init time.
 	_, _ = changeConverter(nil)
@@ -122,7 +122,7 @@ func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
 				}
 			}
 			nv, err := valueConverter(v)
-			return ConstantGradualChange(nv), err
+			return StaticGradualChange(nv), err
 		}
 	}
 }

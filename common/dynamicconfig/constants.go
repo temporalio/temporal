@@ -1334,13 +1334,13 @@ second per poller by one physical queue manager`,
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
 		ConvertGradualChange(false),
-		ConstantGradualChange(false),
+		StaticGradualChange(false),
 		`Use priority-enabled TaskMatcher`,
 	)
 	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
 		"matching.enableFairness",
 		ConvertGradualChange(false),
-		ConstantGradualChange(false),
+		StaticGradualChange(false),
 		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
 	)
 	MatchingEnableMigration = NewTaskQueueBoolSetting(

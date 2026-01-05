@@ -109,8 +109,8 @@ func TestGradualChangeWhen_ConsistentForSameKey(t *testing.T) {
 	assert.Equal(t, when1, when2, "same key should always return same time")
 }
 
-func TestConstantGradualChange_AlwaysReturnsValue(t *testing.T) {
-	gc := ConstantGradualChange(42)
+func TestStaticGradualChange_AlwaysReturnsValue(t *testing.T) {
+	gc := StaticGradualChange(42)
 
 	times := []time.Time{
 		time.Now().Add(-time.Hour * 24 * 365),
@@ -125,8 +125,8 @@ func TestConstantGradualChange_AlwaysReturnsValue(t *testing.T) {
 	}
 }
 
-func TestConstantGradualChange_WhenReturnsZeroOrPast(t *testing.T) {
-	gc := ConstantGradualChange(42)
+func TestStaticGradualChange_WhenReturnsZeroOrPast(t *testing.T) {
+	gc := StaticGradualChange(42)
 	when := gc.When([]byte("any_key"))
 	assert.True(t, when.IsZero() || when.Before(time.Now()))
 }
@@ -367,7 +367,7 @@ func TestSubscribeGradualChange_ConstantValueNoTimer(t *testing.T) {
 	ts := clock.NewEventTimeSource()
 	ts.Update(time.Now())
 
-	gc := ConstantGradualChange("constant")
+	gc := StaticGradualChange("constant")
 
 	subscribable := func(cb func(GradualChange[string])) (GradualChange[string], func()) {
 		return gc, func() {}
