@@ -755,7 +755,7 @@ func (e *ChasmEngine) getExecutionLease(
 		return shardContext, executionLease, nil
 	}
 
-	// Mutable state was previously detected as stale and get reloaded,
+	// Mutable state was previously detected as stale and got reloaded,
 	// do a final check to ensure mutable state is not stale after reload.
 	err = executionLease.GetMutableState().ChasmTree().IsStale(ref)
 	if err != nil {
