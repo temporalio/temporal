@@ -328,6 +328,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("b2", wft.BuildId)
@@ -352,6 +353,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b0"},
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -374,6 +376,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -396,6 +399,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -420,6 +424,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("", wft.BuildId)
@@ -446,6 +451,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -469,6 +475,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
@@ -530,6 +537,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_WithWorkflowTaskTimeouts() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 
@@ -583,6 +591,7 @@ func (s *mutableStateSuite) TestPopulateDeleteTasks_LongTimeout_NotIncluded() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 
@@ -651,6 +660,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal("b1", wft.BuildId)
@@ -933,6 +943,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
@@ -983,6 +994,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1022,6 +1034,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1064,6 +1077,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
@@ -1258,6 +1272,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
@@ -1712,6 +1727,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -1774,6 +1790,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
@@ -1996,6 +2013,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
@@ -2209,6 +2227,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		123678,
 		nil,
 		int64(0),
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -2266,6 +2285,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		123678,
 		nil,
 		int64(0),
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -2973,29 +2993,81 @@ func (s *mutableStateSuite) TestupdateBuildIdsAndDeploymentSearchAttributes() {
 			s.NoError(err)
 
 			// Max 0
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 0)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), nil, 0)
 			s.NoError(err)
 			s.Equal([]string{}, s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), nil, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
 			// Add the same build ID
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), nil, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.2"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.2"), nil, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
 
 			// Limit applies
-			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.3"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.3"), nil, 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
 		})
 	}
+}
+
+func (s *mutableStateSuite) TestUpdateUsedDeploymentVersionsSearchAttribute() {
+	deploymentVersion := func(deploymentName, buildId string) *deploymentpb.WorkerDeploymentVersion {
+		return &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildId,
+		}
+	}
+
+	// Set up initial state with a deployment version
+	dbState := s.buildWorkflowMutableState()
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// Test 1: First deployment version added
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-a", "build-1"), 1000)
+	s.NoError(err)
+	s.Equal([]string{"deployment-a:build-1"}, s.getUsedDeploymentVersionsFromMutableState())
+
+	// Test 2: Same deployment version (no change, deduplication)
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-a", "build-1"), 1000)
+	s.NoError(err)
+	s.Equal([]string{"deployment-a:build-1"}, s.getUsedDeploymentVersionsFromMutableState())
+
+	// Test 3: New deployment version added to list
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-a", "build-2"), 1000)
+	s.NoError(err)
+	s.Equal([]string{"deployment-a:build-1", "deployment-a:build-2"}, s.getUsedDeploymentVersionsFromMutableState())
+
+	// Test 4: Another deployment version added
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-b", "build-1"), 1000)
+	s.NoError(err)
+	s.Equal([]string{"deployment-a:build-1", "deployment-a:build-2", "deployment-b:build-1"}, s.getUsedDeploymentVersionsFromMutableState())
+
+	// Test 5: Size limit handling (oldest removed)
+	// Set a very small limit to trigger size constraint
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, deploymentVersion("deployment-c", "build-1"), 40)
+	s.NoError(err)
+	// Should have removed oldest entries to fit within size limit
+	versions := s.getUsedDeploymentVersionsFromMutableState()
+	s.NotEmpty(versions, "Should have at least one version")
+	// The newest one should be present
+	s.Contains(versions, "deployment-c:build-1")
+
+	// Test 6: Empty deployment version (unversioned workflows not tracked)
+	beforeVersions := s.getUsedDeploymentVersionsFromMutableState()
+	err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(nil, nil, 1000)
+	s.NoError(err)
+	// Should not have added any new version (unversioned is skipped)
+	s.Equal(beforeVersions, s.getUsedDeploymentVersionsFromMutableState())
 }
 
 func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
@@ -3847,6 +3919,18 @@ func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
 	buildIDs, ok := decoded.([]string)
 	s.True(ok)
 	return buildIDs
+}
+
+func (s *mutableStateSuite) getUsedDeploymentVersionsFromMutableState() []string {
+	payload, found := s.mutableState.executionInfo.SearchAttributes[sadefs.TemporalUsedWorkerDeploymentVersions]
+	if !found {
+		return []string{}
+	}
+	decoded, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	s.NoError(err)
+	usedDeploymentVersions, ok := decoded.([]string)
+	s.True(ok)
+	return usedDeploymentVersions
 }
 
 // return reset points minus a few fields that are hard to check for equality
@@ -5002,6 +5086,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.Equal(origin.WorkflowTaskOriginalScheduledTime, current.WorkflowTaskOriginalScheduledTime, "WorkflowTaskOriginalScheduledTime mismatch")
 	s.Equal(origin.WorkflowTaskType, current.WorkflowTaskType, "WorkflowTaskType mismatch")
 	s.Equal(origin.WorkflowTaskSuggestContinueAsNew, current.WorkflowTaskSuggestContinueAsNew, "WorkflowTaskSuggestContinueAsNew mismatch")
+	s.Equal(origin.WorkflowTaskSuggestContinueAsNewReasons, current.WorkflowTaskSuggestContinueAsNewReasons, "WorkflowTaskSuggestContinueAsNewReasons mismatch")
 	s.Equal(origin.WorkflowTaskHistorySizeBytes, current.WorkflowTaskHistorySizeBytes, "WorkflowTaskHistorySizeBytes mismatch")
 	s.Equal(origin.WorkflowTaskBuildId, current.WorkflowTaskBuildId, "WorkflowTaskBuildId mismatch")
 	s.Equal(origin.WorkflowTaskBuildIdRedirectCounter, current.WorkflowTaskBuildIdRedirectCounter, "WorkflowTaskBuildIdRedirectCounter mismatch")
