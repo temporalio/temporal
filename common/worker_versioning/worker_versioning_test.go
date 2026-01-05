@@ -94,16 +94,18 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	t3 := timestamp.TimePtr(time.Now())
 
 	tests := []struct {
-		name        string
-		wantCurrent *deploymentspb.WorkerDeploymentVersion
-		wantRamping *deploymentspb.WorkerDeploymentVersion
-		data        *persistencespb.DeploymentData
+		name               string
+		wantCurrent        *deploymentspb.WorkerDeploymentVersion
+		wantRamping        *deploymentspb.WorkerDeploymentVersion
+		wantRampPercentage float32
+		data               *persistencespb.DeploymentData
 	}{
 		{name: "nil data"},
 		{name: "empty data", data: &persistencespb.DeploymentData{}},
 		{name: "old deployment data: two current + two ramping",
-			wantCurrent: v2,
-			wantRamping: v3,
+			wantCurrent:        v2,
+			wantRamping:        v3,
+			wantRampPercentage: 20,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
@@ -113,7 +115,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "old deployment data: ramp without current", wantRamping: v3,
+		{name: "old deployment data: ramp without current", wantRamping: v3, wantRampPercentage: 20,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2, RampingSinceTime: t2},
@@ -122,7 +124,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 			},
 		},
 		{name: "old deployment data: ramp to unversioned",
-			wantRamping: nil,
+			wantRamping:        nil,
+			wantRampPercentage: 20,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1, RampingSinceTime: t1},
@@ -131,8 +134,9 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 			},
 		},
 		{name: "old deployment data: ramp 100%",
-			wantCurrent: v1,
-			wantRamping: v2,
+			wantCurrent:        v1,
+			wantRamping:        v2,
+			wantRampPercentage: 100,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
@@ -141,8 +145,9 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 			},
 		},
 		{name: "old deployment data: ramp to unversioned 100%",
-			wantCurrent: v1,
-			wantRamping: nil,
+			wantCurrent:        v1,
+			wantRamping:        nil,
+			wantRampPercentage: 100,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: t1},
@@ -151,8 +156,9 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 			},
 		},
 		{name: "old deployment data: ramp to unversioned 100% without current",
-			wantCurrent: nil,
-			wantRamping: nil,
+			wantCurrent:        nil,
+			wantRamping:        nil,
+			wantRampPercentage: 100,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RoutingUpdateTime: t1, CurrentSinceTime: nil},
@@ -161,7 +167,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 			},
 		},
 		// Membership related tests
-		{name: "mixed: new RoutingConfig current overrides old when newer in membership", wantCurrent: v2,
+		{name: "mixed: new RoutingConfig current overrides old when newer in membership",
+			wantCurrent: v2,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v1 is current at older time t1
@@ -184,7 +191,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "mixed: fall back to old current when new current not in membership", wantCurrent: v1,
+		{name: "mixed: fall back to old current when new current not in membership",
+			wantCurrent: v1,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v1 is current at older time t1
@@ -205,7 +213,9 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "mixed: new RoutingConfig ramping overrides old when newer in membership", wantRamping: v3,
+		{name: "mixed: new RoutingConfig ramping overrides old when newer in membership",
+			wantRamping:        v3,
+			wantRampPercentage: 20,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v2 is ramping at older time t1
@@ -229,7 +239,9 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "mixed: fall back to old ramping when new ramping not in membership", wantRamping: v2,
+		{name: "mixed: fall back to old ramping when new ramping not in membership",
+			wantRamping:        v2,
+			wantRampPercentage: 30,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v2 is ramping at older time t1
@@ -251,7 +263,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "mixed: unversioned current newer than older current version -> keep old versioned", wantCurrent: v4,
+		{name: "mixed: unversioned current newer than older current version -> keep old versioned",
+			wantCurrent: v4,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v4 is current at older time t1
@@ -271,7 +284,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "mixed: unversioned current without any other current version -> unversioned", wantCurrent: nil,
+		{name: "mixed: unversioned current without any other current version -> unversioned",
+			wantCurrent: nil,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
@@ -287,7 +301,9 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "mixed: unversioned ramping newer than older ramping version -> keep old versioned", wantRamping: v4,
+		{name: "mixed: unversioned ramping newer than older ramping version -> keep old versioned",
+			wantRamping:        v4,
+			wantRampPercentage: 30,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					// Old format: v4 is ramping at older time t1
@@ -305,7 +321,9 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "mixed: unversioned ramping without any other ramping version -> unversioned", wantRamping: nil,
+		{name: "mixed: unversioned ramping without any other ramping version -> unversioned",
+			wantRamping:        nil,
+			wantRampPercentage: 25,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
@@ -320,7 +338,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "new format: unversioned current with newer timestamp with another current version in a different deployment -> current is still versioned", wantCurrent: v1,
+		{name: "new format: unversioned current with newer timestamp with another current version in a different deployment -> current is still versioned",
+			wantCurrent: v1,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
@@ -342,7 +361,28 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "new format: unversioned ramping with newer timestamp with another ramping version in a different deployment -> ramping is still versioned", wantRamping: v1,
+		{name: "new format: ramping to unversioned ",
+			wantCurrent:        v1,
+			wantRampPercentage: 20,
+			data: &persistencespb.DeploymentData{
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+							CurrentVersionChangedTime:           t2,
+							RampingDeploymentVersion:            nil,
+							RampingVersionPercentage:            20,
+							RampingVersionPercentageChangedTime: t3,
+						},
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v1.GetBuildId(): {},
+						},
+					},
+				},
+			}},
+		{name: "new format: unversioned ramping with newer timestamp with another ramping version in a different deployment -> ramping is still versioned",
+			wantRamping:        v1,
+			wantRampPercentage: 30,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
@@ -366,8 +406,32 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
+		{name: "new format: versioned current with unversioned ramping in same deployment -> current is versioned and ramping is unversioned", wantCurrent: v1, wantRamping: nil, wantRampPercentage: 20,
+			data: &persistencespb.DeploymentData{
+				Versions: []*deploymentspb.DeploymentVersionData{},
+				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+					"foo": {
+						RoutingConfig: &deploymentpb.RoutingConfig{
+							CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+								DeploymentName: v1.GetDeploymentName(),
+								BuildId:        v1.GetBuildId(),
+							},
+							CurrentVersionChangedTime: t2,
+							RampingDeploymentVersion:  nil, // unversioned ramp target
+							RampingVersionPercentage:  20,
+							// Use a newer timestamp so the unversioned ramping is picked from the new format.
+							RampingVersionPercentageChangedTime: t3,
+						},
+						// Membership contains v1 so HasDeploymentVersion() passes for current.
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+							v1.GetBuildId(): {},
+						},
+					},
+				},
+			}},
 		// Tests with deleted versions
-		{name: "new format: current version marked as deleted should be ignored", wantCurrent: nil,
+		{name: "new format: current version marked as deleted should be ignored",
+			wantCurrent: nil,
 			data: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"foo": {
@@ -381,7 +445,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "new format: ramping version marked as deleted should be ignored", wantRamping: nil,
+		{name: "new format: ramping version marked as deleted should be ignored",
+			wantRamping: nil,
 			data: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"foo": {
@@ -396,7 +461,10 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "new format: current deleted, ramping not deleted -> only ramping returned", wantCurrent: nil, wantRamping: v2,
+		{name: "new format: current deleted, ramping not deleted -> only ramping returned",
+			wantCurrent:        nil,
+			wantRamping:        v2,
+			wantRampPercentage: 30,
 			data: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"foo": {
@@ -414,7 +482,10 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "new format: ramping deleted, current not deleted -> only current returned", wantCurrent: v1, wantRamping: nil,
+		{name: "new format: ramping deleted, current not deleted -> only current returned",
+			wantCurrent:        v1,
+			wantRamping:        nil,
+			wantRampPercentage: 0,
 			data: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"foo": {
@@ -432,7 +503,10 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "new format: both current and ramping deleted -> both nil", wantCurrent: nil, wantRamping: nil,
+		{name: "new format: both current and ramping deleted -> both nil",
+			wantCurrent:        nil,
+			wantRamping:        nil,
+			wantRampPercentage: 0,
 			data: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"foo": {
@@ -450,7 +524,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "mixed: new current deleted falls back to old current", wantCurrent: v1,
+		{name: "mixed: new current deleted falls back to old current",
+			wantCurrent: v1,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
@@ -467,7 +542,9 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "mixed: new ramping deleted falls back to old ramping", wantRamping: v1,
+		{name: "mixed: new ramping deleted falls back to old ramping",
+			wantRamping:        v1,
+			wantRampPercentage: 40,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampingSinceTime: t1, RoutingUpdateTime: t1, RampPercentage: 40},
@@ -485,7 +562,8 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "new format: version exists but marked as deleted alongside non-deleted version", wantCurrent: v2,
+		{name: "new format: version exists but marked as deleted alongside non-deleted version",
+			wantCurrent: v2,
 			data: &persistencespb.DeploymentData{
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
 					"foo": {
@@ -504,12 +582,15 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			current, _, _, ramping, _, _, _, _ := CalculateTaskQueueVersioningInfo(tt.data)
+			current, _, _, ramping, _, rampPercentage, _, _ := CalculateTaskQueueVersioningInfo(tt.data)
 			if !current.Equal(tt.wantCurrent) {
 				t.Errorf("got current = %v, want %v", current, tt.wantCurrent)
 			}
 			if !ramping.Equal(tt.wantRamping) {
 				t.Errorf("got ramping = %v, want %v", ramping, tt.wantRamping)
+			}
+			if rampPercentage != tt.wantRampPercentage {
+				t.Errorf("got ramp percentage = %v, want %v", rampPercentage, tt.wantRampPercentage)
 			}
 		})
 	}

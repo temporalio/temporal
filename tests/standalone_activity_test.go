@@ -176,10 +176,9 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue().String()
-
 	t.Run("FailsIfExists", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
 		startResponse := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
 		// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
@@ -212,6 +211,8 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	})
 
 	t.Run("UseExistingNoError", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
 		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
 		secondStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
@@ -229,7 +230,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, firstStartResp.RunId, secondStartResp.RunId)
-		// require.Equal(t, false, secondStartResp.GetStarted()) TODO enable this when we can set the flag correctly
+		require.False(t, secondStartResp.GetStarted()) // indicates activity was not started anew
 	})
 }
 
