@@ -6515,6 +6515,28 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 	ms.executionInfo.ExecutionStats.HistorySize += size
 }
 
+func (ms *MutableStateImpl) GetExternalPayloadSize() int64 {
+	return ms.executionInfo.GetExecutionStats().GetExternalPayloadSize()
+}
+
+func (ms *MutableStateImpl) AddExternalPayloadSize(size int64) {
+	if ms.executionInfo.ExecutionStats == nil {
+		ms.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
+	}
+	ms.executionInfo.ExecutionStats.ExternalPayloadSize += size
+}
+
+func (ms *MutableStateImpl) GetExternalPayloadCount() int64 {
+	return ms.executionInfo.GetExecutionStats().GetExternalPayloadCount()
+}
+
+func (ms *MutableStateImpl) AddExternalPayloadCount(count int64) {
+	if ms.executionInfo.ExecutionStats == nil {
+		ms.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
+	}
+	ms.executionInfo.ExecutionStats.ExternalPayloadCount += count
+}
+
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
@@ -7651,6 +7673,16 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		}
 		ms.executionInfo.LastFirstEventId = eventBatch[0].GetEventId()
 		ms.executionInfo.LastFirstEventTxnId = historyNodeTxnIDs[index]
+
+		// Calculate and add the external payload size and count for this batch
+		if ms.config.ExternalPayloadsEnabled(ms.GetNamespaceEntry().Name().String()) {
+			externalPayloadSize, externalPayloadCount, err := CalculateExternalPayloadSize(eventBatch)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			ms.AddExternalPayloadSize(externalPayloadSize)
+			ms.AddExternalPayloadCount(externalPayloadCount)
+		}
 	}
 
 	if err := ms.validateNoEventsAfterWorkflowFinish(

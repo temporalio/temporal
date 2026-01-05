@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -75,13 +76,15 @@ func (s *workflowReplicatorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	// s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
 
+	config := tests.NewDynamicConfig()
+	config.ExternalPayloadsEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
 			ShardId: 10,
 			RangeId: 1,
 		},
-		tests.NewDynamicConfig(),
+		config,
 	)
 
 	reg := hsm.NewRegistry()
@@ -1147,8 +1150,17 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+	nsName := namespace.Name("test-namespace")
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
+		&persistencespb.NamespaceConfig{},
+		"test-cluster",
+	)).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadSize(gomock.Any()).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadCount(gomock.Any()).AnyTimes()
 	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId:       namespaceID,
 		Execution:         &commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
@@ -1295,8 +1307,17 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+	nsName := namespace.Name("test-namespace")
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
+		&persistencespb.NamespaceConfig{},
+		"test-cluster",
+	)).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadSize(gomock.Any()).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadCount(gomock.Any()).AnyTimes()
 	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId:       namespaceID,
 		Execution:         &commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
@@ -1468,8 +1489,17 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+	nsName := namespace.Name("test-namespace")
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
+		&persistencespb.NamespaceConfig{},
+		"test-cluster",
+	)).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadSize(gomock.Any()).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadCount(gomock.Any()).AnyTimes()
 	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId:       namespaceID,
 		Execution:         &commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
@@ -1620,4 +1650,122 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	s.Equal(forkedBranchToken, localVersionHistoryies.Histories[2].BranchToken)
 	s.Equal(int32(2), localVersionHistoryies.CurrentVersionHistoryIndex)
 	s.NotNil(newRunBranch)
+}
+
+func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_ExternalPayloadStats() {
+	// Test that the external payload stats are correctly updated when bringLocalEventsUpToSourceCurrentBranch is invoked
+	namespaceID := uuid.NewString()
+	versionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("branchToken"),
+				Items: []*historyspb.VersionHistoryItem{
+					{
+						EventId: int64(2),
+						Version: int64(1),
+					},
+				},
+			},
+		},
+	}
+	localVersionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("local-branchToken"),
+			},
+		},
+	}
+
+	historyEvents := []*historypb.HistoryEvent{
+		{
+			EventId:   1,
+			Version:   1,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+					Input: &commonpb.Payloads{
+						Payloads: []*commonpb.Payload{
+							{
+								Data: []byte("test"),
+								ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+									{SizeBytes: 1024},
+									{SizeBytes: 2048},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			EventId:   2,
+			Version:   1,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
+				WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+			},
+		},
+	}
+
+	serializer := serialization.NewSerializer()
+	eventBlobs, err := serializer.SerializeEvents(historyEvents)
+	s.NoError(err)
+
+	executionStats := &persistencespb.ExecutionStats{
+		HistorySize:          0,
+		ExternalPayloadSize:  0,
+		ExternalPayloadCount: 0,
+	}
+	mockMutableState := historyi.NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		VersionHistories: localVersionHistories,
+		ExecutionStats:   executionStats,
+	}).AnyTimes()
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: s.runID,
+	}).AnyTimes()
+	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID, s.workflowID, s.runID)).AnyTimes()
+	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
+	mockMutableState.EXPECT().AddReapplyCandidateEvent(gomock.Any()).AnyTimes()
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+	sourceClusterName := "test-cluster"
+
+	nsName := namespace.Name("test-namespace")
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(nsName, nil).AnyTimes()
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: nsName.String()},
+		&persistencespb.NamespaceConfig{},
+		"test-cluster",
+	)).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadSize(int64(1024 + 2048)).Times(1)
+	mockMutableState.EXPECT().AddExternalPayloadCount(int64(2)).Times(1)
+
+	mockShard := historyi.NewMockShardContext(s.controller)
+	taskID := int64(100)
+	mockShard.EXPECT().GenerateTaskID().Return(taskID, nil).Times(1)
+	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
+	mockEventsCache := events.NewMockCache(s.controller)
+	mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	mockShard.EXPECT().GetEventsCache().Return(mockEventsCache).AnyTimes()
+	s.workflowStateReplicator.shardContext = mockShard
+
+	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+
+	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
+		context.Background(),
+		namespace.ID(namespaceID),
+		s.workflowID,
+		s.runID,
+		sourceClusterName,
+		mockWeCtx,
+		mockMutableState,
+		versionHistories,
+		[]*commonpb.DataBlob{eventBlobs},
+		true)
+	s.NoError(err)
 }

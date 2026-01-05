@@ -105,7 +105,7 @@ func (r *resetterImpl) resetWorkflow(
 	}
 
 	requestID := uuid.NewString()
-	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.Rebuild(
+	rebuildMutableState, rebuildStats, err := r.stateRebuilder.Rebuild(
 		ctx,
 		now,
 		definition.NewWorkflowKey(
@@ -127,7 +127,9 @@ func (r *resetterImpl) resetWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
+	rebuildMutableState.AddHistorySize(rebuildStats.HistorySize)
+	rebuildMutableState.AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
+	rebuildMutableState.AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)
 
 	if err := rebuildMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
 		return nil, err

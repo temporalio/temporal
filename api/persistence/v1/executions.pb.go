@@ -1109,10 +1109,16 @@ func (*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType) isWorkflowExecutionIn
 }
 
 type ExecutionStats struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	HistorySize   int64                  `protobuf:"varint,1,opt,name=history_size,json=historySize,proto3" json:"history_size,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	HistorySize int64                  `protobuf:"varint,1,opt,name=history_size,json=historySize,proto3" json:"history_size,omitempty"`
+	// Total size in bytes of all external payloads referenced in the entire history tree of the execution, not just the current branch.
+	// This number doesn't include payloads in buffered events.
+	ExternalPayloadSize int64 `protobuf:"varint,2,opt,name=external_payload_size,json=externalPayloadSize,proto3" json:"external_payload_size,omitempty"`
+	// Total count of external payloads referenced in the entire history tree of the execution, not just the current branch.
+	// This number doesn't include payloads in buffered events.
+	ExternalPayloadCount int64 `protobuf:"varint,3,opt,name=external_payload_count,json=externalPayloadCount,proto3" json:"external_payload_count,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ExecutionStats) Reset() {
@@ -1148,6 +1154,20 @@ func (*ExecutionStats) Descriptor() ([]byte, []int) {
 func (x *ExecutionStats) GetHistorySize() int64 {
 	if x != nil {
 		return x.HistorySize
+	}
+	return 0
+}
+
+func (x *ExecutionStats) GetExternalPayloadSize() int64 {
+	if x != nil {
+		return x.ExternalPayloadSize
+	}
+	return 0
+}
+
+func (x *ExecutionStats) GetExternalPayloadCount() int64 {
+	if x != nil {
+		return x.ExternalPayloadCount
 	}
 	return 0
 }
@@ -4629,9 +4649,11 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"3\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\x9d\x01\n" +
 	"\x0eExecutionStats\x12!\n" +
-	"\fhistory_size\x18\x01 \x01(\x03R\vhistorySize\"\x8c\x05\n" +
+	"\fhistory_size\x18\x01 \x01(\x03R\vhistorySize\x122\n" +
+	"\x15external_payload_size\x18\x02 \x01(\x03R\x13externalPayloadSize\x124\n" +
+	"\x16external_payload_count\x18\x03 \x01(\x03R\x14externalPayloadCount\"\x8c\x05\n" +
 	"\x16WorkflowExecutionState\x12*\n" +
 	"\x11create_request_id\x18\x01 \x01(\tR\x0fcreateRequestId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12J\n" +
