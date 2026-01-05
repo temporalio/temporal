@@ -9,7 +9,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -28,7 +27,7 @@ func Invoke(
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache cache.Cache,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	req := request.GetUpdateRequest()
 	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())

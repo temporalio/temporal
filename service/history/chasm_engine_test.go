@@ -158,7 +158,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 		},
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -173,8 +173,9 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
@@ -199,7 +200,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		),
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -212,8 +213,9 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       tv.RunID(),
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
@@ -250,7 +252,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 		},
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -266,8 +268,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
@@ -304,7 +307,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 		},
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -320,8 +323,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
@@ -346,7 +350,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 		),
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -356,6 +360,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 		),
 	)
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
@@ -380,7 +385,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 		),
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -390,6 +395,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 		),
 	)
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
@@ -416,7 +422,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -432,8 +438,9 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       tv.RunID(),
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
@@ -460,7 +467,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.NewExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -470,6 +477,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 		),
 	)
 	s.ErrorAs(err, new(*serviceerror.Unimplemented))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) newTestExecutionFn(
@@ -562,7 +570,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 		Return(&persistence.GetWorkflowExecutionResponse{
 			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
 				ActivityId: "",
-			}),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
 		}, nil).Times(1)
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
@@ -616,7 +624,7 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 		Return(&persistence.GetWorkflowExecutionResponse{
 			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
 				ActivityId: expectedActivityID,
-			}),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
 		}, nil).Times(1)
 
 	err := s.engine.ReadComponent(
@@ -629,6 +637,9 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
 			s.Equal(expectedActivityID, tc.ActivityInfo.ActivityId)
+
+			closeTime := ctx.ExecutionCloseTime()
+			s.True(closeTime.IsZero(), "CloseTime should be zero when component is still running")
 			return nil
 		},
 	)
@@ -654,7 +665,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 		Return(&persistence.GetWorkflowExecutionResponse{
 			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
 				ActivityId: expectedActivityID,
-			}),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
 		}, nil).Times(1)
 
 	newSerializedRef, err := s.engine.PollComponent(
@@ -733,7 +744,12 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(resolvedKey, &persistencespb.ActivityInfo{}),
+			State: s.buildPersistenceMutableState(
+				resolvedKey,
+				&persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				nil),
 		}, nil).
 		Times(1) // subsequent reads during UpdateComponent and PollComponent are from cache
 	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
@@ -843,7 +859,12 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(executionKey, &persistencespb.ActivityInfo{}),
+			State: s.buildPersistenceMutableState(
+				executionKey,
+				&persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				nil),
 		}, nil).AnyTimes()
 
 	pRef := &persistencespb.ChasmComponentRef{
@@ -875,11 +896,57 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 	s.Equal("please retry", unavailable.Message)
 }
 
+func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	expectedCloseTime := s.mockShard.GetTimeSource().Now()
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(
+				ref.ExecutionKey,
+				&persistencespb.ActivityInfo{
+					ActivityId: tv.ActivityID(),
+				},
+				enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				timestamppb.New(expectedCloseTime),
+			),
+		}, nil).Times(1)
+
+	err := s.engine.ReadComponent(
+		context.Background(),
+		ref,
+		func(
+			ctx chasm.Context,
+			component chasm.Component,
+		) error {
+			// Verify CloseTime returns non-zero time when component is completed
+			closeTime := ctx.ExecutionCloseTime()
+			s.False(closeTime.IsZero(), "CloseTime should be non-zero when component is completed")
+			s.Equal(expectedCloseTime.Unix(), closeTime.Unix(), "CloseTime should match the expected close time")
+			return nil
+		},
+	)
+	s.NoError(err)
+}
+
 func (s *chasmEngineSuite) buildPersistenceMutableState(
 	key chasm.ExecutionKey,
 	componentState proto.Message,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+	closeTime *timestamppb.Timestamp,
 ) *persistencespb.WorkflowMutableState {
-
 	testComponentTypeID, ok := s.mockShard.ChasmRegistry().ComponentIDFor(&testComponent{})
 	s.True(ok)
 
@@ -900,11 +967,12 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 				},
 			},
 			ExecutionStats: &persistencespb.ExecutionStats{},
+			CloseTime:      closeTime,
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			RunId:     key.RunID,
-			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			State:     state,
+			Status:    status,
 			StartTime: timestamppb.New(s.mockShard.GetTimeSource().Now().Add(-1 * time.Minute)),
 		},
 		ChasmNodes: map[string]*persistencespb.ChasmNode{

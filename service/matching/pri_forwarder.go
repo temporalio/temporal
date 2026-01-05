@@ -208,6 +208,7 @@ func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
 			ForwardedSource: f.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, err
@@ -230,6 +231,7 @@ func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
 			ForwardedSource: f.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, err
@@ -252,6 +254,7 @@ func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				// Namespace is ignored here.
 			},
 			ForwardedSource: f.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, err
