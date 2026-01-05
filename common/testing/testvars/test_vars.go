@@ -258,7 +258,7 @@ func (tv *TestVars) ExternalDeploymentVersion() *deploymentpb.WorkerDeploymentVe
 // SDKDeploymentVersion returns SDK worker deployment version
 func (tv *TestVars) SDKDeploymentVersion() worker.WorkerDeploymentVersion {
 	return worker.WorkerDeploymentVersion{
-		BuildId:        tv.BuildID(),
+		BuildID:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
 	}
 }
@@ -308,6 +308,14 @@ func (tv *TestVars) TaskQueue() *taskqueuepb.TaskQueue {
 
 func (tv *TestVars) WithTaskQueue(taskQueue string) *TestVars {
 	return tv.cloneSetVal("task_queue", taskQueue)
+}
+
+func (tv *TestVars) WithDeploymentSeries(deploymentSeries string) *TestVars {
+	return tv.cloneSetVal("deployment_series", deploymentSeries)
+}
+
+func (tv *TestVars) WithBuildID(buildID string) *TestVars {
+	return tv.cloneSetVal("build_id", buildID)
 }
 
 func (tv *TestVars) WithTaskQueueNumber(n int) *TestVars {

@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -113,6 +114,7 @@ var Module = fx.Options(
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
+	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
@@ -165,6 +167,7 @@ func AuthorizationInterceptorProvider(
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
+	dc *dynamicconfig.Collection,
 ) *authorization.Interceptor {
 	return authorization.NewInterceptor(
 		claimMapper,
@@ -176,6 +179,7 @@ func AuthorizationInterceptorProvider(
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
 		serviceConfig.ExposeAuthorizerErrors,
+		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 	)
 }
 
@@ -774,6 +778,8 @@ func HandlerProvider(
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
+	activityHandler activity.FrontendHandler,
+	registry *chasm.Registry,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -801,6 +807,8 @@ func HandlerProvider(
 		healthInterceptor,
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
+		activityHandler,
+		registry,
 	)
 	return wfHandler
 }

@@ -204,17 +204,23 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	// First ensure deployment workflow is running
-	if !d.VersionState.StartedDeploymentWorkflow {
-		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
-			DeploymentName: d.VersionState.Version.DeploymentName,
-			RequestId:      d.newUUID(ctx),
-		}).Get(ctx, nil)
-		if err != nil {
-			return err
+	// Deployment workflow should always be running before starting the version workflow.
+	// We should not start the deployment workflow. If we cannot find the deployment workflow when signaling, it means a bug and we should fix it.
+	if !d.hasMinVersion(VersionDataRevisionNumber) {
+		// First ensure deployment workflow is running
+		//nolint:staticcheck // SA1019
+		if !d.VersionState.StartedDeploymentWorkflow {
+			activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+			err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
+				DeploymentName: d.VersionState.Version.DeploymentName,
+				RequestId:      d.newUUID(ctx),
+			}).Get(ctx, nil)
+			if err != nil {
+				return err
+			}
+			//nolint:staticcheck // SA1019
+			d.VersionState.StartedDeploymentWorkflow = true
 		}
-		d.VersionState.StartedDeploymentWorkflow = true
 	}
 
 	// Listen to signals in a different goroutine to make business logic clearer
@@ -244,17 +250,29 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 }
 
 func (d *VersionWorkflowRunner) validateUpdateVersionMetadata(args *deploymentspb.UpdateVersionMetadataArgs) error {
+	return d.ensureNotDeleted()
+}
+
+func (d *VersionWorkflowRunner) ensureNotDeleted() error {
 	if d.deleteVersion {
-		// Deployment workflow should not call this function if version is marked for deletion, but still checking for safety.
+		// Deployment workflow should not call updates if version is marked for deletion, but still checking for safety.
 		return temporal.NewNonRetryableApplicationError(errVersionDeleted, errVersionDeleted, nil)
 	}
 	return nil
 }
 
 func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
-	if d.VersionState.Metadata == nil && args.UpsertEntries != nil {
-		d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
-		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
+	if args.UpsertEntries != nil {
+		if d.VersionState.Metadata == nil {
+			d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
+		}
+		if d.VersionState.Metadata.Entries == nil {
+			d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
+		}
 	}
 
 	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
@@ -269,7 +287,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}
 
 	for _, key := range args.RemoveEntries {
-		delete(d.VersionState.Metadata.Entries, key)
+		delete(d.VersionState.Metadata.GetEntries(), key) // if m is nil, delete is a no-op
 	}
 
 	// although the handler might have not changed the metadata at all, still
@@ -311,6 +329,10 @@ func (d *VersionWorkflowRunner) validateDeleteVersion(args *deploymentspb.Delete
 }
 
 func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -324,11 +346,19 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		d.lock.Unlock()
 	}()
 
-	// wait until deployment workflow started
-	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
-	if err != nil {
-		d.logger.Error("Update canceled before worker deployment workflow started")
-		return serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+	if d.deleteVersion {
+		// already deleted, returning success so it is idempotent
+		return nil
+	}
+
+	if !d.hasMinVersion(VersionDataRevisionNumber) {
+		// wait until deployment workflow started
+		//nolint:staticcheck // SA1019
+		err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
+		if err != nil {
+			d.logger.Error("Update canceled before worker deployment workflow started")
+			return serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+		}
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -342,7 +372,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	if !args.SkipDrainage {
 		if d.GetVersionState().GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 			// activity won't retry on this error since version not eligible for deletion
-			return serviceerror.NewFailedPrecondition(ErrVersionIsDraining)
+			return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionIsDraining, worker_versioning.WorkerDeploymentVersionToStringV32(d.VersionState.GetVersion())), errVersionIsDraining, nil)
 		}
 	}
 
@@ -350,7 +380,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	hasPollers, err := d.doesVersionHaveActivePollers(ctx)
 	if hasPollers {
 		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(ErrVersionHasPollers)
+		return temporal.NewNonRetryableApplicationError(fmt.Sprintf(ErrVersionHasPollers, worker_versioning.WorkerDeploymentVersionToStringV32(d.VersionState.GetVersion())), errVersionHasPollers, nil)
 	}
 	if err != nil {
 		// some other error allowing activity retries
@@ -389,6 +419,7 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 }
 
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueues(ctx workflow.Context, activityCtx workflow.Context) error {
+
 	state := d.GetVersionState()
 
 	// sync version removal to task queues
@@ -458,6 +489,8 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 }
 
 func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInVersionArgs) error {
+	// Should not ensure not deleted, instead the version would revive if deleted.
+
 	if _, ok := d.VersionState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
 		return temporal.NewApplicationError("task queue already exists in deployment version", errNoChangeType)
 	}
@@ -471,6 +504,13 @@ func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.Regis
 }
 
 func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) error {
+	// Should not ensure not deleted, instead the version would revive if deleted.
+	if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+		// History is too large, do not accept new updates until wf CaNs.
+		// Since this needs workflow context we cannot do it in validators.
+		return temporal.NewApplicationError(errLongHistory, errLongHistory)
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -514,6 +554,12 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)
 	}
+
+	if _, ok := d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)]; ok {
+		// already registered, returning success so it is idempotent
+		return nil
+	}
+
 	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
 
 	if withRevisionNumbers && args.GetRoutingConfig() != nil {
@@ -583,10 +629,10 @@ func (d *VersionWorkflowRunner) versionDataToSync() *deploymentspb.WorkerDeploym
 
 // If routing update time has changed then we want to let the update through.
 func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersionStateUpdateArgs) error {
-	if d.deleteVersion {
-		// Deployment workflow should not call this function if version is marked for deletion, but still checking for safety.
-		return temporal.NewNonRetryableApplicationError(errVersionDeleted, errVersionDeleted, nil)
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
 	}
+
 	res := &deploymentspb.SyncVersionStateResponse{VersionState: d.VersionState}
 	if args.GetRoutingUpdateTime().AsTime().Equal(d.GetVersionState().GetRoutingUpdateTime().AsTime()) {
 		return temporal.NewApplicationError("no change", errNoChangeType, res)
@@ -596,6 +642,10 @@ func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersio
 
 //nolint:staticcheck // SA1019
 func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.SyncVersionStateResponse, error) {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -613,11 +663,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		return nil, err
 	}
 
-	// wait until deployment workflow started
-	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
-	if err != nil {
-		d.logger.Error("Update canceled before worker deployment workflow started")
-		return nil, serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+	if !d.hasMinVersion(VersionDataRevisionNumber) {
+		// wait until deployment workflow started
+		err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
+		if err != nil {
+			d.logger.Error("Update canceled before worker deployment workflow started")
+			return nil, serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+		}
 	}
 
 	state := d.GetVersionState()
@@ -653,6 +705,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		state.CurrentSinceTime = args.CurrentSinceTime
 		state.RampingSinceTime = args.RampingSinceTime
 		state.RampPercentage = args.RampPercentage
+
+		// Only needed for v0 workflow version. v1 and v2 are handled by updateStateFromRoutingConfig.
+		if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT &&
+			(state.LastCurrentTime == nil || state.LastCurrentTime.AsTime().Before(args.RoutingUpdateTime.AsTime())) {
+			// Last time this version was set to current
+			state.LastCurrentTime = args.RoutingUpdateTime
+		}
 	}
 
 	// stopped accepting new workflows --> start drainage tracking
@@ -681,6 +740,20 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	}, nil
 }
 
+func (d *VersionWorkflowRunner) preUpdateChecks(ctx workflow.Context) error {
+	err := d.ensureNotDeleted()
+	if err != nil {
+		return err
+	}
+
+	if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+		// History is too large, do not accept new updates until wf CaNs.
+		// Since this needs workflow context we cannot do it in validators.
+		return temporal.NewApplicationError(errLongHistory, errLongHistory)
+	}
+	return nil
+}
+
 // updateStateFromRoutingConfig updates the version state based on routing config received from Deployment.
 // returns true if any information that affects version data to be synced in TQs was changed.
 func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
@@ -703,6 +776,7 @@ func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
 		switch newStatus {
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT:
 			state.CurrentSinceTime = rg.GetCurrentVersionChangedTime()
+			state.LastCurrentTime = rg.GetCurrentVersionChangedTime()
 			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING:
 			state.RampingSinceTime = rg.GetRampingVersionChangedTime()
@@ -712,7 +786,10 @@ func (d *VersionWorkflowRunner) updateStateFromRoutingConfig(
 		case enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING:
 			// Version just became draining. So we need to update RoutingUpdateTime which is the max of the following:
 			state.RoutingUpdateTime = rg.GetCurrentVersionChangedTime()
-			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RampingSinceTime.AsTime()) {
+			if rg.GetRampingVersionChangedTime().AsTime().After(state.RoutingUpdateTime.AsTime()) {
+				state.RoutingUpdateTime = rg.GetRampingVersionChangedTime()
+			}
+			if rg.GetRampingVersionPercentageChangedTime().AsTime().After(state.RoutingUpdateTime.AsTime()) {
 				state.RoutingUpdateTime = rg.GetRampingVersionPercentageChangedTime()
 			}
 		default: // Shouldn't happen
@@ -761,6 +838,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		CurrentSinceTime:     s.CurrentSinceTime,
 		RampingSinceTime:     s.RampingSinceTime,
 		FirstActivationTime:  s.FirstActivationTime,
+		LastCurrentTime:      s.LastCurrentTime,
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 	}
@@ -811,8 +889,6 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 		d.logger.Error("could not get version drainage status", tag.Error(err))
 		return
 	}
-
-	d.metrics.Counter(metrics.WorkerDeploymentVersionVisibilityQueryCount.Name()).Inc(1)
 
 	if d.hasMinVersion(VersionDataRevisionNumber) {
 		// Need to lock so there is no race condition with setCurrent/Ramping
@@ -1003,6 +1079,8 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 // syncTaskQueuesAsync must be called within the lock. It first increments the version revision number and then
 // starts async propagation of version data (and routing info if given) to all task queues.
 func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routingConfig *deploymentpb.RoutingConfig, versionDataChanged bool) {
+	startTime := workflow.Now(ctx)
+
 	withRevisionNumber := d.hasMinVersion(VersionDataRevisionNumber)
 	if withRevisionNumber && versionDataChanged {
 		d.GetVersionState().RevisionNumber++
@@ -1031,6 +1109,7 @@ func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routin
 			d.signalPropagationComplete(gCtx, routingConfig.GetRevisionNumber())
 		}
 
+		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
 		// Decrement counter when propagation completes
 		d.asyncPropagationsInProgress--
 	})
@@ -1186,6 +1265,8 @@ func (d *VersionWorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion)
 // later because it's not possible normally and user has to pass IgnoreMissingTaskQueues or AllowNoPollers for it to
 // happen, or the task queue needs to be a task queue that is added in this version.
 func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) {
+	startTime := workflow.Now(ctx)
+
 	versionData := &deploymentspb.WorkerDeploymentVersionData{
 		Status:         d.VersionState.Status,
 		RevisionNumber: d.GetVersionState().GetRevisionNumber(),
@@ -1205,6 +1286,7 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Contex
 		// the task queue partition initiating the registration itself is responsible to block until it sees the version in user data.
 		d.executePropagationBatch(gCtx, batch, args.GetRoutingConfig(), versionData)
 
+		d.metrics.Timer(metrics.VersioningDataPropagationLatency.Name()).Record(workflow.Now(ctx).Sub(startTime))
 		// Decrement counter when propagation completes
 		d.asyncPropagationsInProgress--
 	})

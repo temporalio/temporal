@@ -101,6 +101,9 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   {},
 		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         {},
+
+		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":  {},
 	}
 
 	var service workflowservice.WorkflowServiceServer

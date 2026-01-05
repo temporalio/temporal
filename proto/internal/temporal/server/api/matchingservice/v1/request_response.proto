@@ -30,6 +30,8 @@ message PollWorkflowTaskQueueRequest {
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 3;
     string forwarded_source = 4;
+    // Extra conditions on this poll request. Only supported with new matcher.
+    PollConditions conditions = 5;
 }
 
 message PollWorkflowTaskQueueResponse {
@@ -64,6 +66,8 @@ message PollActivityTaskQueueRequest {
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 3;
     string forwarded_source = 4;
+    // Extra conditions on this poll request. Only supported with new matcher.
+    PollConditions conditions = 5;
 }
 
 message PollActivityTaskQueueResponse {
@@ -132,6 +136,10 @@ message AddActivityTaskRequest {
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
     int32 stamp = 12;
     temporal.api.common.v1.Priority priority = 13;
+    // Reference to the Chasm component for activity execution (if applicable). For standalone activities, all
+    // necessary start information is carried within this component, obviating the need to use the fields that apply to
+    // embedded activities.
+    bytes component_ref = 14;
 }
 
 message AddActivityTaskResponse {
@@ -490,6 +498,8 @@ message PollNexusTaskQueueRequest {
     temporal.api.workflowservice.v1.PollNexusTaskQueueRequest request = 3;
     // Non-empty if this poll was forwarded from a child partition.
     string forwarded_source = 4;
+    // Extra conditions on this poll request. Only supported with new matcher.
+    PollConditions conditions = 5;
 }
 
 message PollNexusTaskQueueResponse {
@@ -641,4 +651,16 @@ message CheckTaskQueueVersionMembershipRequest {
 
 message CheckTaskQueueVersionMembershipResponse {
     bool is_member = 1;
+}
+
+// PollConditions are extra conditions to set on the poll. Only supported with new matcher.
+message PollConditions {
+    // If set (non-zero), this poll will not match a task with lower priority than this value.
+    // Note that "min" priority is "max" numeric value, e.g. "min_priority: 3" means to match
+    // tasks with priority 1, 2, or 3.
+    int32 min_priority = 1;
+    // If true, don't block waiting for a task, just return a task immediately or an empty
+    // response. This is most useful combined with min_priority, to poll for task at a specific
+    // priority level on a partition that you think is there.
+    bool no_wait = 2;
 }
