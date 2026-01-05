@@ -129,11 +129,11 @@ func newPhysicalTaskQueueManager(
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	buildIdTagValue := queue.Version().MetricsTagValue()
-	buildIdTag := tag.WorkerBuildId(buildIdTagValue)
+	versionTagValue := queue.Version().MetricsTagValue()
+	buildIDTag := tag.WorkerVersion(versionTagValue)
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
+		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()))
 
 	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
 
@@ -177,8 +177,8 @@ func newPhysicalTaskQueueManager(
 
 	switch {
 	case config.EnableFairness:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagFairness)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagFairness)
 
 		pqMgr.backlogMgr = newFairBacklogManager(
 			tqCtx,
@@ -216,8 +216,8 @@ func newPhysicalTaskQueueManager(
 		return pqMgr, nil
 
 	case config.NewMatcher:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagPriority)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagPriority)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagPriority)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagPriority)
 
 		pqMgr.backlogMgr = newPriBacklogManager(
 			tqCtx,
@@ -253,8 +253,8 @@ func newPhysicalTaskQueueManager(
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
 	default:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagClassic)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagClassic)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagClassic)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagClassic)
 
 		pqMgr.backlogMgr = newBacklogManager(
 			tqCtx,
