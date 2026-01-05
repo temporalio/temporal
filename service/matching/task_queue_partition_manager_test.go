@@ -393,7 +393,6 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OneUnversione
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	s.partitionMgr.WaitUntilInitialized(ctx)
 	err := s.partitionMgr.WaitUntilInitialized(ctx)
 	s.Require().NoError(err)
 	// Backlog exactly 1 task in the unversioned/default queue.
