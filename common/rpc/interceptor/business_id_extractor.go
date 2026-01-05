@@ -17,7 +17,7 @@ func NewBusinessIDExtractor() BusinessIDExtractor {
 	}
 }
 
-// Interfaces for extracting workflow ID from different request types.
+// Interfaces for extracting business ID from different request types.
 type (
 	workflowIDGetter interface {
 		GetWorkflowId() string
@@ -36,7 +36,7 @@ type (
 	}
 )
 
-// Extract extracts business ID (workflow ID) from the request using the specified pattern.
+// Extract extracts business ID from the request using the specified pattern.
 // Returns the business ID or namespace.EmptyBusinessID if not found.
 func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) string {
 	if req == nil {
