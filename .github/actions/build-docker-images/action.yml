@@ -46,12 +46,11 @@ runs:
       run: |
         go build -o docker-build-helper .
 
-    - name: Validate and sanitize branch name for Docker tag
-      id: sanitize-tag
+    - name: Set image tags
+      id: image-tags
       shell: bash
       working-directory: ${{ github.workspace }}
-      run: |
-        .github/actions/build-docker-images/scripts/docker-build-helper sanitize-tag
+      run: .github/actions/build-docker-images/scripts/docker-build-helper set-image-tags
 
     - name: Organize binaries for Docker
       id: organize-binaries
@@ -97,8 +96,8 @@ runs:
       working-directory: ${{ github.workspace }}
       env:
         IMAGE_REPO: temporaliotest
-        IMAGE_SHA_TAG: ${{ github.sha }}
-        IMAGE_BRANCH_TAG: ${{ steps.sanitize-tag.outputs.tag }}
+        IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
         TEMPORAL_SHA: ${{ github.sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
@@ -123,8 +122,8 @@ runs:
       working-directory: ${{ github.workspace }}
       env:
         IMAGE_REPO: temporaliotest
-        IMAGE_SHA_TAG: ${{ github.sha }}
-        IMAGE_BRANCH_TAG: ${{ steps.sanitize-tag.outputs.tag }}
+        IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
         TEMPORAL_SHA: ${{ github.sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
