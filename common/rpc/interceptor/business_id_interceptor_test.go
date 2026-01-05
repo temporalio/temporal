@@ -16,10 +16,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-func TestWorkflowIDInterceptor_AllMethods(t *testing.T) {
-	extractor := NewWorkflowIDExtractor()
+func TestBusinessIDInterceptor_AllMethods(t *testing.T) {
+	extractor := NewBusinessIDExtractor()
 	logger := log.NewTestLogger()
-	interceptor := NewWorkflowIDInterceptor(extractor, logger)
+	interceptor := NewBusinessIDInterceptor(extractor, logger)
 
 	serializer := tasktoken.NewSerializer()
 	createTaskToken := func(workflowID string) []byte {
@@ -33,169 +33,169 @@ func TestWorkflowIDInterceptor_AllMethods(t *testing.T) {
 	testCases := []struct {
 		methodName         string
 		request            any
-		expectedWorkflowID string
+		expectedBusinessID string
 	}{
 		// PatternWorkflowID methods (direct WorkflowId field)
 		{
 			methodName:         "StartWorkflowExecution",
 			request:            &workflowservice.StartWorkflowExecutionRequest{WorkflowId: "wf-id"},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "SignalWithStartWorkflowExecution",
 			request:            &workflowservice.SignalWithStartWorkflowExecutionRequest{WorkflowId: "wf-id"},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "PauseWorkflowExecution",
 			request:            &workflowservice.PauseWorkflowExecutionRequest{WorkflowId: "wf-id"},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UnpauseWorkflowExecution",
 			request:            &workflowservice.UnpauseWorkflowExecutionRequest{WorkflowId: "wf-id"},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RecordActivityTaskHeartbeatById",
 			request:            &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: "wf-id"},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskCompletedById",
 			request:            &workflowservice.RespondActivityTaskCompletedByIdRequest{WorkflowId: "wf-id"},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskCanceledById",
 			request:            &workflowservice.RespondActivityTaskCanceledByIdRequest{WorkflowId: "wf-id"},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskFailedById",
 			request:            &workflowservice.RespondActivityTaskFailedByIdRequest{WorkflowId: "wf-id"},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 
 		// PatternWorkflowExecution methods (GetWorkflowExecution().GetWorkflowId())
 		{
 			methodName:         "DeleteWorkflowExecution",
 			request:            &workflowservice.DeleteWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RequestCancelWorkflowExecution",
 			request:            &workflowservice.RequestCancelWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "ResetWorkflowExecution",
 			request:            &workflowservice.ResetWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "SignalWorkflowExecution",
 			request:            &workflowservice.SignalWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "TerminateWorkflowExecution",
 			request:            &workflowservice.TerminateWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UpdateWorkflowExecution",
 			request:            &workflowservice.UpdateWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UpdateWorkflowExecutionOptions",
 			request:            &workflowservice.UpdateWorkflowExecutionOptionsRequest{WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 
 		// PatternExecution methods (GetExecution().GetWorkflowId())
 		{
 			methodName:         "DescribeWorkflowExecution",
 			request:            &workflowservice.DescribeWorkflowExecutionRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "GetWorkflowExecutionHistory",
 			request:            &workflowservice.GetWorkflowExecutionHistoryRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "GetWorkflowExecutionHistoryReverse",
 			request:            &workflowservice.GetWorkflowExecutionHistoryReverseRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "QueryWorkflow",
 			request:            &workflowservice.QueryWorkflowRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "ResetStickyTaskQueue",
 			request:            &workflowservice.ResetStickyTaskQueueRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "ResetActivity",
 			request:            &workflowservice.ResetActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "PauseActivity",
 			request:            &workflowservice.PauseActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UnpauseActivity",
 			request:            &workflowservice.UnpauseActivityRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "UpdateActivityOptions",
 			request:            &workflowservice.UpdateActivityOptionsRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "TriggerWorkflowRule",
 			request:            &workflowservice.TriggerWorkflowRuleRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-id"}},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 
 		// PatternTaskToken methods (TaskToken deserialization)
 		{
 			methodName:         "RecordActivityTaskHeartbeat",
 			request:            &workflowservice.RecordActivityTaskHeartbeatRequest{TaskToken: createTaskToken("wf-id")},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskCompleted",
 			request:            &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: createTaskToken("wf-id")},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskCanceled",
 			request:            &workflowservice.RespondActivityTaskCanceledRequest{TaskToken: createTaskToken("wf-id")},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondActivityTaskFailed",
 			request:            &workflowservice.RespondActivityTaskFailedRequest{TaskToken: createTaskToken("wf-id")},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondWorkflowTaskCompleted",
 			request:            &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: createTaskToken("wf-id")},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 		{
 			methodName:         "RespondWorkflowTaskFailed",
 			request:            &workflowservice.RespondWorkflowTaskFailedRequest{TaskToken: createTaskToken("wf-id")},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 
 		// PatternMultiOperation
@@ -210,15 +210,15 @@ func TestWorkflowIDInterceptor_AllMethods(t *testing.T) {
 					},
 				},
 			},
-			expectedWorkflowID: "wf-id",
+			expectedBusinessID: "wf-id",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.methodName, func(t *testing.T) {
-			var capturedWorkflowID string
+			var capturedBusinessID string
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedWorkflowID = GetWorkflowIDFromContext(ctx)
+				capturedBusinessID = GetBusinessIDFromContext(ctx)
 				return nil, nil
 			}
 
@@ -228,7 +228,7 @@ func TestWorkflowIDInterceptor_AllMethods(t *testing.T) {
 
 			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedWorkflowID, capturedWorkflowID)
+			require.Equal(t, tc.expectedBusinessID, capturedBusinessID)
 		})
 	}
 
@@ -236,10 +236,10 @@ func TestWorkflowIDInterceptor_AllMethods(t *testing.T) {
 	require.Len(t, testCases, len(methodToPattern), "test cases should cover all methods in methodToPattern")
 }
 
-func TestWorkflowIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *testing.T) {
-	extractor := NewWorkflowIDExtractor()
+func TestBusinessIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *testing.T) {
+	extractor := NewBusinessIDExtractor()
 	logger := log.NewTestLogger()
-	interceptor := NewWorkflowIDInterceptor(extractor, logger)
+	interceptor := NewBusinessIDInterceptor(extractor, logger)
 
 	testCases := []struct {
 		name       string
@@ -260,48 +260,48 @@ func TestWorkflowIDInterceptor_SkipsNonWorkflowServiceAndUnmappedMethods(t *test
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var capturedWorkflowID string
+			var capturedBusinessID string
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedWorkflowID = GetWorkflowIDFromContext(ctx)
+				capturedBusinessID = GetBusinessIDFromContext(ctx)
 				return nil, nil
 			}
 
 			info := &grpc.UnaryServerInfo{FullMethod: tc.fullMethod}
 			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, namespace.EmptyBusinessID, capturedWorkflowID)
+			require.Equal(t, namespace.EmptyBusinessID, capturedBusinessID)
 		})
 	}
 }
 
-func TestWorkflowIDInterceptor_EdgeCases(t *testing.T) {
-	extractor := NewWorkflowIDExtractor()
+func TestBusinessIDInterceptor_EdgeCases(t *testing.T) {
+	extractor := NewBusinessIDExtractor()
 	logger := log.NewTestLogger()
-	interceptor := NewWorkflowIDInterceptor(extractor, logger)
+	interceptor := NewBusinessIDInterceptor(extractor, logger)
 
 	testCases := []struct {
 		name               string
 		methodName         string
 		request            any
-		expectedWorkflowID string
+		expectedBusinessID string
 	}{
 		{
 			name:               "NilWorkflowExecution",
 			methodName:         "TerminateWorkflowExecution",
 			request:            &workflowservice.TerminateWorkflowExecutionRequest{WorkflowExecution: nil},
-			expectedWorkflowID: namespace.EmptyBusinessID,
+			expectedBusinessID: namespace.EmptyBusinessID,
 		},
 		{
 			name:               "InvalidTaskToken",
 			methodName:         "RespondActivityTaskCompleted",
 			request:            &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: []byte("invalid")},
-			expectedWorkflowID: namespace.EmptyBusinessID,
+			expectedBusinessID: namespace.EmptyBusinessID,
 		},
 		{
 			name:               "EmptyMultiOperations",
 			methodName:         "ExecuteMultiOperation",
 			request:            &workflowservice.ExecuteMultiOperationRequest{Operations: nil},
-			expectedWorkflowID: namespace.EmptyBusinessID,
+			expectedBusinessID: namespace.EmptyBusinessID,
 		},
 		{
 			name:       "MultiOperation_UpdateWorkflowFallback",
@@ -318,15 +318,15 @@ func TestWorkflowIDInterceptor_EdgeCases(t *testing.T) {
 					},
 				},
 			},
-			expectedWorkflowID: "wf-update",
+			expectedBusinessID: "wf-update",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var capturedWorkflowID string
+			var capturedBusinessID string
 			handler := func(ctx context.Context, req any) (any, error) {
-				capturedWorkflowID = GetWorkflowIDFromContext(ctx)
+				capturedBusinessID = GetBusinessIDFromContext(ctx)
 				return nil, nil
 			}
 
@@ -336,24 +336,24 @@ func TestWorkflowIDInterceptor_EdgeCases(t *testing.T) {
 
 			_, err := interceptor.Intercept(context.Background(), tc.request, info, handler)
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedWorkflowID, capturedWorkflowID)
+			require.Equal(t, tc.expectedBusinessID, capturedBusinessID)
 		})
 	}
 }
 
-func TestWorkflowIDContext(t *testing.T) {
+func TestBusinessIDContext(t *testing.T) {
 	t.Run("RoundTrip", func(t *testing.T) {
-		ctx := AddWorkflowIDContext(context.Background(), "test-workflow-id")
-		require.Equal(t, "test-workflow-id", GetWorkflowIDFromContext(ctx))
+		ctx := AddBusinessIDToContext(context.Background(), "test-business-id")
+		require.Equal(t, "test-business-id", GetBusinessIDFromContext(ctx))
 	})
 
 	t.Run("MissingReturnsEmptyBusinessID", func(t *testing.T) {
-		require.Equal(t, namespace.EmptyBusinessID, GetWorkflowIDFromContext(context.Background()))
+		require.Equal(t, namespace.EmptyBusinessID, GetBusinessIDFromContext(context.Background()))
 	})
 }
 
 func TestMethodToPatternMapping(t *testing.T) {
-	expectedMappings := map[string]WorkflowIDPattern{
+	expectedMappings := map[string]BusinessIDPattern{
 		// PatternWorkflowID
 		"StartWorkflowExecution":           PatternWorkflowID,
 		"SignalWithStartWorkflowExecution": PatternWorkflowID,

@@ -12,23 +12,23 @@ import (
 )
 
 type (
-	workflowIDContextKey struct{}
+	businessIDContextKey struct{}
 
-	// WorkflowIDPattern defines the expected interface pattern for extracting workflow ID
-	WorkflowIDPattern int
+	// BusinessIDPattern defines the expected interface pattern for extracting business ID
+	BusinessIDPattern int
 
-	// WorkflowIDInterceptor extracts workflow ID from requests and adds it to context
-	WorkflowIDInterceptor struct {
-		extractor WorkflowIDExtractor
+	// BusinessIDInterceptor extracts business ID from requests and adds it to context
+	BusinessIDInterceptor struct {
+		extractor BusinessIDExtractor
 		logger    log.Logger
 	}
 )
 
-var workflowIDCtxKey = workflowIDContextKey{}
+var businessIDCtxKey = businessIDContextKey{}
 
 const (
-	// PatternNone indicates no workflow ID extraction is needed
-	PatternNone WorkflowIDPattern = iota
+	// PatternNone indicates no business ID extraction is needed
+	PatternNone BusinessIDPattern = iota
 	// PatternWorkflowID indicates extraction via GetWorkflowId() method
 	PatternWorkflowID
 	// PatternWorkflowExecution indicates extraction via GetWorkflowExecution().GetWorkflowId()
@@ -41,9 +41,9 @@ const (
 	PatternMultiOperation
 )
 
-// methodToPattern maps API method names to their expected workflow ID extraction pattern.
-// Methods not in this map are treated as PatternNone (no workflow ID extraction needed).
-var methodToPattern = map[string]WorkflowIDPattern{
+// methodToPattern maps API method names to their expected business ID extraction pattern.
+// Methods not in this map are treated as PatternNone (no business ID extraction needed).
+var methodToPattern = map[string]BusinessIDPattern{
 	// Pattern: GetWorkflowId() - direct WorkflowId field
 	"StartWorkflowExecution":           PatternWorkflowID,
 	"SignalWithStartWorkflowExecution": PatternWorkflowID,
@@ -87,20 +87,20 @@ var methodToPattern = map[string]WorkflowIDPattern{
 	"ExecuteMultiOperation": PatternMultiOperation,
 }
 
-func NewWorkflowIDInterceptor(
-	extractor WorkflowIDExtractor,
+func NewBusinessIDInterceptor(
+	extractor BusinessIDExtractor,
 	logger log.Logger,
-) *WorkflowIDInterceptor {
-	return &WorkflowIDInterceptor{
+) *BusinessIDInterceptor {
+	return &BusinessIDInterceptor{
 		extractor: extractor,
 		logger:    logger,
 	}
 }
 
-var _ grpc.UnaryServerInterceptor = (*WorkflowIDInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*BusinessIDInterceptor)(nil).Intercept
 
-// Intercept extracts workflow ID from the request and adds it to the context
-func (i *WorkflowIDInterceptor) Intercept(
+// Intercept extracts business ID from the request and adds it to the context
+func (i *BusinessIDInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -117,27 +117,27 @@ func (i *WorkflowIDInterceptor) Intercept(
 		return handler(ctx, req)
 	}
 
-	workflowID := i.extractor.Extract(req, pattern)
+	businessID := i.extractor.Extract(req, pattern)
 
-	i.logger.Debug("workflow ID extraction: adding workflow ID to context",
+	i.logger.Debug("business ID extraction: adding business ID to context",
 		tag.Operation(methodName),
-		tag.WorkflowID(workflowID),
+		tag.WorkflowID(businessID),
 	)
 
-	ctx = AddWorkflowIDContext(ctx, workflowID)
+	ctx = AddBusinessIDToContext(ctx, businessID)
 	return handler(ctx, req)
 }
 
-// AddWorkflowIDContext adds the workflow ID to the context
-func AddWorkflowIDContext(ctx context.Context, workflowID string) context.Context {
-	return context.WithValue(ctx, workflowIDCtxKey, workflowID)
+// AddBusinessIDToContext adds the business ID to the context
+func AddBusinessIDToContext(ctx context.Context, businessID string) context.Context {
+	return context.WithValue(ctx, businessIDCtxKey, businessID)
 }
 
-// GetWorkflowIDFromContext retrieves the workflow ID from the context.
+// GetBusinessIDFromContext retrieves the business ID from the context.
 // Returns namespace.EmptyBusinessID if not found.
-func GetWorkflowIDFromContext(ctx context.Context) string {
-	if workflowID, ok := ctx.Value(workflowIDCtxKey).(string); ok {
-		return workflowID
+func GetBusinessIDFromContext(ctx context.Context) string {
+	if businessID, ok := ctx.Value(businessIDCtxKey).(string); ok {
+		return businessID
 	}
 	return namespace.EmptyBusinessID
 }

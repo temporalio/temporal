@@ -7,12 +7,12 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 )
 
-type WorkflowIDExtractor struct {
+type BusinessIDExtractor struct {
 	serializer tasktoken.Serializer
 }
 
-func NewWorkflowIDExtractor() WorkflowIDExtractor {
-	return WorkflowIDExtractor{
+func NewBusinessIDExtractor() BusinessIDExtractor {
+	return BusinessIDExtractor{
 		serializer: *tasktoken.NewSerializer(),
 	}
 }
@@ -36,9 +36,9 @@ type (
 	}
 )
 
-// Extract extracts workflow ID from the request using the specified pattern.
-// Returns the workflow ID or namespace.EmptyBusinessID if not found.
-func (e WorkflowIDExtractor) Extract(req any, pattern WorkflowIDPattern) string {
+// Extract extracts business ID (workflow ID) from the request using the specified pattern.
+// Returns the business ID or namespace.EmptyBusinessID if not found.
+func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) string {
 	if req == nil {
 		return namespace.EmptyBusinessID
 	}
@@ -86,9 +86,9 @@ func (e WorkflowIDExtractor) Extract(req any, pattern WorkflowIDPattern) string 
 	return namespace.EmptyBusinessID
 }
 
-// extractMultiOperation extracts workflow ID from ExecuteMultiOperationRequest.
-// The workflow ID is extracted from the first operation's StartWorkflow request.
-func (e WorkflowIDExtractor) extractMultiOperation(req any) string {
+// extractMultiOperation extracts business ID from ExecuteMultiOperationRequest.
+// The business ID is extracted from the first operation's StartWorkflow request.
+func (e BusinessIDExtractor) extractMultiOperation(req any) string {
 	multiOpReq, ok := req.(*workflowservice.ExecuteMultiOperationRequest)
 	if !ok {
 		return namespace.EmptyBusinessID

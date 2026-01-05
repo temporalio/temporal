@@ -75,8 +75,8 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
-	fx.Provide(interceptor.NewWorkflowIDExtractor),
-	fx.Provide(WorkflowIDInterceptorProvider),
+	fx.Provide(interceptor.NewBusinessIDExtractor),
+	fx.Provide(BusinessIDInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -207,7 +207,7 @@ func GrpcServerOptionsProvider(
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
-	workflowIDInterceptor *interceptor.WorkflowIDInterceptor,
+	businessIDInterceptor *interceptor.BusinessIDInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
@@ -263,8 +263,8 @@ func GrpcServerOptionsProvider(
 		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
-		// WorkflowID interceptor extracts workflow ID and adds it to context for use by redirection policy
-		workflowIDInterceptor.Intercept,
+		// BusinessID interceptor extracts business ID and adds it to context for use by redirection policy
+		businessIDInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
@@ -365,11 +365,11 @@ func RedirectionInterceptorProvider(
 	)
 }
 
-func WorkflowIDInterceptorProvider(
-	extractor interceptor.WorkflowIDExtractor,
+func BusinessIDInterceptorProvider(
+	extractor interceptor.BusinessIDExtractor,
 	logger log.Logger,
-) *interceptor.WorkflowIDInterceptor {
-	return interceptor.NewWorkflowIDInterceptor(extractor, logger)
+) *interceptor.BusinessIDInterceptor {
+	return interceptor.NewBusinessIDInterceptor(extractor, logger)
 }
 
 func NamespaceHandoverInterceptorProvider(

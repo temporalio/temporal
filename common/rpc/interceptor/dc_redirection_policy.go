@@ -180,11 +180,11 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	// Get workflow ID from context (set by WorkflowIDInterceptor)
-	workflowID := GetWorkflowIDFromContext(ctx)
+	// Get business ID from context (set by BusinessIDInterceptor)
+	businessID := GetBusinessIDFromContext(ctx)
 
 	if policy.enableForAllAPIs {
-		return namespaceEntry.ActiveClusterName(workflowID), true
+		return namespaceEntry.ActiveClusterName(businessID), true
 	}
 
 	_, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]
@@ -193,5 +193,5 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	return namespaceEntry.ActiveClusterName(workflowID), true
+	return namespaceEntry.ActiveClusterName(businessID), true
 }
