@@ -389,17 +389,38 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	pm.rateLimitManager.InjectWorkerRPS(pollMetadata)
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
-
-	// TODO (Shivam): Right now, this only considers the backlog of the versioned queue for the poller scaling decision.
-	// The backlog of the unversioned queue should be considered for these decisions since current/ramping versions have their
-	// tasks sent to the unversioned queue.
-	// The right fix is to move MakePollerScalingDecision to the task queue partition manager and call the partitionManager.Describe method
-	// with the right buildID.
 	if task != nil {
-		task.pollerScalingDecision = dbq.MakePollerScalingDecision(pollMetadata.localPollStartTime)
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
 	}
 
 	return task, versionSetUsed, err
+}
+
+// GetPhysicalQueueAdjustedStats retrieves task queue stats for the given physical queue.
+// Returns nil if stats cannot be retrieved or are not available.
+func (pm *taskQueuePartitionManagerImpl) GetPhysicalQueueAdjustedStats(
+	ctx context.Context,
+	physicalQueue physicalTaskQueueManager,
+) *taskqueuepb.TaskQueueStats {
+	// buildID would be empty for either the unversioned queue or when using v3 worker-versioning.
+	buildID := physicalQueue.QueueKey().Version().BuildId()
+
+	// Check if the queue is versioned queue using v3 worker-versioning
+	deployment := physicalQueue.QueueKey().Version().Deployment()
+	if deployment != nil {
+		buildID = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
+	}
+
+	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false)
+	if err != nil {
+		return nil
+	}
+
+	info, ok := partitionInfo.GetVersionsInfoInternal()[buildID]
+	if !ok || info.GetPhysicalTaskQueueInfo().GetTaskQueueStats() == nil {
+		return nil
+	}
+	return info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
 }
 
 // TODO(pri): old matcher cleanup

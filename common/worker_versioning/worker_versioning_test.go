@@ -406,7 +406,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "new format: versioned current with unversioned ramping in same deployment -> current is versioned and ramping is unversioned", wantCurrent: v1, wantRamping: nil,
+		{name: "new format: versioned current with unversioned ramping in same deployment -> current is versioned and ramping is unversioned", wantCurrent: v1, wantRamping: nil, wantRampPercentage: 20,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{

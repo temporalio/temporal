@@ -293,6 +293,12 @@ type (
 		GetHistorySize() int64
 		AddHistorySize(size int64)
 
+		GetExternalPayloadSize() int64
+		AddExternalPayloadSize(size int64)
+
+		GetExternalPayloadCount() int64
+		AddExternalPayloadCount(count int64)
+
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
