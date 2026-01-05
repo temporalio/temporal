@@ -782,21 +782,21 @@ func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
 }
 
 func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
+	tv := testvars.New(s.T()).WithNamespaceID(s.ns.ID())
 	req := &matchingservice.UpdateFairnessStateRequest{
-		NamespaceId:   s.ns.ID().String(),
-		TaskQueue:     "makeToast",
+		NamespaceId:   tv.NamespaceID().String(),
+		TaskQueue:     tv.TaskQueue().Name,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		FairnessState: enumsspb.FAIRNESS_STATE_V2,
 	}
-	didUpdate := &atomic.Bool{}
+	var didUpdate atomic.Bool
 	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
-		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (resp *matchingservice.UpdateFairnessStateResponse, err error) {
-			resp, err = s.matchingEngine.UpdateFairnessState(ctx, req)
+		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
 			didUpdate.Store(true)
-			return
+			return s.matchingEngine.UpdateFairnessState(ctx, req)
 		},
 	).AnyTimes()
-	dbq := newUnversionedRootQueueKey(s.ns.ID().String(), "makeToast", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	dbq := newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().Name, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 	cMgr := mgr.(*taskQueuePartitionManagerImpl)
 	mgr.GetUserDataManager().(*mockUserDataManager).onChange = cMgr.userDataChanged
@@ -805,20 +805,14 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err := mgr.WaitUntilInitialized(ctx)
 	s.Require().NoError(err)
-	defer cancel()
+	cancel()
 
 	_, _, err = s.matchingEngine.AddWorkflowTask(
 		context.Background(),
 		&matchingservice.AddWorkflowTaskRequest{
-			NamespaceId: s.ns.ID().String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "workflow1",
-				RunId:      uuid.NewString(),
-			},
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: "makeToast",
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
+			NamespaceId: tv.NamespaceID().String(),
+			Execution:   tv.WorkflowExecution(),
+			TaskQueue:   tv.TaskQueue(),
 			Priority: &commonpb.Priority{
 				PriorityKey: 3,
 			},
