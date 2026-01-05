@@ -67,6 +67,17 @@ func TestGradualChangeValue_TransitionProgresses(t *testing.T) {
 	assert.Greater(t, lateNew, earlyNew, "more keys should be new later in the transition")
 }
 
+func TestGradualChangeValue_StartEndEqual(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	gc := GradualChange[string]{Old: "old", New: "new", Start: start, End: end}
+	key := []byte("key")
+
+	assert.Equal(t, "old", gc.Value(key, start.Add(-time.Hour)))
+	assert.Equal(t, "new", gc.Value(key, start))
+	assert.Equal(t, "new", gc.Value(key, start.Add(time.Hour)))
+}
+
 func TestGradualChangeValue_Monotonic(t *testing.T) {
 	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2024, 1, 11, 0, 0, 0, 0, time.UTC)

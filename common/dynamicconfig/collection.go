@@ -723,7 +723,7 @@ func mapstructureHookTimestamp(f, t reflect.Type, data any) (any, error) {
 	case string:
 		ts, err := time.Parse(time.RFC3339, v)
 		if err != nil {
-			return 0, fmt.Errorf("failed to parse time: %v", err)
+			return time.Time{}, fmt.Errorf("failed to parse time: %v", err)
 		}
 		return ts, nil
 	}
@@ -734,7 +734,7 @@ func mapstructureHookTimestamp(f, t reflect.Type, data any) (any, error) {
 		ipart, fpart := math.Modf(fval)
 		return time.Unix(int64(ipart), int64(fpart*float64(time.Second))), nil
 	}
-	return 0, errors.New("value not convertible to Time")
+	return time.Time{}, errors.New("value not convertible to Time")
 }
 
 // Parses proto enum values from strings.

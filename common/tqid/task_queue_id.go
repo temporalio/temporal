@@ -64,7 +64,7 @@ type (
 		Key() PartitionKey
 		// RoutingKey returns the string that should be used to find the owner of a task queue partition.
 		RoutingKey() string
-		// ChageKey returns an identifier that can be used with gradual changes.
+		// GradualChangeKey returns an identifier that can be used with gradual changes.
 		GradualChangeKey() []byte
 	}
 
