@@ -156,8 +156,8 @@ func CreateScheduler(
 
 	// Update visibility with custom attributes.
 	visibility := sched.Visibility.Get(ctx)
-	visibility.UpsertCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
-	visibility.UpsertCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
+	visibility.MergeCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	visibility.MergeCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, &schedulerpb.CreateScheduleResponse{
 		FrontendResponse: &workflowservice.CreateScheduleResponse{

@@ -159,14 +159,19 @@ func NewVisibilityWithData(
 		Data: &persistencespb.ChasmVisibilityData{
 			TransitionCount: 0,
 		},
-		SA: NewDataField(
+	}
+
+	if len(customSearchAttributes) != 0 {
+		visibility.SA = NewDataField(
 			mutableContext,
 			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
-		),
-		Memo: NewDataField(
+		)
+	}
+	if len(customMemo) != 0 {
+		visibility.Memo = NewDataField(
 			mutableContext,
 			&commonpb.Memo{Fields: customMemo},
-		),
+		)
 	}
 
 	visibility.generateTask(mutableContext)
@@ -177,6 +182,11 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
 }
 
+// CustomSearchAttributes returns the stored custom search attribute fields.
+// Nil is returned if there are none.
+//
+// Returned map is NOT a deep copy of the underlying data, so do NOT modify it
+// directly, use Merge/ReplaceCustomSearchAttributes methods instead.
 func (v *Visibility) CustomSearchAttributes(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
@@ -185,7 +195,14 @@ func (v *Visibility) CustomSearchAttributes(
 	return sa.GetIndexedFields()
 }
 
-func (v *Visibility) UpsertCustomSearchAttributes(
+// MergeCustomSearchAttributes merges the provided custom search attribute fields into the existing ones.
+//   - If a key in `customSearchAttributes` already exists,
+//     the value in `customSearchAttributes` replaces the existing value.
+//   - If a key in `customSearchAttributes` has nil or empty slice payload value,
+//     the key is deleted from the existing search attributes if it exists.
+//     If all search attributes are removed, the underlying search attributes node is deleted.
+//   - If `customSearchAttributes` is empty, this is a no-op.
+func (v *Visibility) MergeCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 ) {
@@ -210,7 +227,9 @@ func (v *Visibility) UpsertCustomSearchAttributes(
 	v.generateTask(mutableContext)
 }
 
-func (v *Visibility) SetCustomSearchAttributes(
+// ReplaceCustomSearchAttributes replaces the existing custom search attribute fields with the provided ones.
+// If `customSearchAttributes` is empty, the underlying search attributes node is deleted.
+func (v *Visibility) ReplaceCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 ) {
@@ -232,6 +251,11 @@ func (v *Visibility) SetCustomSearchAttributes(
 	v.generateTask(mutableContext)
 }
 
+// CustomMemo returns the stored custom memo fields.
+// Nil is returned if there are none.
+//
+// Returned map is NOT a deep copy of the underlying data, so do NOT modify it
+// directly, use Merge/ReplaceCustomMemo methods instead.
 func (v *Visibility) CustomMemo(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
@@ -240,7 +264,14 @@ func (v *Visibility) CustomMemo(
 	return memo.GetFields()
 }
 
-func (v *Visibility) UpsertCustomMemo(
+// MergeCustomMemo merges the provided custom memo fields into the existing ones.
+//   - If a key in `customMemo` already exists,
+//     the value in `customMemo` replaces the existing value.
+//   - If a key in `customMemo` has nil or empty slice payload value,
+//     the key is deleted from the existing memo if it exists.
+//     If all memo fields are removed, the underlying memo node is deleted.
+//   - If `customMemo` is empty, this is a no-op.
+func (v *Visibility) MergeCustomMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
 ) {
@@ -264,7 +295,9 @@ func (v *Visibility) UpsertCustomMemo(
 	v.generateTask(mutableContext)
 }
 
-func (v *Visibility) SetMemo(
+// ReplaceCustomMemo replaces the existing custom memo fields with the provided ones.
+// If `customMemo` is empty, the underlying memo node is deleted.
+func (v *Visibility) ReplaceCustomMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
 ) {
