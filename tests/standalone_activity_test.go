@@ -427,6 +427,7 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
 		})
+		require.NoError(t, err)
 
 		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: externalNamespace,
@@ -651,6 +652,7 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
 		})
+		require.NoError(t, err)
 
 		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace: externalNamespace,
@@ -1208,6 +1210,7 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
 		})
+		require.NoError(t, err)
 
 		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
 			Namespace: externalNamespace,
@@ -2845,6 +2848,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           s.tv.Any().String(),
 		})
+		require.NoError(t, err)
 
 		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: externalNamespace,
