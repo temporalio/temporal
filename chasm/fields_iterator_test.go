@@ -214,3 +214,32 @@ func (s *fieldsIteratorSuite) TestUnmanagedFieldsOf() {
 	s.Equal(2, len(result))
 	s.ElementsMatch([]string{"unmanaged", "anotherPtr"}, result)
 }
+
+func (s *fieldsIteratorSuite) TestHasVisibilityField() {
+	type componentWithVisibility struct {
+		UnimplementedComponent
+		DataField  *protoMessageType
+		Visibility Field[*Visibility]
+	}
+
+	type componentWithoutVisibility struct {
+		UnimplementedComponent
+		DataField *protoMessageType
+		SomeField Field[string]
+	}
+
+	s.Run("component with Visibility field", func() {
+		s.True(hasVisibilityField(reflect.TypeFor[componentWithVisibility]()))
+		s.True(hasVisibilityField(reflect.TypeFor[*componentWithVisibility]()))
+	})
+
+	s.Run("component without Visibility field", func() {
+		s.False(hasVisibilityField(reflect.TypeFor[componentWithoutVisibility]()))
+		s.False(hasVisibilityField(reflect.TypeFor[*componentWithoutVisibility]()))
+	})
+
+	s.Run("non-struct type", func() {
+		s.False(hasVisibilityField(reflect.TypeFor[string]()))
+		s.False(hasVisibilityField(reflect.TypeFor[int]()))
+	})
+}

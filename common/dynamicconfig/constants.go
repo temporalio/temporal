@@ -2702,6 +2702,12 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
+	ExternalPayloadsEnabled = NewNamespaceBoolSetting(
+		"history.externalPayloadsEnabled",
+		false,
+		`ExternalPayloadsEnabled controls whether external payload features are enabled for a namespace.`,
+	)
+
 	// keys for worker
 
 	WorkerPersistenceMaxQPS = NewGlobalIntSetting(
