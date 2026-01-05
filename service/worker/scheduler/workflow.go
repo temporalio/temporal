@@ -1281,7 +1281,7 @@ func (s *scheduler) processBuffer() bool {
 		}
 		metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Inc(1)
 		nonOverlapping := start == action.NonOverlappingStart
-		s.recordAction(result, nonOverlapping)
+		s.recordAction(result, nonOverlapping, start.Manual)
 	}
 
 	// Terminate or cancel if required (terminate overrides cancel if both are present)
@@ -1310,10 +1310,10 @@ func (s *scheduler) processBuffer() bool {
 	return tryAgain
 }
 
-func (s *scheduler) recordAction(result *schedulepb.ScheduleActionResult, nonOverlapping bool) {
+func (s *scheduler) recordAction(result *schedulepb.ScheduleActionResult, nonOverlapping bool, manual bool) {
 	s.Info.ActionCount++
 	s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, result), s.tweakables.RecentActionCount)
-	canTrack := nonOverlapping || !s.hasMinVersion(DontTrackOverlapping)
+	canTrack := nonOverlapping || manual || !s.hasMinVersion(DontTrackOverlapping)
 	if canTrack && result.StartWorkflowResult != nil {
 		s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, result.StartWorkflowResult)
 	}
