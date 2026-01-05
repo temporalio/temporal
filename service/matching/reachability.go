@@ -94,10 +94,10 @@ func getBuildIdTaskReachability(
 	reachability, exitPoint, err := rc.run(ctx, buildId)
 	handler := metrics.GetPerTaskQueueFamilyScope(metricsHandler, rc.nsName.String(), rc.taskQueue, rc.tqConfig.BreakdownMetricsByTaskQueue())
 	metrics.ReachabilityExitPointCounter.With(handler).Record(1,
-		metrics.WorkerBuildIdTag(buildId, rc.tqConfig.BreakdownMetricsByBuildID()),
+		metrics.WorkerVersionTag(buildId, rc.tqConfig.BreakdownMetricsByBuildID()),
 		metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))
 	logger.Info("Calculated reachability for build id",
-		tag.WorkerBuildId(buildId),
+		tag.WorkerVersion(buildId),
 		tag.BuildIdTaskReachabilityTag(reachability.String()),
 		tag.ReachabilityExitPointTag(reachabilityExitPoint2TagValue[exitPoint]),
 		tag.WorkflowNamespace(rc.nsName.String()),

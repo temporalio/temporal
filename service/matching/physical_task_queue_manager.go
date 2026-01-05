@@ -129,11 +129,11 @@ func newPhysicalTaskQueueManager(
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	buildIdTagValue := queue.Version().MetricsTagValue()
-	buildIdTag := tag.WorkerBuildId(buildIdTagValue)
+	versionTagValue := queue.Version().MetricsTagValue()
+	buildIdTag := tag.WorkerVersion(versionTagValue)
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
+		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()))
 
 	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
 
