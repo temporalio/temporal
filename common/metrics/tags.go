@@ -34,7 +34,7 @@ const (
 	commandType    = "commandType"
 	serviceName    = "service_name"
 	actionType     = "action_type"
-	workerBuildId  = "worker-build-id"
+	workerVersion  = "worker_version"
 	destination    = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
@@ -179,13 +179,13 @@ func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
 }
 
 // Consider passing the value of "metrics.breakdownByBuildID" dynamic config to this function.
-func WorkerBuildIdTag(buildId string, buildIdBreakdown bool) Tag {
-	if buildId == "" {
-		buildId = "__unversioned__"
-	} else if !buildIdBreakdown {
-		buildId = "__versioned__"
+func WorkerVersionTag(version string, versionBreakdown bool) Tag {
+	if version == "" {
+		version = "__unversioned__"
+	} else if !versionBreakdown {
+		version = "__versioned__"
 	}
-	return Tag{Key: workerBuildId, Value: buildId}
+	return Tag{Key: workerVersion, Value: version}
 }
 
 // WorkflowTypeTag returns a new workflow type tag.

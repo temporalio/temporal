@@ -691,7 +691,7 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 		},
 		{
 			name:        "only delimiter",
-			input:       WorkerDeploymentVersionWorkflowIDDelimeter,
+			input:       WorkerDeploymentVersionDelimiter,
 			expectedErr: "deployment name is empty in version string :",
 		},
 		{
