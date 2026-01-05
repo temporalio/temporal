@@ -7,6 +7,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -67,9 +68,10 @@ type (
 		removeFromMatcher     atomic.Pointer[func()]
 		// taskDispatchRevisionNumber represents the revision number used by the task and is
 		// max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
-		taskDispatchRevisionNumber int64
+		taskDispatchRevisionNumber    int64
+		targetWorkerDeploymentVersion *deploymentspb.WorkerDeploymentVersion
 
-		// These fields are for use by matcherData:
+		// The following fields are for use by priMatcher/matcherData:
 		waitableMatchResult
 		forwardCtx context.Context // non-nil for sync match task only
 		// effectivePriority is initialized from an explicit task priority if present, or the
@@ -111,6 +113,7 @@ func newInternalTaskForSyncMatch(
 	info *persistencespb.TaskInfo,
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	taskDispatchRevisionNumber int64,
+	targetVersion *deploymentspb.WorkerDeploymentVersion,
 ) *internalTask {
 	var redirectInfo *taskqueuespb.BuildIdRedirectInfo
 	// if this task is not forwarded, source can only be history
@@ -127,12 +130,15 @@ func newInternalTaskForSyncMatch(
 				TaskId: syncMatchTaskId,
 			},
 		},
-		forwardInfo:                forwardInfo,
-		source:                     source,
-		redirectInfo:               redirectInfo,
-		responseC:                  make(chan taskResponse, 1),
-		taskDispatchRevisionNumber: taskDispatchRevisionNumber,
-		effectivePriority:          effectivePriorityFactor * priorityKey(info.GetPriority().GetPriorityKey()),
+		forwardInfo:  forwardInfo,
+		source:       source,
+		redirectInfo: redirectInfo,
+		responseC:    make(chan taskResponse, 1),
+
+		taskDispatchRevisionNumber:    taskDispatchRevisionNumber,
+		targetWorkerDeploymentVersion: targetVersion,
+
+		effectivePriority: effectivePriorityFactor * priorityKey(info.GetPriority().GetPriorityKey()),
 	}
 }
 

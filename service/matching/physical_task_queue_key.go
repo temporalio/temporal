@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 const (
@@ -197,5 +198,5 @@ func (v PhysicalTaskQueueVersion) MetricsTagValue() string {
 	} else if v.deploymentSeriesName == "" {
 		return v.buildId
 	}
-	return v.deploymentSeriesName + "/" + v.buildId
+	return v.deploymentSeriesName + worker_versioning.WorkerDeploymentVersionDelimiter + v.buildId
 }

@@ -3,12 +3,14 @@ package chasm
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -43,9 +45,13 @@ type VisibilityMemoProvider interface {
 
 // VisibilitySearchAttributesMapper is a mapper for CHASM search attributes.
 type VisibilitySearchAttributesMapper struct {
+	// map from CHASM and predefined search attribute aliases to field names.
 	aliasToField map[string]string
 	fieldToAlias map[string]string
 	saTypeMap    map[string]enumspb.IndexedValueType
+
+	// map from system search attribute aliases to field names.
+	systemAliasToField map[string]string
 }
 
 // Alias returns the alias for a given field.
@@ -65,11 +71,38 @@ func (v *VisibilitySearchAttributesMapper) Field(alias string) (string, error) {
 	if v == nil {
 		return "", serviceerror.NewInvalidArgument("visibility search attributes mapper not defined")
 	}
-	field, ok := v.aliasToField[alias]
-	if !ok {
-		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %q", alias))
+	if field, ok := v.aliasToField[alias]; ok {
+		return field, nil
 	}
-	return field, nil
+	if field, ok := v.resolveSystemAlias(alias); ok {
+		return field, nil
+	}
+	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered alias %q", alias))
+}
+
+// resolveSystemAlias resolves a system search attribute alias to its field name.
+// It handles the `Temporal` prefix variations (e.g., "ScheduleId" and "TemporalScheduleId").
+func (v *VisibilitySearchAttributesMapper) resolveSystemAlias(alias string) (string, bool) {
+	if v.systemAliasToField == nil {
+		return "", false
+	}
+	if field, ok := v.systemAliasToField[alias]; ok {
+		return field, true
+	}
+	// Try without the `Temporal` prefix.
+	if strings.HasPrefix(alias, sadefs.ReservedPrefix) {
+		withoutPrefix := alias[len(sadefs.ReservedPrefix):]
+		if field, ok := v.systemAliasToField[withoutPrefix]; ok {
+			return field, true
+		}
+	} else {
+		// Try with the `Temporal` prefix.
+		withPrefix := sadefs.ReservedPrefix + alias
+		if field, ok := v.systemAliasToField[withPrefix]; ok {
+			return field, true
+		}
+	}
+	return "", false
 }
 
 // SATypeMap returns the type map for the CHASM search attributes.

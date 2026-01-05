@@ -1306,9 +1306,11 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 
 		var buildIds []string
+		var reportUnversioned bool
+
 		if request.Version != nil {
 			// A particular version was requested. This is only available internally; not user-facing.
-			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
+			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV32(request.Version)}
 		}
 
 		// TODO(stephan): cache each version separately to allow re-use of cached stats
@@ -1349,6 +1351,13 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						buildIds = append(buildIds, deploymentVersion)
 					}
 				}
+
+				// Report stats from the unversioned queue here
+				reportUnversioned = true
+			}
+
+			if reportUnversioned {
+				buildIds = append(buildIds, "")
 			}
 
 			// query each partition for stats
@@ -1364,7 +1373,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						},
 						Versions: &taskqueuepb.TaskQueueVersionSelection{
 							BuildIds:    buildIds,
-							Unversioned: true,
+							Unversioned: reportUnversioned,
 						},
 						ReportStats: true,
 					})
@@ -2994,6 +3003,15 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
+	// Only send the target Deployment Version if it is different from the poller's version.
+	// If the poller is not versioned, we still send the target version because the workflow may be moving from an
+	// unversioned worker to a versioned worker.
+	var sentTargetVersion *deploymentpb.WorkerDeploymentVersion
+	if task.targetWorkerDeploymentVersion.GetBuildId() != pollReq.DeploymentOptions.GetBuildId() ||
+		task.targetWorkerDeploymentVersion.GetDeploymentName() != pollReq.DeploymentOptions.GetDeploymentName() {
+		sentTargetVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(task.targetWorkerDeploymentVersion)
+	}
+
 	recordStartedRequest := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),
 		WorkflowExecution:   task.workflowExecution(),
@@ -3007,6 +3025,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		VersionDirective:           task.event.Data.VersionDirective,
 		Stamp:                      task.event.Data.GetStamp(),
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		TargetDeploymentVersion:    sentTargetVersion,
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)

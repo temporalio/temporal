@@ -462,7 +462,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.shardContext.GetMetricsHandler(),
 	)
 
-	resetMutableState, resetHistorySize, err := r.stateRebuilder.Rebuild(
+	resetMutableState, resetStats, err := r.stateRebuilder.Rebuild(
 		ctx,
 		r.shardContext.GetTimeSource().Now(),
 		definition.NewWorkflowKey(
@@ -490,7 +490,9 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 	)
-	resetMutableState.AddHistorySize(resetHistorySize)
+	resetMutableState.AddHistorySize(resetStats.HistorySize)
+	resetMutableState.AddExternalPayloadSize(resetStats.ExternalPayloadSize)
+	resetMutableState.AddExternalPayloadCount(resetStats.ExternalPayloadCount)
 	return NewWorkflow(
 		r.clusterMetadata,
 		resetContext,
@@ -532,6 +534,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			nil,
 			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
 			true,
+			nil,
 		)
 		if err != nil {
 			return err

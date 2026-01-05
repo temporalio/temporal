@@ -184,7 +184,7 @@ func (r *Registry) registerComponent(
 	lib namer,
 	rc *RegistrableComponent,
 ) error {
-	if err := r.validateName(rc.componentType); err != nil {
+	if err := r.validate(rc); err != nil {
 		return err
 	}
 
@@ -221,6 +221,14 @@ func (r *Registry) registerComponent(
 	r.componentByGoType[rc.goType] = rc
 	return nil
 }
+
+func (r *Registry) validate(rc *RegistrableComponent) error {
+	if err := r.validateName(rc.componentType); err != nil {
+		return err
+	}
+	return r.validateVisibilityBusinessIDAlias(rc)
+}
+
 func (r *Registry) registerTask(
 	lib namer,
 	rt *RegistrableTask,
@@ -268,6 +276,17 @@ func (r *Registry) validateName(n string) error {
 	}
 	if !nameValidator.MatchString(n) {
 		return fmt.Errorf("name %s is invalid. name must follow golang identifier rules: %s", n, nameValidator.String())
+	}
+	return nil
+}
+
+func (r *Registry) validateVisibilityBusinessIDAlias(rc *RegistrableComponent) error {
+	if !hasVisibilityField(rc.goType) {
+		return nil
+	}
+	// Archetypes that contain a Field[*Visibility] must specify WithBusinessIDAlias.
+	if !rc.hasBusinessIDAlias() {
+		return fmt.Errorf("component %s has Field[*Visibility] but no businessID alias; use WithBusinessIDAlias option", rc.componentType)
 	}
 	return nil
 }
