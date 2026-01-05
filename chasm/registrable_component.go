@@ -19,7 +19,6 @@ type (
 
 		ephemeral     bool
 		singleCluster bool
-		shardingFn    func(ExecutionKey) string
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 	}
@@ -34,7 +33,6 @@ func NewRegistrableComponent[C Component](
 	rc := &RegistrableComponent{
 		componentType: componentType,
 		goType:        reflect.TypeFor[C](),
-		shardingFn:    defaultShardingFn,
 	}
 	for _, opt := range opts {
 		opt(rc)
@@ -52,18 +50,6 @@ func WithEphemeral() RegistrableComponentOption {
 func WithSingleCluster() RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.singleCluster = true
-	}
-}
-
-// WithShardingFn allows specifying a custom sharding key function for the component.
-// TODO: remove WithShardingFn, we don't need this functionality.
-func WithShardingFn(
-	shardingFn func(ExecutionKey) string,
-) RegistrableComponentOption {
-	return func(rc *RegistrableComponent) {
-		if shardingFn != nil {
-			rc.shardingFn = shardingFn
-		}
 	}
 }
 
