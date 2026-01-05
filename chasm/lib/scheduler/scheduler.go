@@ -180,11 +180,10 @@ func (s *Scheduler) NewRangeBackfiller(
 	ctx chasm.MutableContext,
 	request *schedulepb.BackfillRequest,
 ) *Backfiller {
-	backfiller := newBackfiller(ctx, s)
+	backfiller := addBackfiller(ctx, s)
 	backfiller.Request = &schedulerpb.BackfillerState_BackfillRequest{
 		BackfillRequest: request,
 	}
-	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
@@ -194,11 +193,10 @@ func (s *Scheduler) NewImmediateBackfiller(
 	ctx chasm.MutableContext,
 	request *schedulepb.TriggerImmediatelyRequest,
 ) *Backfiller {
-	backfiller := newBackfiller(ctx, s)
+	backfiller := addBackfiller(ctx, s)
 	backfiller.Request = &schedulerpb.BackfillerState_TriggerRequest{
 		TriggerRequest: request,
 	}
-	s.Backfillers[backfiller.BackfillId] = chasm.NewComponentField(ctx, backfiller)
 	return backfiller
 }
 
