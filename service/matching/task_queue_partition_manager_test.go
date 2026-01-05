@@ -284,7 +284,8 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 		},
 	}
 
-	s.partitionMgr.WaitUntilInitialized(ctx)
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
 		err := s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
@@ -393,8 +394,10 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OneUnversione
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	s.partitionMgr.WaitUntilInitialized(ctx)
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	// Backlog exactly 1 task in the unversioned/default queue.
-	err := s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+	err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
 		NamespaceId: namespaceID,
 		RunId:       "run",
 		WorkflowId:  "wf-single",
@@ -462,10 +465,11 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyCurrentNo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	s.partitionMgr.WaitUntilInitialized(ctx)
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
-		err := s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+		err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-only-current-%d", i),
@@ -532,10 +536,11 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyRampingNo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	s.partitionMgr.WaitUntilInitialized(ctx)
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
-		err := s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+		err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-only-ramp-%d", i),
@@ -583,10 +588,11 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	s.partitionMgr.WaitUntilInitialized(ctx)
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	// Backlog 5 tasks in the unversioned/default queue.
 	for i := 0; i < 5; i++ {
-		err := s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+		err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-uv-%d", i),
