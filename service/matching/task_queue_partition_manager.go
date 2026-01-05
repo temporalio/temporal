@@ -197,10 +197,8 @@ func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager
 func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
-	go func() {
-		// Make the linter happy...
-		_ = pm.initialize()
-	}()
+	//nolint:errcheck
+	go pm.initialize()
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
@@ -262,10 +260,10 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
 		return
 	}
-	if !pm.config.AutoEnableV2() || !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+	if params.taskInfo.Priority.GetFairnessKey() == "" && params.taskInfo.Priority.GetPriorityKey() == int32(0) {
 		return
 	}
-	if params.taskInfo.Priority.GetFairnessKey() == "" && params.taskInfo.Priority.GetPriorityKey() == int32(0) {
+	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.config.AutoEnableV2() {
 		return
 	}
 	if !pm.autoEnableRateLimiter.Allow() {
