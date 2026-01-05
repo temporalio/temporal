@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -436,6 +437,73 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 		})
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "Operation requested with a token from a different namespace.", invalidArgErr.Message)
+	})
+
+	// MismatchedTokenComponentRef tests that task tokens cannot be used across namespaces.
+	// The validation ensures that the namespace in the request matches the namespace in the token's
+	// ComponentRef, preventing cross-namespace token reuse attacks.
+	t.Run("MismatchedTokenComponentRef", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		existingNamespace := s.Namespace().String()
+
+		// Start activity in namespace A and get its task token
+		_, err := s.startActivity(ctx, activityID, taskQueue)
+		require.NoError(t, err)
+
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: existingNamespace,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Start another activity in namespace B with the same activity ID
+		// (different namespaces allow same activity IDs)
+		externalNamespace := s.ExternalNamespace().String()
+		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    externalNamespace,
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.Any().String(),
+		})
+		require.NoError(t, err)
+
+		// Poll for the task from namespace B
+		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: externalNamespace,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Deserialize both task tokens
+		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.TaskToken)
+		require.NoError(t, err)
+
+		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.TaskToken)
+		require.NoError(t, err)
+
+		// Tamper with namespace A's token by replacing its ComponentRef with namespace B's ComponentRef
+		existingTask.ComponentRef = externalTask.GetComponentRef()
+		existingTaskToken, err := tasktoken.NewSerializer().Serialize(existingTask)
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: existingNamespace,
+			TaskToken: existingTaskToken,
+			Result:    defaultResult,
+		})
+
+		// Verify that the request is rejected with the correct error
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "token does not match namespace", invalidArgErr.Message)
 	})
 }
 
@@ -667,6 +735,73 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 		})
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "Operation requested with a token from a different namespace.", invalidArgErr.Message)
+	})
+
+	// MismatchedTokenComponentRef tests that task tokens cannot be used across namespaces.
+	// The validation ensures that the namespace in the request matches the namespace in the token's
+	// ComponentRef, preventing cross-namespace token reuse attacks.
+	t.Run("MismatchedTokenComponentRef", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		existingNamespace := s.Namespace().String()
+
+		// Start activity in namespace A and get its task token
+		_, err := s.startActivity(ctx, activityID, taskQueue)
+		require.NoError(t, err)
+
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: existingNamespace,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Start another activity in namespace B with the same activity ID
+		// (different namespaces allow same activity IDs)
+		externalNamespace := s.ExternalNamespace().String()
+		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    externalNamespace,
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.Any().String(),
+		})
+		require.NoError(t, err)
+
+		// Poll for the task from namespace B
+		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: externalNamespace,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Deserialize both task tokens
+		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.TaskToken)
+		require.NoError(t, err)
+
+		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.TaskToken)
+		require.NoError(t, err)
+
+		// Tamper with namespace A's token by replacing its ComponentRef with namespace B's ComponentRef
+		existingTask.ComponentRef = externalTask.GetComponentRef()
+		existingTaskToken, err := tasktoken.NewSerializer().Serialize(existingTask)
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: existingNamespace,
+			TaskToken: existingTaskToken,
+			Failure:   defaultFailure,
+		})
+
+		// Verify that the request is rejected with the correct error
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "token does not match namespace", invalidArgErr.Message)
 	})
 }
 
@@ -1218,6 +1353,72 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 		})
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "Operation requested with a token from a different namespace.", invalidArgErr.Message)
+	})
+
+	// MismatchedTokenComponentRef tests that task tokens cannot be used across namespaces.
+	// The validation ensures that the namespace in the request matches the namespace in the token's
+	// ComponentRef, preventing cross-namespace token reuse attacks.
+	t.Run("MismatchedTokenComponentRef", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		existingNamespace := s.Namespace().String()
+
+		// Start activity in namespace A and get its task token
+		_, err := s.startActivity(ctx, activityID, taskQueue)
+		require.NoError(t, err)
+
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: existingNamespace,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Start another activity in namespace B with the same activity ID
+		// (different namespaces allow same activity IDs)
+		externalNamespace := s.ExternalNamespace().String()
+		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    externalNamespace,
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.Any().String(),
+		})
+		require.NoError(t, err)
+
+		// Poll for the task from namespace B
+		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: externalNamespace,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Deserialize both task tokens
+		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.TaskToken)
+		require.NoError(t, err)
+
+		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.TaskToken)
+		require.NoError(t, err)
+
+		// Tamper with namespace A's token by replacing its ComponentRef with namespace B's ComponentRef
+		existingTask.ComponentRef = externalTask.GetComponentRef()
+		existingTaskToken, err := tasktoken.NewSerializer().Serialize(existingTask)
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+			Namespace: existingNamespace,
+			TaskToken: existingTaskToken,
+		})
+
+		// Verify that the request is rejected with the correct error
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "token does not match namespace", invalidArgErr.Message)
 	})
 }
 
@@ -2857,6 +3058,73 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		})
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "Operation requested with a token from a different namespace.", invalidArgErr.Message)
+	})
+
+	// MismatchedTokenComponentRef tests that task tokens cannot be used across namespaces.
+	// The validation ensures that the namespace in the request matches the namespace in the token's
+	// ComponentRef, preventing cross-namespace token reuse attacks.
+	t.Run("MismatchedTokenComponentRef", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		existingNamespace := s.Namespace().String()
+
+		// Start activity in namespace A and get its task token
+		_, err := s.startActivity(ctx, activityID, taskQueue)
+		require.NoError(t, err)
+
+		pollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: existingNamespace,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Start another activity in namespace B with the same activity ID
+		// (different namespaces allow same activity IDs)
+		externalNamespace := s.ExternalNamespace().String()
+		_, err = s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    externalNamespace,
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.Any().String(),
+		})
+		require.NoError(t, err)
+
+		// Poll for the task from namespace B
+		externalPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: externalNamespace,
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Deserialize both task tokens
+		existingTask, err := tasktoken.NewSerializer().Deserialize(pollResp.TaskToken)
+		require.NoError(t, err)
+
+		externalTask, err := tasktoken.NewSerializer().Deserialize(externalPollResp.TaskToken)
+		require.NoError(t, err)
+
+		// Tamper with namespace A's token by replacing its ComponentRef with namespace B's ComponentRef
+		existingTask.ComponentRef = externalTask.GetComponentRef()
+		existingTaskToken, err := tasktoken.NewSerializer().Serialize(existingTask)
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: existingNamespace,
+			TaskToken: existingTaskToken,
+			Details:   heartbeatDetails,
+		})
+
+		// Verify that the request is rejected with the correct error
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "token does not match namespace", invalidArgErr.Message)
 	})
 
 	t.Run("ResponseIncludesCancelRequested", func(t *testing.T) {

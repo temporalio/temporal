@@ -249,7 +249,7 @@ func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
 	event RespondCompletedEvent,
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
 		return nil, err
 	}
 
@@ -276,7 +276,7 @@ func (a *Activity) HandleFailed(
 	ctx chasm.MutableContext,
 	event RespondFailedEvent,
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
-	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
 		return nil, err
 	}
 
@@ -321,7 +321,7 @@ func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
 	event RespondCancelledEvent,
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
-	if err := a.validateActivityTaskToken(ctx, event.Token); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
 		return nil, err
 	}
 
@@ -555,7 +555,7 @@ func (a *Activity) RecordHeartbeat(
 	ctx chasm.MutableContext,
 	input WithToken[*historyservice.RecordActivityTaskHeartbeatRequest],
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
-	err := a.validateActivityTaskToken(ctx, input.Token)
+	err := a.validateActivityTaskToken(ctx, input.Token, input.Request.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -780,6 +780,7 @@ func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 func (a *Activity) validateActivityTaskToken(
 	ctx chasm.Context,
 	token *tokenspb.Task,
+	requestNamespaceID string,
 ) error {
 	if a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
 		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
@@ -788,6 +789,19 @@ func (a *Activity) validateActivityTaskToken(
 	if token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
+
+	ref, err := chasm.DeserializeComponentRef(token.GetComponentRef())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("malformed token")
+	}
+
+	// Validate that the request namespace matches the token's namespace.
+	// This prevents cross-namespace token reuse attacks where an attacker could use a valid token from namespace B to
+	// complete an activity in namespace A.
+	if requestNamespaceID != ref.NamespaceID {
+		return serviceerror.NewInvalidArgument("token does not match namespace")
+	}
+
 	return nil
 }
 
