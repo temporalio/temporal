@@ -4991,10 +4991,11 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 		TransitionCount:          currentTransitionCount + 1,
 	}
 
-	mutableState.ApplyMutation(&persistencespb.WorkflowMutableStateMutation{
+	err = mutableState.ApplyMutation(&persistencespb.WorkflowMutableStateMutation{
 		ExecutionInfo:  updatedExecutionInfo,
 		ExecutionState: updatedExecutionState,
 	})
+	s.NoError(err)
 
 	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
 	s.NoError(err)
