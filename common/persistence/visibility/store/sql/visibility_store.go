@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -247,7 +248,26 @@ func (s *VisibilityStore) countChasmExecutions(
 		return nil, err
 	}
 
-	queryParams, err := s.buildQueryParams(request.NamespaceID, request.Namespace, request.Query, mapper, request.ArchetypeID, sqlQC)
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams, err := buildQueryParams(
+		request.NamespaceID,
+		request.Namespace,
+		request.Query,
+		sqlQC,
+		saTypeMap,
+		saMapper,
+		mapper,
+		request.ArchetypeID,
+	)
 	if err != nil {
 		var converterErr *query.ConverterError
 		if errors.As(err, &converterErr) {
@@ -340,7 +360,26 @@ func (s *VisibilityStore) listExecutionsInternal(
 		return nil, err
 	}
 
-	queryParams, err := s.buildQueryParams(request.NamespaceID, request.Namespace, request.Query, request.ChasmMapper, request.ArchetypeID, sqlQC)
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams, err := buildQueryParams(
+		request.NamespaceID,
+		request.Namespace,
+		request.Query,
+		sqlQC,
+		saTypeMap,
+		saMapper,
+		request.ChasmMapper,
+		request.ArchetypeID,
+	)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
 		// only mapper errors).
@@ -556,7 +595,26 @@ func (s *VisibilityStore) countWorkflowExecutions(
 		return nil, err
 	}
 
-	queryParams, err := s.buildQueryParams(request.NamespaceID, request.Namespace, request.Query, nil, chasm.UnspecifiedArchetypeID, sqlQC)
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	queryParams, err := buildQueryParams(
+		request.NamespaceID,
+		request.Namespace,
+		request.Query,
+		sqlQC,
+		saTypeMap,
+		saMapper,
+		nil,
+		chasm.UnspecifiedArchetypeID,
+	)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
 		// only mapper errors).
@@ -662,55 +720,6 @@ func (s *VisibilityStore) countGroupByExecutions(
 		resp.Count += row.Count
 	}
 	return resp, nil
-}
-
-func (s *VisibilityStore) buildQueryParams(
-	namespaceID namespace.ID,
-	namespaceName namespace.Name,
-	queryString string,
-	chasmMapper *chasm.VisibilitySearchAttributesMapper,
-	archetypeID chasm.ArchetypeID,
-	sqlQC *SQLQueryConverter,
-) (*query.QueryParams[sqlparser.Expr], error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
-	if err != nil {
-		return nil, err
-	}
-
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
-	if err != nil {
-		return nil, err
-	}
-
-	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper).
-		WithChasmMapper(chasmMapper).
-		WithArchetypeID(archetypeID)
-
-	queryParams, err := c.Convert(queryString)
-	if err != nil {
-		return nil, err
-	}
-
-	nsFilterExpr, err := sqlQC.ConvertComparisonExpr(
-		sqlparser.EqualStr,
-		query.NamespaceIDSAColumn,
-		namespaceID.String(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	queryParams.QueryExpr, err = sqlQC.BuildAndExpr(nsFilterExpr, queryParams.QueryExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// ORDER BY is not support in SQL visibility store
-	if len(queryParams.OrderBy) > 0 {
-		return nil, query.NewConverterError("%s: 'ORDER BY' clause", query.NotSupportedErrMessage)
-	}
-
-	return queryParams, nil
 }
 
 func (s *VisibilityStore) GetWorkflowExecution(
@@ -859,19 +868,25 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 	}
 
 	combinedTypeMap := store.CombineTypeMaps(saTypeMap, chasmMapper)
+	registeredSearchAttributes := sqlplugin.VisibilitySearchAttributes{}
 
 	// Fix SQLite keyword list handling (convert string to []string for keyword lists)
 	for name, value := range rowSearchAttributes {
 		tp, err := combinedTypeMap.GetType(name)
 		if err != nil {
+			// Silently ignore ErrInvalidName for unregistered chasm search attributes
+			if sadefs.IsChasmSearchAttribute(name) && errors.Is(err, searchattribute.ErrInvalidName) {
+				continue
+			}
 			return nil, err
 		}
+		registeredSearchAttributes[name] = value
 		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
 			switch v := value.(type) {
 			case []string:
 				// no-op
 			case string:
-				rowSearchAttributes[name] = []string{v}
+				registeredSearchAttributes[name] = []string{v}
 			default:
 				return nil, serviceerror.NewInternal(
 					fmt.Sprintf("Unexpected data type for keyword list: %T (expected list of strings)", v),
@@ -881,7 +896,7 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 	}
 
 	// Encode all search attributes together
-	encodedSAs, err := searchattribute.Encode(rowSearchAttributes, &combinedTypeMap)
+	encodedSAs, err := searchattribute.Encode(registeredSearchAttributes, &combinedTypeMap)
 	if err != nil {
 		return nil, err
 	}
@@ -898,14 +913,19 @@ func (s *VisibilityStore) AddSearchAttributes(
 }
 
 func buildQueryParams(
-	namespaceName namespace.Name,
 	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	queryString string,
 	sqlQC *SQLQueryConverter,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) (*query.QueryParams[sqlparser.Expr], error) {
-	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper)
+	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper).
+		WithChasmMapper(chasmMapper).
+		WithArchetypeID(archetypeID)
+
 	queryParams, err := c.Convert(queryString)
 	if err != nil {
 		return nil, err

@@ -89,6 +89,7 @@ type Config struct {
 	// size limit system protection
 	BlobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	ThrottledLogRPS dynamicconfig.IntPropertyFn
 
@@ -177,8 +178,6 @@ type Config struct {
 	EnableUpdateWorkflowExecution                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
-
-	EnableExecuteMultiOperation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -297,6 +296,7 @@ func NewConfig(
 		DisableListVisibilityByFilter:            dynamicconfig.DisableListVisibilityByFilter.Get(dc),
 		BlobSizeLimitError:                       dynamicconfig.BlobSizeLimitError.Get(dc),
 		BlobSizeLimitWarn:                        dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MemoSizeLimitError:                       dynamicconfig.MemoSizeLimitError.Get(dc),
 		ThrottledLogRPS:                          dynamicconfig.FrontendThrottledLogRPS.Get(dc),
 		ShutdownDrainDuration:                    dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
 		ShutdownFailHealthCheckDuration:          dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
@@ -338,8 +338,6 @@ func NewConfig(
 		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:     dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
 		MaxExecutionCountBatchOperation: dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
-
-		EnableExecuteMultiOperation: dynamicconfig.FrontendEnableExecuteMultiOperation.Get(dc),
 
 		EnableUpdateWorkflowExecution:                              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
 		EnableUpdateWorkflowExecutionAsyncAccepted:                 dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),

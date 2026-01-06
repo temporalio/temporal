@@ -493,7 +493,6 @@ func (r *registry) SuggestContinueAsNew() bool {
 		return false
 	}
 	if r.inFlightCount()+r.completedCount >= suggestContinueAsNewThreshold {
-		r.instrumentation.countContinueAsNewSuggestions()
 		return true
 	}
 	return false

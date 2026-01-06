@@ -124,16 +124,17 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
-			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
-				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
-					Info: &persistencespb.NamespaceInfo{
-						Id:   "namespace-id",
-						Name: "namespace-name",
-					},
-					Config: &persistencespb.NamespaceConfig{},
-				}),
-				nil,
-			)
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:   "namespace-id",
+					Name: "namespace-name",
+				},
+				Config: &persistencespb.NamespaceConfig{},
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
+			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(ns, nil)
 			metricsHandler := metrics.NewMockHandler(ctrl)
 			counter := metrics.NewMockCounterIface(ctrl)
 			timer := metrics.NewMockTimerIface(ctrl)
@@ -307,11 +308,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
 	dummyTime := time.Now().UTC()
 
-	createPayloadBytes := func(data []byte) []byte {
-		p := &commonpb.Payload{Data: data}
-		payloadBytes, err := proto.Marshal(p)
-		require.NoError(t, err)
-		return payloadBytes
+	createPayload := func(data []byte) *commonpb.Payload {
+		return &commonpb.Payload{Data: data}
 	}
 
 	cases := []struct {
@@ -352,9 +350,10 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
+					createPayload([]byte("result-data")),
 					nexusrpc.OperationCompletionSuccessfulOptions{
-						CloseTime: dummyTime,
+						Serializer: commonnexus.PayloadSerializer,
+						CloseTime:  dummyTime,
 					},
 				)
 				require.NoError(t, err)
@@ -411,8 +410,10 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					createPayload([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -435,8 +436,10 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					createPayload([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -455,8 +458,10 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			},
 			completion: func() nexusrpc.OperationCompletion {
 				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{},
+					createPayload([]byte("result-data")),
+					nexusrpc.OperationCompletionSuccessfulOptions{
+						Serializer: commonnexus.PayloadSerializer,
+					},
 				)
 				require.NoError(t, err)
 				return comp
@@ -473,16 +478,17 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
-			namespaceRegistryMock.EXPECT().GetNamespaceByID(gomock.Any()).Return(
-				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
-					Info: &persistencespb.NamespaceInfo{
-						Id:   "namespace-id",
-						Name: "namespace-name",
-					},
-					Config: &persistencespb.NamespaceConfig{},
-				}),
-				nil,
-			)
+			factory := namespace.NewDefaultReplicationResolverFactory()
+			detail := &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:   "namespace-id",
+					Name: "namespace-name",
+				},
+				Config: &persistencespb.NamespaceConfig{},
+			}
+			ns, err := namespace.FromPersistentState(detail, factory(detail))
+			require.NoError(t, err)
+			namespaceRegistryMock.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 			historyClient := tc.setupHistoryClient(t, ctrl)
 
 			headers := nexus.Header{}

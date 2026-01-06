@@ -41,7 +41,7 @@ func Invoke(
 	persistenceVisibilityMgr manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +169,7 @@ func Invoke(
 				req.GetBuildIdRedirectInfo(),
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
+				req.TargetDeploymentVersion,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history

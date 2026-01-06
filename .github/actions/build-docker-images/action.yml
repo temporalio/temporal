@@ -1,0 +1,135 @@
+name: Build Docker Images
+description: |
+  Build Temporal Docker images from binaries.
+
+  Prerequisites:
+    - The build-binaries action must run before this action to produce the binaries.
+
+inputs:
+  push:
+    description: "Push images to Docker Hub"
+    required: false
+    default: "false"
+  tag-latest:
+    description: "Tag images as latest"
+    required: false
+    default: "false"
+  platform:
+    description: "Single platform to build (e.g., linux/amd64)"
+    required: false
+    default: ""
+  load:
+    description: "Load image into local Docker daemon (only works with linux/amd64 - the runner architecture)"
+    required: false
+    default: "false"
+  cli-version:
+    description: "Temporal CLI version to download"
+    required: false
+    default: "1.5.1"
+  alpine-tag:
+    description: "Alpine base image tag"
+    required: false
+    default: "3.23"
+  dockerhub-username:
+    description: "Docker Hub username"
+    required: false
+  dockerhub-token:
+    description: "Docker Hub token"
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Build docker-build-helper
+      shell: bash
+      working-directory: ${{ github.workspace }}/.github/actions/build-docker-images/scripts
+      run: |
+        go build -o docker-build-helper .
+
+    - name: Set image tags
+      id: image-tags
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: .github/actions/build-docker-images/scripts/docker-build-helper set-image-tags
+
+    - name: Organize binaries for Docker
+      id: organize-binaries
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PLATFORM: ${{ inputs.platform }}
+      run: |
+        .github/actions/build-docker-images/scripts/docker-build-helper organize-binaries
+
+    - name: Download Temporal CLI
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        AVAILABLE_ARCHS: ${{ steps.organize-binaries.outputs.available-archs }}
+        CLI_VERSION: ${{ inputs.cli-version }}
+      run: |
+        .github/actions/build-docker-images/scripts/docker-build-helper download-cli
+
+    - name: Extract server version from binary
+      id: extract-version
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        .github/actions/build-docker-images/scripts/docker-build-helper extract-version
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      if: inputs.push == 'true'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.dockerhub-username }}
+        password: ${{ inputs.dockerhub-token }}
+
+    - name: Build Docker images
+      if: inputs.push != 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        IMAGE_REPO: temporaliotest
+        IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
+        TEMPORAL_SHA: ${{ github.sha }}
+        TAG_LATEST: ${{ inputs.tag-latest }}
+        ALPINE_TAG: ${{ inputs.alpine-tag }}
+        SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
+      run: |
+        if [ -n "${{ inputs.platform }}" ]; then
+          docker buildx bake \
+            --set "*.platform=${{ inputs.platform }}" \
+            ${{ inputs.load == 'true' && '--load' || '' }} \
+            -f docker/docker-bake.hcl \
+            server admin-tools
+        else
+          docker buildx bake \
+            ${{ inputs.load == 'true' && '--load' || '' }} \
+            -f docker/docker-bake.hcl \
+            server admin-tools
+        fi
+
+    - name: Build and push Docker images
+      if: inputs.push == 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        IMAGE_REPO: temporaliotest
+        IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
+        IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
+        TEMPORAL_SHA: ${{ github.sha }}
+        TAG_LATEST: ${{ inputs.tag-latest }}
+        ALPINE_TAG: ${{ inputs.alpine-tag }}
+        SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
+      run: |
+        docker buildx bake \
+          --push \
+          -f docker/docker-bake.hcl \
+          server admin-tools

@@ -59,7 +59,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -91,6 +90,7 @@ type (
 		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
+		conditions                *matchingservice.PollConditions
 		forwardedFrom             string
 		localPollStartTime        time.Time
 	}
@@ -115,7 +115,6 @@ type (
 		fairTaskManager               persistence.FairTaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
-		deploymentStoreClient         deployment.DeploymentStoreClient
 		workerDeploymentClient        workerdeployment.Client
 		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
@@ -198,7 +197,6 @@ func NewEngine(
 	fairTaskManager persistence.FairTaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient deployment.DeploymentStoreClient, // [wv-cleanup-pre-release]
 	workerDeploymentClient workerdeployment.Client,
 	config *Config,
 	logger log.Logger,
@@ -223,7 +221,6 @@ func NewEngine(
 		fairTaskManager:               fairTaskManager,
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
-		deploymentStoreClient:         deploymentStoreClient,
 		tokenSerializer:               tasktoken.NewSerializer(),
 		workerDeploymentClient:        workerDeploymentClient,
 		historySerializer:             serialization.NewSerializer(),
@@ -583,6 +580,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
+		ComponentRef:     addRequest.ComponentRef,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -628,7 +626,8 @@ pollLoop:
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
-			forwardedFrom:             req.GetForwardedSource(),
+			forwardedFrom:             req.ForwardedSource,
+			conditions:                req.Conditions,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -893,7 +892,8 @@ pollLoop:
 			taskQueueMetadata:         request.TaskQueueMetadata,
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
-			forwardedFrom:             req.GetForwardedSource(),
+			forwardedFrom:             req.ForwardedSource,
+			conditions:                req.Conditions,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1304,9 +1304,11 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 
 		var buildIds []string
+		var reportUnversioned bool
+
 		if request.Version != nil {
 			// A particular version was requested. This is only available internally; not user-facing.
-			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV31(request.Version)}
+			buildIds = []string{worker_versioning.WorkerDeploymentVersionToStringV32(request.Version)}
 		}
 
 		// TODO(stephan): cache each version separately to allow re-use of cached stats
@@ -1347,6 +1349,13 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						buildIds = append(buildIds, deploymentVersion)
 					}
 				}
+
+				// Report stats from the unversioned queue here
+				reportUnversioned = true
+			}
+
+			if reportUnversioned {
+				buildIds = append(buildIds, "")
 			}
 
 			// query each partition for stats
@@ -1362,7 +1371,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						},
 						Versions: &taskqueuepb.TaskQueueVersionSelection{
 							BuildIds:    buildIds,
-							Unversioned: true,
+							Unversioned: reportUnversioned,
 						},
 						ReportStats: true,
 					})
@@ -1902,7 +1911,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	if req.Deployment == nil && req.GetOperation() == nil && req.GetDeploymentName() == "" {
+	if req.GetOperation() == nil && req.GetDeploymentName() == "" {
 		return nil, errMissingDeploymentVersion
 	}
 
@@ -1930,10 +1939,6 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
 		}
 
-		if req.TaskQueueType != enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-			req.TaskQueueTypes = append(req.TaskQueueTypes, req.TaskQueueType)
-		}
-
 		changed := false
 		for _, t := range req.TaskQueueTypes {
 			if data.PerType[int32(t)] == nil {
@@ -1946,20 +1951,8 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			// set/append the new data
 			deploymentData := data.PerType[int32(t)].DeploymentData
 
-			if d := req.Deployment; d != nil {
-				// [cleanup-old-wv]
-				//nolint:staticcheck
-				if idx := worker_versioning.FindDeployment(deploymentData, req.Deployment); idx >= 0 {
-					deploymentData.Deployments[idx].Data = req.Data
-				} else {
-					deploymentData.Deployments = append(
-						deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
-							Deployment: req.Deployment,
-							Data:       req.Data,
-						})
-				}
-				changed = true
-			} else if vd := req.GetUpdateVersionData(); vd != nil {
+			//nolint:staticcheck // SA1019
+			if vd := req.GetUpdateVersionData(); vd != nil {
 				// [cleanup-public-preview-versioning]
 				if vd.GetVersion() == nil { // unversioned ramp
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
@@ -2039,8 +2032,28 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					tqWorkerDeploymentData.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionData)
 				}
 				for buildID, versionData := range req.GetUpsertVersionsData() {
+					existing := tqWorkerDeploymentData.Versions[buildID]
+					// Skip if existing version data has a higher revision number to avoid stale writes.
+					// Equal revision number is accepted for now because we may roll back the workflow version
+					// and stop incrementing the revision number.
+					if existing != nil && existing.GetRevisionNumber() > versionData.GetRevisionNumber() {
+						continue
+					}
 					tqWorkerDeploymentData.Versions[buildID] = versionData
 					changed = true
+					if versionData.GetDeleted() {
+						// Remove the version from the old deployment data format if present.
+						//nolint:staticcheck // SA1019 deprecated versions will clean up later
+						for idx, oldVersions := range deploymentData.GetVersions() {
+							if oldVersions.GetVersion().GetDeploymentName() == req.GetDeploymentName() &&
+								oldVersions.GetVersion().GetBuildId() == buildID {
+								//nolint:staticcheck // SA1019 deprecated versions will clean up later
+								deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+								changed = true
+								break
+							}
+						}
+					}
 				}
 
 				if removed := removeDeploymentVersions(
@@ -2084,6 +2097,10 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 						req.GetDeploymentName(),
 						tqWorkerDeploymentData,
 					)
+				}
+
+				if worker_versioning.CleanupOldDeletedVersions(tqWorkerDeploymentData, e.config.MaxVersionsInTaskQueue(tqMgr.Namespace().Name().String())) {
+					changed = true
 				}
 			}
 		}
@@ -2428,7 +2445,8 @@ pollLoop:
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
-			forwardedFrom:             req.GetForwardedSource(),
+			forwardedFrom:             req.ForwardedSource,
+			conditions:                req.Conditions,
 		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -2898,7 +2916,6 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
 	metricsHandler metrics.Handler,
 ) *matchingservice.PollActivityTaskQueueResponse {
-
 	scheduledEvent := historyResponse.ScheduledEvent
 	if scheduledEvent.GetActivityTaskScheduledEventAttributes() == nil {
 		panic("GetActivityTaskScheduledEventAttributes is not set")
@@ -2923,6 +2940,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		historyResponse.GetClock(),
 		historyResponse.GetVersion(),
 		historyResponse.GetStartVersion(),
+		task.event.GetData().GetComponentRef(),
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
@@ -2983,6 +3001,15 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
+	// Only send the target Deployment Version if it is different from the poller's version.
+	// If the poller is not versioned, we still send the target version because the workflow may be moving from an
+	// unversioned worker to a versioned worker.
+	var sentTargetVersion *deploymentpb.WorkerDeploymentVersion
+	if task.targetWorkerDeploymentVersion.GetBuildId() != pollReq.DeploymentOptions.GetBuildId() ||
+		task.targetWorkerDeploymentVersion.GetDeploymentName() != pollReq.DeploymentOptions.GetDeploymentName() {
+		sentTargetVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(task.targetWorkerDeploymentVersion)
+	}
+
 	recordStartedRequest := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),
 		WorkflowExecution:   task.workflowExecution(),
@@ -2996,6 +3023,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
 		Stamp:                      task.event.Data.GetStamp(),
+		TargetDeploymentVersion:    sentTargetVersion,
 	}
 
 	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -3055,6 +3083,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		ScheduledDeployment:        worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:           task.event.Data.VersionDirective,
 		TaskDispatchRevisionNumber: task.taskDispatchRevisionNumber,
+		ComponentRef:               task.event.Data.GetComponentRef(),
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
@@ -3137,6 +3166,32 @@ func prepareTaskQueueUserData(
 		data.PerType[tqType].Config = &taskqueuepb.TaskQueueConfig{}
 	}
 	return data
+}
+
+func (e *matchingEngineImpl) CheckTaskQueueVersionMembership(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueVersionMembershipRequest,
+) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error) {
+	partition, err := tqid.PartitionFromProto(&taskqueuepb.TaskQueue{
+		Name: request.GetTaskQueue(),
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}, request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherRead)
+	if err != nil {
+		return nil, err
+	}
+
+	userData, _, err := pm.GetUserDataManager().GetUserData()
+	if err != nil {
+		return nil, err
+	}
+
+	typedUserData := userData.GetData().GetPerType()[int32(request.GetTaskQueueType())]
+	present := worker_versioning.HasDeploymentVersion(typedUserData.GetDeploymentData(), request.GetVersion())
+	return &matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: present}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueConfig(

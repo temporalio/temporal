@@ -4,12 +4,15 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -22,12 +25,14 @@ func Invoke(
 	request *historyservice.UpdateWorkflowExecutionOptionsRequest,
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
-	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()))
+	req := request.GetUpdateRequest()
+	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	req := request.GetUpdateRequest()
 	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
 
 	err = api.GetAndUpdateWorkflowWithNew(
@@ -44,6 +49,12 @@ func Invoke(
 				// in-memory mutable state is still clean, let updateError=nil in the defer func()
 				// to prevent clearing and reloading mutable state while releasing the lock
 				return nil, consts.ErrWorkflowCompleted
+			}
+
+			// Validate versioning override, if any.
+			err = worker_versioning.ValidateVersioningOverride(ctx, req.GetWorkflowExecutionOptions().GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			if err != nil {
+				return nil, err
 			}
 
 			mergedOpts, hasChanges, err := MergeAndApply(mutableState, req.GetWorkflowExecutionOptions(), req.GetUpdateMask(), req.GetIdentity())

@@ -30,6 +30,8 @@ message PollWorkflowTaskQueueRequest {
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 3;
     string forwarded_source = 4;
+    // Extra conditions on this poll request. Only supported with new matcher.
+    PollConditions conditions = 5;
 }
 
 message PollWorkflowTaskQueueResponse {
@@ -64,6 +66,8 @@ message PollActivityTaskQueueRequest {
     string poller_id = 2;
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 3;
     string forwarded_source = 4;
+    // Extra conditions on this poll request. Only supported with new matcher.
+    PollConditions conditions = 5;
 }
 
 message PollActivityTaskQueueResponse {
@@ -132,6 +136,10 @@ message AddActivityTaskRequest {
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
     int32 stamp = 12;
     temporal.api.common.v1.Priority priority = 13;
+    // Reference to the Chasm component for activity execution (if applicable). For standalone activities, all
+    // necessary start information is carried within this component, obviating the need to use the fields that apply to
+    // embedded activities.
+    bytes component_ref = 14;
 }
 
 message AddActivityTaskResponse {
@@ -346,18 +354,8 @@ message SyncDeploymentUserDataRequest {
     // (-- api-linter: core::0203::required=disabled
     //     aip.dev/not-precedent: Not following Google API format --)
     string deployment_name = 9;
-    // Note: this is the task queue type being modified, but this field should not be used for
-    // routing, the user data is owned by the WORKFLOW task queue.
-    // Deprecated. Use `task_queue_types`.
-    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    reserved 3, 4, 5;
     repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 8;
-
-    // This is the deployment being modified.
-    // Deprecated.
-    temporal.api.deployment.v1.Deployment deployment = 4;
-    // Data for this deployment.
-    // Deprecated.
-    temporal.server.api.deployment.v1.TaskQueueData data = 5;
 
     oneof operation {
         // The deployment version and its data that is being updated.
@@ -370,12 +368,11 @@ message SyncDeploymentUserDataRequest {
     // Ignored by the task queue if new revision number is not greater that what it has.
     temporal.api.deployment.v1.RoutingConfig update_routing_config = 10;
     // Optional map of build id to upsert version data.
-    // Ignored if `update_routing_config` is present and has an outdated revision number.
     // (-- api-linter: core::0203::required=disabled
     //     aip.dev/not-precedent: Not following Google API format --)
     map<string, temporal.server.api.deployment.v1.WorkerDeploymentVersionData> upsert_versions_data = 11;
     // List of build ids to forget from task queue.
-    // Ignored if `update_routing_config` is present and has an outdated revision number.
+    // Deprecated. Use upsert_versions_data with deleted=true.
     repeated string forget_versions = 12;
 }
 
@@ -383,7 +380,8 @@ message SyncDeploymentUserDataResponse {
     // New task queue user data version. Can be used to wait for propagation.
     int64 version = 1;
     // If the routing config changed after applying this operation. Compared base on revision number.
-    bool routing_config_changed = 2;
+    // Deprecated. using this is not totaly safe in case of retries.
+    bool routing_config_changed = 2 [deprecated = true];
 }
 
 message ApplyTaskQueueUserDataReplicationEventRequest {
@@ -500,6 +498,8 @@ message PollNexusTaskQueueRequest {
     temporal.api.workflowservice.v1.PollNexusTaskQueueRequest request = 3;
     // Non-empty if this poll was forwarded from a child partition.
     string forwarded_source = 4;
+    // Extra conditions on this poll request. Only supported with new matcher.
+    PollConditions conditions = 5;
 }
 
 message PollNexusTaskQueueResponse {
@@ -640,4 +640,27 @@ message DescribeWorkerRequest {
 
 message DescribeWorkerResponse {
     temporal.api.worker.v1.WorkerInfo worker_info = 1;
+}
+
+message CheckTaskQueueVersionMembershipRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 4;
+}
+
+message CheckTaskQueueVersionMembershipResponse {
+    bool is_member = 1;
+}
+
+// PollConditions are extra conditions to set on the poll. Only supported with new matcher.
+message PollConditions {
+    // If set (non-zero), this poll will not match a task with lower priority than this value.
+    // Note that "min" priority is "max" numeric value, e.g. "min_priority: 3" means to match
+    // tasks with priority 1, 2, or 3.
+    int32 min_priority = 1;
+    // If true, don't block waiting for a task, just return a task immediately or an empty
+    // response. This is most useful combined with min_priority, to poll for task at a specific
+    // priority level on a partition that you think is there.
+    bool no_wait = 2;
 }

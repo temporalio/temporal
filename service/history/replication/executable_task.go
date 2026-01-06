@@ -80,6 +80,7 @@ type (
 		GetNamespaceInfo(
 			ctx context.Context,
 			namespaceID string,
+			businessID string,
 		) (string, bool, error)
 		SyncState(
 			ctx context.Context,
@@ -622,7 +623,17 @@ func (e *ExecutableTaskImpl) SyncState(
 	}
 
 	targetClusterInfo := e.ClusterMetadata.GetAllClusterInfo()[e.ClusterMetadata.GetCurrentClusterName()]
-	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
+
+	// Remove branch tokens from version histories to reduce request size
+	versionHistories := syncStateErr.VersionHistories
+	if versionHistories != nil {
+		versionHistories = versionhistory.CopyVersionHistories(versionHistories)
+		for _, history := range versionHistories.Histories {
+			history.BranchToken = nil
+		}
+	}
+
+	req := &adminservice.SyncWorkflowStateRequest{
 		NamespaceId: syncStateErr.NamespaceId,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: syncStateErr.WorkflowId,
@@ -630,10 +641,15 @@ func (e *ExecutableTaskImpl) SyncState(
 		},
 		ArchetypeId:         syncStateErr.ArchetypeId,
 		VersionedTransition: syncStateErr.VersionedTransition,
-		VersionHistories:    syncStateErr.VersionHistories,
+		VersionHistories:    versionHistories,
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
-	})
+	}
+	resp, err := remoteAdminClient.SyncWorkflowState(ctx, req)
 	if err != nil {
+		var resourceExhaustedError *serviceerror.ResourceExhausted
+		if errors.As(err, &resourceExhaustedError) {
+			return false, serviceerror.NewInvalidArgumentf("sync workflow state failed due to resource exhausted: %v, request payload size: %v", err, req.Size())
+		}
 		logger := log.With(e.Logger,
 			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
 			tag.WorkflowID(syncStateErr.WorkflowId),
@@ -645,6 +661,20 @@ func (e *ExecutableTaskImpl) SyncState(
 		if errors.As(err, &workflowNotReady) {
 			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
 			return false, nil
+		}
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			logger.Error(
+				"workflow not found in source cluster, proceed to cleanup")
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return false, e.DeleteWorkflow(
+				ctx,
+				definition.NewWorkflowKey(
+					syncStateErr.NamespaceId,
+					syncStateErr.WorkflowId,
+					syncStateErr.RunId,
+				),
+			)
 		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		if !errors.As(err, &failedPreconditionErr) {
@@ -727,6 +757,7 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	ctx context.Context,
 	namespaceID string,
+	businessID string,
 ) (string, bool, error) {
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
@@ -761,7 +792,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 	shouldProcessTask := false
 FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames() {
+	for _, targetCluster := range namespaceEntry.ClusterNames(businessID) {
 		if e.ClusterMetadata.GetCurrentClusterName() == targetCluster {
 			shouldProcessTask = true
 			break FilterLoop

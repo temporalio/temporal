@@ -86,12 +86,7 @@ message VersioningData {
 }
 
 message DeploymentData {
-    // Set of deployments that this task queue belongs to.
-    // Current deployment is defined implicitly as the deployment with the most recent
-    // TaskQueueData.last_became_current_time.
-    // Deprecated.
-    repeated DeploymentDataItem deployments = 1 [deprecated = true];
-
+    reserved 1;
     // Set of worker deployment versions that this task queue belongs to.
     // Current Version is defined implicitly as the version with `current_since_time!=nil` and the most
     // recent `routing_update_time`.
@@ -111,13 +106,6 @@ message DeploymentData {
     // Routing and version membership data for all worker deployments that this task queue belongs to.
     // Key is the deployment name.
     map<string, WorkerDeploymentData> deployments_data = 4;
-
-
-    // Deprecated.
-    message DeploymentDataItem {
-        temporal.api.deployment.v1.Deployment deployment = 1;
-        temporal.server.api.deployment.v1.TaskQueueData data = 2;
-    }
 }
 
 // Routing config and version membership data for a given worker deployment that a TQ should know.

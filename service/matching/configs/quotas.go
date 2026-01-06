@@ -50,6 +50,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers":                            1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueConfig":                  1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeWorker":                         1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueVersionMembership":        1,
 	}
 
 	APIPrioritiesOrdered = []int{0, 1}

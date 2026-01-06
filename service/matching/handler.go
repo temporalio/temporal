@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/matching/workers"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/proto"
@@ -55,7 +54,6 @@ type (
 		FairTaskManager               persistence.FairTaskManager
 		HistoryClient                 resource.HistoryClient
 		MatchingRawClient             resource.MatchingRawClient
-		DeploymentStoreClient         deployment.DeploymentStoreClient
 		WorkerDeploymentClient        workerdeployment.Client
 		HostInfoProvider              membership.HostInfoProvider
 		MatchingServiceResolver       membership.ServiceResolver
@@ -95,7 +93,6 @@ func NewHandler(
 			params.FairTaskManager,
 			params.HistoryClient,
 			params.MatchingRawClient, // Use non retry client inside matching
-			params.DeploymentStoreClient,
 			params.WorkerDeploymentClient,
 			params.Config,
 			params.Logger,
@@ -475,6 +472,14 @@ func (h *Handler) CheckTaskQueueUserDataPropagation(
 	return h.engine.CheckTaskQueueUserDataPropagation(ctx, request)
 }
 
+func (h *Handler) CheckTaskQueueVersionMembership(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueVersionMembershipRequest,
+) (_ *matchingservice.CheckTaskQueueVersionMembershipResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CheckTaskQueueVersionMembership(ctx, request)
+}
+
 func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.DispatchNexusTask(ctx, request)
@@ -563,19 +568,24 @@ func (h *Handler) ListWorkers(
 	_ context.Context, request *matchingservice.ListWorkersRequest,
 ) (*matchingservice.ListWorkersResponse, error) {
 	nsID := namespace.ID(request.GetNamespaceId())
-	workersHeartbeats, err := h.workersRegistry.ListWorkers(
-		nsID, request.GetListRequest().GetQuery(), request.GetListRequest().GetNextPageToken())
+	listRequest := request.GetListRequest()
+	resp, err := h.workersRegistry.ListWorkers(nsID, workers.ListWorkersParams{
+		Query:         listRequest.GetQuery(),
+		PageSize:      int(listRequest.GetPageSize()),
+		NextPageToken: listRequest.GetNextPageToken(),
+	})
 	if err != nil {
 		return nil, err
 	}
 	var workersInfo []*workerpb.WorkerInfo
-	for _, heartbeat := range workersHeartbeats {
+	for _, heartbeat := range resp.Workers {
 		workersInfo = append(workersInfo, &workerpb.WorkerInfo{
 			WorkerHeartbeat: heartbeat,
 		})
 	}
 	return &matchingservice.ListWorkersResponse{
-		WorkersInfo: workersInfo,
+		WorkersInfo:   workersInfo,
+		NextPageToken: resp.NextPageToken,
 	}, nil
 }
 

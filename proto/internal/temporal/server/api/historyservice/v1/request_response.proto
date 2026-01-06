@@ -95,7 +95,7 @@ message StartWorkflowExecutionRequest {
     temporal.api.deployment.v1.WorkerDeploymentVersion inherited_pinned_version = 15;
     // Passes deployment version and revision number from a parent/previous workflow with AutoUpgrade behavior
     // to its child/continued-as-new workflow. The first workflow task of the child/CAN workflow is dispatched to
-    // either this deployment version or the current version of the task queue, depending on which is the more recent version. 
+    // either this deployment version or the current version of the task queue, depending on which is the more recent version.
     // After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
     // subsequent workflow tasks.
     temporal.api.deployment.v1.InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
@@ -247,6 +247,10 @@ message RecordWorkflowTaskStartedRequest {
     // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
     // that may arise due to stale routing configs in task queue partitions.
     int64 task_dispatch_revision_number = 12;
+    // Target worker deployment version according to matching when starting the task.
+    // Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
+    // Sent only if the target version is different from the poller's version.
+    temporal.api.deployment.v1.WorkerDeploymentVersion target_deployment_version = 13;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -300,7 +304,7 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
 }
 
 message RecordActivityTaskStartedRequest {
-    option (routing).workflow_id = "workflow_execution.workflow_id";
+    option (routing).custom = true;
 
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
@@ -323,6 +327,10 @@ message RecordActivityTaskStartedRequest {
     // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
     // that may arise due to stale routing configs in task queue partitions.
     int64 task_dispatch_revision_number = 13;
+    // Reference to the Chasm component for activity execution (if applicable). For standalone activities, all necessary
+    // start information is carried within this component, obviating the need to use the fields that apply to embedded
+    // activities with the exception of version_directive.
+    bytes component_ref = 14;
 }
 
 message RecordActivityTaskStartedResponse {

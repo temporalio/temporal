@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,13 +44,13 @@ const (
 	// in external and internal APIs. Until then, both delimiters are banned in deployment name. All
 	// deprecated version string fields in APIs keep using the old delimiter. Workflow SA uses new delimiter.
 	WorkerDeploymentVersionIDDelimiterV31   = "."
+	WorkerDeploymentVersionDelimiter        = ":"
 	WorkerDeploymentVersionWorkflowIDEscape = "|"
 
 	// Prefixes, Delimeters and Keys that are used in the internal entity workflows backing worker-versioning
 	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
 	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
-	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter) // 39
+	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionDelimiter) // 39
 	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 )
@@ -163,9 +164,9 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 		if b == "" {
 			return nil, serviceerror.NewInvalidArgumentf("versioned worker must have build id")
 		}
-		if strings.Contains(d, WorkerDeploymentVersionWorkflowIDDelimeter) || strings.Contains(d, WorkerDeploymentVersionIDDelimiterV31) {
+		if strings.Contains(d, WorkerDeploymentVersionDelimiter) || strings.Contains(d, WorkerDeploymentVersionIDDelimiterV31) {
 			// TODO: allow '.' once we get rid of v31 stuff
-			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31)
+			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionDelimiter, WorkerDeploymentVersionIDDelimiterV31)
 		}
 		return &deploymentpb.Deployment{
 			SeriesName: d,
@@ -265,32 +266,17 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
-		resp, err := matchingClient.GetTaskQueueUserData(ctx,
-			&matchingservice.GetTaskQueueUserDataRequest{
-				NamespaceId:   namespaceID,
-				TaskQueue:     tq,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			})
+		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     tq,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
+		})
 		if err != nil {
 			return false, err
 		}
-		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)]
-		if !ok {
-			// The TQ is unversioned
-			return false, nil
-		}
-		return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
+		return resp.GetIsMember(), nil
 	}
-}
-
-// [cleanup-wv-pre-release]
-func FindDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
-	for i, d := range deployments.GetDeployments() { //nolint:staticcheck // SA1019: worker versioning v0.30
-		if d.Deployment.Equal(deployment) {
-			return i
-		}
-	}
-	return -1
 }
 
 func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
@@ -309,11 +295,6 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 		return false
 	}
 
-	for _, d := range deployments.GetDeployments() {
-		if d.Deployment.Equal(DeploymentFromDeploymentVersion(v)) {
-			return true
-		}
-	}
 	for _, vd := range deployments.GetVersions() {
 		if proto.Equal(v, vd.GetVersion()) {
 			return true
@@ -322,10 +303,27 @@ func HasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 
 	// Check for the presence of the version in the new DeploymentData format.
 	if deploymentData, ok := deployments.GetDeploymentsData()[v.GetDeploymentName()]; ok {
-		return deploymentData.GetVersions()[v.GetBuildId()] != nil
+		vd := deploymentData.GetVersions()[v.GetBuildId()]
+		return vd != nil && !vd.GetDeleted()
 	}
 
 	return false
+}
+
+func CountDeploymentVersions(deployments *persistencespb.DeploymentData) int {
+	//nolint:staticcheck // SA1019
+	res := len(deployments.GetVersions())
+
+	// Check for the presence of the version in the new DeploymentData format.
+	for _, d := range deployments.GetDeploymentsData() {
+		for _, vd := range d.GetVersions() {
+			if vd != nil && !vd.GetDeleted() {
+				res++
+			}
+		}
+	}
+
+	return res
 }
 
 // DeploymentVersionFromDeployment Temporary helper function to convert Deployment to
@@ -425,8 +423,8 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 	}
 	// TODO: remove '.' restriction once the v31 version strings are completely cleaned from external and internal API
 	if strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIDDelimiterV31) ||
-		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIDDelimiterV31, WorkerDeploymentVersionWorkflowIDDelimeter)
+		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionDelimiter) {
+		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIDDelimiterV31, WorkerDeploymentVersionDelimiter)
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
@@ -475,8 +473,8 @@ func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLength
 		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionIDDelimiterV31)
 	}
 	// deploymentName cannot have ":"
-	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionWorkflowIDDelimeter)
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionDelimiter) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionDelimiter)
 	}
 
 	// buildID or deployment name cannot start with "__"
@@ -528,7 +526,64 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
-func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
+func validatePinnedVersionInTaskQueue(ctx context.Context,
+	pinnedVersion *deploymentpb.WorkerDeploymentVersion,
+	matchingClient resource.MatchingClient,
+	versionMembershipCache VersionMembershipCache,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) error {
+
+	// Check if we have recently queried matching to validate if this version exists in the task queue.
+	if isMember, ok := versionMembershipCache.Get(
+		namespaceID,
+		tq,
+		tqType,
+		pinnedVersion.DeploymentName,
+		pinnedVersion.BuildId,
+	); ok {
+		if isMember {
+			return nil
+		}
+		return serviceerror.NewFailedPrecondition(
+			"Pinned version is not present in the task queue",
+		)
+	}
+
+	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		NamespaceId:   namespaceID,
+		TaskQueue:     tq,
+		TaskQueueType: tqType,
+		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(pinnedVersion)),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Add result to cache
+	versionMembershipCache.Put(
+		namespaceID,
+		tq,
+		tqType,
+		pinnedVersion.DeploymentName,
+		pinnedVersion.BuildId,
+		resp.GetIsMember(),
+	)
+	if !resp.GetIsMember() {
+		return serviceerror.NewFailedPrecondition(
+			"Pinned version is not present in the task queue",
+		)
+	}
+	return nil
+}
+
+func ValidateVersioningOverride(ctx context.Context,
+	override *workflowpb.VersioningOverride,
+	matchingClient resource.MatchingClient,
+	versionMembershipCache VersionMembershipCache,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) error {
 	if override == nil {
 		return nil
 	}
@@ -542,7 +597,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return nil
+		return validatePinnedVersionInTaskQueue(ctx, p.GetVersion(), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -552,7 +607,12 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 			return ValidateDeployment(override.GetDeployment())
 		} else if override.GetPinnedVersion() != "" {
 			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
-			return err
+			if err != nil {
+				return err
+			}
+
+			return validatePinnedVersionInTaskQueue(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
+
 		} else {
 			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
 		}
@@ -704,19 +764,6 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 
 	var current *deploymentspb.DeploymentVersionData
 	ramping := deployments.GetUnversionedRampData() // nil if there is no unversioned ramp
-
-	// Find old current
-	for _, d := range deployments.GetDeployments() {
-		// [cleanup-old-wv]
-		if d.Data.LastBecameCurrentTime != nil {
-			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
-				current = &deploymentspb.DeploymentVersionData{
-					Version:           DeploymentVersionFromDeployment(d.Deployment),
-					RoutingUpdateTime: d.Data.LastBecameCurrentTime,
-				}
-			}
-		}
-	}
 
 	// Find current and ramping
 	// [cleanup-pp-wv]
@@ -922,18 +969,18 @@ func WorkerDeploymentVersionToStringV32(v *deploymentspb.WorkerDeploymentVersion
 	if v == nil {
 		return ""
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionWorkflowIDDelimeter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionDelimiter + v.GetBuildId()
 }
 
 func BuildIDToStringV32(deploymentName, buildID string) string {
-	return deploymentName + WorkerDeploymentVersionWorkflowIDDelimeter + buildID
+	return deploymentName + WorkerDeploymentVersionDelimiter + buildID
 }
 
 func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return ""
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionWorkflowIDDelimeter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionDelimiter + v.GetBuildId()
 }
 
 func ExternalWorkerDeploymentVersionToStringV31(v *deploymentpb.WorkerDeploymentVersion) string {
@@ -963,9 +1010,9 @@ func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploy
 	}
 	before, after, found := strings.Cut(s, WorkerDeploymentVersionIDDelimiterV31)
 	// Also try parsing via the v32 delimiter in case user is using an old CLI/SDK but passing new version strings.
-	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
+	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionDelimiter)
 	if !found && !found32 {
-		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31, s)
+		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionDelimiter, WorkerDeploymentVersionIDDelimiterV31, s)
 	}
 	if found && found32 && len(before32) < len(before) {
 		// choose the values based on the delimiter appeared first to ensure that deployment name does not contain any of the banned delimiters
@@ -988,9 +1035,9 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 	if s == UnversionedVersionId {
 		return nil, nil
 	}
-	before, after, found := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionDelimiter)
 	if !found {
-		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, s)
+		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionDelimiter, s)
 	}
 	if len(before) == 0 {
 		return nil, fmt.Errorf("deployment name is empty in version string %s", s)
@@ -1002,4 +1049,53 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 		DeploymentName: before,
 		BuildId:        after,
 	}, nil
+}
+
+// CleanupOldDeletedVersions removes versions deleted more than 7 days ago. Also removes more deleted versions if
+// the limit is being exceeded. Never removes undeleted versions.
+func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData, maxVersions int) bool {
+	now := time.Now()
+	aWeekAgo := now.Add(-time.Hour * 24 * 7)
+
+	// Collect all deleted versions with their metadata
+	type deletedVersion struct {
+		buildID    string
+		updateTime time.Time
+	}
+	var deletedVersions []deletedVersion
+	undeletedCount := 0
+
+	for buildID, versionData := range deploymentData.Versions {
+		if versionData.GetDeleted() {
+			deletedVersions = append(deletedVersions, deletedVersion{
+				buildID:    buildID,
+				updateTime: versionData.GetUpdateTime().AsTime(),
+			})
+		} else {
+			undeletedCount++
+		}
+	}
+
+	// Sort deleted versions by update time (oldest first)
+	sort.Slice(deletedVersions, func(i, j int) bool {
+		return deletedVersions[i].updateTime.Before(deletedVersions[j].updateTime)
+	})
+
+	cleaned := false
+	totalCount := undeletedCount + len(deletedVersions)
+	for _, dv := range deletedVersions {
+		// Stop if:
+		// 1. This version is not older than 7 days AND
+		// 2. We're not exceeding the limit because of deleted versions
+		if !dv.updateTime.Before(aWeekAgo) && totalCount <= maxVersions {
+			break
+		}
+
+		// Remove this deleted version
+		delete(deploymentData.Versions, dv.buildID)
+		totalCount--
+		cleaned = true
+	}
+
+	return cleaned
 }

@@ -15,16 +15,6 @@ import (
 
 var (
 	// keys for dynamic config itself
-	DynamicConfigSubscriptionCallback = NewGlobalTypedSetting(
-		"dynamicconfig.subscriptionCallback",
-		subscriptionCallbackSettings{
-			MinWorkers:   10,
-			MaxWorkers:   1e9, // effectively unlimited
-			TargetDelay:  10 * time.Millisecond,
-			ShrinkFactor: 1000, // 10 seconds
-		},
-		`Settings for dynamic config subscription dispatch. Requires server restart.`,
-	)
 	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
 		"dynamicconfig.subscriptionPollInterval",
 		time.Minute,
@@ -998,13 +988,6 @@ so forwarding by endpoint ID will not work out of the box.`,
 		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
 	)
 
-	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
-		"frontend.enableExecuteMultiOperation",
-		true,
-		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
-The API is under active development.`,
-	)
-
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
 		true,
@@ -1208,9 +1191,9 @@ observability stack. Disabling this option will disable all the per-Task Queue g
 	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
 		"metrics.breakdownByBuildID",
 		true,
-		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should
-contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned
-queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your
+		`MetricsBreakdownByBuildID determines if the 'worker_version' tag in Matching metrics should
+contain the actual Worker Deployment Version or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned
+queues will be "__unversioned__". Disable this option if the version cardinality is too high for your
 observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age
 for VERSIONED queues.`,
 	)
@@ -1319,6 +1302,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
 	)
+	MatchingMaxVersionsInTaskQueue = NewNamespaceIntSetting(
+		"matching.maxVersionsInTaskQueue",
+		200,
+		`MatchingMaxVersionsInTaskQueue represents the maximum number of versions that can be registered in a single task queue. 
+ Should be larger than MatchingMaxVersionsInDeployment because a task queue can be in versions spanning across more than one deployments.`,
+	)
 	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeploymentVersion",
 		100,
@@ -1388,6 +1377,40 @@ second per poller by one physical queue manager`,
 		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics.
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
+	)
+
+	// Worker registry settings
+	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
+		"matching.workerRegistryNumBuckets",
+		10,
+		`MatchingWorkerRegistryNumBuckets is the number of buckets used to partition the worker registry
+keyspace for reduced lock contention. Changes require a restart to take effect.`,
+	)
+	MatchingWorkerRegistryEntryTTL = NewGlobalDurationSetting(
+		"matching.workerRegistryEntryTTL",
+		5*time.Minute,
+		`MatchingWorkerRegistryEntryTTL is the time after which worker heartbeat entries are considered expired
+and eligible for eviction. Workers typically heartbeat every 30-60 seconds, so 5 minutes without a
+heartbeat indicates the worker is likely dead.`,
+	)
+	MatchingWorkerRegistryMinEvictAge = NewGlobalDurationSetting(
+		"matching.workerRegistryMinEvictAge",
+		1*time.Minute,
+		`MatchingWorkerRegistryMinEvictAge is the minimum age of worker heartbeat entries before they can be
+evicted due to capacity pressure. This prevents evicting recently-heartbeated workers even when
+the registry is at capacity. Lower values help handle crash-looping workers more aggressively.`,
+	)
+	MatchingWorkerRegistryMaxEntries = NewGlobalIntSetting(
+		"matching.workerRegistryMaxEntries",
+		1_000_000,
+		`MatchingWorkerRegistryMaxEntries is the maximum number of worker heartbeat entries allowed across
+all namespaces. When exceeded, the oldest entries (older than MinEvictAge) are evicted.`,
+	)
+	MatchingWorkerRegistryEvictionInterval = NewGlobalDurationSetting(
+		"matching.workerRegistryEvictionInterval",
+		1*time.Minute,
+		`MatchingWorkerRegistryEvictionInterval is how often the worker registry runs background eviction
+to remove expired entries. Should be shorter than EntryTTL for timely cleanup. Lower values mean faster cleanup but more CPU overhead.`,
 	)
 
 	// keys for history
@@ -2665,6 +2688,24 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 		false,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
+	)
+
+	VersionMembershipCacheTTL = NewGlobalDurationSetting(
+		"history.versionMembershipCacheTTL",
+		1*time.Second,
+		`TTL for caching RPC results that check whether a version is present in a task queue.`,
+	)
+
+	VersionMembershipCacheMaxSize = NewGlobalIntSetting(
+		"history.versionMembershipCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version membership cache.`,
+	)
+
+	ExternalPayloadsEnabled = NewNamespaceBoolSetting(
+		"history.externalPayloadsEnabled",
+		false,
+		`ExternalPayloadsEnabled controls whether external payload features are enabled for a namespace.`,
 	)
 
 	// keys for worker

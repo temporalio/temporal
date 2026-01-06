@@ -56,20 +56,21 @@ var (
 	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 
-	SearchAttributeTemporalChangeVersion              = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)
-	SearchAttributeBinaryChecksums                    = newSearchAttributeKeywordListByField(sadefs.BinaryChecksums)
-	SearchAttributeBuildIds                           = newSearchAttributeKeywordListByField(sadefs.BuildIds)
-	SearchAttributeBatcherNamespace                   = newSearchAttributeKeywordByField(sadefs.BatcherNamespace)
-	SearchAttributeBatcherUser                        = newSearchAttributeKeywordByField(sadefs.BatcherUser)
-	SearchAttributeTemporalScheduledStartTime         = newSearchAttributeDateTimeByField(sadefs.TemporalScheduledStartTime)
-	SearchAttributeTemporalScheduledByID              = newSearchAttributeKeywordByField(sadefs.TemporalScheduledById)
-	SearchAttributeTemporalSchedulePaused             = newSearchAttributeBoolByField(sadefs.TemporalSchedulePaused)
-	SearchAttributeTemporalNamespaceDivision          = newSearchAttributeKeywordByField(sadefs.TemporalNamespaceDivision)
-	SearchAttributeTemporalPauseInfo                  = newSearchAttributeKeywordListByField(sadefs.TemporalPauseInfo)
-	SearchAttributeTemporalReportedProblems           = newSearchAttributeKeywordListByField(sadefs.TemporalReportedProblems)
-	SearchAttributeTemporalWorkerDeploymentVersion    = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeploymentVersion)
-	SearchAttributeTemporalWorkflowVersioningBehavior = newSearchAttributeKeywordByField(sadefs.TemporalWorkflowVersioningBehavior)
-	SearchAttributeTemporalWorkerDeployment           = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeployment)
+	SearchAttributeTemporalChangeVersion                = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)
+	SearchAttributeBinaryChecksums                      = newSearchAttributeKeywordListByField(sadefs.BinaryChecksums)
+	SearchAttributeBuildIds                             = newSearchAttributeKeywordListByField(sadefs.BuildIds)
+	SearchAttributeBatcherNamespace                     = newSearchAttributeKeywordByField(sadefs.BatcherNamespace)
+	SearchAttributeBatcherUser                          = newSearchAttributeKeywordByField(sadefs.BatcherUser)
+	SearchAttributeTemporalScheduledStartTime           = newSearchAttributeDateTimeByField(sadefs.TemporalScheduledStartTime)
+	SearchAttributeTemporalScheduledByID                = newSearchAttributeKeywordByField(sadefs.TemporalScheduledById)
+	SearchAttributeTemporalSchedulePaused               = newSearchAttributeBoolByField(sadefs.TemporalSchedulePaused)
+	SearchAttributeTemporalNamespaceDivision            = newSearchAttributeKeywordByField(sadefs.TemporalNamespaceDivision)
+	SearchAttributeTemporalPauseInfo                    = newSearchAttributeKeywordListByField(sadefs.TemporalPauseInfo)
+	SearchAttributeTemporalReportedProblems             = newSearchAttributeKeywordListByField(sadefs.TemporalReportedProblems)
+	SearchAttributeTemporalWorkerDeploymentVersion      = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeploymentVersion)
+	SearchAttributeTemporalWorkflowVersioningBehavior   = newSearchAttributeKeywordByField(sadefs.TemporalWorkflowVersioningBehavior)
+	SearchAttributeTemporalWorkerDeployment             = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeployment)
+	SearchAttributeTemporalUsedWorkerDeploymentVersions = newSearchAttributeKeywordListByField(sadefs.TemporalUsedWorkerDeploymentVersions)
 )
 
 var (
@@ -283,16 +284,6 @@ func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) Searc
 		searchAttributeDefinition: searchAttributeDefinition{
 			alias:     alias,
 			field:     intField.field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
-		},
-	}
-}
-
-func newSearchAttributeIntByField(field string) SearchAttributeInt {
-	return SearchAttributeInt{
-		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
 			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
 		},
 	}
