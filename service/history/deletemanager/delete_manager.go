@@ -114,7 +114,16 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)))
+	return m.deleteWorkflowExecutionInternal(
+		ctx,
+		nsID,
+		we,
+		weCtx,
+		ms,
+		stage,
+		false,
+		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)),
+	)
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
@@ -126,7 +135,16 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)))
+	return m.deleteWorkflowExecutionInternal(
+		ctx,
+		nsID,
+		we,
+		weCtx,
+		ms,
+		stage,
+		true,
+		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)),
+	)
 }
 
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
@@ -136,6 +154,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	weCtx historyi.WorkflowContext,
 	ms historyi.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
+	retentionDelete bool,
 	metricsHandler metrics.Handler,
 ) error {
 
@@ -158,6 +177,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		executionInfo.GetCloseTime().AsTime(),
 		executionInfo.GetStartTime().AsTime(),
 		stage,
+		retentionDelete,
 	); err != nil {
 		return err
 	}

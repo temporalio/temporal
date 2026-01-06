@@ -946,6 +946,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	workflowCloseTime time.Time,
 	workflowStartTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
+	retentionDelete bool,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete,
@@ -1023,6 +1024,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 							CloseTime:                      workflowCloseTime,
 							StartTime:                      workflowStartTime,
+							IsRetentionDelete:              retentionDelete,
 						},
 					},
 				}
