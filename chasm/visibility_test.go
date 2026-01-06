@@ -86,7 +86,7 @@ func (s *visibilitySuite) TestMergeCustomSearchAttributes() {
 		},
 	)
 	s.Len(s.mockMutableContext.Tasks, 1)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}, s.mockMutableContext.Tasks[0].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(2, s.mockMutableContext.Tasks[0].Payload)
 
 	sa = s.visibility.CustomSearchAttributes(s.mockMutableContext)
 	s.Len(sa, 3)
@@ -113,7 +113,7 @@ func (s *visibilitySuite) TestMergeCustomSearchAttributes() {
 	})
 	s.NoError(err)
 	s.Len(s.mockMutableContext.Tasks, 2)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}, s.mockMutableContext.Tasks[1].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(3, s.mockMutableContext.Tasks[1].Payload)
 
 	sa = s.visibility.CustomSearchAttributes(s.mockMutableContext)
 	s.NoError(err)
@@ -125,7 +125,7 @@ func (s *visibilitySuite) TestMergeCustomSearchAttributes() {
 		intKey:    nil,
 	})
 	s.Len(s.mockMutableContext.Tasks, 3)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}, s.mockMutableContext.Tasks[2].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(4, s.mockMutableContext.Tasks[2].Payload)
 	_, ok := s.visibility.SA.TryGet(s.mockContext)
 	s.False(ok)
 	s.Nil(s.visibility.CustomSearchAttributes(s.mockContext))
@@ -147,7 +147,7 @@ func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 		},
 	)
 	s.Len(s.mockMutableContext.Tasks, 1)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}, s.mockMutableContext.Tasks[0].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(2, s.mockMutableContext.Tasks[0].Payload)
 
 	sa := s.visibility.CustomSearchAttributes(s.mockMutableContext)
 	s.Len(sa, 3)
@@ -161,7 +161,7 @@ func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 		},
 	)
 	s.Len(s.mockMutableContext.Tasks, 2)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}, s.mockMutableContext.Tasks[1].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(3, s.mockMutableContext.Tasks[1].Payload)
 
 	sa = s.visibility.CustomSearchAttributes(s.mockMutableContext)
 	s.Len(sa, 2)
@@ -172,7 +172,7 @@ func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 		map[string]*commonpb.Payload{},
 	)
 	s.Len(s.mockMutableContext.Tasks, 3)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}, s.mockMutableContext.Tasks[2].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(4, s.mockMutableContext.Tasks[2].Payload)
 	_, ok := s.visibility.SA.TryGet(s.mockContext)
 	s.False(ok)
 	s.Nil(s.visibility.CustomSearchAttributes(s.mockContext))
@@ -193,7 +193,7 @@ func (s *visibilitySuite) TestMergeCustomMemo() {
 		floatKey:  s.mustEncode(floatVal),
 	})
 	s.Len(s.mockMutableContext.Tasks, 1)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}, s.mockMutableContext.Tasks[0].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(2, s.mockMutableContext.Tasks[0].Payload)
 
 	memo = s.visibility.CustomMemo(s.mockMutableContext)
 	s.Len(memo, 3)
@@ -219,18 +219,18 @@ func (s *visibilitySuite) TestMergeCustomMemo() {
 		floatKey: nil,
 	})
 	s.Len(s.mockMutableContext.Tasks, 2)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}, s.mockMutableContext.Tasks[1].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(3, s.mockMutableContext.Tasks[1].Payload)
 
 	memo = s.visibility.CustomMemo(s.mockMutableContext)
 	s.Len(memo, 2, "intKey and stringKey should remain")
 
-	// Test removing all search attributes also removes the node.
+	// Test removing all memo fields also removes the node.
 	s.visibility.MergeCustomMemo(s.mockMutableContext, map[string]*commonpb.Payload{
 		stringKey: nil,
 		intKey:    nil,
 	})
 	s.Len(s.mockMutableContext.Tasks, 3)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}, s.mockMutableContext.Tasks[2].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(4, s.mockMutableContext.Tasks[2].Payload)
 	_, ok := s.visibility.Memo.TryGet(s.mockContext)
 	s.False(ok)
 	s.Nil(s.visibility.CustomMemo(s.mockContext))
@@ -242,7 +242,7 @@ func (s *visibilitySuite) TestReplaceCustomMemo() {
 	floatKey, floatVal := "floatKey", 3.14
 	byteKey, byteVal := "byteKey", []byte{0x01, 0x02, 0x03}
 
-	// Set up some initial SA.
+	// Set up some initial memo fields.
 	s.visibility.ReplaceCustomMemo(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
@@ -252,12 +252,12 @@ func (s *visibilitySuite) TestReplaceCustomMemo() {
 		},
 	)
 	s.Len(s.mockMutableContext.Tasks, 1)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 2}, s.mockMutableContext.Tasks[0].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(2, s.mockMutableContext.Tasks[0].Payload)
 
 	memo := s.visibility.CustomMemo(s.mockMutableContext)
 	s.Len(memo, 3)
 
-	// Set to a new set of SA, non-existing keys should be removed.
+	// Set to a new set of memo fields, non-existing keys should be removed.
 	s.visibility.ReplaceCustomMemo(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
@@ -266,7 +266,7 @@ func (s *visibilitySuite) TestReplaceCustomMemo() {
 		},
 	)
 	s.Len(s.mockMutableContext.Tasks, 2)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 3}, s.mockMutableContext.Tasks[1].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(3, s.mockMutableContext.Tasks[1].Payload)
 
 	memo = s.visibility.CustomMemo(s.mockMutableContext)
 	s.Len(memo, 2)
@@ -277,10 +277,18 @@ func (s *visibilitySuite) TestReplaceCustomMemo() {
 		map[string]*commonpb.Payload{},
 	)
 	s.Len(s.mockMutableContext.Tasks, 3)
-	protorequire.ProtoEqual(s.T(), &persistencespb.ChasmVisibilityTaskData{TransitionCount: 4}, s.mockMutableContext.Tasks[2].Payload.(*persistencespb.ChasmVisibilityTaskData))
+	s.assertTaskPayload(4, s.mockMutableContext.Tasks[2].Payload)
 	_, ok := s.visibility.Memo.TryGet(s.mockContext)
 	s.False(ok)
 	s.Nil(s.visibility.CustomMemo(s.mockContext))
+}
+
+func (s *visibilitySuite) assertTaskPayload(expectedCount int64, taskPayload any) {
+	protorequire.ProtoEqual(
+		s.T(),
+		&persistencespb.ChasmVisibilityTaskData{TransitionCount: expectedCount},
+		taskPayload.(*persistencespb.ChasmVisibilityTaskData),
+	)
 }
 
 func (s *visibilitySuite) mustEncode(v any) *commonpb.Payload {
