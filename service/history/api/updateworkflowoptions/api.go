@@ -52,13 +52,30 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
+			// If the requested override is pinned and omitted optional pinned version, fill in the current pinned version if it exists,
+			// or error if no pinned version exists.
+			// Clone the requested options to avoid mutating the original request but only do the cloning work if needed.
+			requestedOptions := req.GetWorkflowExecutionOptions()
+			if requestedOptions.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
+				requestedOptions.GetVersioningOverride().GetPinned().GetVersion() == nil {
+				currentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(workflow.GetEffectiveDeployment(mutableState.GetExecutionInfo().GetVersioningInfo()))
+				if workflow.GetEffectiveVersioningBehavior(mutableState.GetExecutionInfo().GetVersioningInfo()) != enumspb.VERSIONING_BEHAVIOR_PINNED {
+					return nil, serviceerror.NewFailedPreconditionf("must specify a specific pinned override version because workflow with id %v has behavior %s and is not yet pinned to any version",
+						mutableState.GetExecutionInfo().GetWorkflowId(),
+						mutableState.GetExecutionInfo().GetVersioningInfo().GetBehavior().String(),
+					)
+				}
+				requestedOptions = proto.Clone(requestedOptions).(*workflowpb.WorkflowExecutionOptions)
+				requestedOptions.GetVersioningOverride().GetPinned().Version = currentVersion
+			}
+
 			// Validate versioning override, if any.
-			err = worker_versioning.ValidateVersioningOverride(ctx, req.GetWorkflowExecutionOptions().GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			err = worker_versioning.ValidateVersioningOverride(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
 			if err != nil {
 				return nil, err
 			}
 
-			mergedOpts, hasChanges, err := MergeAndApply(mutableState, req.GetWorkflowExecutionOptions(), req.GetUpdateMask(), req.GetIdentity())
+			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -105,21 +122,6 @@ func MergeAndApply(
 	)
 	if err != nil {
 		return nil, false, serviceerror.NewInvalidArgumentf("error applying update_options: %v", err)
-	}
-
-	// If the requested override is pinned and omitted optional pinned version, fill in the current pinned version if it exists,
-	// or error if no pinned version exists.
-	if mergedOpts.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
-		mergedOpts.GetVersioningOverride().GetPinned().GetVersion() == nil {
-		currentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(workflow.GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo()))
-		if workflow.GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo()) == enumspb.VERSIONING_BEHAVIOR_PINNED {
-			mergedOpts.GetVersioningOverride().GetPinned().Version = currentVersion
-		} else {
-			return nil, false, serviceerror.NewFailedPreconditionf("must specify a specific pinned override version because workflow with id %v has behavior %s and is not yet pinned to any version",
-				ms.GetExecutionInfo().GetWorkflowId(),
-				ms.GetExecutionInfo().GetVersioningInfo().GetBehavior().String(),
-			)
-		}
 	}
 
 	// If there is no mutable state change at all, return with no new history event and Noop=true
