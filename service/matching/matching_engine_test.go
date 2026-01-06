@@ -5143,13 +5143,13 @@ func (d *dynamicRateBurstWrapper) Burst() int {
 
 // TODO(pri): cleanup; delete this
 func useNewMatcher(config *Config) {
-	config.NewMatcherSub = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
-		return true, func() {}
-	}
+	config.NewMatcherSub = staticTrueChange
 }
 
 func useFairness(config *Config) {
-	config.EnableFairnessSub = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
-		return true, func() {}
-	}
+	config.EnableFairnessSub = staticTrueChange
+}
+
+func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
+	return dynamicconfig.StaticGradualChange(true), func() {}
 }

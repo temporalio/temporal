@@ -1331,14 +1331,16 @@ a decision to scale down the number of pollers will be issued`,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
 	)
-	MatchingUseNewMatcher = NewTaskQueueBoolSetting(
+	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
-		false,
+		ConvertGradualChange(false),
+		StaticGradualChange(false),
 		`Use priority-enabled TaskMatcher`,
 	)
-	MatchingEnableFairness = NewTaskQueueBoolSetting(
+	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
 		"matching.enableFairness",
-		false,
+		ConvertGradualChange(false),
+		StaticGradualChange(false),
 		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
 	)
 	MatchingEnableMigration = NewTaskQueueBoolSetting(

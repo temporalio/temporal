@@ -18,6 +18,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -123,13 +124,17 @@ func newTaskQueuePartitionManager(
 	}
 
 	var fairness bool
-	fairness, pm.cancelFairnessSub = tqConfig.EnableFairnessSub(unload)
+	changeKey := pm.partition.GradualChangeKey()
+	fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
+		tqConfig.EnableFairnessSub, changeKey, unload, e.timeSource)
+
 	// Fairness is disabled for sticky queues for now so that we can still use TTLs.
 	tqConfig.EnableFairness = fairness && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
 	if fairness {
 		tqConfig.NewMatcher = true
 	} else {
-		tqConfig.NewMatcher, pm.cancelNewMatcherSub = tqConfig.NewMatcherSub(unload)
+		tqConfig.NewMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
+			tqConfig.NewMatcherSub, changeKey, unload, e.timeSource)
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
