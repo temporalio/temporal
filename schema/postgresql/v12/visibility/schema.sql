@@ -55,6 +55,7 @@ CREATE TABLE executions_visibility (
   TemporalWorkerDeploymentVersion    VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkerDeploymentVersion')          STORED,
   TemporalWorkflowVersioningBehavior VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkflowVersioningBehavior')       STORED,
   TemporalWorkerDeployment           VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkerDeployment')                 STORED,
+  TemporalUsedWorkerDeploymentVersions JSONB GENERATED ALWAYS AS (search_attributes->'TemporalUsedWorkerDeploymentVersions') STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
@@ -130,6 +131,7 @@ CREATE INDEX by_temporal_reported_problems     ON executions_visibility USING GI
 CREATE INDEX by_temporal_worker_deployment_version ON executions_visibility (namespace_id, TemporalWorkerDeploymentVersion,  (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_workflow_versioning_behavior ON executions_visibility (namespace_id, TemporalWorkflowVersioningBehavior,  (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_worker_deployment    ON executions_visibility (namespace_id, TemporalWorkerDeployment,  (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_used_deployment_versions      ON executions_visibility USING GIN (namespace_id, TemporalUsedWorkerDeploymentVersions jsonb_path_ops);
 CREATE INDEX by_batcher_user                  ON executions_visibility (namespace_id, BatcherUser,                (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_scheduled_start_time ON executions_visibility (namespace_id, TemporalScheduledStartTime, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_scheduled_by_id      ON executions_visibility (namespace_id, TemporalScheduledById,      (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);

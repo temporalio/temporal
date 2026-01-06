@@ -298,12 +298,12 @@ func WorkflowTaskQueueName(taskQueueName string) ZapTag {
 	return NewStringTag("wf-task-queue-name", taskQueueName)
 }
 
-// WorkerBuildId returns tag for worker build ID
-func WorkerBuildId(buildId string) ZapTag {
-	if buildId == "" {
-		buildId = "_unversioned_"
+// WorkerVersion returns tag for worker build ID
+func WorkerVersion(version string) ZapTag {
+	if version == "" {
+		version = "_unversioned_"
 	}
-	return NewStringTag("worker-build-id", buildId)
+	return NewStringTag("worker-version", version)
 }
 
 // ReachabilityExitPointTag returns tag for reachabilityExitPoint

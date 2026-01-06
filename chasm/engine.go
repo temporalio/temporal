@@ -17,7 +17,7 @@ type Engine interface {
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
-	) (ExecutionKey, []byte, error)
+	) (EngineNewExecutionResult, error)
 	UpdateWithNewExecution(
 		context.Context,
 		ComponentRef,
@@ -75,6 +75,35 @@ type TransitionOptions struct {
 
 type TransitionOption func(*TransitionOptions)
 
+// NewExecutionResult contains the outcome of creating a new execution via [NewExecution]
+// or [UpdateWithNewExecution].
+//
+// This struct provides information about whether a new execution was actually created,
+// along with identifiers needed to reference the execution in subsequent operations.
+//
+// Fields:
+//   - ExecutionKey: The unique identifier for the execution. This key can be used to
+//     look up or reference the execution in future operations.
+//   - NewExecutionRef: A serialized reference to the newly created root component.
+//     This can be passed to [UpdateComponent], [ReadComponent], or [PollComponent]
+//     to interact with the component. Use [DeserializeComponentRef] to convert this
+//     back to a [ComponentRef] if needed.
+//   - Created: Indicates whether a new execution was actually created. When false,
+//     the execution already existed (based on the [BusinessIDReusePolicy] and
+//     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
+//     existing execution was returned instead.
+//   - Output: The output value returned by the factory function.
+type NewExecutionResult[O any] struct {
+	ExecutionKey    ExecutionKey
+	NewExecutionRef []byte
+	Created         bool
+	Output          O
+}
+
+// EngineNewExecutionResult is a type alias for the result type returned by the Engine implementation.
+// This avoids repeating [struct{}] everywhere in the engine implementation.
+type EngineNewExecutionResult = NewExecutionResult[struct{}]
+
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
 // Compared to the ExecutionEphemeral() operation on RegistrableComponent,
@@ -118,15 +147,40 @@ func WithRequestID(
 // 	panic("not implemented")
 // }
 
+// NewExecution creates a new execution with a component initialized by the provided factory function.
+//
+// This is the primary entry point for starting a new execution in the CHASM engine. It handles
+// the lifecycle of creating and persisting a new component within an execution context.
+//
+// Type Parameters:
+//   - C: The component type to create, must implement [Component]
+//   - I: The input type passed to the factory function
+//   - O: The output type returned by the factory function
+//
+// Parameters:
+//   - ctx: Context containing the CHASM engine (must be created via [NewEngineContext])
+//   - key: Unique identifier for the execution, used for deduplication and lookup
+//   - newFn: Factory function that creates the component and produces output.
+//     Receives a [MutableContext] for accessing engine capabilities and the input value.
+//   - input: Application-specific data passed to newFn
+//   - opts: Optional [TransitionOption] functions to configure creation behavior:
+//   - [WithBusinessIDPolicy]: Controls duplicate handling and conflict resolution
+//   - [WithRequestID]: Sets a request ID for idempotency
+//   - [WithSpeculative]: Defers persistence until the next non-speculative transition
+//
+// Returns:
+//   - O: The output value produced by newFn
+//   - [NewExecutionResult]: Contains the execution key, serialized ref, and whether a new execution was created
+//   - error: Non-nil if creation failed or policy constraints were violated
 func NewExecution[C Component, I any, O any](
 	ctx context.Context,
 	key ExecutionKey,
 	newFn func(MutableContext, I) (C, O, error),
 	input I,
 	opts ...TransitionOption,
-) (O, ExecutionKey, []byte, error) {
+) (NewExecutionResult[O], error) {
 	var output O
-	executionKey, serializedRef, err := engineFromContext(ctx).NewExecution(
+	result, err := engineFromContext(ctx).NewExecution(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (Component, error) {
@@ -138,9 +192,17 @@ func NewExecution[C Component, I any, O any](
 		opts...,
 	)
 	if err != nil {
-		return output, ExecutionKey{}, nil, err
+		return NewExecutionResult[O]{
+			Output: output,
+		}, err
 	}
-	return output, executionKey, serializedRef, err
+
+	return NewExecutionResult[O]{
+		ExecutionKey:    result.ExecutionKey,
+		NewExecutionRef: result.NewExecutionRef,
+		Created:         result.Created,
+		Output:          output,
+	}, nil
 }
 
 func UpdateWithNewExecution[C Component, I any, O1 any, O2 any](
