@@ -1656,6 +1656,11 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// - a pointer field pointing to an updated component
 		// As a result, we need to validate existing tasks for all components if we are in active cluster.
 		if n.isActiveStateDirty {
+			// Ensure this node's component value is hydrated before cleaning up tasks.
+			if err := node.prepareComponentValue(taskValidationContext); err != nil {
+				return err
+			}
+
 			cleanedUp, err := node.closeTransactionCleanupInvalidTasks(taskValidationContext)
 			if err != nil {
 				return err
@@ -2067,7 +2072,11 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.newTasks = make(map[any][]taskWithAttributes)
-	// n.immediatePureTasks should be empty after executeImmediatePureTasks()
+	if len(n.immediatePureTasks) != 0 {
+		// n.immediatePureTasks should already be empty after executeImmediatePureTasks()
+		// unless there's an error.
+		n.immediatePureTasks = make(map[any][]taskWithAttributes)
+	}
 
 	n.isActiveStateDirty = false
 	n.needsPointerResolution = false
@@ -2509,8 +2518,9 @@ func isComponentTaskExpired(
 }
 
 // EachPureTask runs the callback for all expired/runnable pure tasks within the
-// CHASM tree (including invalid tasks).
-// A pure task is removed from the tree if callback returns nil error.
+// CHASM tree (including invalid tasks). The CHASM tree is left untouched, even
+// if invalid tasks are detected (these are cleaned up as part of transaction
+// close).
 func (n *Node) EachPureTask(
 	referenceTime time.Time,
 	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
