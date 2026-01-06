@@ -3,7 +3,6 @@ package dynamicconfig
 import (
 	"math"
 	"reflect"
-	"strings"
 	"sync"
 	"time"
 
@@ -109,21 +108,8 @@ func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
 			return changeConverter(v)
 		}
 	default:
-		valueConverter := ConvertStructure(def)
-		return func(v any) (GradualChange[T], error) {
-			// both valueConverter and changeConverter will probably return success here, so
-			// we can't rely on the error. check if the input has "new" (the only required
-			// key in a GradualChange).
-			if vmap, ok := v.(map[string]any); ok {
-				for k := range vmap {
-					if strings.ToLower(k) == "new" {
-						return changeConverter(v)
-					}
-				}
-			}
-			nv, err := valueConverter(v)
-			return StaticGradualChange(nv), err
-		}
+		// nolint:forbidigo // this will be triggered from a static initializer before it can be triggered from production code
+		panic("ConvertGradualChange can only be used with scalar types for now")
 	}
 }
 

@@ -215,38 +215,6 @@ func TestConvertGradualChange_DurationNumeric(t *testing.T) {
 	assert.Equal(t, 30*time.Second, gc.New)
 }
 
-func TestConvertGradualChange_StructPlainValue(t *testing.T) {
-	type config struct {
-		Enabled bool
-		Count   int
-	}
-	conv := ConvertGradualChange(config{})
-
-	gc, err := conv(map[string]any{"Enabled": true, "Count": 5})
-	require.NoError(t, err)
-	assert.Equal(t, config{Enabled: true, Count: 5}, gc.New)
-}
-
-func TestConvertGradualChange_StructGradualChange(t *testing.T) {
-	type config struct {
-		Enabled bool
-		Count   int
-	}
-	conv := ConvertGradualChange(config{})
-
-	gc, err := conv(map[string]any{
-		"new":   map[string]any{"enabLed": true, "Count": 10},
-		"old":   map[string]any{"Enabled": false, "counT": 0},
-		"Start": 1704067200,
-		"enD":   1704844800,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, config{Enabled: true, Count: 10}, gc.New)
-	assert.Equal(t, config{Enabled: false, Count: 0}, gc.Old)
-	assert.True(t, gc.Start.Equal(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)))
-	assert.True(t, gc.End.Equal(time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC)))
-}
-
 func TestSubscribeGradualChange_InitialValues(t *testing.T) {
 	ts := clock.NewEventTimeSource()
 
