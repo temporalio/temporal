@@ -5,7 +5,6 @@ package nsregistry
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -31,13 +30,6 @@ const (
 	CacheRefreshPageSize             = 1000
 	readthroughCacheTTL              = 1 * time.Second // represents minimum time to wait before trying to readthrough again
 	readthroughTimeout               = 3 * time.Second
-)
-
-const (
-	stopped int32 = iota
-	starting
-	running
-	stopping
 )
 
 var (
@@ -76,7 +68,6 @@ type (
 		GetMetadata(context.Context) (*persistence.GetMetadataResponse, error)
 	}
 	registry struct {
-		status                  int32
 		refresher               *goro.Handle
 		persistence             Persistence
 		globalNamespacesEnabled bool
@@ -158,14 +149,9 @@ func (r *registry) RefreshNamespaceById(id namespace.ID) (*namespace.Namespace, 
 	return ns, nil
 }
 
-// Start the background refresh of Namespace data.
+// Start begins background refresh. Should only be invoked by fx lifecycle hook.
+// Should not be called multiple times or concurrently with Stop().
 func (r *registry) Start() {
-	if !atomic.CompareAndSwapInt32(&r.status, stopped, starting) {
-		return
-	}
-	defer atomic.StoreInt32(&r.status, running)
-
-	// initialize the namespace registry by initial scan
 	ctx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemBackgroundHighCallerInfo,
@@ -178,12 +164,9 @@ func (r *registry) Start() {
 	r.refresher = goro.NewHandle(ctx).Go(r.refreshLoop)
 }
 
-// Stop the background refresh of Namespace data
+// Stop ends background refresh. Should only be invoked by fx lifecycle hook.
+// Should not be called multiple times or concurrently with Start().
 func (r *registry) Stop() {
-	if !atomic.CompareAndSwapInt32(&r.status, running, stopping) {
-		return
-	}
-	defer atomic.StoreInt32(&r.status, stopped)
 	r.refresher.Cancel()
 	<-r.refresher.Done()
 }
