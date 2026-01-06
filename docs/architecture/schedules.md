@@ -199,13 +199,90 @@ The Invoker component is responsible for driving buffered starts to execution, m
 #### Tasks
 `ProcessBufferTask`: The final step in the scheduler where a potential action can be dropped, as it determines which actions will become eligible for execution via the `ExecuteTask`. `ProcessBufferTask` itself does not make *any* service calls to determine the state of running workflows, and instead relies on the cached view of `Scheduler.Info.RunningWorkflows`, which is updated through `ExecuteTask` and completion callbacks, discussed below.
 
->[!WARNING]
-> LINA TODO - diagram here 
+```mermaid
+flowchart TD
+    A{{ProcessBufferTask executes}}
+    B([Resolve overlap policies])
+    C{Need terminate or cancel?}
+    D[Queue terminate/cancel requests]
+    E{Starts ready for execution?}
+    F{Is action manual?}
+    G{Is schedule paused?}
+    H{Scheduled actions remaining?}
+    I{Is start expired?}
+    J[Discard start]
+    K[Mark for execution]
+    L([Schedule ExecuteTask])
+    M{{Finish executing}}
+
+    A --> B
+    B --> C
+    C -->|Yes| D
+    C -->|No| E
+    D --> E
+    E -->|Yes| F
+    E -->|No| L
+    F -->|Yes| I
+    F -->|No| G
+    G -->|Yes| J
+    G -->|No| H
+    H -->|No| J
+    H -->|Yes| I
+    I -->|Yes| J
+    I -->|No| K
+    J --> E
+    K --> E
+    L --> M
+```
+
+*Figure: `ProcessBufferTask`'s decision tree (trivial branches omitted).*
 
 `ExecuteTask`: Drives all [eligible buffered starts](https://github.com/temporalio/temporal/blob/85635674d7c55a8679b715b118aaf14c973266eb/chasm/lib/scheduler/invoker.go#L276) and pending cancel/terminate requests to execution by making service calls. `ExecuteTask` reschedules itself whenever a service call fails and must be retried, as well as when it wants to "checkpoint" a batch of completed executions by flushing to mutable state.
 
->[!WARNING]
-> LINA TODO - diagram here 
+```mermaid
+flowchart TD
+    A{{ExecuteTask executes}}
+    B([Terminate pending workflows])
+    C([Cancel pending workflows])
+    D{Eligible starts remaining?}
+    E{Already completed?}
+    F{Retry limit exceeded?}
+    G([Start workflow])
+    H{Success?}
+    I[Record start result]
+    J{Retryable error?}
+    K[Apply backoff for retry]
+    L[Drop start]
+    M([Record execute results])
+    N{Starts pending retry?}
+    O([Reschedule ExecuteTask])
+    P{{Finish executing}}
+
+    A --> B
+    B --> C
+    C --> D
+    D -->|Yes| E
+    D -->|No| M
+    E -->|Yes| D
+    E -->|No| F
+    F -->|Yes| L
+    F -->|No| G
+    G --> H
+    H -->|Yes| I
+    H -->|No| J
+    I --> D
+    J -->|Yes| K
+    J -->|No| L
+    K --> D
+    L --> D
+    M --> N
+    N -->|Yes| O
+    N -->|No| P
+    O --> P
+```
+
+*Figure: `ExecuteTask`'s decision tree (trivial branches omitted).*
+
 #### Notes
 * At the time of writing, `RunningWorkflows` and `RecentActions` are distinct fields (on the Scheduler's `Info` block), but it is likely their functionality will be merged into `BufferedStarts`.
 
@@ -227,5 +304,38 @@ Nexus completion callbacks are the only way that Scheduler can find out about an
 
 The Specification Processor (`SpecProcessor` in code) is responsible for looping through the action times derived from the schedule's specification for a given range of time. It is used by both the `Generator` and the `Backfiller` to generate their `BufferedStart` structs. 
 
->[!WARNING]
-> LINA TODO - diagram here 
+```mermaid
+flowchart TD
+    A{{ProcessTimeRange called}}
+    B{Is action manual?}
+    C{Is schedule paused?}
+    D[Skip time range]
+    E{Action times remaining?}
+    F{Is time before update?}
+    G{Is time outside catchup window?}
+    H[Skip action]
+    I[Create BufferedStart]
+    J{Limit reached?}
+    K([Return buffered starts])
+    L{{Finish processing}}
+
+    A --> B
+    B -->|Yes| E
+    B -->|No| C
+    C -->|Yes| D
+    C -->|No| E
+    D --> K
+    E -->|Yes| F
+    E -->|No| K
+    F -->|Yes| H
+    F -->|No| G
+    G -->|Yes| H
+    G -->|No| I
+    H --> E
+    I --> J
+    J -->|Yes| K
+    J -->|No| E
+    K --> L
+```
+
+*Figure: `SpecProcessor.ProcessTimeRange`'s decision tree (trivial branches omitted).*
