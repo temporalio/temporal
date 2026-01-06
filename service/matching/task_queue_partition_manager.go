@@ -260,8 +260,14 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context,
 	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
 		return
 	}
-	if params.taskInfo.Priority.GetFairnessKey() == "" && params.taskInfo.Priority.GetPriorityKey() == int32(0) {
-		return
+	if params.taskInfo.Priority.GetFairnessKey() == "" {
+		if params.taskInfo.Priority.GetPriorityKey() == int32(0) {
+			return
+		}
+		// Do not auto enable if we only see priority and we're using new matcher already
+		if pm.config.NewMatcher {
+			return
+		}
 	}
 	if !pm.Partition().IsRoot() || pm.Partition().Kind() == enumspb.TASK_QUEUE_KIND_STICKY || !pm.config.AutoEnableV2() {
 		return
