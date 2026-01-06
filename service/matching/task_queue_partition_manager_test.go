@@ -286,9 +286,10 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 
 	err := s.partitionMgr.WaitUntilInitialized(ctx)
 	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
-		err := s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-%d", i),
@@ -466,9 +467,10 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyCurrentNo
 	defer cancel()
 	err := s.partitionMgr.WaitUntilInitialized(ctx)
 	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
-		err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-only-current-%d", i),
@@ -537,9 +539,10 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyRampingNo
 	defer cancel()
 	err := s.partitionMgr.WaitUntilInitialized(ctx)
 	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
-		err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-only-ramp-%d", i),
@@ -589,9 +592,10 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 	defer cancel()
 	err := s.partitionMgr.WaitUntilInitialized(ctx)
 	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 5 tasks in the unversioned/default queue.
 	for i := 0; i < 5; i++ {
-		err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-uv-%d", i),
