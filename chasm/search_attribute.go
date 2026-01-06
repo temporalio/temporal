@@ -289,16 +289,6 @@ func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) Searc
 	}
 }
 
-func newSearchAttributeIntByField(field string) SearchAttributeInt {
-	return SearchAttributeInt{
-		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
-		},
-	}
-}
-
 // Value sets the integer value of the search attribute.
 func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{

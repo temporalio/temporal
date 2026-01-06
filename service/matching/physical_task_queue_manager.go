@@ -129,11 +129,11 @@ func newPhysicalTaskQueueManager(
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	buildIdTagValue := queue.Version().MetricsTagValue()
-	buildIdTag := tag.WorkerBuildId(buildIdTagValue)
+	versionTagValue := queue.Version().MetricsTagValue()
+	buildIDTag := tag.WorkerVersion(versionTagValue)
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
+		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()))
 
 	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
 
@@ -177,8 +177,8 @@ func newPhysicalTaskQueueManager(
 
 	switch {
 	case config.EnableFairness:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagFairness)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagFairness)
 
 		pqMgr.backlogMgr = newFairBacklogManager(
 			tqCtx,
@@ -216,8 +216,8 @@ func newPhysicalTaskQueueManager(
 		return pqMgr, nil
 
 	case config.NewMatcher:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagPriority)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagPriority)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagPriority)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagPriority)
 
 		pqMgr.backlogMgr = newPriBacklogManager(
 			tqCtx,
@@ -253,8 +253,8 @@ func newPhysicalTaskQueueManager(
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
 	default:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagClassic)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagClassic)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagClassic)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagClassic)
 
 		pqMgr.backlogMgr = newBacklogManager(
 			tqCtx,
@@ -784,15 +784,16 @@ func (c *physicalTaskQueueManagerImpl) counterFactory() counter.Counter {
 	return counter.NewHybridCounter(c.config.FairnessCounter(), src)
 }
 
-func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
-	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
-		return aggregateStats(c.GetStatsByPriority())
-	})
-}
-
 func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeightOverrides {
 	return c.partitionMgr.GetRateLimitManager().GetFairnessWeightOverrides()
+}
+
+func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
+	ctx context.Context,
+	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
+	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
+		return c.partitionMgr.GetPhysicalQueueAdjustedStats(ctx, c)
+	})
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
@@ -820,18 +821,20 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 
 	delta := int32(0)
 	stats := statsFn()
-	if stats.ApproximateBacklogCount > 0 &&
-		stats.ApproximateBacklogAge.AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
+	if stats.GetApproximateBacklogCount() > 0 &&
+		stats.GetApproximateBacklogAge().AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
 		// sticky queues.
 		delta = 1
 	} else if !c.queue.Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
 		return nil
-	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
-		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-		// since those (currently) don't get backlogged.
-		delta = 1
+	} else {
+		if (stats.GetTasksAddRate() / stats.GetTasksDispatchRate()) > 1.2 {
+			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
+			// since those (currently) don't get backlogged.
+			delta = 1
+		}
 	}
 
 	if delta == 0 {

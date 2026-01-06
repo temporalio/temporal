@@ -406,10 +406,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					},
 				},
 			}},
-		{name: "new format: versioned current with unversioned ramping in same deployment -> current is versioned and ramping is unversioned",
-			wantCurrent:        v1,
-			wantRamping:        nil,
-			wantRampPercentage: 20,
+		{name: "new format: versioned current with unversioned ramping in same deployment -> current is versioned and ramping is unversioned", wantCurrent: v1, wantRamping: nil, wantRampPercentage: 20,
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{},
 				DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
@@ -694,7 +691,7 @@ func TestWorkerDeploymentVersionFromStringV32(t *testing.T) {
 		},
 		{
 			name:        "only delimiter",
-			input:       WorkerDeploymentVersionWorkflowIDDelimeter,
+			input:       WorkerDeploymentVersionDelimiter,
 			expectedErr: "deployment name is empty in version string :",
 		},
 		{
