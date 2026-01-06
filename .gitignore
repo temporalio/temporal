@@ -34,6 +34,9 @@
 # Goreleaser
 /dist
 
+# Docker build artifacts
+/docker/build
+
 # direnv
 .envrc
 

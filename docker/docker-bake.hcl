@@ -34,7 +34,7 @@ variable "TAG_LATEST" {
 # - docker/targets/admin-tools.Dockerfile
 # - docker/targets/server.Dockerfile
 variable "ALPINE_TAG" {
-  default = "3.23@sha256:c78ded0fee4493809c8ca71d4a6057a46237763d952fae15ea418f6d14137f2d"
+  default = "3.23.2@sha256:865b95f46d98cf867a156fe4a135ad3fe50d2056aa3f25ed31662dff6da4eb62"
 }
 
 target "admin-tools" {
