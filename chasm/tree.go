@@ -134,7 +134,7 @@ type (
 		immediatePureTasks map[any][]taskWithAttributes // similar to newTasks, but will be executed at the end of the transaction
 
 		// Node value -> node
-		// Only component and data node value is tracked right now
+		// Only component and data node values are tracked right now
 		valueToNode map[any]*Node
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
@@ -578,10 +578,6 @@ func (n *Node) isMap() bool {
 	return n.serializedNode.GetMetadata().GetCollectionAttributes() != nil
 }
 
-func (n *Node) isPointer() bool {
-	return n.serializedNode.GetMetadata().GetPointerAttributes() != nil
-}
-
 func (n *Node) fieldType() fieldType {
 	if n.serializedNode.GetMetadata().GetComponentAttributes() != nil {
 		return fieldTypeComponent
@@ -1001,9 +997,10 @@ func (n *Node) syncSubField(
 		return
 	}
 
-	fieldType := internal.fieldType()
 	fieldValue := internal.value()
 	if internal.node == nil && fieldValue != nil {
+		fieldType := internal.fieldType()
+
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 		childNode.initSerializedNode(fieldType)
@@ -1047,7 +1044,7 @@ func (n *Node) syncSubField(
 		updatedFieldV.FieldByName(internalFieldName).Set(reflect.ValueOf(internal))
 	}
 
-	if fieldType == fieldTypeComponent && fieldValue != nil {
+	if internal.fieldType() == fieldTypeComponent && internal.value() != nil {
 		err = internal.node.syncSubComponents()
 		if err != nil {
 			return
