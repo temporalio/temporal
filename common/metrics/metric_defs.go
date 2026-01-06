@@ -647,7 +647,11 @@ var (
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
-	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
+	EventBlobSize = NewBytesHistogramDef("event_blob_size")
+	EventBlobSizeError = NewCounterDef(
+		"event_blob_size_error",
+		WithDescription("The number of requests that failed due to blob size exceeding the limit."),
+	)
 	HeaderSize                               = NewBytesHistogramDef("header_size", WithDescription("The size of the header in bytes passed to the server by the client. This metric is experimental and can be removed in the future."))
 	LockRequests                             = NewCounterDef("lock_requests")
 	LockLatency                              = NewTimerDef("lock_latency")

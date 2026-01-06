@@ -602,6 +602,7 @@ func CheckEventBlobSizeLimit(
 		}
 
 		if actualSize > errorLimit {
+			metrics.EventBlobSizeError.With(metricsHandler).Record(1)
 			return ErrBlobSizeExceedsLimit
 		}
 	}
