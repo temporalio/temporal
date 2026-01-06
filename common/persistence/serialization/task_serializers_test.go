@@ -308,6 +308,7 @@ func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
 		CloseExecutionVisibilityTaskID: rand.Int63(),
 		CloseTime:                      time.Unix(0, 0).UTC(),
 		StartTime:                      time.Unix(0, 0).UTC(),
+		IsRetentionDelete:              false,
 	}
 
 	s.assertEqualTasks(deleteExecutionVisibilityTask)
