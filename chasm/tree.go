@@ -1442,7 +1442,7 @@ func (n *Node) executeImmediatePureTasks() error {
 					}
 				}
 
-				// The correspoinding Node may not be found due to several reasons:
+				// The corresponding Node may not be found due to several reasons:
 				// 1. This function is executed at the end of a transaction which could contain multiple transitions.
 				// So it's possible that a task added for a component in one transition and in a later transition that component get removed.
 				// 2. Previous pure task for the node deleted the node itself via a (parent) pointer.

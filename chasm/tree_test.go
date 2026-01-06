@@ -2783,7 +2783,7 @@ func (s *nodeSuite) TestEachPureTask() {
 			rootComponent.(*TestComponent).SubComponent2 = NewEmptyField[*TestSubComponent2]()
 		}
 
-		// When processing task for subcomponent11, delete it's parent SubComponent1 to remaining task is not executed.
+		// When processing task for SubComponent11, delete its parent SubComponent1 so that the remaining task is not executed.
 		if slices.Equal(
 			testPureTask.Payload.Data,
 			[]byte("some-random-data-sc11-2"),
