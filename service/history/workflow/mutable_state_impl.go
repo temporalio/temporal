@@ -7008,7 +7008,6 @@ func (ms *MutableStateImpl) closeTransaction(
 		transactionPolicy,
 		eventBatches,
 		clearBuffer,
-		isStateDirty,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -7410,7 +7409,6 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy historyi.TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
 	clearBufferEvents bool,
-	isStateDirty bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -7424,7 +7422,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
-	if err := ms.closeTransactionGenerateChasmRetentionTask(transactionPolicy, isStateDirty); err != nil {
+	if err := ms.closeTransactionGenerateChasmRetentionTask(transactionPolicy); err != nil {
 		return err
 	}
 
@@ -7442,15 +7440,16 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 
 func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(
 	transactionPolicy historyi.TransactionPolicy,
-	isStateDirty bool,
 ) error {
 
-	if !isStateDirty ||
-		ms.IsWorkflow() ||
+	if ms.IsWorkflow() ||
 		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
 		ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil
 	}
+
+	// Generate retention timer for chasm executions if it's currentely completed
+	// but state in DB is not completed, i.e. completing in this transaction.
 
 	if transactionPolicy == historyi.TransactionPolicyActive {
 		// TODO: consider setting CloseTime in ChasmTree closeTransaction() instead of here.
