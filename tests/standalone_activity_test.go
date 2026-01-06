@@ -2292,7 +2292,45 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_InvalidArgum
 		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
 	})
 
-	// TODO(dan): add test for long poll token from non-existent execution
+	t.Run("LongPollTokenFromDifferentNamespace", func(t *testing.T) {
+		// Get a valid poll token from activity in main namespace
+		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: existingActivityID,
+			RunId:      existingRunID,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, validPollResp.LongPollToken)
+
+		// Start an activity in a different namespace
+		externalNamespace := s.ExternalNamespace().String()
+		externalActivityID := s.tv.Any().String()
+		externalStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    externalNamespace,
+			ActivityId:   externalActivityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: tq.Name,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.Any().String(),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, externalStartResp.GetRunId())
+
+		// Try to use main namespace's poll token with external namespace's activity
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:     externalNamespace,
+			ActivityId:    externalActivityID,
+			RunId:         externalStartResp.GetRunId(),
+			LongPollToken: validPollResp.LongPollToken,
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestHeartbeat() {

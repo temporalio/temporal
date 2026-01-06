@@ -7008,7 +7008,6 @@ func (ms *MutableStateImpl) closeTransaction(
 		transactionPolicy,
 		eventBatches,
 		clearBuffer,
-		isStateDirty,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -7410,7 +7409,6 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	transactionPolicy historyi.TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
 	clearBufferEvents bool,
-	isStateDirty bool,
 ) error {
 	if err := ms.closeTransactionHandleWorkflowResetTask(
 		transactionPolicy,
@@ -7424,7 +7422,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
-	if err := ms.closeTransactionGenerateChasmRetentionTask(isStateDirty); err != nil {
+	if err := ms.closeTransactionGenerateChasmRetentionTask(transactionPolicy); err != nil {
 		return err
 	}
 
@@ -7441,22 +7439,26 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 }
 
 func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(
-	isStateDirty bool,
+	transactionPolicy historyi.TransactionPolicy,
 ) error {
 
-	if !isStateDirty ||
-		ms.IsWorkflow() ||
+	if ms.IsWorkflow() ||
 		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
-		transitionhistory.Compare(
-			ms.executionState.LastUpdateVersionedTransition,
-			ms.CurrentVersionedTransition(),
-		) != 0 {
+		ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil
 	}
 
-	closeTime := ms.timeSource.Now()
-	ms.executionInfo.CloseTime = timestamppb.New(closeTime)
-	return ms.taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
+	// Generate retention timer for chasm executions if it's currentely completed
+	// but state in DB is not completed, i.e. completing in this transaction.
+
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		// TODO: consider setting CloseTime in ChasmTree closeTransaction() instead of here.
+		ms.executionInfo.CloseTime = timestamppb.New(ms.timeSource.Now())
+
+		// If passive cluster, the CloseTime field should already be populated by the replication stack.
+	}
+
+	return ms.taskGenerator.GenerateDeleteHistoryEventTask(ms.executionInfo.CloseTime.AsTime())
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
