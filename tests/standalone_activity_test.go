@@ -176,10 +176,9 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue().String()
-
 	t.Run("FailsIfExists", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
 		startResponse := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
 		// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
@@ -212,6 +211,8 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	})
 
 	t.Run("UseExistingNoError", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
 		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
 		secondStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
@@ -229,7 +230,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, firstStartResp.RunId, secondStartResp.RunId)
-		// require.Equal(t, false, secondStartResp.GetStarted()) TODO enable this when we can set the flag correctly
+		require.False(t, secondStartResp.GetStarted()) // indicates activity was not started anew
 	})
 }
 
@@ -2291,7 +2292,45 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_InvalidArgum
 		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
 	})
 
-	// TODO(dan): add test for long poll token from non-existent execution
+	t.Run("LongPollTokenFromDifferentNamespace", func(t *testing.T) {
+		// Get a valid poll token from activity in main namespace
+		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: existingActivityID,
+			RunId:      existingRunID,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, validPollResp.LongPollToken)
+
+		// Start an activity in a different namespace
+		externalNamespace := s.ExternalNamespace().String()
+		externalActivityID := s.tv.Any().String()
+		externalStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    externalNamespace,
+			ActivityId:   externalActivityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: tq.Name,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.Any().String(),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, externalStartResp.GetRunId())
+
+		// Try to use main namespace's poll token with external namespace's activity
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:     externalNamespace,
+			ActivityId:    externalActivityID,
+			RunId:         externalStartResp.GetRunId(),
+			LongPollToken: validPollResp.LongPollToken,
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestHeartbeat() {

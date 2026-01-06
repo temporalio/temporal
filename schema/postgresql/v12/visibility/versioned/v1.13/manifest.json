@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.13",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add TemporalUsedWorkerDeploymentVersions search attribute",
+  "SchemaUpdateCqlFiles": [
+    "add_used_deployment_versions_search_attribute.sql"
+  ]
+}

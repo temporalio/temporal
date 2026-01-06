@@ -78,6 +78,28 @@ func InverseMap[M ~map[K]V, K, V comparable](m M) map[V]K {
 	return invm
 }
 
+// GetOrSetNew looks up k in m and returns the result. If it's not present, it uses `new` to
+// allocate an new value type and sets that in the map, then returns it.
+func GetOrSetNew[M ~map[K]*V, K comparable, V any](m M, k K) *V {
+	if v, ok := m[k]; ok {
+		return v
+	}
+	v := new(V)
+	m[k] = v
+	return v
+}
+
+// GetOrSetMap looks up k in m, a two-level map, and returns the result. If it's not present,
+// it uses `make` to allocate new second-level map and sets that in the first map, then returns it.
+func GetOrSetMap[M ~map[K]M2, M2 ~map[K2]V, K, K2 comparable, V any](m M, k K) M2 {
+	if m2, ok := m[k]; ok {
+		return m2
+	}
+	m2 := make(M2)
+	m[k] = m2
+	return m2
+}
+
 // MapConcurrent concurrently maps a function over input and fails fast on error.
 func MapConcurrent[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([]OUT, error) {
 	errorsCh := make(chan error, len(input))

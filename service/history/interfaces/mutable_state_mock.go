@@ -298,6 +298,30 @@ func (mr *MockMutableStateMockRecorder) AddContinueAsNewEvent(arg0, arg1, arg2, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddContinueAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).AddContinueAsNewEvent), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
+// AddExternalPayloadCount mocks base method.
+func (m *MockMutableState) AddExternalPayloadCount(count int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddExternalPayloadCount", count)
+}
+
+// AddExternalPayloadCount indicates an expected call of AddExternalPayloadCount.
+func (mr *MockMutableStateMockRecorder) AddExternalPayloadCount(count any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddExternalPayloadCount", reflect.TypeOf((*MockMutableState)(nil).AddExternalPayloadCount), count)
+}
+
+// AddExternalPayloadSize mocks base method.
+func (m *MockMutableState) AddExternalPayloadSize(size int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddExternalPayloadSize", size)
+}
+
+// AddExternalPayloadSize indicates an expected call of AddExternalPayloadSize.
+func (mr *MockMutableStateMockRecorder) AddExternalPayloadSize(size any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddExternalPayloadSize", reflect.TypeOf((*MockMutableState)(nil).AddExternalPayloadSize), size)
+}
+
 // AddExternalWorkflowExecutionCancelRequested mocks base method.
 func (m *MockMutableState) AddExternalWorkflowExecutionCancelRequested(arg0 int64, arg1 namespace.Name, arg2 namespace.ID, arg3, arg4 string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -894,9 +918,9 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskScheduledEventAsHeartbeat
 }
 
 // AddWorkflowTaskStartedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, arg2 *taskqueue.TaskQueue, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *taskqueue0.BuildIdRedirectInfo, arg6 update0.Registry, arg7 bool) (*history.HistoryEvent, *WorkflowTaskInfo, error) {
+func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, arg2 *taskqueue.TaskQueue, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *taskqueue0.BuildIdRedirectInfo, arg6 update0.Registry, arg7 bool, arg8 *deployment.WorkerDeploymentVersion) (*history.HistoryEvent, *WorkflowTaskInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(*WorkflowTaskInfo)
 	ret2, _ := ret[2].(error)
@@ -904,9 +928,9 @@ func (m *MockMutableState) AddWorkflowTaskStartedEvent(arg0 int64, arg1 string, 
 }
 
 // AddWorkflowTaskStartedEvent indicates an expected call of AddWorkflowTaskStartedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 }
 
 // AddWorkflowTaskTimedOutEvent mocks base method.
@@ -1600,18 +1624,18 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskScheduledEvent(arg0, ar
 }
 
 // ApplyWorkflowTaskStartedEvent mocks base method.
-func (m *MockMutableState) ApplyWorkflowTaskStartedEvent(arg0 *WorkflowTaskInfo, arg1, arg2, arg3 int64, arg4 string, arg5 time.Time, arg6 bool, arg7 int64, arg8 *common.WorkerVersionStamp, arg9 int64) (*WorkflowTaskInfo, error) {
+func (m *MockMutableState) ApplyWorkflowTaskStartedEvent(arg0 *WorkflowTaskInfo, arg1, arg2, arg3 int64, arg4 string, arg5 time.Time, arg6 bool, arg7 int64, arg8 *common.WorkerVersionStamp, arg9 int64, arg10 []enums.SuggestContinueAsNewReason) (*WorkflowTaskInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	ret := m.ctrl.Call(m, "ApplyWorkflowTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
 	ret0, _ := ret[0].(*WorkflowTaskInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ApplyWorkflowTaskStartedEvent indicates an expected call of ApplyWorkflowTaskStartedEvent.
-func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)
 }
 
 // ApplyWorkflowTaskTimedOutEvent mocks base method.
@@ -2211,6 +2235,34 @@ func (m *MockMutableState) GetExecutionState() *persistence.WorkflowExecutionSta
 func (mr *MockMutableStateMockRecorder) GetExecutionState() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionState", reflect.TypeOf((*MockMutableState)(nil).GetExecutionState))
+}
+
+// GetExternalPayloadCount mocks base method.
+func (m *MockMutableState) GetExternalPayloadCount() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPayloadCount")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetExternalPayloadCount indicates an expected call of GetExternalPayloadCount.
+func (mr *MockMutableStateMockRecorder) GetExternalPayloadCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPayloadCount", reflect.TypeOf((*MockMutableState)(nil).GetExternalPayloadCount))
+}
+
+// GetExternalPayloadSize mocks base method.
+func (m *MockMutableState) GetExternalPayloadSize() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExternalPayloadSize")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetExternalPayloadSize indicates an expected call of GetExternalPayloadSize.
+func (mr *MockMutableStateMockRecorder) GetExternalPayloadSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExternalPayloadSize", reflect.TypeOf((*MockMutableState)(nil).GetExternalPayloadSize))
 }
 
 // GetFirstRunID mocks base method.

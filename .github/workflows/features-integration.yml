@@ -64,7 +64,6 @@ jobs:
           # Upload-artifact has no good way to flatten paths, so we need to move the compose file
           # to avoid some disgustingly long inner path inside the artifact zip.
           cp ./develop/docker-compose/docker-compose.yml /tmp/docker-compose.yml
-          echo -n "${{env.IMAGE_SHA_TAG}}" > /tmp/image_sha_tag
 
       - name: Upload Docker artifact
         uses: actions/upload-artifact@v4
@@ -74,7 +73,7 @@ jobs:
             /tmp/temporal-server.tar
             /tmp/temporal-admin-tools.tar
             /tmp/image_tag
-            /tmp/docker-compose.yml 
+            /tmp/docker-compose.yml
 
           retention-days: 7
 
