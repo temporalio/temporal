@@ -884,6 +884,7 @@ func (s *PartitionManagerTestSuite) TestAutoEnable() {
 			WorkflowId:  "wf",
 			Priority: &commonpb.Priority{
 				PriorityKey: 3,
+				FairnessKey: "myFairnessKey",
 			},
 		},
 	})

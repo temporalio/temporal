@@ -795,7 +795,7 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 			didUpdate.Store(true)
 			return s.matchingEngine.UpdateFairnessState(ctx, req)
 		},
-	).AnyTimes()
+	)
 	dbq := newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().Name, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 	cMgr := mgr.(*taskQueuePartitionManagerImpl)
@@ -815,6 +815,7 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 			TaskQueue:   tv.TaskQueue(),
 			Priority: &commonpb.Priority{
 				PriorityKey: 3,
+				FairnessKey: "myFairnessKey",
 			},
 		},
 	)
@@ -833,6 +834,33 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	case <-time.After(time.Second):
 		s.Require().Fail("our partition manager was not unloaded")
 	}
+}
+
+func (s *matchingEngineSuite) TestSkipAutoEnable() {
+	if !s.newMatcher && !s.fairness {
+		s.T().Skip("We only skip auto enable if new matcher is explicitly enabled already")
+	}
+
+	// Explicitly set to zero times in the event this call is added as expected during setup in the future
+	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), nil).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
+			return s.matchingEngine.UpdateFairnessState(ctx, req)
+		},
+	).Times(0)
+
+	tv := testvars.New(s.T())
+	_, _, err := s.matchingEngine.AddWorkflowTask(
+		context.Background(),
+		&matchingservice.AddWorkflowTaskRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			Execution:   tv.WorkflowExecution(),
+			TaskQueue:   tv.TaskQueue(),
+			Priority: &commonpb.Priority{
+				PriorityKey: 3,
+			},
+		},
+	)
+	s.Require().NoError(err)
 }
 
 func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
