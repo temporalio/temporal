@@ -330,6 +330,14 @@ func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
 	)
 	s.Require().NoError(err)
 
+	_, err = s.FrontendClient().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "trigger",
+		},
+	})
+	s.Require().NoError(err)
+
 	cancel()
 }
 
