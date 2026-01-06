@@ -76,7 +76,7 @@ type (
 		GetMetadata(context.Context) (*persistence.GetMetadataResponse, error)
 	}
 	registry struct {
-		status                  int32
+		status                  atomic.Int32
 		refresher               *goro.Handle
 		persistence             Persistence
 		globalNamespacesEnabled bool
@@ -160,10 +160,10 @@ func (r *registry) RefreshNamespaceById(id namespace.ID) (*namespace.Namespace, 
 
 // Start the background refresh of Namespace data.
 func (r *registry) Start() {
-	if !atomic.CompareAndSwapInt32(&r.status, stopped, starting) {
+	if !r.status.CompareAndSwap(stopped, starting) {
 		return
 	}
-	defer atomic.StoreInt32(&r.status, running)
+	defer r.status.Store(running)
 
 	// initialize the namespace registry by initial scan
 	ctx := headers.SetCallerInfo(
@@ -180,10 +180,10 @@ func (r *registry) Start() {
 
 // Stop the background refresh of Namespace data
 func (r *registry) Stop() {
-	if !atomic.CompareAndSwapInt32(&r.status, running, stopping) {
+	if !r.status.CompareAndSwap(running, stopping) {
 		return
 	}
-	defer atomic.StoreInt32(&r.status, stopped)
+	defer r.status.Store(stopped)
 	r.refresher.Cancel()
 	<-r.refresher.Done()
 }
