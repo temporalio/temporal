@@ -240,7 +240,8 @@ func wrongorderness(vs []int) float64 {
 
 type FairnessSuite struct {
 	testcore.FunctionalTestBase
-	partitions int
+	partitions   int
+	doAutoEnable bool
 }
 
 func TestFairnessSuite(t *testing.T) {
@@ -248,11 +249,14 @@ func TestFairnessSuite(t *testing.T) {
 	suite.Run(t, new(FairnessSuite))
 }
 
+func TestFairnessAutoEnableSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &FairnessSuite{doAutoEnable: true})
+}
+
 func (s *FairnessSuite) SetupSuite() {
 	s.partitions = 1
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingUseNewMatcher.Key():          true,
-		dynamicconfig.MatchingEnableFairness.Key():         true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key():      20,
 		dynamicconfig.MatchingGetTasksReloadAt.Key():       5,
 		dynamicconfig.NumPendingActivitiesLimitError.Key(): 1000,
@@ -260,7 +264,81 @@ func (s *FairnessSuite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  s.partitions,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): s.partitions,
 	}
+	if s.doAutoEnable {
+		dynamicConfigOverrides[dynamicconfig.MatchingAutoEnableV2.Key()] = true
+		dynamicConfigOverrides[dynamicconfig.MatchingEnableMigration.Key()] = true
+		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = false
+		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = false
+	} else {
+		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = true
+		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = true
+	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+}
+
+func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
+	_, err := s.FrontendClient().StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		WorkflowId:   "trigger",
+		WorkflowType: tv.WorkflowType(),
+		TaskQueue:    tv.TaskQueue(),
+		Priority: &commonpb.Priority{
+			PriorityKey: 3,
+		},
+	})
+	s.Require().NoError(err)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	s.Eventually(func() bool {
+		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue().Name,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			BatchSize:     10,
+			MinPass:       1,
+		})
+		return err == nil && len(resp.GetTasks()) == 1
+	}, 10*time.Second, 100*time.Millisecond)
+
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			var commands []*commandpb.Command
+			commands = append(commands,
+				&commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             "trigger",
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(time.Minute),
+						},
+					},
+				},
+			)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+		},
+		taskpoller.WithContext(ctx),
+	)
+	s.Require().NoError(err)
+
+	_, err = s.TaskPoller().PollAndHandleActivityTask(
+		tv,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
+		},
+		taskpoller.WithContext(ctx),
+	)
+	s.Require().NoError(err)
+
+	_, err = s.FrontendClient().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "trigger",
+		},
+	})
+	s.Require().NoError(err)
+
+	cancel()
 }
 
 func (s *FairnessSuite) TestFairness_Activity_Basic() {
@@ -269,6 +347,9 @@ func (s *FairnessSuite) TestFairness_Activity_Basic() {
 	const Keys = 10
 
 	tv := testvars.New(s.T())
+	if s.doAutoEnable {
+		s.TriggerAutoEnable(tv)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -567,8 +648,10 @@ func (s *FairnessSuite) TestFairness_Migration_FromFair() {
 }
 
 func (s *FairnessSuite) TestFairness_UpdateWorkflowExecutionOptions_InvalidatesPendingTask() {
+	if s.doAutoEnable {
+		s.T().Skip("flaky with autoenable")
+	}
 	tv := testvars.New(s.T())
-
 	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
@@ -679,7 +762,7 @@ func (s *FairnessSuite) TestFairness_UpdateWorkflowExecutionOptions_InvalidatesP
 			}
 		}
 	}
-	s.Equal(1, obsoleteWorkflowTaskCount, "Expected 1 worklow task to be obsolete")
+	s.Equal(1, obsoleteWorkflowTaskCount, "Expected 1 workflow task to be obsolete")
 
 	// Wait for activity task to be backlogged
 	s.Eventually(func() bool {

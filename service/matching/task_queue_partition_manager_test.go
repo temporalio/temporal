@@ -15,12 +15,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -42,11 +42,13 @@ type PartitionManagerTestSuite struct {
 	suite.Suite
 	protorequire.ProtoAssertions
 
-	newMatcher   bool
-	fairness     bool
-	controller   *gomock.Controller
-	userDataMgr  *mockUserDataManager
-	partitionMgr *taskQueuePartitionManagerImpl
+	newMatcher     bool
+	fairness       bool
+	controller     *gomock.Controller
+	userDataMgr    *mockUserDataManager
+	partitionMgr   *taskQueuePartitionManagerImpl
+	matchingClient *matchingservicemock.MockMatchingServiceClient
+	ns             *namespace.Namespace
 }
 
 // TODO(pri): cleanup; delete this
@@ -71,15 +73,16 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
-	config := NewConfig(dynamicconfig.NewNoopCollection())
+	s.ns = ns
+	config := defaultTestConfig()
 	if s.fairness {
 		useFairness(config)
 	} else if s.newMatcher {
 		useNewMatcher(config)
 	}
 
-	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
-	engine := createTestMatchingEngine(logger, s.controller, config, matchingClientMock, registry)
+	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	engine := createTestMatchingEngine(logger, s.controller, config, s.matchingClient, registry)
 
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.NoError(err)
@@ -281,9 +284,12 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 		},
 	}
 
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
-		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-%d", i),
@@ -386,8 +392,12 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OneUnversione
 		},
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
 	// Backlog exactly 1 task in the unversioned/default queue.
-	err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+	err = s.partitionMgr.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
 		NamespaceId: namespaceID,
 		RunId:       "run",
 		WorkflowId:  "wf-single",
@@ -453,9 +463,14 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyCurrentNo
 		},
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
-		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-only-current-%d", i),
@@ -520,9 +535,14 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyRampingNo
 		},
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
 	for i := 0; i < 10; i++ {
-		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-only-ramp-%d", i),
@@ -568,9 +588,14 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 		},
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err := s.partitionMgr.WaitUntilInitialized(ctx)
+	s.Require().NoError(err)
+	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 5 tasks in the unversioned/default queue.
 	for i := 0; i < 5; i++ {
-		err := s.partitionMgr.defaultQueue.SpoolTask(&persistencespb.TaskInfo{
+		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
 			WorkflowId:  fmt.Sprintf("wf-uv-%d", i),
@@ -847,6 +872,29 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 }
 
+func (s *PartitionManagerTestSuite) TestAutoEnable() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.matchingClient.EXPECT().UpdateFairnessState(ctx, &matchingservice.UpdateFairnessStateRequest{
+		NamespaceId:   s.ns.ID().String(),
+		TaskQueue:     "my-test-tq",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		FairnessState: enumsspb.FAIRNESS_STATE_V2,
+	}).Times(1).Return(nil, nil)
+	_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+			Priority: &commonpb.Priority{
+				PriorityKey: 3,
+				FairnessKey: "myFairnessKey",
+			},
+		},
+	})
+	s.Require().NoError(err)
+}
+
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistencespb.VersioningData, directive *taskqueuespb.TaskVersionDirective) {
 	timeout := 1000000 * time.Millisecond
 	if expectedSyncMatch {
@@ -967,7 +1015,8 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 
 type mockUserDataManager struct {
 	sync.Mutex
-	data *persistencespb.VersionedTaskQueueUserData
+	data     *persistencespb.VersionedTaskQueueUserData
+	onChange UserDataOnChangeFunc
 }
 
 func (m *mockUserDataManager) Start() {
@@ -996,7 +1045,11 @@ func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdate
 		return 0, err
 	}
 	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.GetVersion() + 1}
-	return m.data.Version, nil
+	version := m.data.Version
+	if m.onChange != nil {
+		go m.onChange(m.data)
+	}
+	return version, nil
 }
 
 func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error) {
