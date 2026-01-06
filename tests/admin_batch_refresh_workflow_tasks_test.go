@@ -9,12 +9,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -26,6 +29,15 @@ type AdminBatchRefreshWorkflowTasksTestSuite struct {
 func TestAdminBatchRefreshWorkflowTasksTestSuite(t *testing.T) {
 	s := new(AdminBatchRefreshWorkflowTasksTestSuite)
 	suite.Run(t, s)
+}
+
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) SetupSuite() {
+	// Use a higher limit for general tests to avoid interference from batch operations
+	// that haven't completed yet. The isolation test (A_SeparateLimitFromFrontendBatchOperation)
+	// explicitly sets limit to 1 to verify frontend and admin batch ops use separate limits.
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+		dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Key(): 10,
+	}))
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) simpleWorkflow(ctx workflow.Context) (string, error) {
@@ -194,4 +206,56 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 	})
 	s.Error(err)
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+}
+
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0_SeparateLimitFromFrontendBatchOperation() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.Worker().RegisterWorkflow(s.simpleWorkflow)
+
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1)
+	s.OverrideDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 1)
+
+	// Create workflows
+	workflowRun1 := s.createWorkflow(ctx, s.simpleWorkflow)
+	workflowRun2 := s.createWorkflow(ctx, s.simpleWorkflow)
+
+	// Wait for workflows to complete
+	var out string
+	err := workflowRun1.Get(ctx, &out)
+	s.NoError(err)
+	err = workflowRun2.Get(ctx, &out)
+	s.NoError(err)
+
+	_, err = s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: s.Namespace().String(),
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()},
+		},
+		JobId:  uuid.NewString(),
+		Reason: "test frontend batch",
+		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+			SignalOperation: &batchpb.BatchOperationSignal{
+				Signal:   "test-signal",
+				Input:    payloads.EncodeString("test-input"),
+				Identity: "test-identity",
+			},
+		},
+	})
+	s.NoError(err, "frontend batch operation should succeed")
+
+	_, err = s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace: s.Namespace().String(),
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()},
+		},
+		JobId:    uuid.NewString(),
+		Reason:   "test admin batch",
+		Identity: "test-identity",
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		},
+	})
+	s.NoError(err, "admin batch operation should succeed because it uses a separate limit")
 }

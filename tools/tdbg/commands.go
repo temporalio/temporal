@@ -637,6 +637,9 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 }
 
 func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
+		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
+	}
 	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
 		return AdminBatchRefreshWorkflowTasks(c, clientFactory, prompter)
 	}
@@ -720,7 +723,7 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 		return fmt.Errorf("unable to count workflow executions: %w", err)
 	}
 
-	msg := fmt.Sprintf("Will refresh workflow tasks for %d workflow(s) matching query %q in namespace %q. Continue Y/N?",
+	msg := fmt.Sprintf("Will refresh tasks for %d execution(s) matching query %q in namespace %q. Continue Y/N?",
 		countResp.GetCount(), query, nsName)
 	prompter.Prompt(msg)
 
@@ -739,7 +742,7 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	}
 
 	// nolint:errcheck // assuming that write will succeed.
-	fmt.Fprintln(c.App.Writer, "Batch Refresh Workflow Tasks started successfully.")
+	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", jobID)
 	return nil
 }
 
