@@ -1004,9 +1004,9 @@ func (n *Node) syncSubField(
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
 		childNode.initSerializedNode(fieldType)
-		childNode.setValue(fieldValue)
 		childNode.setValueState(valueStateNeedSerialize)
 
+		// set node value after validation
 		switch fieldType {
 		case fieldTypeComponent:
 			if err = assertStructPointer(reflect.TypeOf(fieldValue)); err != nil {
@@ -1036,6 +1036,7 @@ func (n *Node) syncSubField(
 			)
 			return
 		}
+		childNode.setValue(fieldValue)
 
 		n.children[fieldN] = childNode
 		internal.node = childNode
@@ -1648,7 +1649,34 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 
 		// First update component logical tasks.
-		//
+
+		// Even if a node is not touched in this transaction, its task can still become invalid due to, e.g.
+		// - child component state update
+		// - parent component closing (access rule)
+		// - a pointer field pointing to an updated component
+		// As a result, we need to validate existing tasks for all components if we are in active cluster.
+		if n.isActiveStateDirty {
+			cleanedUp, err := node.closeTransactionCleanupInvalidTasks(taskValidationContext)
+			if err != nil {
+				return err
+			}
+
+			if cleanedUp {
+				// add the current node to UpdatedNodes map if it's not already there
+				encodedPath, err := node.getEncodedPath()
+				if err != nil {
+					return err
+				}
+				if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
+					// Mark the node as updated so changes will get replicated.
+					node.updateLastUpdateVersionedTransition()
+
+					n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+					delete(n.mutation.DeletedNodes, encodedPath)
+				}
+			}
+		}
+
 		// The conditions excludes replication logic (applyMutation/Snapshot) which sets
 		// valueState to valueStateNeedDeserialize.
 		//
@@ -1659,12 +1687,6 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			node.serializedNode.GetMetadata().LastUpdateVersionedTransition,
 			nextVersionedTransition,
 		) == 0 && node.valueState != valueStateNeedDeserialize {
-			// TODO: If node is closed, remove all tasks for non-detached child components as well.
-			// Those tasks are invalid due to access rules.
-			if err := node.closeTransactionCleanupInvalidTasks(taskValidationContext); err != nil {
-				return err
-			}
-
 			if err := node.closeTransactionHandleNewTasks(
 				nextVersionedTransition,
 				taskValidationContext,
@@ -1777,9 +1799,10 @@ func (n *Node) validateTask(
 
 func (n *Node) closeTransactionCleanupInvalidTasks(
 	validateContext Context,
-) error {
+) (bool, error) {
 	// Validate existing tasks and remove invalid ones.
 	var validationErr error
+	cleanedUp := false
 	deleteFunc := func(existingTask *persistencespb.ChasmComponentAttributes_Task) bool {
 		existingTaskInstance, err := n.deserializeComponentTask(existingTask)
 		if err != nil {
@@ -1800,6 +1823,7 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 			return false
 		}
 		if !valid {
+			cleanedUp = true
 			delete(n.taskValueCache, existingTask.Data)
 		}
 		return !valid
@@ -1808,13 +1832,13 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 	componentAttr := n.serializedNode.Metadata.GetComponentAttributes()
 	componentAttr.SideEffectTasks = slices.DeleteFunc(componentAttr.SideEffectTasks, deleteFunc)
 	if validationErr != nil {
-		return validationErr
+		return false, validationErr
 	}
 	componentAttr.PureTasks = slices.DeleteFunc(componentAttr.PureTasks, deleteFunc)
 	if validationErr != nil {
-		return validationErr
+		return false, validationErr
 	}
-	return nil
+	return cleanedUp, nil
 }
 
 func (n *Node) closeTransactionHandleNewTasks(
@@ -2248,9 +2272,9 @@ func (n *Node) applyUpdates(
 			}
 
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
-			node.serializedNode = updatedNode
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
+			node.serializedNode = updatedNode
 
 			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
 			// Parent node is pointing to the Node struct.
@@ -2534,8 +2558,11 @@ func (n *Node) EachPureTask(
 		}
 
 		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
-		for len(componentAttr.GetPureTasks()) != 0 &&
-			isComponentTaskExpired(referenceTime, componentAttr.GetPureTasks()[0]) {
+
+		for _, task := range componentAttr.GetPureTasks() {
+			if !isComponentTaskExpired(referenceTime, task) {
+				break
+			}
 
 			// Node get deleted when previous pure tasks of the same component are executed.
 			// e.g. via a (parent) pointer.
@@ -2544,7 +2571,6 @@ func (n *Node) EachPureTask(
 				break
 			}
 
-			task := componentAttr.GetPureTasks()[0]
 			taskInstance, err := node.deserializeComponentTask(task)
 			if err != nil {
 				return err
@@ -2566,11 +2592,11 @@ func (n *Node) EachPureTask(
 				}
 			}
 
-			// Remove the processed task.
-			// This addresses the concern where user provided task validator doesn't correctly
-			// invalidate a task even if it has been executed.
-			delete(n.taskValueCache, task.Data)
-			componentAttr.PureTasks = componentAttr.GetPureTasks()[1:]
+			// Processed task should become invalid and will be removed upon CloseTransaction().
+
+			// TODO: Add a validation for that and return an internal error if tasks is still valid after processing.
+			// Alternatively, remove task from PureTasks slice after processing, but that requires persisting the
+			// task changes as well even if the component itself is not changed.
 		}
 	}
 

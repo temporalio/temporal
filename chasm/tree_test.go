@@ -2803,7 +2803,7 @@ func (s *nodeSuite) TestEachPureTask() {
 		[]byte("some-random-data-sc11-1"),
 		[]byte("some-random-data-sc11-2"),
 	}, processedTaskData)
-	s.Empty(root.taskValueCache) // processed tasks should be removed from cache
+	s.Len(root.taskValueCache, 1) // only one task from root component
 }
 
 func (s *nodeSuite) TestExecutePureTask() {
