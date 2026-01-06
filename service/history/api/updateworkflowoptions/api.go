@@ -59,13 +59,17 @@ func Invoke(
 			if requestedOptions.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
 				requestedOptions.GetVersioningOverride().GetPinned().GetVersion() == nil {
 				currentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(workflow.GetEffectiveDeployment(mutableState.GetExecutionInfo().GetVersioningInfo()))
-				if workflow.GetEffectiveVersioningBehavior(mutableState.GetExecutionInfo().GetVersioningInfo()) != enumspb.VERSIONING_BEHAVIOR_PINNED {
+				if effectiveBevior := workflow.GetEffectiveVersioningBehavior(mutableState.GetExecutionInfo().GetVersioningInfo()); effectiveBevior != enumspb.VERSIONING_BEHAVIOR_PINNED {
 					return nil, serviceerror.NewFailedPreconditionf("must specify a specific pinned override version because workflow with id %v has behavior %s and is not yet pinned to any version",
 						mutableState.GetExecutionInfo().GetWorkflowId(),
-						mutableState.GetExecutionInfo().GetVersioningInfo().GetBehavior().String(),
+						effectiveBevior.String(),
 					)
 				}
-				requestedOptions = proto.Clone(requestedOptions).(*workflowpb.WorkflowExecutionOptions)
+				var ok bool
+				requestedOptions, ok = proto.Clone(requestedOptions).(*workflowpb.WorkflowExecutionOptions)
+				if !ok {
+					return nil, serviceerror.NewInternalf("failed to copy workflow options to workflow options: %+v", requestedOptions)
+				}
 				requestedOptions.GetVersioningOverride().GetPinned().Version = currentVersion
 			}
 
