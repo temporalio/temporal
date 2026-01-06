@@ -67,7 +67,7 @@ func Invoke(
 				}
 				var ok bool
 				requestedOptions, ok = proto.Clone(requestedOptions).(*workflowpb.WorkflowExecutionOptions)
-				if !ok {
+				if !ok { // this will never happen, but linter wants me to check the casting, so do it just in case
 					return nil, serviceerror.NewInternalf("failed to copy workflow options to workflow options: %+v", requestedOptions)
 				}
 				requestedOptions.GetVersioningOverride().GetPinned().Version = currentVersion
