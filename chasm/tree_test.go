@@ -2073,41 +2073,73 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 				},
 			},
 		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 4,
+								Data:                      taskBlob,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+						},
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testPureTaskTypeID,
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 5,
+								Data:                      taskBlob,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
+	nextTransitionCount := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
 	// The idea is to mark the node as dirty by accessing it with a mutable context.
-	// Otherwise, CloseTransaction logic will skip validating tasks for this node.
-	// This is a no-op change right now, since we are manually setting the LastUpdateVersionedTransition
-	// for the node below.
-	// Once CloseTransaction is fully implemented, this will be mark the node as dirty,
-	// and CloseTransaction logic will take care of updating LastUpdateVersionedTransition.
 	mutableContext := NewMutableContext(context.Background(), root)
 	_, err = root.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
 
-	// TODO: remove this when CloseTransaction is fully implemented.
-	root.serializedNode.Metadata.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
-		TransitionCount: 2,
-	}
-
 	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	s.testLibrary.mockPureTaskValidator.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
-	err = root.closeTransactionUpdateComponentTasks(&persistencespb.VersionedTransition{TransitionCount: 2})
+	mutation, err := root.CloseTransaction()
 	s.NoError(err)
 
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+
+	s.Len(mutation.UpdatedNodes, 2)
+	for _, updatedNode := range mutation.UpdatedNodes {
+		s.Equal(nextTransitionCount, updatedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount)
+	}
+	s.Empty(mutation.DeletedNodes)
 
 	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
 	s.Empty(componentAttr.PureTasks)
 	s.Len(componentAttr.SideEffectTasks, 1)
 	s.Equal(testOutboundSideEffectTaskTypeID, componentAttr.SideEffectTasks[0].GetTypeId())
+
+	componentAttr = root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
+	s.Empty(componentAttr.PureTasks)
+	s.Empty(componentAttr.SideEffectTasks)
 }
 
 func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
