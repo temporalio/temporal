@@ -23,16 +23,10 @@ func getCommands(
 ) []*cli.Command {
 	return []*cli.Command{
 		{
-			Name:        "workflow",
-			Aliases:     []string{"w"},
-			Usage:       "Run admin operation on workflow",
-			Subcommands: newAdminWorkflowCommands(clientFactory, prompterFactory),
-		},
-		{
-			Name:        "chasm",
-			Aliases:     []string{"c"},
-			Usage:       "Run admin operation on CHASM trees",
-			Subcommands: newAdminChasmCommands(clientFactory, prompterFactory),
+			Name:        "execution",
+			Aliases:     []string{"e", "w", "workflow"},
+			Usage:       "Run admin operation on an execution (workflow)",
+			Subcommands: newAdminExecutionCommands(clientFactory, prompterFactory),
 		},
 		{
 			Name:        "shard",
@@ -78,7 +72,7 @@ func getCommands(
 	}
 }
 
-func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
+func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "import",
@@ -144,17 +138,17 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 		{
 			Name:    "describe",
 			Aliases: []string{"d"},
-			Usage:   "Describe internal information of workflow execution",
+			Usage:   "Describe internal information of Temporal execution",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow ID",
+					Name:    FlagBusinessID,
+					Aliases: FlagBusinessIDAlias,
+					Usage:   "Business ID (Workflow ID)",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run ID",
+					Usage:   "Run ID (optional, uses latest if not specified)",
 				},
 				&cli.StringFlag{
 					Name:        FlagArchetype,
@@ -163,7 +157,7 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeWorkflow(c, clientFactory)
+				return AdminDescribeExecution(c, clientFactory)
 			},
 		},
 		{
@@ -259,36 +253,6 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
-			},
-		},
-	}
-}
-
-func newAdminChasmCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:    "describe",
-			Aliases: []string{"d"},
-			Usage:   "Describe CHASM tree from database mutable state",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    FlagBusinessID,
-					Aliases: FlagBusinessIDAlias,
-					Usage:   "The business ID of the CHASM tree",
-				},
-				&cli.StringFlag{
-					Name:    FlagRunID,
-					Aliases: FlagRunIDAlias,
-					Usage:   "Run ID (optional, uses latest if not specified)",
-				},
-				&cli.StringFlag{
-					Name:        FlagArchetype,
-					Usage:       "Fully qualified archetype name of the execution",
-					DefaultText: chasm.WorkflowArchetype,
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDescribeChasmTree(c, clientFactory)
 			},
 		},
 	}
