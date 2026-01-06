@@ -1,8 +1,12 @@
 package interceptor
 
 import (
+	"context"
+	"strings"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 )
@@ -14,6 +18,25 @@ type BusinessIDExtractor struct {
 func NewBusinessIDExtractor() BusinessIDExtractor {
 	return BusinessIDExtractor{
 		serializer: *tasktoken.NewSerializer(),
+	}
+}
+
+// WorkflowServiceExtractor returns a BusinessIDExtractorFunc that extracts business ID
+// from WorkflowService API requests using the provided BusinessIDExtractor.
+func WorkflowServiceExtractor(extractor BusinessIDExtractor) BusinessIDExtractorFunc {
+	return func(_ context.Context, req any, fullMethod string) string {
+		// Only process WorkflowService APIs
+		if !strings.HasPrefix(fullMethod, api.WorkflowServicePrefix) {
+			return ""
+		}
+
+		methodName := api.MethodName(fullMethod)
+		pattern, hasPattern := methodToPattern[methodName]
+		if !hasPattern {
+			return ""
+		}
+
+		return extractor.Extract(req, pattern)
 	}
 }
 

@@ -369,7 +369,12 @@ func BusinessIDInterceptorProvider(
 	extractor interceptor.BusinessIDExtractor,
 	logger log.Logger,
 ) *interceptor.BusinessIDInterceptor {
-	return interceptor.NewBusinessIDInterceptor(extractor, logger)
+	return interceptor.NewBusinessIDInterceptor(
+		[]interceptor.BusinessIDExtractorFunc{
+			interceptor.WorkflowServiceExtractor(extractor),
+		},
+		logger,
+	)
 }
 
 func NamespaceHandoverInterceptorProvider(

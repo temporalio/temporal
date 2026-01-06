@@ -2,9 +2,7 @@ package interceptor
 
 import (
 	"context"
-	"strings"
 
-	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -17,10 +15,15 @@ type (
 	// BusinessIDPattern defines the expected interface pattern for extracting business ID
 	BusinessIDPattern int
 
-	// BusinessIDInterceptor extracts business ID from requests and adds it to context
+	// BusinessIDExtractorFunc extracts business ID from a request.
+	// Returns empty string if this extractor doesn't handle the request.
+	BusinessIDExtractorFunc func(ctx context.Context, req any, fullMethod string) string
+
+	// BusinessIDInterceptor extracts business ID from requests and adds it to context.
+	// It iterates through a list of extractor functions until one returns a non-empty business ID.
 	BusinessIDInterceptor struct {
-		extractor BusinessIDExtractor
-		logger    log.Logger
+		extractors []BusinessIDExtractorFunc
+		logger     log.Logger
 	}
 )
 
@@ -87,44 +90,49 @@ var methodToPattern = map[string]BusinessIDPattern{
 	"ExecuteMultiOperation": PatternMultiOperation,
 }
 
+// NewBusinessIDInterceptor creates a new BusinessIDInterceptor with the given extractor functions.
+// Extractors are called in order until one returns a non-empty business ID.
 func NewBusinessIDInterceptor(
-	extractor BusinessIDExtractor,
+	extractors []BusinessIDExtractorFunc,
 	logger log.Logger,
 ) *BusinessIDInterceptor {
 	return &BusinessIDInterceptor{
-		extractor: extractor,
-		logger:    logger,
+		extractors: extractors,
+		logger:     logger,
+	}
+}
+
+// WithExtractors returns a new interceptor with additional extractors prepended.
+// The new extractors will be tried before the existing ones.
+func (i *BusinessIDInterceptor) WithExtractors(extractors ...BusinessIDExtractorFunc) *BusinessIDInterceptor {
+	return &BusinessIDInterceptor{
+		extractors: append(extractors, i.extractors...),
+		logger:     i.logger,
 	}
 }
 
 var _ grpc.UnaryServerInterceptor = (*BusinessIDInterceptor)(nil).Intercept
 
-// Intercept extracts business ID from the request and adds it to the context
+// Intercept extracts business ID from the request and adds it to the context.
+// It tries each extractor in order until one returns a non-empty business ID.
 func (i *BusinessIDInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
-	// Only process WorkflowService APIs
-	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
-		return handler(ctx, req)
+	// Try each extractor until one returns a non-empty businessID
+	for _, extractor := range i.extractors {
+		if businessID := extractor(ctx, req, info.FullMethod); businessID != "" {
+			i.logger.Debug("business ID extraction: adding business ID to context",
+				tag.WorkflowID(businessID),
+				tag.NewStringTag("grpc-method", info.FullMethod),
+			)
+			ctx = AddBusinessIDToContext(ctx, businessID)
+			break
+		}
 	}
 
-	methodName := api.MethodName(info.FullMethod)
-	pattern, hasPattern := methodToPattern[methodName]
-	if !hasPattern {
-		return handler(ctx, req)
-	}
-
-	businessID := i.extractor.Extract(req, pattern)
-
-	i.logger.Debug("business ID extraction: adding business ID to context",
-		tag.Operation(methodName),
-		tag.WorkflowID(businessID),
-	)
-
-	ctx = AddBusinessIDToContext(ctx, businessID)
 	return handler(ctx, req)
 }
 
