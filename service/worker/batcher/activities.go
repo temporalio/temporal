@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -554,7 +555,8 @@ func startTaskProcessorProtobuf(
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
-				nonRetryable := slices.Contains(batchOperation.NonRetryableErrors, err.Error())
+				var appErr *temporal.ApplicationError
+				nonRetryable := (errors.As(err, &appErr) && appErr.NonRetryable()) || slices.Contains(batchOperation.NonRetryableErrors, err.Error())
 				if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
 					respCh <- taskResponse{err: err, page: task.page}
 				} else {
@@ -679,7 +681,7 @@ func getLastWorkflowTaskEventID(
 		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
-		return 0, errors.New("unable to find any scheduled or completed task")
+		return 0, temporal.NewNonRetryableApplicationError("unable to find any scheduled or completed task", "NoWorkflowTaskFound", nil)
 	}
 	return
 }
@@ -720,7 +722,7 @@ func getFirstWorkflowTaskEventID(
 		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
-		return 0, errors.New("unable to find any scheduled or completed task")
+		return 0, temporal.NewNonRetryableApplicationError("unable to find any scheduled or completed task", "NoWorkflowTaskFound", nil)
 	}
 	return
 }
