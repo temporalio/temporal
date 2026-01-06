@@ -185,8 +185,8 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	if err != nil {
 		return err
 	}
-	defaultQ.Start()
 	pm.defaultQueueFuture.Set(defaultQ, nil)
+	defaultQ.Start()
 	return nil
 }
 
