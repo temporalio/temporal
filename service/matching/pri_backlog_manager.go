@@ -395,6 +395,6 @@ func (c *priBacklogManagerImpl) setPriority(task *internalTask) {
 	c.config.setDefaultPriority(task)
 	if c.isDraining {
 		// draining goes before active backlog so we're guaranteed to finish migration
-		task.effectivePriority -= maxPriorityLevels
+		task.effectivePriority -= effectivePriorityFactor * maxPriorityLevels
 	}
 }

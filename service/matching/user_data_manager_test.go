@@ -69,7 +69,17 @@ func createUserDataManager(
 		onFatalErr = func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
 	}
 
-	return newUserDataManager(tm, testOpts.matchingClientMock, onFatalErr, nil, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
+	return newUserDataManager(
+		tm,
+		testOpts.matchingClientMock,
+		onFatalErr,
+		nil,
+		nil,
+		testOpts.dbq.Partition(),
+		newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns),
+		logger,
+		mockNamespaceCache,
+	)
 }
 
 func TestUserData_LoadOnInit(t *testing.T) {
