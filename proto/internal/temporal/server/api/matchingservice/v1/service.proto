@@ -190,6 +190,16 @@ service MatchingService {
     // Returns an error if the namespace or worker doesn't exist.
     rpc DescribeWorker (DescribeWorkerRequest) returns (DescribeWorkerResponse) {}
 
+    // UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
+    // priority and fairness.
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::request-resource-required=disabled
+    //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+    rpc UpdateFairnessState(UpdateFairnessStateRequest) returns (UpdateFairnessStateResponse) {}
+
     // CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
     rpc CheckTaskQueueVersionMembership(CheckTaskQueueVersionMembershipRequest) returns (CheckTaskQueueVersionMembershipResponse) {}
 
