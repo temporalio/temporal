@@ -146,12 +146,13 @@ type (
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
 	VisibilityDeleteWorkflowExecutionRequest struct {
-		NamespaceID namespace.ID
-		RunID       string
-		WorkflowID  string
-		TaskID      int64
-		CloseTime   *time.Time
-		StartTime   time.Time
+		NamespaceID       namespace.ID
+		RunID             string
+		WorkflowID        string
+		TaskID            int64
+		CloseTime         *time.Time
+		StartTime         time.Time
+		IsRetentionDelete bool
 	}
 
 	// GetWorkflowExecutionRequest is request from GetWorkflowExecution

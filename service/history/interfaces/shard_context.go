@@ -104,6 +104,7 @@ type (
 			workflowCloseTime time.Time,
 			workflowStartTime time.Time,
 			stage *tasks.DeleteWorkflowExecutionStage,
+			retentionDelete bool,
 		) error
 
 		GetCachedWorkflowContext(ctx context.Context, namespaceID namespace.ID, execution *commonpb.WorkflowExecution, lockPriority locks.Priority) (WorkflowContext, ReleaseWorkflowContextFunc, error)
