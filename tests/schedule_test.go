@@ -34,6 +34,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 /*
@@ -1033,6 +1034,54 @@ func (s *scheduleFunctionalSuiteBase) TestListSchedulesReturnsWorkflowStatus() {
 	})
 	s.NoError(err)
 	s.assertSameRecentActions(descResp, listResp)
+}
+
+func (s *scheduleFunctionalSuiteBase) TestListScheduleMatchingTimes() {
+	sid := "sched-test-list-matching-times"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-list-matching-times",
+					WorkflowType: &commonpb.WorkflowType{Name: "action"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Query for matching times over a 5-hour window.
+	now := time.Now().UTC().Truncate(time.Hour).Add(time.Hour) // Start of next hour
+	startTime := timestamppb.New(now)
+	endTime := timestamppb.New(now.Add(5 * time.Hour))
+
+	resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		StartTime:  startTime,
+		EndTime:    endTime,
+	})
+	s.NoError(err)
+	// With 1-hour interval over 5 hours, we expect 5 matching times.
+	s.Len(resp.GetStartTime(), 5)
 }
 
 // A schedule's memo should have an upper bound on the number of spec items stored.
