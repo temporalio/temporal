@@ -7424,7 +7424,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 
 	ms.closeTransactionCollapseVisibilityTasks()
 
-	if err := ms.closeTransactionGenerateChasmRetentionTask(isStateDirty); err != nil {
+	if err := ms.closeTransactionGenerateChasmRetentionTask(transactionPolicy, isStateDirty); err != nil {
 		return err
 	}
 
@@ -7441,22 +7441,25 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 }
 
 func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(
+	transactionPolicy historyi.TransactionPolicy,
 	isStateDirty bool,
 ) error {
 
 	if !isStateDirty ||
 		ms.IsWorkflow() ||
 		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
-		transitionhistory.Compare(
-			ms.executionState.LastUpdateVersionedTransition,
-			ms.CurrentVersionedTransition(),
-		) != 0 {
+		ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil
 	}
 
-	closeTime := ms.timeSource.Now()
-	ms.executionInfo.CloseTime = timestamppb.New(closeTime)
-	return ms.taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		// TODO: consider setting CloseTime in ChasmTree closeTransaction() instead of here.
+		ms.executionInfo.CloseTime = timestamppb.New(ms.timeSource.Now())
+
+		// If passive cluster, the CloseTime field should already be populated by the replication stack.
+	}
+
+	return ms.taskGenerator.GenerateDeleteHistoryEventTask(ms.executionInfo.CloseTime.AsTime())
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(

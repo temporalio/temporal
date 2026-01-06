@@ -4915,7 +4915,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workf
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
 }
 
-func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWorkflow() {
+func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWorkflow_Active() {
 	dbState := s.buildWorkflowMutableState()
 
 	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
@@ -4943,9 +4943,69 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 	s.NoError(err)
 	s.Len(mutation.Tasks[tasks.CategoryTimer], 1)
 	s.Equal(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, mutation.Tasks[tasks.CategoryTimer][0].GetType())
+	actualCloseTime, err := mutableState.GetWorkflowCloseTime(context.Background())
+	s.NoError(err)
+	s.False(actualCloseTime.IsZero())
 
 	// Already closed before, should not generate retention task again.
 	mutation, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Empty(mutation.Tasks[tasks.CategoryTimer])
+}
+
+func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWorkflow_Passive() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	// Switch to a mock CHASM tree
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+
+	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mockChasmTree.EXPECT().ApplyMutation(gomock.Any()).Return(nil).AnyTimes()
+
+	// On standby side, multiple transactions can be applied at the same time,
+	// the latest VT may be larger than execution state's LastUpdateVT, we still need to
+	// generate retention task in this case.
+	updatedExecutionInfo := common.CloneProto(mutableState.GetExecutionInfo())
+	closeTime := time.Now()
+	currentTransitionCount := updatedExecutionInfo.TransitionHistory[0].TransitionCount
+	updatedExecutionInfo.TransitionHistory[0].TransitionCount += 10
+	updatedExecutionInfo.CloseTime = timestamppb.New(closeTime)
+
+	updatedExecutionState := common.CloneProto(mutableState.GetExecutionState())
+	updatedExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	updatedExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	updatedExecutionState.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		TransitionCount:          currentTransitionCount + 1,
+	}
+
+	mutableState.ApplyMutation(&persistencespb.WorkflowMutableStateMutation{
+		ExecutionInfo:  updatedExecutionInfo,
+		ExecutionState: updatedExecutionState,
+	})
+
+	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
+	s.NoError(err)
+	s.Len(mutation.Tasks[tasks.CategoryTimer], 1)
+	s.Equal(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT, mutation.Tasks[tasks.CategoryTimer][0].GetType())
+	actualCloseTime, err := mutableState.GetWorkflowCloseTime(context.Background())
+	s.NoError(err)
+	s.True(actualCloseTime.Equal(closeTime))
+
+	// Already closed before, should not generate retention task again.
+	mutation, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyPassive)
 	s.NoError(err)
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
 }
