@@ -99,10 +99,11 @@ var (
 	errKeyNotPresent        = errors.New("key not present")
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 
-	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
-	errorType     = reflect.TypeOf((*error)(nil)).Elem()
-	durationType  = reflect.TypeOf(time.Duration(0))
-	stringType    = reflect.TypeOf("")
+	protoEnumType = reflect.TypeFor[protoreflect.Enum]()
+	errorType     = reflect.TypeFor[error]()
+	durationType  = reflect.TypeFor[time.Duration]()
+	timeType      = reflect.TypeFor[time.Time]()
+	stringType    = reflect.TypeFor[string]()
 
 	usingDefaultValue any = defaultValue{}
 )
@@ -689,6 +690,7 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 			Result: &out,
 			DecodeHook: mapstructure.ComposeDecodeHookFunc(
 				mapstructureHookDuration,
+				mapstructureHookTimestamp,
 				mapstructureHookProtoEnum,
 				mapstructureHookGeneric,
 			),
@@ -708,6 +710,31 @@ func mapstructureHookDuration(f, t reflect.Type, data any) (any, error) {
 		return data, nil
 	}
 	return convertDuration(data)
+}
+
+// Parses string or int into time.Time.
+func mapstructureHookTimestamp(f, t reflect.Type, data any) (any, error) {
+	if t != timeType {
+		return data, nil
+	}
+	switch v := data.(type) {
+	case time.Time:
+		return v, nil
+	case string:
+		ts, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to parse time: %v", err)
+		}
+		return ts, nil
+	}
+	// treat numeric values as seconds
+	if ival, err := convertInt(data); err == nil {
+		return time.Unix(int64(ival), 0), nil
+	} else if fval, err := convertFloat(data); err == nil {
+		ipart, fpart := math.Modf(fval)
+		return time.Unix(int64(ipart), int64(fpart*float64(time.Second))), nil
+	}
+	return time.Time{}, errors.New("value not convertible to Time")
 }
 
 // Parses proto enum values from strings.

@@ -106,6 +106,7 @@ func WorkflowHandlerName(handlerName string) ZapTag {
 }
 
 // WorkflowID returns tag for WorkflowID
+// TODO: Rename to BusinessID.
 func WorkflowID(workflowID string) ZapTag {
 	return NewStringTag(WorkflowIDKey, workflowID)
 }
@@ -121,6 +122,7 @@ func WorkflowState(s enumsspb.WorkflowExecutionState) ZapTag {
 }
 
 // WorkflowRunID returns tag for WorkflowRunID
+// TODO: Rename to RunID
 func WorkflowRunID(runID string) ZapTag {
 	return NewStringTag(WorkflowRunIDKey, runID)
 }
@@ -188,6 +190,7 @@ func BlobSizeViolationOperation(operation string) ZapTag {
 // namespace related
 
 // WorkflowNamespaceID returns tag for WorkflowNamespaceID
+// TODO: Rename to NamespaceID
 func WorkflowNamespaceID(namespaceID string) ZapTag {
 	return NewStringTag("wf-namespace-id", namespaceID)
 }
@@ -298,12 +301,12 @@ func WorkflowTaskQueueName(taskQueueName string) ZapTag {
 	return NewStringTag("wf-task-queue-name", taskQueueName)
 }
 
-// WorkerBuildId returns tag for worker build ID
-func WorkerBuildId(buildId string) ZapTag {
-	if buildId == "" {
-		buildId = "_unversioned_"
+// WorkerVersion returns tag for worker build ID
+func WorkerVersion(version string) ZapTag {
+	if version == "" {
+		version = "_unversioned_"
 	}
-	return NewStringTag("worker-build-id", buildId)
+	return NewStringTag("worker-version", version)
 }
 
 // ReachabilityExitPointTag returns tag for reachabilityExitPoint

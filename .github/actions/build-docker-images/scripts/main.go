@@ -20,7 +20,7 @@ func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <command>\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Commands:\n")
-		fmt.Fprintf(os.Stderr, "  sanitize-tag      - Sanitize branch name for Docker tag\n")
+		fmt.Fprintf(os.Stderr, "  set-image-tags    - Generate Docker image tags from branch and SHA\n")
 		fmt.Fprintf(os.Stderr, "  organize-binaries - Organize binaries for Docker\n")
 		fmt.Fprintf(os.Stderr, "  download-cli      - Download Temporal CLI\n")
 		fmt.Fprintf(os.Stderr, "  extract-version   - Extract version from temporal-server binary\n")
@@ -30,8 +30,8 @@ func main() {
 	command := os.Args[1]
 
 	switch command {
-	case "sanitize-tag":
-		if err := sanitizeTag(); err != nil {
+	case "set-image-tags":
+		if err := setImageTags(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -56,12 +56,18 @@ func main() {
 	}
 }
 
-// sanitizeTag sanitizes branch names for Docker tags
-func sanitizeTag() error {
+// setImageTags generates Docker image tags from branch name and commit SHA
+func setImageTags() error {
 	// Get GITHUB_REF from environment
 	ref := os.Getenv("GITHUB_REF")
 	if ref == "" {
 		return fmt.Errorf("GITHUB_REF environment variable not set")
+	}
+
+	// Get GITHUB_SHA from environment
+	sha := os.Getenv("GITHUB_SHA")
+	if sha == "" {
+		return fmt.Errorf("GITHUB_SHA environment variable not set")
 	}
 
 	// Remove refs/heads/ or refs/tags/ prefix
@@ -95,12 +101,23 @@ func sanitizeTag() error {
 		return fmt.Errorf("failed to generate valid Docker tag from branch name")
 	}
 
+	// Generate short SHA tag (first 7 characters with "sha-" prefix)
+	shortSha := sha
+	if len(shortSha) > 7 {
+		shortSha = shortSha[:7]
+	}
+	shaTag := fmt.Sprintf("sha-%s", shortSha)
+
 	fmt.Printf("Original: %s\n", ref)
 	fmt.Printf("Sanitized: %s\n", safeTag)
+	fmt.Printf("SHA tag: %s\n", shaTag)
 
-	// Set output for GitHub Actions
+	// Set outputs for GitHub Actions
 	if err := setOutput("tag", safeTag); err != nil {
-		return fmt.Errorf("failed to set output: %w", err)
+		return fmt.Errorf("failed to set tag output: %w", err)
+	}
+	if err := setOutput("sha", shaTag); err != nil {
+		return fmt.Errorf("failed to set sha output: %w", err)
 	}
 
 	return nil
