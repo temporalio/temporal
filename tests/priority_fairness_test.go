@@ -266,6 +266,7 @@ func (s *FairnessSuite) SetupSuite() {
 	}
 	if s.doAutoEnable {
 		dynamicConfigOverrides[dynamicconfig.MatchingAutoEnableV2.Key()] = true
+		dynamicConfigOverrides[dynamicconfig.MatchingEnableMigration.Key()] = true
 		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = false
 		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = false
 	} else {
@@ -276,53 +277,60 @@ func (s *FairnessSuite) SetupSuite() {
 }
 
 func (s *FairnessSuite) TriggerAutoEnable(tv *testvars.TestVars) {
-	// We need to trigger both a workflow and activity reload.
-	// We guarantee that a successful call triggers the reload
-	// however we need to loop multiple times to ensure that a workflow
-	// gets enqueued for us to create an activity on.
-	for range 15 {
-		_, err := s.FrontendClient().StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			WorkflowId:   "trigger",
-			WorkflowType: tv.WorkflowType(),
-			TaskQueue:    tv.TaskQueue(),
-			Priority: &commonpb.Priority{
-				PriorityKey: 3,
-			},
+	_, err := s.FrontendClient().StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		WorkflowId:   "trigger",
+		WorkflowType: tv.WorkflowType(),
+		TaskQueue:    tv.TaskQueue(),
+		Priority: &commonpb.Priority{
+			PriorityKey: 3,
+		},
+	})
+	s.Require().NoError(err)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	s.Eventually(func() bool {
+		resp, err := s.AdminClient().GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv.TaskQueue().Name,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			BatchSize:     10,
+			MinPass:       1,
 		})
-		// Can fail if we're waiting on the reload, log for tracing what happens on failure
-		// We should only see shutdown errors in expected operation
-		s.T().Log("AutoEnable StartWorkflowExecution:", err)
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				var commands []*commandpb.Command
-				commands = append(commands,
-					&commandpb.Command{
-						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             "trigger",
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-							},
+		return err == nil && len(resp.GetTasks()) == 1
+	}, 10*time.Second, 100*time.Millisecond)
+
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			var commands []*commandpb.Command
+			commands = append(commands,
+				&commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             "trigger",
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(time.Minute),
 						},
 					},
-				)
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
-			},
-			taskpoller.WithContext(ctx),
-		)
-		cancel()
-		// No error, we triggered the reload
-		if err == nil {
-			return
-		}
-		// The workflow was likely not enqueued, loop and try again with another one
-		s.T().Log("AutoEnable PollAndHandleWorkflowTask:", err)
-	}
-	s.T().Fatal("Could not trigger auto enable")
+				},
+			)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+		},
+		taskpoller.WithContext(ctx),
+	)
+	s.Require().NoError(err)
+
+	_, err = s.TaskPoller().PollAndHandleActivityTask(
+		tv,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
+		},
+		taskpoller.WithContext(ctx),
+	)
+	s.Require().NoError(err)
+
+	cancel()
 }
 
 func (s *FairnessSuite) TestFairness_Activity_Basic() {
