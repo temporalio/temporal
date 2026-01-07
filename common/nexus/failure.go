@@ -115,6 +115,7 @@ type serializedHandlerError struct {
 // NexusFailureToAPIFailure converts a Nexus Failure to an API proto Failure.
 // If the failure metadata "type" field is set to the fullname of the temporal API Failure message, the failure is
 // reconstructed using protojson.Unmarshal on the failure details field.
+// nolint:revive // cognitive-complexity is high but justified to keep each case together
 func NexusFailureToAPIFailure(f nexus.Failure) (*failurepb.Failure, error) {
 	apiFailure := &failurepb.Failure{
 		Message:    f.Message,

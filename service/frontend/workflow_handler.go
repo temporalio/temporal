@@ -5471,11 +5471,11 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
 
-	if request.Error == nil && request.Failure == nil {
+	if request.Error == nil && request.Failure == nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
 		return nil, serviceerror.NewInvalidArgument("request must contain error or failure")
 	}
-	if request.GetError() != nil {
-		if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+	if request.GetError() != nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+		if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) { // nolint:staticcheck // checking deprecated field for backwards compatibility
 			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
 		}
 	}

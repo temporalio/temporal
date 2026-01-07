@@ -122,6 +122,7 @@ func (c customFailureConverter) ErrorToFailure(err error) (nexus.Failure, error)
 }
 
 // FailureToError implements FailureConverter.
+// nolint:revive // unnamed results of the same type is fine for test
 func (c customFailureConverter) FailureToError(f nexus.Failure) (error, error) {
 	if f.Metadata["type"] != "custom" {
 		return errors.New(f.Message), nil

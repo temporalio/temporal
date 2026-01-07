@@ -204,7 +204,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				require.Equal(t, nexus.HandlerErrorRetryBehaviorUnspecified, handlerErr.RetryBehavior)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
-				require.NotNil(t, handlerErr.Cause)
+				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
 		},
@@ -226,7 +226,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				require.Equal(t, nexus.HandlerErrorRetryBehaviorNonRetryable, handlerErr.RetryBehavior)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
-				require.NotNil(t, handlerErr.Cause)
+				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
 		},
@@ -727,7 +727,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "500 Internal Server Error", handlerErr.Message)
-				require.NotNil(t, handlerErr.Cause)
+				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
 		},
