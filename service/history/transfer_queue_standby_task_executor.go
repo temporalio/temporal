@@ -469,7 +469,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			// Case 1: Target workflow is in the desired state.
 			return nil, nil
 		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
-			// Case 2:Ttarget workflow is not in the desired state.
+			// Case 2: Target workflow is not in the desired state.
 			// Return a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
 			return &struct{}{}, nil
 		default:
