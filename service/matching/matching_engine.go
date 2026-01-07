@@ -2954,6 +2954,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	return &matchingservice.PollActivityTaskQueueResponse{
 		ActivityId:                  attributes.ActivityId,
 		ActivityType:                attributes.ActivityType,
+		ActivityRunId:               historyResponse.GetActivityRunId(),
 		Header:                      attributes.Header,
 		Input:                       attributes.Input,
 		WorkflowExecution:           task.workflowExecution(),
