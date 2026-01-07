@@ -320,14 +320,12 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				}, nil
 			default:
 				// Case 3: Verification itself failed.
-				// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
-				// Post action will propagate the error to upper layer to backoff and emit metrics properly if retry is needed.
-				// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry.
-				// That's unnecessary as the error is in the target workflow, not this workflow.
-				return &verificationErr{
+				// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry,
+				// which is unnecessary as the error is in the target workflow, not this workflow.
+				return nil, &verificationErr{
 					msg: recordChildCompletionVerificationFailedMsg,
 					err: err,
-				}, nil
+				}
 			}
 		}
 		return nil, nil
@@ -476,14 +474,12 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return &struct{}{}, nil
 		default:
 			// Case 3: Verification itself failed.
-			// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
-			// Post action will propagate the error to upper layer to backoff and emit metrics properly if retry is needed.
-			// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry.
-			// That's unnecessary as the error is in the target workflow, not this workflow.
-			return &verificationErr{
+			// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry,
+			// which is unnecessary as the error is in the target workflow, not this workflow.
+			return nil, &verificationErr{
 				msg: recordChildCompletionVerificationFailedMsg,
 				err: err,
-			}, nil
+			}
 		}
 	}
 
