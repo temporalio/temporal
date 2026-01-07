@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"go/ast"
@@ -15,10 +16,12 @@ import (
 
 // Output is the JSON structure for the action output
 type Output struct {
+	TestPath     string        `json:"test_path"`
 	File         string        `json:"file"`
 	StartLine    int           `json:"start_line"`
 	EndLine      int           `json:"end_line"`
 	Contributors []Contributor `json:"contributors,omitempty"`
+	Error        string        `json:"error,omitempty"`
 }
 
 type Contributor struct {
@@ -26,17 +29,20 @@ type Contributor struct {
 	Lines int    `json:"lines"`
 }
 
+// funcLocation holds pre-computed location info for a function
+type funcLocation struct {
+	file      string
+	startLine int
+	endLine   int
+}
+
 func main() {
 	// Read configuration from environment variables
 	testPath := os.Getenv("INPUT_TEST_PATH")
+	testPathsFile := os.Getenv("INPUT_TEST_PATHS_FILE")
 	commitHash := os.Getenv("INPUT_COMMIT")
 	dir := os.Getenv("INPUT_DIR")
 	githubOutput := os.Getenv("GITHUB_OUTPUT")
-
-	if testPath == "" {
-		fmt.Fprintln(os.Stderr, "Error: INPUT_TEST_PATH is required")
-		os.Exit(1)
-	}
 
 	// Change to specified directory for package loading
 	if dir != "" && dir != "." {
@@ -46,9 +52,23 @@ func main() {
 		}
 	}
 
+	// Batch mode: read test paths from file (one per line)
+	if testPathsFile != "" {
+		runBatchMode(testPathsFile, commitHash)
+		return
+	}
+
+	// Single test mode (original behavior)
+	if testPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: INPUT_TEST_PATH or INPUT_TEST_PATHS_FILE is required")
+		os.Exit(1)
+	}
+
+	runSingleMode(testPath, commitHash, githubOutput)
+}
+
+func runSingleMode(testPath, commitHash, githubOutput string) {
 	// Parse test path: TestSuiteName/TestFunctionName[/SubtestName...]
-	// We extract the second component as the actual function name.
-	// Subtests (created via t.Run) are part of the parent function.
 	parts := strings.Split(testPath, "/")
 	if len(parts) < 2 {
 		fmt.Fprintln(os.Stderr, "Error: expected format TestSuiteName/TestFunctionName")
@@ -56,20 +76,28 @@ func main() {
 	}
 	testFunc := parts[1]
 
-	filePath, start, end, err := findTestFunction(testFunc)
+	// Load packages once
+	funcIndex, err := buildFunctionIndex()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error finding test: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error loading packages: %v\n", err)
+		os.Exit(1)
+	}
+
+	loc, ok := funcIndex[testFunc]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Error finding test: function %s not found\n", testFunc)
 		os.Exit(1)
 	}
 
 	output := Output{
-		File:      filePath,
-		StartLine: start,
-		EndLine:   end,
+		TestPath:  testPath,
+		File:      loc.file,
+		StartLine: loc.startLine,
+		EndLine:   loc.endLine,
 	}
 
 	if commitHash != "" {
-		contributors, err := getContributors(filePath, start, end, commitHash)
+		contributors, err := getContributors(loc.file, loc.startLine, loc.endLine, commitHash)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting contributors: %v\n", err)
 			os.Exit(1)
@@ -81,11 +109,96 @@ func main() {
 	if githubOutput != "" {
 		writeGitHubOutput(githubOutput, output)
 	} else {
-		// Write JSON to stdout for local testing
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		enc.Encode(output)
 	}
+}
+
+func runBatchMode(testPathsFile, commitHash string) {
+	// Read test paths from file
+	file, err := os.Open(testPathsFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening test paths file: %v\n", err)
+		os.Exit(1)
+	}
+	defer file.Close()
+
+	var testPaths []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			testPaths = append(testPaths, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading test paths file: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(testPaths) == 0 {
+		fmt.Fprintln(os.Stderr, "Error: no test paths found in file")
+		os.Exit(1)
+	}
+
+	// Load packages once for all tests
+	fmt.Fprintf(os.Stderr, "Loading packages for %d tests...\n", len(testPaths))
+	funcIndex, err := buildFunctionIndex()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading packages: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "Indexed %d functions\n", len(funcIndex))
+
+	// Process each test path
+	var results []Output
+	for _, testPath := range testPaths {
+		output := processTestPath(testPath, commitHash, funcIndex)
+		results = append(results, output)
+	}
+
+	// Output as JSON array
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.Encode(results)
+}
+
+func processTestPath(testPath, commitHash string, funcIndex map[string]funcLocation) Output {
+	parts := strings.Split(testPath, "/")
+	if len(parts) < 2 {
+		return Output{
+			TestPath: testPath,
+			Error:    "expected format TestSuiteName/TestFunctionName",
+		}
+	}
+	testFunc := parts[1]
+
+	loc, ok := funcIndex[testFunc]
+	if !ok {
+		return Output{
+			TestPath: testPath,
+			Error:    fmt.Sprintf("function %s not found", testFunc),
+		}
+	}
+
+	output := Output{
+		TestPath:  testPath,
+		File:      loc.file,
+		StartLine: loc.startLine,
+		EndLine:   loc.endLine,
+	}
+
+	if commitHash != "" {
+		contributors, err := getContributors(loc.file, loc.startLine, loc.endLine, commitHash)
+		if err != nil {
+			output.Error = fmt.Sprintf("git blame failed: %v", err)
+		} else {
+			output.Contributors = contributors
+		}
+	}
+
+	return output
 }
 
 // writeGitHubOutput writes the output to the GITHUB_OUTPUT file
@@ -109,10 +222,10 @@ func writeGitHubOutput(path string, output Output) {
 	fmt.Fprintf(f, "result=%s\n", fullJSON)
 }
 
-// findTestFunction loads all packages in the current module and searches for
-// a function declaration matching funcName. Returns the file path and line
-// bounds (start/end) of the function.
-func findTestFunction(funcName string) (filePath string, start, end int, err error) {
+// buildFunctionIndex loads all packages in the current module and builds an
+// index of function names to their locations. This allows efficient lookup
+// of multiple functions without reloading packages.
+func buildFunctionIndex() (map[string]funcLocation, error) {
 	cfg := &packages.Config{
 		// NeedSyntax gives us parsed AST, NeedTypes ensures accurate position info.
 		// Tests: true includes _test.go files in the loaded packages.
@@ -124,11 +237,11 @@ func findTestFunction(funcName string) (filePath string, start, end int, err err
 	// an index) but avoids the external dependency.
 	pkgs, err := packages.Load(cfg, "./...")
 	if err != nil {
-		return "", 0, 0, fmt.Errorf("failed to load packages: %w", err)
+		return nil, fmt.Errorf("failed to load packages: %w", err)
 	}
 
-	// Walk the AST of each file looking for a matching function declaration.
-	// pkg.Syntax contains the parsed AST for each file in the package.
+	// Build index of all function declarations
+	index := make(map[string]funcLocation)
 	for _, pkg := range pkgs {
 		for _, file := range pkg.Syntax {
 			for _, decl := range file.Decls {
@@ -136,17 +249,19 @@ func findTestFunction(funcName string) (filePath string, start, end int, err err
 				if !ok {
 					continue
 				}
-				if fn.Name.Name == funcName {
-					// fn.Pos() is the start of "func", fn.End() is after closing brace
-					pos := pkg.Fset.Position(fn.Pos())
-					endPos := pkg.Fset.Position(fn.End())
-					return pos.Filename, pos.Line, endPos.Line, nil
+				// fn.Pos() is the start of "func", fn.End() is after closing brace
+				pos := pkg.Fset.Position(fn.Pos())
+				endPos := pkg.Fset.Position(fn.End())
+				index[fn.Name.Name] = funcLocation{
+					file:      pos.Filename,
+					startLine: pos.Line,
+					endLine:   endPos.Line,
 				}
 			}
 		}
 	}
 
-	return "", 0, 0, fmt.Errorf("function %s not found", funcName)
+	return index, nil
 }
 
 // getContributors runs git blame on the specified line range and aggregates

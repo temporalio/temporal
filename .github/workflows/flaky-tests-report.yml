@@ -34,9 +34,21 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: false
+
+      - name: Build find-test-lines
+        run: |
+          cd .github/actions/find-test-lines
+          go build -o find-test-lines .
+          echo "Built find-test-lines binary"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -87,6 +99,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
           MAX_LINKS_PARAM: ${{ github.event.inputs.max_links || '3' }}
+          FIND_TEST_LINES_BIN: ${{ github.workspace }}/.github/actions/find-test-lines/find-test-lines
         run: |
           set -x
           cd tools/flakes && uv run main.py \
@@ -96,7 +109,9 @@ jobs:
             --run-id "$RUN_ID" \
             --ref-name "$REF_NAME" \
             --sha "$SHA" \
-            --max-links "$MAX_LINKS_PARAM"
+            --max-links "$MAX_LINKS_PARAM" \
+            --find-test-lines-bin "$FIND_TEST_LINES_BIN" \
+            --commit "$SHA"
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4

@@ -1,11 +1,100 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import requests
+
+
+def get_test_contributors(
+    test_names: List[str],
+    find_test_lines_bin: Optional[str] = None,
+    commit: str = "HEAD",
+    repo_root: Optional[str] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Get contributors for a list of test names using the find-test-lines tool.
+    Returns a dict mapping test_path -> list of contributors.
+    """
+    if not find_test_lines_bin or not test_names:
+        return {}
+
+    if not os.path.exists(find_test_lines_bin):
+        print(f"Warning: find-test-lines binary not found at {find_test_lines_bin}", file=sys.stderr)
+        return {}
+
+    # Write test names to a temp file
+    test_paths_file = "out/test_paths.txt"
+    os.makedirs("out", exist_ok=True)
+    with open(test_paths_file, "w") as f:
+        for name in test_names:
+            f.write(name + "\n")
+
+    # Determine repo root (for Go package loading)
+    if not repo_root:
+        # Try to find repo root from git
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                repo_root = result.stdout.strip()
+        except Exception:
+            pass
+
+    # Run the tool
+    try:
+        env = os.environ.copy()
+        env["INPUT_TEST_PATHS_FILE"] = os.path.abspath(test_paths_file)
+        env["INPUT_COMMIT"] = commit
+        if repo_root:
+            env["INPUT_DIR"] = repo_root
+
+        result = subprocess.run(
+            [find_test_lines_bin],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=300,  # 5 minute timeout
+        )
+
+        if result.returncode != 0:
+            print(f"Warning: find-test-lines failed: {result.stderr}", file=sys.stderr)
+            return {}
+
+        # Parse JSON output
+        results = json.loads(result.stdout)
+        contributors_map = {}
+        for item in results:
+            test_path = item.get("test_path", "")
+            contributors = item.get("contributors", [])
+            if test_path and contributors:
+                contributors_map[test_path] = contributors
+
+        return contributors_map
+
+    except subprocess.TimeoutExpired:
+        print("Warning: find-test-lines timed out", file=sys.stderr)
+        return {}
+    except json.JSONDecodeError as e:
+        print(f"Warning: failed to parse find-test-lines output: {e}", file=sys.stderr)
+        return {}
+    except Exception as e:
+        print(f"Warning: error running find-test-lines: {e}", file=sys.stderr)
+        return {}
+
+
+def format_contributors(contributors: List[Dict[str, Any]], max_contributors: int = 5) -> str:
+    """Format contributors list for display."""
+    if not contributors:
+        return ""
+    names = [c["name"] for c in contributors[:max_contributors]]
+    return ", ".join(names)
 
 
 def process_tests(data, pattern, output_file: str, max_links: int = 3):
@@ -111,7 +200,19 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
         outfile.writelines(lines)
 
 
-def process_flaky(data, output_file: str, max_links: int = 3):
+def process_flaky(
+    data,
+    output_file: str,
+    max_links: int = 3,
+    contributors_map: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+) -> List[str]:
+    """
+    Process flaky test data and write output files.
+    Returns list of test names for contributor lookup.
+    """
+    if contributors_map is None:
+        contributors_map = {}
+
     # Group data by test name and collect artifacts
     test_groups = {}
     for item in data:
@@ -161,7 +262,11 @@ def process_flaky(data, output_file: str, max_links: int = 3):
     for item in transformed:
         # Format: * XXX failures: `TestName` [1](url1) [2](url2) [3](url3)
         links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
-        lines.append(f"* {item['count']} failures: `{item['name']}` {links}\n")
+        contrib_str = format_contributors(contributors_map.get(item["name"], []))
+        if contrib_str:
+            lines.append(f"* {item['count']} failures: `{item['name']}` ({contrib_str}) {links}\n")
+        else:
+            lines.append(f"* {item['count']} failures: `{item['name']}` {links}\n")
 
     with open(output_file, "w") as outfile:
         outfile.writelines(lines)
@@ -170,11 +275,18 @@ def process_flaky(data, output_file: str, max_links: int = 3):
     slack_file = output_file.replace(".txt", "_slack.txt")
     slack_lines = []
     for item in transformed:
-        # Format for Slack: • XXX failures: `TestName`
-        slack_lines.append(f"• {item['count']} failures: `{item['name']}`\n")
+        # Format for Slack: • XXX failures: `TestName` (contributors)
+        contrib_str = format_contributors(contributors_map.get(item["name"], []))
+        if contrib_str:
+            slack_lines.append(f"• {item['count']} failures: `{item['name']}` ({contrib_str})\n")
+        else:
+            slack_lines.append(f"• {item['count']} failures: `{item['name']}`\n")
 
     with open(slack_file, "w") as outfile:
         outfile.writelines(slack_lines)
+
+    # Return test names for contributor lookup
+    return [item["name"] for item in transformed]
 
 
 def create_success_message(
@@ -414,7 +526,12 @@ def write_github_actions_summary(summary_content: str) -> None:
         print(f"Warning: Could not write GitHub Actions summary: {e}", file=sys.stderr)
 
 
-def process_json_file(input_filename: str, max_links: int = 3):
+def process_json_file(
+    input_filename: str,
+    max_links: int = 3,
+    find_test_lines_bin: Optional[str] = None,
+    commit: str = "HEAD",
+):
     with open(input_filename, "r") as file:
         # Load the file content as JSON
         data = json.load(file)
@@ -422,7 +539,20 @@ def process_json_file(input_filename: str, max_links: int = 3):
     # Create output directory if it doesn't exist
     os.makedirs("out", exist_ok=True)
 
-    process_flaky(data, "out/flaky.txt", max_links)
+    # First pass: get test names from flaky tests (without contributors)
+    test_names = process_flaky(data, "out/flaky.txt", max_links, contributors_map={})
+
+    # Look up contributors if the tool is available
+    contributors_map = {}
+    if find_test_lines_bin and test_names:
+        print(f"Looking up contributors for {len(test_names)} flaky tests...")
+        contributors_map = get_test_contributors(test_names, find_test_lines_bin, commit)
+        print(f"Found contributors for {len(contributors_map)} tests")
+
+        # Re-process flaky tests with contributors
+        if contributors_map:
+            process_flaky(data, "out/flaky.txt", max_links, contributors_map)
+
     process_tests(data, "(timeout)", "out/timeout.txt", max_links)
     process_tests(data, "(retry 2)", "out/retry.txt", max_links)
     process_crash(data, "(crash)", "out/crash.txt", max_links)
@@ -462,6 +592,17 @@ def create_argument_parser() -> argparse.ArgumentParser:
         type=int,
         default=3,
         help="Maximum number of failure links to show per test (default: 3)",
+    )
+
+    # Contributor lookup options
+    parser.add_argument(
+        "--find-test-lines-bin",
+        help="Path to find-test-lines binary for contributor lookup",
+    )
+    parser.add_argument(
+        "--commit",
+        default="HEAD",
+        help="Git commit to use for contributor lookup (default: HEAD)",
     )
 
     return parser
@@ -555,7 +696,12 @@ def main():
 
     # Try to process the JSON file and handle both success and failure cases
     try:
-        total_failures = process_json_file(args.file, args.max_links)
+        total_failures = process_json_file(
+            args.file,
+            args.max_links,
+            find_test_lines_bin=args.find_test_lines_bin,
+            commit=args.commit,
+        )
         print(f"Successfully processed {args.file}")
         handle_success_case(args, total_failures)
 
