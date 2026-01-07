@@ -4,6 +4,21 @@
 
 The Worker CHASM component tracks the health and availability of Temporal workers through periodic heartbeats. It detects inactive workers and reschedules their activities to maintain workflow execution continuity.
 
+## Requirements
+
+**Functional:**
+- Track liveness of workers via periodic heartbeats.
+- Detect worker failures within 1-2 minutes.
+- Reliably reschedule activities when workers fail or become unreachable.
+
+**Scalability:**
+- Support 100K workers per cluster with a hearbeat interval of 10s of seconds.
+- Handle rolling deployments with high worker churn (average of 20% restarts per minute, crash looping workers).
+
+**Performance:**
+- Heartbeat latency < 100ms (P99).
+- Activity rescheduling latency < 10 seconds after worker failure detection.
+
 ## Architecture
 
 ### Components
@@ -48,6 +63,9 @@ ACTIVE ──────► INACTIVE (terminal)
 - Mark worker as INACTIVE (terminal)
 - CHASM framework deletes the entity
 - Activities bound to this worker are rescheduled
+
+**Activity rescheduling detail:**
+Rescheduling requires a cross-shard write to each activity's workflow. For a worker with N bound activities across M shards, this generates M batched writes (one per shard). Batching by shard reduces overhead compared to N individual writes.
 
 ## Heartbeat Protocol
 
@@ -193,4 +211,97 @@ For throttling worker registration (protecting against crash loops), a separate 
 - Different validation/capabilities for registration vs heartbeat
 
 Current implementation uses heartbeat for both registration and lease renewal.
+
+## Scalability
+
+### Persistence Overhead
+
+#### Storage Overhead (Disk Space)
+
+| Component | Size |
+|-----------|------|
+| Worker entity | ~1 KB |
+| Lease expiry timer | ~100 bytes |
+| Verification timer (per activity) | ~100 bytes |
+
+**Total storage for 10K workers:** ~10 MB (worker entities only)
+
+Worker entities are distributed across history shards by `WorkerInstanceKey`, providing natural load distribution.
+
+#### I/O Overhead (Disk Reads/Writes)
+
+**Per heartbeat:**
+- 1 write: CHASM entity update (~1 KB)
+
+**Per lease expiry timer fire:**
+- 1 write: New timer task creation (~100 bytes)
+
+**Per activity start:**
+- 1 write: Verification timer creation (~100 bytes)
+
+**Aggregate write load (N workers, heartbeat interval H seconds, lease duration L seconds):**
+- Heartbeat writes: N/H per second
+- Lease expiry timer writes: N/L per second (timer created when previous one fires)
+- Example: 10K workers @ 20s heartbeat, 60s lease = 500 + 167 = **667 writes/second**
+
+**Worker restart churn:**
+
+When workers restart, they re-register with new `WorkerInstanceKey`, creating additional entity creation overhead.
+
+Example: 10K workers @ 20s heartbeat interval
+
+| Scenario | Restart Rate | New Registrations/sec | Total Writes/sec |
+|----------|-------------|----------------------|------------------|
+| Stable | 0% | 0 | 500 |
+| Rolling deploy | 20%/min | 33 | 533 |
+| Mass restart | 100%/min | 167 | 667 |
+
+Note: Old worker entities expire naturally after lease duration. During high churn, there may be temporarily more worker entities than actual workers.
+Rate limiting worker registrations protects against crash-loop scenarios where workers repeatedly restart and re-register.
+
+### Cross-Shard Operations
+
+- **Verification timer (read)**: Fires on workflow shard, reads worker entity on worker shard. Most are discarded locally when activity completes quickly, avoiding the cross-shard RPC.
+- **Activity reschedule (write)**: Fires on worker shard when worker goes INACTIVE, writes to workflow shard. Only occurs on worker failure, which is rare.
+
+## Multi-Cloud Namespace (MCN)
+
+Worker entities use CHASM's state-based replication for MCN namespaces. No special handling is required in the worker entity; replication and failover are handled by the CHASM framework and SDK.
+
+**Replication behavior:**
+- Worker entities are replicated to standby clusters.
+- Heartbeats are only accepted by the active cluster; standby clusters reject writes.
+- Lease expiry timers only execute on the active cluster; standby timers are dormant.
+- On failover, worker entities exist on the new active cluster with lease deadlines preserved.
+
+**Worker behavior on failover:**
+- Workers heartbeating to old active cluster receive errors after failover.
+- Workers must discover the new active cluster and reconnect.
+- Workers should re-register with a new `WorkerInstanceKey` after reconnecting.
+
+This is handled by SDK cluster discovery and reconnection logic, not by the worker entity itself.
+
+## Visibility
+
+Worker entities are written to the visibility store to enable querying.
+
+**Indexed fields:**
+- `WorkerInstanceKey` - unique identifier
+- `Namespace` - owning namespace
+- `Status` - ACTIVE or INACTIVE
+- `TaskQueue` - task queues the worker is polling
+- `BuildId` - worker build identifier
+
+**Write timing:**
+- On first heartbeat (worker creation)
+- On status change (ACTIVE → INACTIVE)
+- Optionally: periodic refresh to update `LastHeartbeatTime`
+
+**Query examples:**
+- List all active workers in a namespace
+- Find workers polling a specific task queue
+- Find workers with a specific build ID
+- Find workers with stale heartbeats
+
+**Trade-off:** Writing to visibility on every heartbeat doubles the write load (CHASM entity + visibility store). Write only on creation and status change to avoid this overhead.
 
