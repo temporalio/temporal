@@ -38,24 +38,14 @@ func NewGenerator(ctx chasm.MutableContext) *Generator {
 func (g *Generator) Generate(ctx chasm.MutableContext) {
 	ctx.AddTask(g, chasm.TaskAttributes{
 		ScheduledTime: chasm.TaskScheduledTimeImmediate,
-	}, &schedulerpb.GeneratorTask{
-		TaskVersion: g.TaskVersion,
-	})
+	}, &schedulerpb.GeneratorTask{})
 }
 
 // scheduleTask schedules a GeneratorTask at the given time.
 func (g *Generator) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
 	ctx.AddTask(g, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
-	}, &schedulerpb.GeneratorTask{
-		TaskVersion: g.TaskVersion,
-	})
-}
-
-// incrementTaskVersion advances the component's task version after execution.
-// Called after executing an immediate task to invalidate any stale duplicate tasks.
-func (g *Generator) incrementTaskVersion() {
-	g.TaskVersion++
+	}, &schedulerpb.GeneratorTask{})
 }
 
 func (g *Generator) LifecycleState(ctx chasm.Context) chasm.LifecycleState {

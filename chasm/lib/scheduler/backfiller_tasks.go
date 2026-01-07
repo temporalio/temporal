@@ -46,13 +46,11 @@ func (b *BackfillerTaskExecutor) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
 	attrs chasm.TaskAttributes,
-	task *schedulerpb.BackfillerTask,
+	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
 	return validateTaskHighWaterMark(
 		backfiller.GetLastProcessedTime(),
 		attrs.ScheduledTime,
-		backfiller.GetTaskVersion(),
-		task.GetTaskVersion(),
 	)
 }
 
@@ -62,10 +60,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) error {
-	defer func() {
-		backfiller.Attempt++
-		backfiller.incrementTaskVersion()
-	}()
+	defer func() { backfiller.Attempt++ }()
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)

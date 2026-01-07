@@ -1424,7 +1424,6 @@ func (n *Node) executeImmediatePureTasks() error {
 	var err error
 
 	for len(n.immediatePureTasks) != 0 {
-
 		// Create a map in case more immediate pure tasks get
 		// added while existing ones are executed.
 		immediatePureTasks := n.immediatePureTasks
@@ -1432,7 +1431,6 @@ func (n *Node) executeImmediatePureTasks() error {
 
 		for component, pureTasks := range immediatePureTasks {
 			for _, task := range pureTasks {
-
 				if syncStructure {
 					if err := n.syncSubComponents(); err != nil {
 						return err

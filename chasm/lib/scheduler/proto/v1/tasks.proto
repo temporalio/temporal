@@ -15,29 +15,14 @@ message SchedulerIdleTask {
 }
 
 // Buffers actions based on the schedule's specification.
-message GeneratorTask {
-  // Logical clock for immediate task validation. When this task is scheduled
-  // immediately (zero scheduled time), the task is only valid if task_version
-  // matches the component's current task_version.
-  int64 task_version = 1;
-}
+message GeneratorTask {}
 
 // Processes buffered actions, deciding whether to execute, delay, or discard.
-message InvokerProcessBufferTask {
-  // Logical clock for immediate task validation. When this task is scheduled
-  // immediately (zero scheduled time), the task is only valid if task_version
-  // matches the component's current task_version.
-  int64 task_version = 1;
-}
+message InvokerProcessBufferTask {}
 
 // Drives execution of pending buffered actions to completion by starting,
 // canceling, or terminating workflows.
 message InvokerExecuteTask {}
 
 // Buffers actions based on a manually-requested backfill.
-message BackfillerTask {
-  // Logical clock for immediate task validation. When this task is scheduled
-  // immediately (zero scheduled time), the task is only valid if task_version
-  // matches the component's current task_version.
-  int64 task_version = 1;
-}
+message BackfillerTask {}

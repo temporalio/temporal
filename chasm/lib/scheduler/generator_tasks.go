@@ -46,11 +46,9 @@ func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskE
 func (g *GeneratorTaskExecutor) Execute(
 	ctx chasm.MutableContext,
 	generator *Generator,
-	taskAttrs chasm.TaskAttributes,
+	_ chasm.TaskAttributes,
 	_ *schedulerpb.GeneratorTask,
 ) error {
-	defer generator.incrementTaskVersion()
-
 	scheduler := generator.Scheduler.Get(ctx)
 	logger := newTaggedLogger(g.baseLogger, scheduler)
 	invoker := scheduler.Invoker.Get(ctx)
@@ -185,12 +183,10 @@ func (g *GeneratorTaskExecutor) Validate(
 	ctx chasm.Context,
 	generator *Generator,
 	attrs chasm.TaskAttributes,
-	task *schedulerpb.GeneratorTask,
+	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
 	return validateTaskHighWaterMark(
 		generator.GetLastProcessedTime(),
 		attrs.ScheduledTime,
-		generator.GetTaskVersion(),
-		task.GetTaskVersion(),
 	)
 }

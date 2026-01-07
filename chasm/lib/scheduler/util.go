@@ -45,20 +45,14 @@ func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
 // task timestamp. A task is valid if its scheduled time is after the high water mark.
-//
-// For immediate tasks (zero scheduled time), validation uses a logical clock
-// comparison: the task's version must match the component's current version.
-// This prevents re-execution of immediate tasks after the component has processed
-// them and incremented its version.
+// Immediate tasks (zero scheduled time) are always valid since they execute inline.
 func validateTaskHighWaterMark(
 	lastProcessedTime *timestamppb.Timestamp,
 	scheduledAt time.Time,
-	componentTaskVersion int64,
-	taskVersion int64,
 ) (bool, error) {
-	// Immediate tasks are valid only if their version matches the component's version.
+	// Immediate tasks are always valid - they execute inline during the transaction.
 	if scheduledAt.IsZero() {
-		return componentTaskVersion == taskVersion, nil
+		return true, nil
 	}
 	// If lastProcessedTime is not set, all scheduled tasks are valid.
 	if lastProcessedTime == nil || (lastProcessedTime.GetSeconds() == 0 && lastProcessedTime.GetNanos() == 0) {
