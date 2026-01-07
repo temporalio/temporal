@@ -247,7 +247,7 @@ func AdminDescribeExecution(c *cli.Context, clientFactory ClientFactory) error {
 	if err != nil {
 		return err
 	}
-	if resp == nil || resp.GetDatabaseMutableState() == nil {
+	if resp == nil {
 		return errors.New("no mutable state returned")
 	}
 
@@ -256,9 +256,11 @@ func AdminDescribeExecution(c *cli.Context, clientFactory ClientFactory) error {
 	if resp.GetCacheMutableState() != nil {
 		prettyPrintJSONObject(c, resp.GetCacheMutableState())
 	}
-	// nolint:errcheck // assuming that write will succeed.
-	fmt.Fprintln(c.App.Writer, color.GreenString("Database mutable state:"))
-	prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
+	if resp.GetDatabaseMutableState() != nil {
+		// nolint:errcheck // assuming that write will succeed.
+		fmt.Fprintln(c.App.Writer, color.GreenString("Database mutable state:"))
+		prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
+	}
 
 	// CHASM executions also print their tree.
 	if len(resp.GetDatabaseMutableState().GetChasmNodes()) > 0 {
@@ -269,22 +271,24 @@ func AdminDescribeExecution(c *cli.Context, clientFactory ClientFactory) error {
 		}
 	}
 
-	// nolint:errcheck // assuming that write will succeed.
-	fmt.Fprintln(c.App.Writer, color.GreenString("Current branch token:"))
-	versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
-	// if VersionHistories is set, then all branch infos are stored in VersionHistories
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
-	if err != nil {
+	if resp.GetDatabaseMutableState() != nil {
 		// nolint:errcheck // assuming that write will succeed.
-		fmt.Fprintln(c.App.Writer, color.RedString("Unable to get current version history:"), err)
-	} else {
-		currentBranchToken := persistencespb.HistoryBranch{}
-		err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
+		fmt.Fprintln(c.App.Writer, color.GreenString("Current branch token:"))
+		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
+		// if VersionHistories is set, then all branch infos are stored in VersionHistories
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 		if err != nil {
 			// nolint:errcheck // assuming that write will succeed.
-			fmt.Fprintln(c.App.Writer, color.RedString("Unable to unmarshal current branch token:"), err)
+			fmt.Fprintln(c.App.Writer, color.RedString("Unable to get current version history:"), err)
 		} else {
-			prettyPrintJSONObject(c, &currentBranchToken)
+			currentBranchToken := persistencespb.HistoryBranch{}
+			err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
+			if err != nil {
+				// nolint:errcheck // assuming that write will succeed.
+				fmt.Fprintln(c.App.Writer, color.RedString("Unable to unmarshal current branch token:"), err)
+			} else {
+				prettyPrintJSONObject(c, &currentBranchToken)
+			}
 		}
 	}
 
