@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
+	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recorded"
 )
 
 type (
@@ -651,14 +651,14 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 	if postActionInfo == nil {
 		return nil
 	}
-	pushActivityInfo, ok := postActionInfo.(*verifyCompletionRecordedPostActionInfo)
-	if !ok || pushActivityInfo.parentWorkflowKey == nil {
+	verifyCompletionInfo, ok := postActionInfo.(*verifyCompletionRecordedPostActionInfo)
+	if !ok || verifyCompletionInfo.parentWorkflowKey == nil {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
 	}
 
 	if !executionExistsOnSource(
 		ctx,
-		*pushActivityInfo.parentWorkflowKey,
+		*verifyCompletionInfo.parentWorkflowKey,
 		getTaskArchetypeID(taskInfo),
 		logger,
 		t.clusterName,
