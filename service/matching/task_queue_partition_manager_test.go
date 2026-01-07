@@ -22,6 +22,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -963,6 +964,198 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 		}
 		return check(resp)
 	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartition() {
+	// Create a capturing metrics handler
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	// Create a new partition manager with the capturing metrics handler
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
+	s.NoError(err)
+	pm.Start()
+	defer pm.Stop(unloadCauseUnspecified)
+
+	// Simulate partition loaded 1 minute ago (less than 2 minute threshold)
+	pm.loadTime = time.Now().Add(-1 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err = pm.WaitUntilInitialized(ctx)
+	cancel()
+	s.NoError(err)
+
+	// Add a task to trigger the metric check
+	_, _, err = pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "test-run",
+			WorkflowId:  "test-workflow",
+		},
+	})
+	s.NoError(err)
+
+	// Verify metric was NOT emitted for newly loaded partition
+	snapshot := capture.Snapshot()
+	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
+	s.False(exists && len(recordings) > 0, "Metric should not be emitted for newly loaded partition")
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_NewlyLoadedPartitionWithRecentPollers() {
+	// Create a capturing metrics handler
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	// Create a new partition manager with the capturing metrics handler
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
+	s.NoError(err)
+	pm.Start()
+	defer pm.Stop(unloadCauseUnspecified)
+
+	// Simulate partition loaded 1 minute ago (less than 2 minute threshold)
+	pm.loadTime = time.Now().Add(-1 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err = pm.WaitUntilInitialized(ctx)
+	cancel()
+	s.NoError(err)
+
+	// Register a poller
+	pollCtx, pollCancel := context.WithTimeout(
+		context.WithValue(context.Background(), identityKey, "test-poller"),
+		100*time.Millisecond,
+	)
+	_, _, _ = pm.PollTask(pollCtx, &pollMetadata{
+		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			BuildId:       "",
+			UseVersioning: false,
+		},
+	})
+	pollCancel()
+
+	// Add a task to trigger the metric check
+	_, _, err = pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "test-run",
+			WorkflowId:  "test-workflow",
+		},
+	})
+	s.NoError(err)
+
+	// Verify metric was NOT emitted for newly loaded partition even with pollers
+	snapshot := capture.Snapshot()
+	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
+	s.False(exists && len(recordings) > 0, "Metric should not be emitted for newly loaded partition with pollers")
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionNoPollers() {
+	// Create a capturing metrics handler
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	// Create a new partition manager with the capturing metrics handler
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
+	s.NoError(err)
+	pm.Start()
+	defer pm.Stop(unloadCauseUnspecified)
+
+	// Simulate partition loaded 3 minutes ago (more than 2 minute threshold)
+	pm.loadTime = time.Now().Add(-3 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err = pm.WaitUntilInitialized(ctx)
+	cancel()
+	s.NoError(err)
+
+	// Add a task to trigger the metric check
+	_, _, err = pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "test-run",
+			WorkflowId:  "test-workflow",
+		},
+	})
+	s.NoError(err)
+
+	// Verify metric WAS emitted for old partition with no pollers
+	snapshot := capture.Snapshot()
+	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
+	s.True(exists && len(recordings) > 0, "Metric should be emitted for old partition with no pollers")
+	s.Equal(int64(1), recordings[0].Value)
+}
+
+func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithRecentPollers() {
+	// Create a capturing metrics handler
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	// Create a new partition manager with the capturing metrics handler
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
+	s.NoError(err)
+	pm.Start()
+	defer pm.Stop(unloadCauseUnspecified)
+
+	// Simulate partition loaded 3 minutes ago (more than 2 minute threshold)
+	pm.loadTime = time.Now().Add(-3 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err = pm.WaitUntilInitialized(ctx)
+	cancel()
+	s.NoError(err)
+
+	// Register a poller
+	pollCtx, pollCancel := context.WithTimeout(
+		context.WithValue(context.Background(), identityKey, "test-poller"),
+		100*time.Millisecond,
+	)
+	_, _, _ = pm.PollTask(pollCtx, &pollMetadata{
+		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			BuildId:       "",
+			UseVersioning: false,
+		},
+	})
+	pollCancel()
+
+	// Add a task to trigger the metric check
+	_, _, err = pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "test-run",
+			WorkflowId:  "test-workflow",
+		},
+	})
+	s.NoError(err)
+
+	// Verify metric was NOT emitted because of recent poller
+	snapshot := capture.Snapshot()
+	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
+	s.False(exists, "No recordings should exist when there are no recent pollers")
+	s.Equal(len(recordings), 0, "Metric should not be emitted when there are recent pollers")
 }
 
 type mockUserDataManager struct {
