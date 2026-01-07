@@ -249,6 +249,11 @@ func GetOrPollWorkflowMutableState(
 				}
 			case <-longPollCtx.Done():
 				return response, nil
+			case <-ctx.Done():
+				// Fallback: if the original context is done (e.g., client deadline expired
+				// or client disconnected), return response. This ensures we respect the
+				// client's deadline even if it wasn't properly captured by WithDeadlineBuffer.
+				return response, nil
 			}
 		}
 	}

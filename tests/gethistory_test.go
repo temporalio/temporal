@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -814,4 +815,88 @@ func (s *RawHistoryClientSuite) getHistoryReverse(namespace string, execution *c
 	}
 
 	return events
+}
+
+// TestGetWorkflowExecutionHistory_LongPollRespectsContextDeadline verifies that long poll
+// GetWorkflowExecutionHistory respects the client's context deadline.
+func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_LongPollRespectsContextDeadline() {
+	workflowID := "functional-get-history-long-poll-deadline-test"
+	workflowTypeName := "functional-get-history-long-poll-deadline-type"
+	taskqueueName := "functional-get-history-long-poll-deadline-taskqueue"
+
+	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	// Start a workflow that will run for a long time (we won't process any workflow tasks)
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "test-worker",
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err)
+	s.NotEmpty(we.RunId)
+
+	// Test 1: Short context deadline should be respected
+	// The server's long poll interval is ~20s. With a 2s client timeout, the server
+	// should return around 1s (2s - 1s buffer) due to WithDeadlineBuffer.
+	clientTimeout := 2 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
+	ctx = headers.SetVersions(ctx)
+
+	start := time.Now()
+	_, err = s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      we.RunId,
+		},
+		MaximumPageSize:        100,
+		WaitNewEvent:           true,                                          // Enable long poll
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT, // Wait for close (won't happen)
+	})
+	elapsed := time.Since(start)
+	cancel()
+
+	// Should return within 3x the client timeout (accounts for buffer and overhead)
+	s.Less(elapsed, clientTimeout*3,
+		"Long poll should respect context deadline. Expected ~1s (2s - 1s buffer), got %v", elapsed)
+	// Should NOT wait for the full long poll interval (~20s)
+	s.Less(elapsed, 10*time.Second,
+		"Long poll should not wait for full interval. Got %v", elapsed)
+	s.T().Logf("Test 1 (deadline): returned in %v (client timeout: %v)", elapsed, clientTimeout)
+
+	// Test 2: Context cancellation should be respected
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	ctx2 = headers.SetVersions(ctx2)
+
+	// Cancel after 500ms
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		cancel2()
+	}()
+
+	start = time.Now()
+	_, err = s.FrontendClient().GetWorkflowExecutionHistory(ctx2, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      we.RunId,
+		},
+		MaximumPageSize:        100,
+		WaitNewEvent:           true,
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+	})
+	elapsed = time.Since(start)
+
+	// Should return quickly after cancellation
+	s.Less(elapsed, 3*time.Second,
+		"Long poll should respect context cancellation. Got %v", elapsed)
+	s.T().Logf("Test 2 (cancellation): returned in %v", elapsed)
 }
