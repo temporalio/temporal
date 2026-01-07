@@ -77,7 +77,23 @@ func (r *TaskRefresherImpl) Refresh(
 		return err
 	}
 
-	return mutableState.ChasmTree().RefreshTasks()
+	if err := mutableState.ChasmTree().RefreshTasks(); err != nil {
+		return err
+	}
+
+	if !mutableState.IsWorkflow() && mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
+		if err != nil {
+			return err
+		}
+		taskGenerator := r.taskGeneratorProvider.NewTaskGenerator(
+			r.shard,
+			mutableState,
+		)
+		return taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
+	}
+
+	return nil
 }
 
 func (r *TaskRefresherImpl) PartialRefresh(

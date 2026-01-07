@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -635,6 +636,16 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 	return nil
 }
 
+func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
+		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
+	}
+	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
+		return AdminBatchRefreshWorkflowTasks(c, clientFactory, prompter)
+	}
+	return AdminRefreshWorkflowTasks(c, clientFactory)
+}
+
 // AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
 func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
 	adminClient := clientFactory.AdminClient(c)
@@ -672,6 +683,66 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "Refresh workflow task succeeded.")
 	}
+	return nil
+}
+
+// AdminBatchRefreshWorkflowTasks starts a batch job to refresh workflow tasks for multiple workflows
+func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	adminClient := clientFactory.AdminClient(c)
+	workflowClient := clientFactory.WorkflowClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	query, err := getRequiredOption(c, FlagVisibilityQuery)
+	if err != nil {
+		return err
+	}
+
+	reason, err := getRequiredOption(c, FlagReason)
+	if err != nil {
+		return err
+	}
+
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	// Count workflows matching the query to confirm with user
+	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: nsName,
+		Query:     query,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to count workflow executions: %w", err)
+	}
+
+	msg := fmt.Sprintf("Will refresh tasks for %d execution(s) matching query %q in namespace %q. Continue Y/N?",
+		countResp.GetCount(), query, nsName)
+	prompter.Prompt(msg)
+
+	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       nsName,
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
+	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", jobID)
 	return nil
 }
 

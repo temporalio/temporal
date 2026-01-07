@@ -626,6 +626,21 @@ func (c *retryableClient) ResendReplicationTasks(
 	return resp, err
 }
 
+func (c *retryableClient) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.StartAdminBatchOperationResponse, error) {
+	var resp *adminservice.StartAdminBatchOperationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.StartAdminBatchOperation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) SyncWorkflowState(
 	ctx context.Context,
 	request *adminservice.SyncWorkflowStateRequest,

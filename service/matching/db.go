@@ -378,7 +378,7 @@ func (db *taskQueueDB) updateBacklogStatsLocked(subqueue subqueueIndex, countDel
 	count := &db.subqueues[subqueue].ApproximateBacklogCount
 	if *count+countDelta < 0 {
 		db.logger.Info("ApproximateBacklogCount could have under-counted.",
-			tag.WorkerBuildId(db.queue.Version().MetricsTagValue()),
+			tag.WorkerVersion(db.queue.Version().MetricsTagValue()),
 			tag.WorkflowNamespaceID(db.queue.Partition().NamespaceId()))
 		*count = 0
 	} else {
